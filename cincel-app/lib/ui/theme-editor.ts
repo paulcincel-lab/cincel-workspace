@@ -18,26 +18,27 @@ export type TokenSection = { title: string; tokens: { name: TokenName; label: st
 export const TOKEN_SECTIONS: readonly TokenSection[] = [
   {
     title: "Interfaz",
+    // The first INTERFAZ_VISIBLE rows show by default (canvas `Ajustes-Tema`); the rest behind "Ver los 19 colores".
     tokens: [
       { name: "background", label: "Fondo de página" },
       { name: "foreground", label: "Texto principal" },
       { name: "card", label: "Tarjetas" },
+      { name: "muted", label: "Fondo atenuado" },
+      { name: "muted-foreground", label: "Texto secundario" },
+      { name: "primary", label: "Botón principal" },
+      { name: "secondary", label: "Botón secundario" },
+      { name: "border", label: "Bordes" },
+      { name: "ring", label: "Anillo de foco" },
       { name: "card-foreground", label: "Texto de tarjetas" },
       { name: "popover", label: "Menús emergentes" },
       { name: "popover-foreground", label: "Texto de menús emergentes" },
-      { name: "muted", label: "Fondo atenuado" },
-      { name: "muted-foreground", label: "Texto secundario" },
       { name: "foreground-soft", label: "Texto suave" },
       { name: "accent", label: "Resaltado" },
       { name: "accent-foreground", label: "Texto resaltado" },
-      { name: "primary", label: "Botón principal" },
       { name: "primary-foreground", label: "Texto del botón" },
-      { name: "secondary", label: "Botón secundario" },
       { name: "secondary-foreground", label: "Texto del botón secundario" },
-      { name: "border", label: "Bordes" },
       { name: "border-strong", label: "Bordes de controles" },
       { name: "input", label: "Campos" },
-      { name: "ring", label: "Anillo de foco" },
     ],
   },
   {
@@ -80,6 +81,9 @@ export const TOKEN_SECTIONS: readonly TokenSection[] = [
     ],
   },
 ];
+
+/** Rows of "Interfaz" shown before "Ver los 18 colores". */
+export const INTERFAZ_VISIBLE = 9;
 
 /** Type roles in editor order (FE §3.8 "Tipografía"). */
 export const TYPE_ROLE_LABELS: readonly { role: TypeRole; label: string }[] = [
@@ -180,4 +184,51 @@ export function textPairs(tokens: OrgAppearance["tokens"], mode: EditMode): { fg
       : tokens[p.bg as TokenName][mode];
     return { fg: tokens[p.fg][mode], bg, label: pairLabel(p) };
   });
+}
+
+/** The tokens a pair's result is shown on: its text token and its background (for a tint, the chart color). */
+function pairTokens(def: ContrastPair): TokenName[] {
+  const slot = tintSlot(def.bg);
+  return [def.fg, slot ? (`chart-${slot}` as TokenName) : (def.bg as TokenName)];
+}
+
+export type TokenContrast = { ratio: number; min: number; ok: boolean };
+
+/**
+ * The contrast badge of one token row: of the `CONTRAST_PAIRS` it takes part
+ * in (as text or background), the worst failing one, else the lowest ratio.
+ * Null when the token is in no pair.
+ */
+export function tokenContrast(results: ContrastResult[], token: TokenName): TokenContrast | null {
+  let worst: ContrastResult | null = null;
+  for (const result of results) {
+    const def = PAIRS_BY_NAME.get(result.pair);
+    if (!def || !pairTokens(def).includes(token)) continue;
+    if (!worst) worst = result;
+    else if (worst.ok !== result.ok) worst = result.ok ? worst : result;
+    else if (result.ratio < worst.ratio) worst = result;
+  }
+  return worst ? { ratio: worst.ratio, min: worst.min, ok: worst.ok } : null;
+}
+
+/** Distinct text colors of the failing pairs, in either mode (the save bar's "{n} color(es) no cumple(n)"). */
+export function failingColorCount(results: Record<EditMode, ContrastResult[]>): number {
+  const tokens = new Set<TokenName>();
+  for (const result of [...results.light, ...results.dark]) {
+    if (result.ok) continue;
+    const def = PAIRS_BY_NAME.get(result.pair);
+    if (def) tokens.add(def.fg);
+  }
+  return tokens.size;
+}
+
+/** "1 color no cumple el contraste" / "3 colores no cumplen el contraste". */
+export function failingColorsText(count: number): string {
+  return count === 1 ? "1 color no cumple el contraste" : `${count} colores no cumplen el contraste`;
+}
+
+/** "Hay 1 color que no cumple…" / "Hay 3 colores que no cumplen…": the publish confirmation. */
+export function publishLowContrastQuestion(count: number): string {
+  const colors = count === 1 ? "1 color que no cumple" : `${count} colores que no cumplen`;
+  return `Hay ${colors} el contraste mínimo. ¿Publicar de todos modos?`;
 }

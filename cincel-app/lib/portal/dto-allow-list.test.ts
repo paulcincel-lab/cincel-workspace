@@ -9,12 +9,17 @@ import { describe, expect, it } from "vitest";
 import type { DriveFile } from "@/lib/google/drive-admin";
 
 import {
+  markPortalClientUploads,
   PORTAL_DTO_ALLOWED_KEYS,
   toPortalProjectDTO,
   toPortalScheduleDTO,
+  toPortalFolderGroupDTO,
+  toPortalTeamMemberDTO,
   toPortalTramosDTO,
   type PortalProjectRow,
   type PortalScheduleTaskRow,
+  type PortalTeamRow,
+  type PortalTramoProgressRow,
   type PortalTramoRow,
 } from "./dto";
 import { toPortalFileDTO } from "./files";
@@ -110,10 +115,48 @@ describe("portal DTO allow-list", () => {
     expectNoLeak(dto);
   });
 
+  it("toPortalTramosDTO emits progressPct and startMonth only", () => {
+    const progress = { workflowId: "w1", total: 8, done: 5, title: "Tarea interna", responsable: "Responsable interno" };
+    const [dto] = toPortalTramosDTO([tramoRow], null, [progress as PortalTramoProgressRow]);
+    expect(dto).toEqual({ key: "diseno", name: "Diseño", state: "en_curso", progressPct: 63, startMonth: "2026-01" });
+    expect(sortedKeys(dto)).toEqual(["key", "name", "progressPct", "startMonth", "state"]);
+    expectNoLeak(dto);
+  });
+
+  it("team member emits name, role, email", () => {
+    const row = { name: "Laura", lastName: "Pérez", role: "Diseñadora líder", email: "laura@cincel.example",
+      staffId: "s-1", phone: "55 0000 0000", capacity: 40, ...LEAKS } as PortalTeamRow;
+    const dto = toPortalTeamMemberDTO(row);
+    expect(sortedKeys(dto)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.teamMember]);
+    expect(dto).toEqual({ name: "Laura Pérez", role: "Diseñadora líder", email: "laura@cincel.example" });
+    expectNoLeak(dto);
+  });
+
+  it("folder group emits files, folderId, name", () => {
+    const file = toPortalFileDTO(driveFile)!;
+    const dto = toPortalFolderGroupDTO({ folderId: "d1", name: "Planos", files: [file], ...LEAKS } as never);
+    expect(sortedKeys(dto)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.folderGroup]);
+    expect(sortedKeys(dto.files[0])).toEqual(PORTAL_DTO_ALLOWED_KEYS.file.filter((key) => key !== "uploadedBy"));
+    expectNoLeak(dto);
+  });
+
   it("the files DTO emits exactly the allowed keys", () => {
     const dto = toPortalFileDTO(driveFile);
-    expect(sortedKeys(dto!)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.file]);
+    expect(sortedKeys(dto!)).toEqual(PORTAL_DTO_ALLOWED_KEYS.file.filter((key) => key !== "uploadedBy"));
     expectNoLeak(dto);
+  });
+
+  it("file emits uploadedBy only after the change", () => {
+    const listed = toPortalFileDTO(driveFile)!;
+    expect(listed).not.toHaveProperty("uploadedBy");
+    const [mine, theirs] = markPortalClientUploads(
+      [{ ...listed, ...LEAKS } as typeof listed, { ...listed, id: "f2" }],
+      new Set(["f1"]),
+    );
+    expect(sortedKeys(mine)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.file]);
+    expect(mine.uploadedBy).toBe("cliente");
+    expect(theirs.uploadedBy).toBe("cincel");
+    expectNoLeak([mine, theirs]);
   });
 
   it("pins the allow-list itself", () => {
@@ -122,8 +165,10 @@ describe("portal DTO allow-list", () => {
       projectManager: ["email", "name"],
       schedule: ["sections"],
       scheduleSection: ["end", "key", "planta", "progressPct", "seccion", "start"],
-      tramo: ["key", "name", "state"],
-      file: ["deliveredAs", "id", "kind", "mimeType", "modifiedAt", "name", "sizeBytes"],
+      tramo: ["key", "name", "progressPct", "startMonth", "state"],
+      file: ["deliveredAs", "id", "kind", "mimeType", "modifiedAt", "name", "sizeBytes", "uploadedBy"],
+      folderGroup: ["files", "folderId", "name"],
+      teamMember: ["email", "name", "role"],
     });
   });
 });

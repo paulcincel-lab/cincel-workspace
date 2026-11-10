@@ -95,9 +95,9 @@ function days(hours: number[]): TeamHoursRow["days"] {
 }
 
 export const TEAM_ROWS: TeamHoursRow[] = [
-  { staffId: "s-paul", name: "Paul Langarica", days: days([8.5, 8.2, 9, 8, 7.8]), total: 41.5, target: 40, lateCount: 0, status: "completo" },
-  { staffId: "s-juanma", name: "Juanma", days: days([8, 7.5, 8, 6.5, 5.2]), total: 35.2, target: 40, lateCount: 2, status: "incompleto" },
-  { staffId: "s-maria", name: "María González", days: days([0, 0, 0, 0, 0]), total: 0, target: 40, lateCount: 0, status: "sin_registro" },
+  { staffId: "s-paul", name: "Paul Langarica", days: days([8.5, 8.2, 9, 8, 7.8]), total: 41.5, target: 40, lateCount: 0, status: "completo", needsReview: false },
+  { staffId: "s-juanma", name: "Juanma", days: days([8, 7.5, 8, 6.5, 5.2]), total: 35.2, target: 40, lateCount: 2, status: "incompleto", needsReview: false },
+  { staffId: "s-maria", name: "María González", days: days([0, 0, 0, 0, 0]), total: 0, target: 40, lateCount: 0, status: "sin_registro", needsReview: false },
 ];
 
 export const SETTINGS: TimeTrackingSettings = {

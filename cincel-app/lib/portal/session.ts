@@ -41,7 +41,8 @@ export type { PortalProjectAccess };
 export const PORTAL_LOGIN_PATH = "/portal/login";
 export const PORTAL_LOGOUT_ROUTE = "/api/portal/auth/logout";
 
-export type PortalUser = { id: string; name: string; email: string; contactId: string };
+/** `companyName`: `contacts.name` of `contactId`, null when it equals the user's name (shown in the top bar). */
+export type PortalUser = { id: string; name: string; email: string; contactId: string; companyName: string | null };
 
 /** The logout route that drops the cookie, then redirects to a safe `next` (default `/portal/login`). */
 export function portalSignOutPath(next: string = PORTAL_LOGIN_PATH): string {

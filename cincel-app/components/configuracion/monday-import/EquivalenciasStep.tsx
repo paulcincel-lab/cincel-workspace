@@ -8,15 +8,17 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
 import { Switch } from "@/components/ui/shadcn/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { ChoiceSelect, type Choice } from "@/components/configuracion/monday-import/ChoiceSelect";
 import { GroupTargetsTable } from "@/components/configuracion/monday-import/GroupTargetsTable";
 import { currentGroupTarget, hasGroupTargets, pruneGroupTargets } from "@/lib/monday-import/group-targets";
 import { placementLabel, templateItemPlacement } from "@/lib/monday-import/template-phases";
 import { StatusMapTable, type CreatedStatus } from "@/components/configuracion/monday-import/StatusMapTable";
-import { statusMapLabels } from "@/lib/monday-import/status-map";
+import { statusMapLabels, statusesToReview } from "@/lib/monday-import/status-map";
 import {
   COLUMN_TARGET_LABELS,
   CONTACT_TYPE_LABELS,
+  STRATEGY_OPTIONS,
   SUBITEM_LABELS,
   decodeClient,
   encodeClient,
@@ -77,6 +79,52 @@ function EquivalenceTable({ monday, cincel, children }: { monday: string; cincel
   );
 }
 
+/** "Con dato" as a percentage ("82 %"); "—" when the export doesn't say. */
+export function fillPercent(share: number | undefined): string {
+  if (typeof share !== "number" || !Number.isFinite(share)) return "—";
+  return `${Math.round(share * 100)} %`;
+}
+
+/** monday columns and their Cincel field: Columna de monday · Tipo · a · Campo de Cincel · Con dato. */
+function ColumnsTable({ monday, children }: { monday: string; children: ReactNode }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{monday}</TableHead>
+          <TableHead>Tipo</TableHead>
+          <TableHead>a</TableHead>
+          <TableHead>Campo de Cincel</TableHead>
+          <TableHead className="text-right">Con dato</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>{children}</TableBody>
+    </Table>
+  );
+}
+
+/** The parts of a board's mapping; Equivalencias shows them across its tabs, the board card shows them all. */
+export type BoardSection =
+  | "columnas"
+  | "contactos"
+  | "grupos"
+  | "cliente"
+  | "subelementos"
+  | "nombres"
+  | "cronograma"
+  | "plantillas";
+
+const ALL_SECTIONS: readonly BoardSection[] = [
+  "columnas",
+  "contactos",
+  "grupos",
+  "cliente",
+  "subelementos",
+  "nombres",
+  "cronograma",
+  "plantillas",
+];
+
 /**
  * Whether the board needs "Tramo del tablero": only when no group targets a tramo or a fase (FE §4.6 item 2).
  * Boards whose groups aren't mapped one by one always take the board's tramo.
@@ -99,12 +147,16 @@ export function BoardEquivalences({
   source,
   choices,
   onBoardChange,
+  sections = ALL_SECTIONS,
 }: {
   board: BoardDraft;
   source: MondayBoardSource;
   choices: MondayImportChoices;
   onBoardChange: (update: (board: BoardDraft) => BoardDraft) => void;
+  /** Only these parts (Equivalencias' tabs); every part by default. */
+  sections?: readonly BoardSection[];
 }) {
+  const show = (section: BoardSection) => sections.includes(section);
   const isCrm = board.strategy === "crm_contacts";
   const subitemsCopy = subitemsSection(board.strategy, board.subitems);
   const relationColumns = source.columns.filter(
@@ -141,11 +193,12 @@ export function BoardEquivalences({
     const targets = subitem ? (board.subitemColumns ?? {}) : board.columns;
     return columns.map((column) => (
       <TableRow key={`${subitem ? "sub" : "col"}-${column.id}`}>
-        <TableCell className="align-top">
-          <span className="text-foreground">{column.title}</span>
-          <span className="block text-xs text-muted-foreground">{column.type}</span>
+        <TableCell className="align-top whitespace-normal text-foreground">{column.title}</TableCell>
+        <TableCell className="align-top font-mono text-xs text-muted-foreground">{column.type}</TableCell>
+        <TableCell aria-hidden="true" className="align-top text-muted-foreground">
+          →
         </TableCell>
-        <TableCell>
+        <TableCell className="min-w-[190px] [&_[data-slot=select-trigger]]:h-8">
           <ChoiceSelect
             label={`Campo de Cincel para ${column.title}`}
             value={targets[column.id] ?? "ignore"}
@@ -154,6 +207,9 @@ export function BoardEquivalences({
               onBoardChange((current) => setColumnTarget(current, column.id, value as ColumnTarget, subitem))
             }
           />
+        </TableCell>
+        <TableCell className="text-right align-top font-mono tabular-nums">
+          {fillPercent(source.columnFill?.[column.id])}
         </TableCell>
       </TableRow>
     ));
@@ -169,15 +225,18 @@ export function BoardEquivalences({
 
   return (
     <div className="space-y-8">
-      <p className="text-sm text-muted-foreground">{strategyDescription(board.strategy)}</p>
+      {sections === ALL_SECTIONS ? (
+        <p className="text-sm text-muted-foreground">{strategyDescription(board.strategy)}</p>
+      ) : null}
 
-      <Section id={`cols-${board.mondayBoardId}`} title="Columnas" description="Cada columna de monday y su campo en Cincel.">
-        <EquivalenceTable monday="Columna de monday" cincel="Campo de Cincel">
-          {columnRows(source.columns, false)}
-        </EquivalenceTable>
-      </Section>
+      {show("columnas") ? (
+        <Section id={`cols-${board.mondayBoardId}`} title="Columnas" description="Cada columna de monday y su campo en Cincel.">
+          <ColumnsTable monday="Columna de monday">{columnRows(source.columns, false)}</ColumnsTable>
+        </Section>
+      ) : null}
 
       {isCrm ? (
+        show("contactos") ? (
         <Section id={`crm-${board.mondayBoardId}`} title="Contactos" description="Tipo de contacto y coincidencias en el Directorio.">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -233,9 +292,15 @@ export function BoardEquivalences({
             </EquivalenceTable>
           ) : null}
         </Section>
+        ) : null
       ) : (
         <>
-          <Section id={`groups-${board.mondayBoardId}`} title="Grupos y tramo">
+          {show("grupos") ? (
+          <Section
+            id={`groups-${board.mondayBoardId}`}
+            title="Grupos y tramo"
+            description="Cada grupo de monday y la fase que tendrá en Cincel."
+          >
             <div className="space-y-2 sm:max-w-sm">
               <Label>Tramo del tablero</Label>
               <ChoiceSelect
@@ -294,7 +359,9 @@ export function BoardEquivalences({
               </EquivalenceTable>
             )}
           </Section>
+          ) : null}
 
+          {show("cliente") ? (
           <Section
             id={`client-${board.mondayBoardId}`}
             title="Cliente (opcional)"
@@ -348,7 +415,9 @@ export function BoardEquivalences({
               </div>
             ) : null}
           </Section>
+          ) : null}
 
+          {show("subelementos") ? (
           <Section id={`subitems-${board.mondayBoardId}`} title="Subelementos" description={subitemsCopy.description}>
             <ChoiceSelect
               label={subitemsCopy.selectLabel}
@@ -359,13 +428,15 @@ export function BoardEquivalences({
               }
             />
             {source.subitemColumns.length > 0 && subitemsCopy.showColumns ? (
-              <EquivalenceTable monday="Columna de subelementos" cincel="Campo de Cincel">
-                {columnRows(source.subitemColumns, true)}
-              </EquivalenceTable>
+              <ColumnsTable monday="Columna de subelementos">{columnRows(source.subitemColumns, true)}</ColumnsTable>
             ) : null}
           </Section>
+          ) : null}
 
-          {keys.length > 0 ? (
+          {show("nombres") && keys.length === 0 && sections !== ALL_SECTIONS ? (
+            <p className="text-sm text-muted-foreground">Este tablero no tiene nombres de proyecto que cambiar.</p>
+          ) : null}
+          {show("nombres") && keys.length > 0 ? (
             <Section
               id={`names-${board.mondayBoardId}`}
               title="Nombres y códigos de proyecto"
@@ -423,6 +494,7 @@ export function BoardEquivalences({
             </Section>
           ) : null}
 
+          {show("cronograma") ? (
           <Section id={`schedule-${board.mondayBoardId}`} title="Cronograma" description="Crea filas de cronograma con las fechas de la línea de tiempo.">
             <Label className="flex items-center gap-2">
               <Switch
@@ -474,7 +546,9 @@ export function BoardEquivalences({
               </div>
             ) : null}
           </Section>
+          ) : null}
 
+          {show("plantillas") ? (
           <Section
             id={`templates-${board.mondayBoardId}`}
             title="Tareas de plantilla"
@@ -521,13 +595,14 @@ export function BoardEquivalences({
               </EquivalenceTable>
             )}
           </Section>
+          ) : null}
         </>
       )}
     </div>
   );
 }
 
-/** Paso 3: one equivalence table per board, prefilled by init and editable. */
+/** Paso 3: the board picker and four tabs (Columnas, Estatus, Grupos y tramo, Nombres y códigos de proyecto), prefilled by init and editable. */
 export function EquivalenciasStep({
   mapping,
   source,
@@ -548,6 +623,7 @@ export function EquivalenciasStep({
   initialBoardId?: string | null;
 }) {
   const [boardId, setBoardId] = useState(initialBoardId ?? mapping.boards[0]?.mondayBoardId ?? "");
+  const [tab, setTab] = useState<EquivalenciasTab>("columnas");
   const board = findBoard(mapping, boardId) ?? mapping.boards[0];
   const boardSource = source.boards.find((candidate) => candidate.id === board?.mondayBoardId);
 
@@ -559,42 +635,87 @@ export function EquivalenciasStep({
     );
   }
 
+  const labels = statusMapLabels(mapping, source);
+  const toReview = statusesToReview(labels, choices.statusMap ?? {}, choices.statuses);
+  const boardChoices = mapping.boards.map((candidate) => ({
+    value: candidate.mondayBoardId,
+    label: `${candidate.name} · ${STRATEGY_OPTIONS.find((option) => option.value === candidate.strategy)?.label ?? ""}`,
+  }));
+  const boardPart = (sections: readonly BoardSection[]) =>
+    boardSource ? (
+      <BoardEquivalences
+        key={board.mondayBoardId}
+        board={board}
+        source={boardSource}
+        choices={choices}
+        sections={sections}
+        onBoardChange={(update) => onMappingChange(updateBoard(mapping, board.mondayBoardId, update))}
+      />
+    ) : (
+      <Alert variant="destructive">
+        <AlertDescription>Este tablero no está en la exportación. Exporta otra vez en Tableros.</AlertDescription>
+      </Alert>
+    );
+
   return (
-    <div className="space-y-6">
-      <Section
-        id="monday-status-map"
-        title="Estatus de monday"
-        description="Se guarda para todo el despacho y se usa en esta y en las próximas importaciones."
-      >
-        <StatusMapTable
-          labels={statusMapLabels(mapping, source)}
-          choices={choices}
-          onStatusCreated={onStatusCreated}
-          onSaved={onStatusMapSaved}
-        />
-      </Section>
-      <div className="space-y-2">
-        <Label>Tablero</Label>
-        <ChoiceSelect
-          label="Tablero"
-          value={board.mondayBoardId}
-          choices={mapping.boards.map((candidate) => ({ value: candidate.mondayBoardId, label: candidate.name }))}
-          onChange={setBoardId}
-        />
+    <section className="space-y-5" aria-labelledby="monday-equivalencias">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h3 id="monday-equivalencias" className="text-[15px] font-semibold text-foreground">
+            Equivalencias
+          </h3>
+          <p className="text-[13px] text-muted-foreground">
+            Revisa qué será en Cincel cada columna, estatus y grupo de monday.
+          </p>
+        </div>
+        <div className="w-full space-y-2 sm:w-auto sm:min-w-[280px]">
+          <Label>Tablero</Label>
+          <ChoiceSelect label="Tablero" value={board.mondayBoardId} choices={boardChoices} onChange={setBoardId} />
+        </div>
       </div>
-      {boardSource ? (
-        <BoardEquivalences
-          key={board.mondayBoardId}
-          board={board}
-          source={boardSource}
-          choices={choices}
-          onBoardChange={(update) => onMappingChange(updateBoard(mapping, board.mondayBoardId, update))}
-        />
-      ) : (
-        <Alert variant="destructive">
-          <AlertDescription>Este tablero no está en la exportación. Exporta otra vez en Tableros.</AlertDescription>
-        </Alert>
-      )}
-    </div>
+
+      <Tabs value={tab} onValueChange={(value) => setTab(value as EquivalenciasTab)}>
+        <div className="max-w-full overflow-x-auto">
+          <TabsList aria-label="Equivalencias">
+            <TabsTrigger value="columnas">
+              Columnas <span className="font-mono text-xs tabular-nums">{boardSource?.columns.length ?? 0}</span>
+            </TabsTrigger>
+            <TabsTrigger value="estatus">
+              Estatus <span className="font-mono text-xs tabular-nums">{labels.length}</span>
+              {toReview > 0 ? <Badge variant="warning">{toReview} por revisar</Badge> : null}
+            </TabsTrigger>
+            <TabsTrigger value="grupos">
+              Grupos y tramo <span className="font-mono text-xs tabular-nums">{boardSource?.groups.length ?? 0}</span>
+            </TabsTrigger>
+            <TabsTrigger value="nombres">Nombres y códigos de proyecto</TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="columnas" className="pt-4">
+          {boardPart(["columnas", "subelementos"])}
+        </TabsContent>
+        <TabsContent value="estatus" className="pt-4">
+          <Section
+            id="monday-status-map"
+            title="Estatus de monday"
+            description="Cada estatus de monday y su estatus en Cincel. Se guarda para todo el despacho y se usa en esta y en las próximas importaciones."
+          >
+            <StatusMapTable
+              labels={labels}
+              choices={choices}
+              onStatusCreated={onStatusCreated}
+              onSaved={onStatusMapSaved}
+            />
+          </Section>
+        </TabsContent>
+        <TabsContent value="grupos" className="pt-4">
+          {boardPart(["contactos", "grupos", "cliente", "plantillas", "cronograma"])}
+        </TabsContent>
+        <TabsContent value="nombres" className="pt-4">
+          {boardPart(["nombres"])}
+        </TabsContent>
+      </Tabs>
+    </section>
   );
 }
+
+type EquivalenciasTab = "columnas" | "estatus" | "grupos" | "nombres";

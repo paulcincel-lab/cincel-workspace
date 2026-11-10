@@ -5,7 +5,12 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { TRAMO_INVALIDATIONS } from "@/lib/tramos/invalidations";
+import type { AjustesTramosPageData } from "@/lib/types/ajustes-catalogs";
 import type { WorkflowDetail, WorkflowPhase, WorkflowTaskTemplate } from "@/lib/types/core";
+
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
 
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => null,
@@ -20,6 +25,10 @@ vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
 
 const actions = vi.hoisted(() => ({
   fetchWorkflowsAction: vi.fn(),
+  createWorkflowAction: vi.fn(),
+  updateWorkflowAction: vi.fn(),
+  deleteWorkflowAction: vi.fn(),
+  reorderWorkflowsAction: vi.fn(),
   createTemplateAction: vi.fn(),
   updateTemplateAction: vi.fn(),
   deactivateTemplateAction: vi.fn(),
@@ -31,7 +40,7 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/workflows-actions", () => actions);
 
-import { autoStartHelpText, sortTemplatesByPhase, TramosClient } from "./TramosClient";
+import { autoStartHelpText, sortTemplatesByPhase, tramoKeyFor, TramosClient } from "./TramosClient";
 
 function phase(overrides: Partial<WorkflowPhase>): WorkflowPhase {
   return { id: "p", name: "Fase", sortOrder: 0, workflowId: "w-diseno", active: true, templateCount: 0, ...overrides };
@@ -63,6 +72,7 @@ const PRESALE: WorkflowDetail = {
   active: true,
   sortOrder: 1,
   autoStart: "on_create",
+  colorSlot: null,
   phases: [phase({ id: "p-cobro", name: "Cobro", workflowId: "w-presale", templateCount: 1 })],
   templates: [],
   readiness: null,
@@ -76,6 +86,7 @@ const DISENO: WorkflowDetail = {
   active: true,
   sortOrder: 2,
   autoStart: "manual",
+  colorSlot: null,
   phases: [
     phase({ id: "p-anteproyecto", name: "Anteproyecto", sortOrder: 0, templateCount: 1 }),
     phase({ id: "p-ejecutivo", name: "Ejecutivo", sortOrder: 1, templateCount: 1 }),
@@ -90,11 +101,18 @@ const DISENO: WorkflowDetail = {
   },
 };
 
+const ACTIVE_PROJECTS = { "w-presale": 3 };
+const PHASE_TASKS = { "p-anteproyecto": 1, "p-ejecutivo": 4 };
+
+function pageOf(workflows: WorkflowDetail[]): AjustesTramosPageData {
+  return { workflows, activeProjects: ACTIVE_PROJECTS, phaseTaskCounts: PHASE_TASKS };
+}
+
 /** Renders under a client hydrated with the tramos, as the page's prefetch leaves it. */
-function renderTramos(workflows: WorkflowDetail[]): { client: QueryClient } {
+function renderTramos(workflows: WorkflowDetail[] = [PRESALE, DISENO]): { client: QueryClient } {
   const client = createTestQueryClient();
-  client.setQueryData(qk.ajustes.page("tramos"), { workflows });
-  pageData.getAjustesTramosPageData.mockResolvedValue({ workflows });
+  client.setQueryData(qk.ajustes.page("tramos"), pageOf(workflows));
+  pageData.getAjustesTramosPageData.mockResolvedValue(pageOf(workflows));
   return renderWithQueryClient(<TramosClient />, { client });
 }
 
@@ -106,9 +124,21 @@ function row(text: string) {
   return screen.getAllByRole("row").find((r) => r.textContent?.includes(text))!;
 }
 
-async function openRowAction(rowText: string, label: string) {
-  fireEvent.click(within(row(rowText)).getByLabelText("Acciones"));
+function tramoNames(): string[] {
+  return screen
+    .getAllByRole("row")
+    .slice(1)
+    .map((r) => r.querySelectorAll("td")[1]?.textContent ?? "");
+}
+
+async function openRowAction(name: string, label: string) {
+  fireEvent.click(screen.getByRole("button", { name: `Acciones de ${name}` }));
   fireEvent.click(await screen.findByText(label));
+}
+
+async function openEditor(name: string) {
+  await openRowAction(name, "Editar");
+  return screen.findByRole("complementary", { name: `Editar tramo · ${name}` });
 }
 
 describe("TramosClient", () => {
@@ -118,15 +148,274 @@ describe("TramosClient", () => {
 
   afterEach(cleanup);
 
-  it("shows the header, one tab per tramo in order and the first tramo's start text", () => {
+  it("lists the tramos in flow order with color, fases, templates and active projects", () => {
     renderTramos([DISENO, PRESALE]);
 
-    expect(screen.getByText("Tramos y fases")).toBeTruthy();
-    expect(screen.getByText("Fases, tareas de plantilla e inicio automático de cada tramo.")).toBeTruthy();
-    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Presale", "Diseño"]);
-    expect(screen.getByText("Se inicia al crear un proyecto.")).toBeTruthy();
-    expect(screen.getByRole("switch", { name: /Iniciar automáticamente/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Tramos y fases" })).toBeTruthy();
+    expect(screen.getByText("El orden define el flujo de cada proyecto. Arrastra para reordenar.")).toBeTruthy();
+    expect(screen.getByLabelText("2 en total")).toBeTruthy();
+    expect(tramoNames()).toEqual(["Presale", "Diseño"]);
+    for (const header of ["Orden", "Tramo", "Color", "Fases", "Plantillas", "Proyectos activos"]) {
+      expect(screen.getByRole("columnheader", { name: header })).toBeTruthy();
+    }
+    const presale = within(row("Presale")).getAllByRole("cell").map((c) => c.textContent);
+    expect(presale).toEqual(expect.arrayContaining(["Azul", "1", "0", "3"]));
+    const diseno = within(row("Diseño")).getAllByRole("cell").map((c) => c.textContent);
+    expect(diseno).toEqual(expect.arrayContaining(["Violeta", "2", "2", "0"]));
+  });
+
+  it("shows the color an admin chose over the derived one", () => {
+    renderTramos([{ ...PRESALE, colorSlot: 5 }]);
+    expect(within(row("Presale")).getByText("Verde")).toBeTruthy();
+  });
+
+  it("makes no call on mount: the tramos are hydrated", () => {
+    renderTramos();
+    expect(pageData.getAjustesTramosPageData).not.toHaveBeenCalled();
+    expect(actions.fetchWorkflowsAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the empty text and the inline add without tramos", () => {
+    renderTramos([]);
+    expect(screen.getByText("Aún no hay tramos.")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Agregar tramo…")).toBeTruthy();
+  });
+
+  it("keyboard reorder announces the new position", async () => {
+    actions.reorderWorkflowsAction.mockResolvedValue({ ok: true, data: undefined });
+    const { client } = renderTramos();
+    // The refetch after the write reads the saved order.
+    pageData.getAjustesTramosPageData.mockResolvedValue(
+      pageOf([
+        { ...DISENO, sortOrder: 0 },
+        { ...PRESALE, sortOrder: 1 },
+      ]),
+    );
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    const handle = screen.getByRole("button", { name: "Mover Presale" });
+    fireEvent.keyDown(handle, { key: " " });
+    fireEvent.keyDown(handle, { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mover Presale" }), { key: " " });
+
+    expect(screen.getByText("Presale movido a la posición 2 de 2")).toBeTruthy();
+    await waitFor(() => expect(actions.reorderWorkflowsAction).toHaveBeenCalledWith(["w-diseno", "w-presale"]));
+    await waitFor(() => expect(tramoNames()).toEqual(["Diseño", "Presale"]));
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual([...TRAMO_INVALIDATIONS]));
+  });
+
+  it("rolls the order back and shows the Tramos copy when the reorder fails", async () => {
+    actions.reorderWorkflowsAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
+    renderTramos();
+
+    const handle = screen.getByRole("button", { name: "Mover Diseño" });
+    fireEvent.keyDown(handle, { key: " " });
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mover Diseño" }), { key: " " });
+
+    expect(await screen.findByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
+    expect(tramoNames()).toEqual(["Presale", "Diseño"]);
+  });
+
+  it("inline add creates on Enter and flashes the row", async () => {
+    const created = { ...PRESALE, id: "w-deco", key: "decoracion", name: "Decoración", sortOrder: 3, autoStart: "manual" as const };
+    actions.createWorkflowAction.mockResolvedValue(created);
+    renderTramos();
+
+    const input = screen.getByLabelText("Agregar tramo");
+    fireEvent.change(input, { target: { value: "Decoración" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(actions.createWorkflowAction).toHaveBeenCalledWith({ key: "decoracion", name: "Decoración", sortOrder: 3 }),
+    );
+    await waitFor(() => expect(row("Decoración").className).toContain("row-new"));
+    expect((input as HTMLInputElement).value).toBe("");
+  });
+
+  it("Escape clears the inline add without creating", () => {
+    renderTramos();
+    const input = screen.getByLabelText("Agregar tramo") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Otro" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("");
+    expect(actions.createWorkflowAction).not.toHaveBeenCalled();
+  });
+
+  it("color saves: Verde, Guardar cambios → updateWorkflowAction with slot 5", async () => {
+    actions.updateWorkflowAction.mockResolvedValue({ ...DISENO, colorSlot: 5 });
+    const { client } = renderTramos();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const panel = await openEditor("Diseño");
+
+    const group = within(panel).getByRole("radiogroup", { name: "Color del tramo" });
+    expect(within(group).getByRole("radio", { name: "Violeta" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(within(group).getByRole("radio", { name: "Verde" }));
+    expect(within(group).getByRole("radio", { name: "Verde" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(within(panel).getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(actions.updateWorkflowAction).toHaveBeenCalledWith("w-diseno", { colorSlot: 5 }));
+    expect(actions.updateWorkflowPhaseAction).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual([...TRAMO_INVALIDATIONS]));
+  });
+
+  it("saves a renamed fase and the tramo name with Guardar cambios", async () => {
+    actions.updateWorkflowAction.mockResolvedValue({ ...DISENO, name: "Diseño arquitectónico" });
+    actions.updateWorkflowPhaseAction.mockResolvedValue({ ok: true, data: phase({ id: "p-ejecutivo", name: "Proyecto ejecutivo" }) });
+    renderTramos();
+    const panel = await openEditor("Diseño");
+
+    fireEvent.change(within(panel).getByLabelText("Nombre"), { target: { value: "Diseño arquitectónico" } });
+    fireEvent.change(within(panel).getByLabelText("Nombre de la fase Ejecutivo"), {
+      target: { value: "Proyecto ejecutivo" },
+    });
+    fireEvent.click(within(panel).getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(actions.updateWorkflowAction).toHaveBeenCalledWith("w-diseno", { name: "Diseño arquitectónico" }),
+    );
+    await waitFor(() =>
+      expect(actions.updateWorkflowPhaseAction).toHaveBeenCalledWith("p-ejecutivo", { name: "Proyecto ejecutivo" }),
+    );
+  });
+
+  it("shows the save error in the editor footer", async () => {
+    actions.updateWorkflowPhaseAction.mockResolvedValue({ ok: false, error: "NAME_TAKEN" });
+    renderTramos();
+    const panel = await openEditor("Diseño");
+
+    fireEvent.change(within(panel).getByLabelText("Nombre de la fase Ejecutivo"), { target: { value: "Anteproyecto" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Guardar cambios" }));
+
+    expect(await within(panel).findByText("Ya existe una fase con ese nombre en Diseño.")).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Editar tramo · Diseño" })).toBeTruthy();
+  });
+
+  it("lists each fase with its index and task count", async () => {
+    renderTramos();
+    const panel = await openEditor("Diseño");
+
+    const list = within(panel).getByRole("list", { name: "Fases de Diseño" });
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent).toContain("1 tarea");
+    expect(items[1].textContent).toContain("4 tareas");
+    expect(within(panel).getByText("Diseño (2 plantillas)")).toBeTruthy();
+  });
+
+  it("fase keyboard reorder persists on drop", async () => {
+    actions.reorderWorkflowPhasesAction.mockResolvedValue({ ok: true, data: undefined });
+    renderTramos();
+    const panel = await openEditor("Diseño");
+
+    const handle = within(panel).getByRole("button", { name: "Mover Ejecutivo" });
+    fireEvent.keyDown(handle, { key: " " });
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+    expect(within(panel).getByText("Ejecutivo movido a la posición 1 de 2")).toBeTruthy();
+    expect(actions.reorderWorkflowPhasesAction).not.toHaveBeenCalled();
+    fireEvent.keyDown(within(panel).getByRole("button", { name: "Mover Ejecutivo" }), { key: " " });
+
+    await waitFor(() =>
+      expect(actions.reorderWorkflowPhasesAction).toHaveBeenCalledWith("w-diseno", ["p-ejecutivo", "p-anteproyecto"]),
+    );
+  });
+
+  it("adds a fase inline and marks it Nueva", async () => {
+    const created = phase({ id: "p-obra", name: "Obra", sortOrder: 2 });
+    actions.createWorkflowPhaseAction.mockResolvedValue({ ok: true, data: created });
+    const { client } = renderTramos();
+    pageData.getAjustesTramosPageData.mockResolvedValue(pageOf([PRESALE, { ...DISENO, phases: [...DISENO.phases, created] }]));
+    const panel = await openEditor("Diseño");
+
+    const input = within(panel).getByLabelText("Agregar fase a Diseño");
+    fireEvent.change(input, { target: { value: "Obra" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(actions.createWorkflowPhaseAction).toHaveBeenCalledWith("w-diseno", { name: "Obra" }));
+    await client.refetchQueries({ queryKey: qk.ajustes.page("tramos") });
+    expect(await within(panel).findByText("Nueva")).toBeTruthy();
+  });
+
+  it("shows NAME_TAKEN with the tramo name when a new fase repeats one", async () => {
+    actions.createWorkflowPhaseAction.mockRejectedValueOnce(new Error("NAME_TAKEN"));
+    renderTramos();
+    const panel = await openEditor("Diseño");
+
+    const input = within(panel).getByLabelText("Agregar fase a Diseño") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Ejecutivo" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(await within(panel).findByText("Ya existe una fase con ese nombre en Diseño.")).toBeTruthy();
+    expect(input.value).toBe("Ejecutivo");
+  });
+
+  it("deactivates a fase from its menu", async () => {
+    actions.updateWorkflowPhaseAction.mockResolvedValue({ ok: true, data: phase({ id: "p-anteproyecto", active: false }) });
+    renderTramos();
+    const panel = await openEditor("Diseño");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Acciones de Anteproyecto" }));
+    fireEvent.click(await screen.findByText("Desactivar"));
+
+    await waitFor(() =>
+      expect(actions.updateWorkflowPhaseAction).toHaveBeenCalledWith("p-anteproyecto", { active: false }),
+    );
+  });
+
+  it("saves the auto-start switch from the editor", async () => {
+    actions.setWorkflowAutoStartAction.mockResolvedValue({ ok: true, data: { ...PRESALE, autoStart: "manual" } });
+    const { client } = renderTramos();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const panel = await openEditor("Presale");
+
+    expect(within(panel).getByText("Se inicia al crear un proyecto.")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("switch", { name: /Iniciar automáticamente/ }));
+
+    await waitFor(() => expect(actions.setWorkflowAutoStartAction).toHaveBeenCalledWith("w-presale", false));
+    await waitFor(() =>
+      expect(invalidatedKeys(invalidate)).toEqual([qk.ajustes.page("tramos"), qk.catalog.workflows(), qk.proyectos.list()]),
+    );
+  });
+
+  it("editor returns focus to the row action on close", async () => {
+    renderTramos();
+    const panel = await openEditor("Diseño");
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Cerrar" }));
+
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Acciones de Diseño" })),
+    );
+  });
+
+  it("Escape closes the editor", async () => {
+    renderTramos();
+    const panel = await openEditor("Diseño");
+    fireEvent.keyDown(within(panel).getByLabelText("Nombre"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
+  });
+
+  it("can't delete a tramo with active projects", async () => {
+    renderTramos();
+    fireEvent.click(screen.getByRole("button", { name: "Acciones de Presale" }));
+    const item = (await screen.findByText("Eliminar")).closest('[role="menuitem"]')!;
+    expect(item.hasAttribute("data-disabled") || item.getAttribute("aria-disabled") === "true").toBe(true);
+    fireEvent.click(item);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("asks before deleting a tramo and then deletes it", async () => {
+    actions.deleteWorkflowAction.mockResolvedValue(undefined);
+    renderTramos();
+    await openRowAction("Diseño", "Eliminar");
+
+    const dialog = await screen.findByRole("alertdialog", { name: "¿Eliminar el tramo «Diseño»?" });
+    expect(actions.deleteWorkflowAction).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => expect(actions.deleteWorkflowAction).toHaveBeenCalledWith("w-diseno"));
   });
 
   it("describes the read-only readiness rule for later tramos", () => {
@@ -136,147 +425,14 @@ describe("TramosClient", () => {
     expect(autoStartHelpText(PRESALE, true)).toBe("Se inicia al crear un proyecto.");
   });
 
-  it("makes no call on mount: the tramos are hydrated", () => {
-    renderTramos([DISENO, PRESALE]);
-    expect(pageData.getAjustesTramosPageData).not.toHaveBeenCalled();
-    expect(actions.fetchWorkflowsAction).not.toHaveBeenCalled();
-  });
-
-  it("saves the auto-start switch and invalidates Tramos, the catalog and the Proyectos list (no refresh helper)", async () => {
-    actions.setWorkflowAutoStartAction.mockResolvedValue({ ok: true, data: { ...PRESALE, autoStart: "manual" } });
-    const { client } = renderTramos([PRESALE, DISENO]);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
-    fireEvent.click(screen.getByRole("switch", { name: /Iniciar automáticamente/ }));
-
-    await waitFor(() => expect(actions.setWorkflowAutoStartAction).toHaveBeenCalledWith("w-presale", false));
-    await waitFor(() =>
-      expect(invalidatedKeys(invalidate)).toEqual([
-        qk.ajustes.page("tramos"),
-        qk.catalog.workflows(),
-        qk.proyectos.list(),
-      ]),
-    );
-    // The active page query refetches once through its page-data action; the old list action is gone.
-    await waitFor(() => expect(pageData.getAjustesTramosPageData).toHaveBeenCalledTimes(1));
-    expect(actions.fetchWorkflowsAction).not.toHaveBeenCalled();
-  });
-
-  it("a fase change also invalidates Puestos, Tareas and Proyectos", async () => {
-    actions.updateWorkflowPhaseAction.mockResolvedValue({ ok: true, data: phase({ id: "p-anteproyecto", active: false }) });
-    const { client } = renderTramos([{ ...DISENO, sortOrder: 0 }]);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
-    await openRowAction("Anteproyecto", "Desactivar");
-
-    await waitFor(() =>
-      expect(invalidatedKeys(invalidate)).toEqual([
-        qk.ajustes.page("tramos"),
-        qk.catalog.workflows(),
-        qk.ajustes.page("puestos"),
-        qk.tareas.all,
-        qk.proyectos.all,
-      ]),
-    );
-  });
-
-  it("a template save invalidates only Tramos and the catalog", async () => {
-    actions.updateTemplateAction.mockResolvedValue({ ok: true, data: DISENO.templates[0] });
-    const { client } = renderTramos([{ ...DISENO, sortOrder: 0 }]);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
-    await openRowAction("Planos ejecutivos", "Editar");
-    fireEvent.click(await screen.findByRole("button", { name: "Guardar" }));
-
-    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual([qk.ajustes.page("tramos"), qk.catalog.workflows()]));
-  });
-
-  it("shows the Tramos copy for a failed result (production keeps the code)", async () => {
-    actions.setWorkflowAutoStartAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
-    renderTramos([PRESALE, DISENO]);
-
-    fireEvent.click(screen.getByRole("switch", { name: /Iniciar automáticamente/ }));
-
-    expect(await screen.findByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
-  });
-
-  it("lists fases with their template count and state", () => {
-    renderTramos([{ ...DISENO, sortOrder: 0 }]);
-
-    const cells = within(row("Ejecutivo")).getAllByRole("cell").map((c) => c.textContent);
-    expect(cells).toContain("Activa");
-    expect(screen.getByRole("columnheader", { name: "Tareas de plantilla" })).toBeTruthy();
-  });
-
-  it("shows the empty text for a tramo without fases", () => {
-    renderTramos([{ ...PRESALE, phases: [] }]);
-
-    expect(screen.getByText("Este tramo aún no tiene fases.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "+ Nueva tarea de plantilla" }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
   it("groups template tasks by fase order", () => {
     const sorted = sortTemplatesByPhase(DISENO.templates, DISENO.phases);
     expect(sorted.map((t) => t.title)).toEqual(["Reporte Estado Actual", "Planos ejecutivos"]);
   });
 
-  it("can't save a template task without a fase", async () => {
-    renderTramos([{ ...DISENO, sortOrder: 0 }]);
-
-    fireEvent.click(screen.getByRole("button", { name: "+ Nueva tarea de plantilla" }));
-    fireEvent.change(await screen.findByLabelText("Tarea"), { target: { value: "Nueva tarea" } });
-
-    const save = screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
-    fireEvent.click(save);
-    expect(actions.createTemplateAction).not.toHaveBeenCalled();
-    expect(screen.getByText("Tramo: Diseño")).toBeTruthy();
-  });
-
-  it("shows NAME_TAKEN for a template task with the fase name", async () => {
-    actions.updateTemplateAction.mockRejectedValue(new Error("NAME_TAKEN"));
-    renderTramos([{ ...DISENO, sortOrder: 0 }]);
-
-    await openRowAction("Planos ejecutivos", "Editar");
-    fireEvent.click(await screen.findByRole("button", { name: "Guardar" }));
-
-    expect(await screen.findByText("Ya existe una tarea de plantilla con ese nombre en Ejecutivo.")).toBeTruthy();
-    expect(actions.updateTemplateAction).toHaveBeenCalledWith(
-      "t-planos",
-      expect.objectContaining({ title: "Planos ejecutivos", phaseId: "p-ejecutivo" }),
-    );
-  });
-
-  it("shows PHASE_MISMATCH for a template task", async () => {
-    actions.updateTemplateAction.mockRejectedValue(new Error("PHASE_MISMATCH: p-ejecutivo"));
-    renderTramos([{ ...DISENO, sortOrder: 0 }]);
-
-    await openRowAction("Planos ejecutivos", "Editar");
-    fireEvent.click(await screen.findByRole("button", { name: "Guardar" }));
-
-    expect(await screen.findByText("Esa fase no pertenece al tramo de la tarea.")).toBeTruthy();
-  });
-
-  it("creates a fase and shows NAME_TAKEN with the tramo name", async () => {
-    actions.createWorkflowPhaseAction.mockRejectedValueOnce(new Error("NAME_TAKEN"));
-    renderTramos([{ ...DISENO, sortOrder: 0 }]);
-
-    fireEvent.click(screen.getByRole("button", { name: "+ Nueva fase" }));
-    fireEvent.change(await screen.findByLabelText("Nombre"), { target: { value: "Ejecutivo" } });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
-
-    expect(await screen.findByText("Ya existe una fase con ese nombre en Diseño.")).toBeTruthy();
-    expect(actions.createWorkflowPhaseAction).toHaveBeenCalledWith("w-diseno", { name: "Ejecutivo" });
-  });
-
-  it("deactivates a fase through the row actions", async () => {
-    actions.updateWorkflowPhaseAction.mockResolvedValue(phase({ id: "p-ejecutivo", active: false }));
-    renderTramos([{ ...DISENO, sortOrder: 0 }]);
-
-    await openRowAction("Anteproyecto", "Desactivar");
-
-    await waitFor(() =>
-      expect(actions.updateWorkflowPhaseAction).toHaveBeenCalledWith("p-anteproyecto", { active: false }),
-    );
+  it("derives a unique key from the tramo name", () => {
+    expect(tramoKeyFor("Decoración", new Set())).toBe("decoracion");
+    expect(tramoKeyFor("  Diseño de interiores ", new Set(["diseno-de-interiores"]))).toBe("diseno-de-interiores-2");
+    expect(tramoKeyFor("¡!", new Set())).toBe("tramo");
   });
 });

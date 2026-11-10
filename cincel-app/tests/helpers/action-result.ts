@@ -75,7 +75,12 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "disconnectGmailAction",
   ],
   "profile-photo-actions": ["removeMyPhotoAction"],
-  "task-statuses-actions": ["createTaskStatusAction", "updateTaskStatusAction", "deleteTaskStatusAction"],
+  "task-statuses-actions": [
+    "createTaskStatusAction",
+    "updateTaskStatusAction",
+    "deleteTaskStatusAction",
+    "reorderTaskStatusesAction",
+  ],
   "positions-actions": [
     "createPositionAction",
     "updatePositionAction",
@@ -92,6 +97,7 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "updateWorkflowPhaseAction",
     "reorderWorkflowPhasesAction",
     "setWorkflowAutoStartAction",
+    "reorderWorkflowsAction",
   ],
   "preferences-actions": ["updateMyPreferencesAction"],
   "tramo-start-actions": ["startTramoAction", "undoStartTramoAction"],

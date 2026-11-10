@@ -28,3 +28,8 @@ export function portalProjectFolderHref(projectId: string, folderId: string | nu
   const href = portalProjectTabHref(projectId, "archivos");
   return folderId ? `${href}&folder=${encodeURIComponent(folderId)}` : href;
 }
+
+/** Download route of one shared file (BE §B.4.5), the one the file browser uses. */
+export function portalDocumentDownloadUrl(projectId: string, fileId: string): string {
+  return `/api/portal/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}/download`;
+}

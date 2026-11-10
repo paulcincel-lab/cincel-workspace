@@ -40,7 +40,7 @@ import { NextRequest } from "next/server";
 import { GET } from "./route";
 
 const PID = "11111111-1111-4111-8111-111111111111";
-const user = { id: "pu-1", name: "Ana", email: "ana@example.com", contactId: "c-1" };
+const user = { id: "pu-1", name: "Ana", email: "ana@example.com", contactId: "c-1", companyName: null };
 const readyProject = {
   accessId: "acc-1",
   projectId: PID,

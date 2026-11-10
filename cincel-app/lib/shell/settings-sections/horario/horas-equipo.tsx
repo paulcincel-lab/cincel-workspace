@@ -3,7 +3,7 @@
  *
  * `canViewTeamHours` (Administrador, Dirección); hidden while
  * `fetchTeamHoursAction` is a stub. The only section that changes with the
- * presentation style (`TeamHoursTable` on `RecordTable`). Renders inside `HorarioClient`.
+ * presentation style (`TeamHoursTable` on `TeamHoursWidget`). Renders inside `HorarioClient`.
  */
 import { HorarioHorasEquipo } from "@/components/ajustes/HorarioSections";
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";

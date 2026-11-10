@@ -21,7 +21,7 @@ export const ASSISTANT_THREADS_KEEP = 50;
 export const ASSISTANT_ACTIONS_PAGE = 30;
 
 /** One row of the threads list: the thread plus its rail status (`AssistantThreadSummary`). */
-export type AssistantThreadListRow = Pick<AssistantThreadRow, "id" | "title" | "updatedAt" | "pinnedAt"> & {
+export type AssistantThreadListRow = Pick<AssistantThreadRow, "id" | "title" | "updatedAt" | "pinnedAt" | "toolCallCount"> & {
   pendingApprovals: number;
   unread: boolean;
 };
@@ -51,6 +51,7 @@ const threadListColumns = {
   title: assistantThreads.title,
   updatedAt: assistantThreads.updatedAt,
   pinnedAt: assistantThreads.pinnedAt,
+  toolCallCount: assistantThreads.toolCallCount,
   pendingApprovals: pendingApprovalsSql,
   unread: unreadSql,
 };

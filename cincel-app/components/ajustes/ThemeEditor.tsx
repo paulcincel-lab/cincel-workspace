@@ -1,26 +1,38 @@
 "use client";
 
+import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
+import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
-import { useMemo, useState, type CSSProperties } from "react";
+import { Loader2Icon } from "lucide-react";
+import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { StoreApi } from "zustand";
 
+import { AdminPageHeading } from "@/components/ajustes/AdminFields";
+import { STYLE_DESCRIPTIONS, STYLE_NAMES, StyleSchematic } from "@/components/ajustes/AparienciaSections";
+import { ChoiceCards, SegmentedChoice, type ChoiceCardOption } from "@/components/ajustes/ChoiceCards";
 import { ContrastBadge } from "@/components/ajustes/ContrastBadge";
 import { TokenRow } from "@/components/ajustes/TokenRow";
-import { TypeScaleRow } from "@/components/ajustes/TypeScaleRow";
+import { TYPE_SCALE_GRID, TypeScaleRow } from "@/components/ajustes/TypeScaleRow";
 import { FormDialog } from "@/components/patterns/FormDialog";
-import { SettingsRow } from "@/components/patterns/SettingsRow";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
-import { PageHeader } from "@/components/shell/PageHeader";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
-import { Badge } from "@/components/ui/shadcn/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/shadcn/alert-dialog";
 import { Button } from "@/components/ui/shadcn/button";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Label } from "@/components/ui/shadcn/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Slider } from "@/components/ui/shadcn/slider";
+import { Switch } from "@/components/ui/shadcn/switch";
 import { resetOrgAppearanceAction, saveOrgAppearanceAction } from "@/lib/actions/org-appearance-actions";
 import { IMPLEMENTED } from "@/lib/actions/org-appearance-actions.flags";
-import { actionErrorText } from "@/lib/errors";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
 import { ajustesTemaOptions, type AjustesTemaPageData } from "@/lib/query/options/ajustes";
@@ -29,19 +41,24 @@ import {
   useAppearanceStoreApiOrNull,
   type AppearanceState,
 } from "@/lib/stores/appearance-store";
-import type { OrgAppearance, ThemeId, TokenName, TypeRole } from "@/lib/types/redesign";
+import type { OrgAppearance, PresentationStyle, ThemeId, TokenName, TypeRole } from "@/lib/types/redesign";
 import { toCssVars } from "@/lib/ui/appearance-css";
 import { resolveAppearance } from "@/lib/ui/preferences";
 import {
   applyPreset,
   contrastResults,
   EDIT_MODE_LABELS,
+  failingColorCount,
+  failingColorsText,
   failingRows,
   FONT_FAMILIES,
+  INTERFAZ_VISIBLE,
   matchesPreset,
+  publishLowContrastQuestion,
   SHADOW_LABELS,
   STYLE_CARDS,
   textPairs,
+  tokenContrast,
   TOKEN_SECTIONS,
   TYPE_ROLE_LABELS,
   type EditMode,
@@ -52,7 +69,6 @@ import { SHAPE_BOUNDS, THEME_IDS, THEME_LABELS, TYPE_SCALE_BOUNDS } from "@/lib/
 
 export type ThemeEditorProps = { presets: Record<ThemeId, OrgAppearance> };
 
-const LOW_CONTRAST_HINT_ID = "theme-low-contrast";
 const FONT_ITEMS = Object.fromEntries(FONT_FAMILIES.map((f) => [f, f]));
 const SHADOWS = Object.keys(SHADOW_LABELS) as OrgAppearance["shape"]["shadow"][];
 const EDIT_MODES: readonly EditMode[] = ["light", "dark"];
@@ -85,11 +101,30 @@ export function applyPublishedOrgAppearance(store: StoreApi<AppearanceState> | n
   applyAppearanceToDocument(next, true);
 }
 
+/** "¿Partir de {tema}?" confirmation title. */
+export function presetConfirmTitle(id: ThemeId): string {
+  return `¿Partir de ${THEME_LABELS[id]}?`;
+}
+
+/** Left text of the save bar: "Cambios sin publicar", then the failing colors (in `--destructive`) when there are any. */
+function SaveBarStatus({ dirty, failing }: { dirty: boolean; failing: number }) {
+  if (!dirty && failing === 0) return null;
+  return (
+    <>
+      {dirty ? "Cambios sin publicar" : null}
+      {dirty && failing > 0 ? " · " : null}
+      {failing > 0 ? <span className="text-destructive">{failingColorsText(failing)}</span> : null}
+    </>
+  );
+}
+
 /**
- * Ajustes › Tema y estilo (redesign FE §3.8): org theme editor with "Partir
- * de" presets, token / type / shape rows, a sticky live preview of the draft
- * and `ContrastBadge`. "Publicar para todos" stays disabled while any pair of
- * `CONTRAST_PAIRS` fails in either mode; failing rows are marked.
+ * Ajustes › Tema y estilo (canvas `Ajustes-Tema`): the org theme editor.
+ * Editor column ("Partir de" presets, color sections with contrast badges,
+ * Tipografía, Forma y espacio, Estilo de la organización) and a sticky live
+ * preview of the draft (`<aside aria-label="Vista previa">`, below the editor
+ * under 1024 px), then the save bar. Publishing with colors under their
+ * `CONTRAST_PAIRS` minimum asks first. One layout for every style.
  *
  * The published theme is `qk.ajustes.page('tema')` (hydrated by the page);
  * the draft is local. Publish and reset write the result into that key and
@@ -103,16 +138,24 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
   const [error, setError] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [pendingPreset, setPendingPreset] = useState<ThemeId | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [showAllInterfaz, setShowAllInterfaz] = useState(false);
+  const interfazId = useId();
 
   const writePublished = (qc: QueryClient, org: OrgAppearance) => {
     qc.setQueryData<AjustesTemaPageData>(qk.ajustes.page("tema"), { org });
     applyPublishedOrgAppearance(appearanceStore, org);
   };
-  const publishMutation = useActionMutation(saveOrgAppearanceAction, {
-    setData: (qc, saved) => writePublished(qc, saved),
-    onFormError: setError,
-    successToast: "Tema publicado para todos",
-  });
+  const publishMutation = useActionMutation(
+    (vars: { org: OrgAppearance; acceptLowContrast: boolean }) =>
+      saveOrgAppearanceAction(vars.org, { acceptLowContrast: vars.acceptLowContrast }),
+    {
+      setData: (qc, saved) => writePublished(qc, saved),
+      onFormError: setError,
+      successToast: "Tema publicado para todos",
+    },
+  );
   const resetMutation = useActionMutation(resetOrgAppearanceAction, {
     setData: (qc, next) => writePublished(qc, next),
     onFormError: setResetError,
@@ -122,12 +165,11 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
   const resetPending = resetMutation.isPending;
 
   const results = useMemo(() => contrastResults(draft.tokens), [draft.tokens]);
-  const failingCount = { light: results.light.filter((r) => !r.ok).length, dark: results.dark.filter((r) => !r.ok).length };
-  const anyFailing = failingCount.light + failingCount.dark > 0;
+  const failing = failingColorCount(results);
   const rowMessages = useMemo(() => failingRows(results[mode]), [results, mode]);
   const badgePairs = useMemo(() => textPairs(draft.tokens, mode), [draft.tokens, mode]);
-  const otherMode: EditMode = mode === "light" ? "dark" : "light";
   const dirty = JSON.stringify(draft) !== JSON.stringify(published);
+  const matched = THEME_IDS.find((id) => matchesPreset(draft, presets, id)) ?? null;
 
   function update(patch: Partial<OrgAppearance>) {
     setDraft((d) => ({ ...d, ...patch }));
@@ -145,9 +187,22 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
     setDraft((d) => ({ ...d, shape: { ...d.shape, ...patch } }));
   }
 
-  function publish() {
+  /** "Partir de": straight away on a clean draft; with unsaved changes, after "¿Partir de {tema}?". */
+  function choosePreset(id: ThemeId) {
+    if (dirty) setPendingPreset(id);
+    else setDraft((d) => applyPreset(d, presets[id]));
+  }
+
+  function publish(acceptLowContrast: boolean) {
     setError(null);
-    publishMutation.mutate(draft, { onSuccess: (saved) => setDraft(saved) });
+    setConfirmPublish(false);
+    publishMutation.mutate({ org: draft, acceptLowContrast }, { onSuccess: (saved) => setDraft(saved) });
+  }
+
+  function requestPublish() {
+    if (!dirty || publishing) return;
+    if (failing > 0) setConfirmPublish(true);
+    else publish(false);
   }
 
   async function reset() {
@@ -162,56 +217,223 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
     }
   }
 
+  const styleOptions: ChoiceCardOption<PresentationStyle>[] = STYLE_CARDS.map((card) => ({
+    value: card.value,
+    title: STYLE_NAMES[card.value],
+    description: STYLE_DESCRIPTIONS[card.value],
+    preview: <StyleSchematic style={card.value} />,
+  }));
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        estilo={false}
+    <div className="flex flex-col gap-4">
+      <AdminPageHeading
         title="Tema de la organización"
         description="Colores, tipografía y forma para todos. Cada usuario puede elegir otro tema solo para sí."
-        breadcrumb={[{ label: "Ajustes", href: "/ajustes" }, { label: "Tema de la organización" }]}
-        badge={<Badge variant="secondary">Admin</Badge>}
-        actions={
-          <>
-            {IMPLEMENTED.resetOrgAppearanceAction ? (
-              <Button variant="outline" onClick={() => setResetOpen(true)} disabled={publishing}>
-                Restablecer
-              </Button>
-            ) : null}
-            <Button variant="outline" onClick={() => downloadText(THEME_CSS_FILENAME, themeCss(draft), "text/css")}>
-              Exportar CSS
-            </Button>
-            {IMPLEMENTED.saveOrgAppearanceAction ? (
-              <Button
-                onClick={publish}
-                disabled={anyFailing || publishing}
-                aria-describedby={anyFailing ? LOW_CONTRAST_HINT_ID : undefined}
-              >
-                {publishing ? "Publicando…" : "Publicar para todos"}
-              </Button>
-            ) : null}
-          </>
-        }
       />
 
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Partir de un tema">
-        <span className="text-sm text-muted-foreground">Partir de:</span>
-        {THEME_IDS.map((id) => (
-          <Button
-            key={id}
-            variant="outline"
-            size="sm"
-            aria-pressed={matchesPreset(draft, presets, id)}
-            onClick={() => setDraft((d) => applyPreset(d, presets[id]))}
-          >
-            <span
-              aria-hidden="true"
-              className="size-3 rounded-full border border-border"
-              style={{ backgroundColor: presets[id].tokens.primary.light }}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] text-muted-foreground">Partir de:</span>
+            <RadioGroupPrimitive
+              aria-label="Partir de un tema"
+              value={matched ?? ""}
+              onValueChange={(next) => {
+                const id = THEME_IDS.find((t) => t === next);
+                if (id) choosePreset(id);
+              }}
+              className="flex flex-wrap items-center gap-2"
+            >
+              {THEME_IDS.map((id) => (
+                <RadioPrimitive.Root
+                  key={id}
+                  value={id}
+                  data-slot="preset-pill"
+                  className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-full border border-border bg-card px-3 text-[13px] font-medium text-sidebar-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-[checked]:border-primary data-[checked]:bg-secondary data-[checked]:text-secondary-foreground"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-3 rounded-full border border-border"
+                    style={{ backgroundColor: presets[id].tokens.primary.light }}
+                  />
+                  {THEME_LABELS[id]}
+                </RadioPrimitive.Root>
+              ))}
+            </RadioGroupPrimitive>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[13px] font-medium text-sidebar-foreground">Modo que editas</span>
+            <SegmentedChoice
+              label="Modo que editas"
+              value={mode}
+              options={EDIT_MODES.map((m) => ({ value: m, label: EDIT_MODE_LABELS[m] }))}
+              onChange={setMode}
             />
-            {THEME_LABELS[id]}
-          </Button>
-        ))}
-        {dirty ? <span className="text-xs text-muted-foreground">Cambios sin publicar</span> : null}
+          </div>
+
+          {TOKEN_SECTIONS.map((section, index) => {
+            const isInterfaz = index === 0;
+            const tokens = isInterfaz && !showAllInterfaz ? section.tokens.slice(0, INTERFAZ_VISIBLE) : section.tokens;
+            return (
+              <SettingsSection
+                key={section.title}
+                title={section.title}
+                level={3}
+                actions={
+                  <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] tracking-wider text-sidebar-foreground">
+                    {section.tokens.length} COLORES
+                  </span>
+                }
+              >
+                <div id={isInterfaz ? interfazId : undefined} className="flex flex-col">
+                  {tokens.map((token) => (
+                    <TokenRow
+                      key={`${mode}-${token.name}`}
+                      name={token.name}
+                      label={token.label}
+                      value={draft.tokens[token.name][mode]}
+                      onChange={(value) => setToken(token.name, value)}
+                      invalid={rowMessages.get(token.name)}
+                      contrast={tokenContrast(results[mode], token.name)}
+                    />
+                  ))}
+                </div>
+                {isInterfaz && section.tokens.length > INTERFAZ_VISIBLE ? (
+                  <div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={showAllInterfaz}
+                      aria-controls={interfazId}
+                      onClick={() => setShowAllInterfaz((v) => !v)}
+                    >
+                      {showAllInterfaz ? "Ver menos colores" : `Ver los ${section.tokens.length} colores`}
+                    </Button>
+                  </div>
+                ) : null}
+              </SettingsSection>
+            );
+          })}
+
+          <SettingsSection title="Tipografía" level={3}>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="font-family" className="text-[13px] font-medium text-sidebar-foreground">
+                Familia
+              </Label>
+              <Select
+                items={FONT_ITEMS}
+                value={draft.fontFamily}
+                onValueChange={(v) => {
+                  const font = FONT_FAMILIES.find((f) => f === v);
+                  if (font) update({ fontFamily: font });
+                }}
+              >
+                <SelectTrigger id="font-family" className="w-full sm:w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FONT_FAMILIES.map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {f}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div aria-hidden="true" className={`${TYPE_SCALE_GRID} font-mono text-[11px] tracking-wider text-muted-foreground`}>
+                <span>ROL</span>
+                <span>TAMAÑO</span>
+                <span>PESO</span>
+              </div>
+              {TYPE_ROLE_LABELS.map(({ role, label }) => (
+                <TypeScaleRow
+                  key={role}
+                  role={role}
+                  label={label}
+                  value={draft.typeScale[role]}
+                  min={TYPE_SCALE_BOUNDS[role].min}
+                  max={TYPE_SCALE_BOUNDS[role].max}
+                  onChange={(v) => setType(role, v)}
+                />
+              ))}
+            </div>
+          </SettingsSection>
+
+          <SettingsSection title="Forma y espacio" level={3}>
+            <ShapeSlider
+              label="Radio de tarjetas"
+              value={draft.shape.radius}
+              bounds={SHAPE_BOUNDS.radius}
+              onChange={(radius) => setShape({ radius })}
+            />
+            <ShapeSlider
+              label="Relleno de tarjetas"
+              value={draft.shape.cardPadding}
+              bounds={SHAPE_BOUNDS.cardPadding}
+              onChange={(cardPadding) => setShape({ cardPadding })}
+            />
+            <ShapeSlider
+              label="Separación"
+              value={draft.shape.gap}
+              bounds={SHAPE_BOUNDS.gap}
+              onChange={(gap) => setShape({ gap })}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-[13px] font-medium text-sidebar-foreground">Sombra de tarjetas</span>
+              <SegmentedChoice
+                label="Sombra de tarjetas"
+                value={draft.shape.shadow}
+                options={SHADOWS.map((s) => ({ value: s, label: SHADOW_LABELS[s] }))}
+                onChange={(shadow) => setShape({ shadow })}
+              />
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Estilo de la organización"
+            description="El estilo con que todos ven los datos, salvo que elijan otro."
+            level={3}
+          >
+            <ChoiceCards
+              label="Estilo de la organización"
+              value={draft.styleDefault}
+              options={styleOptions}
+              onChange={(styleDefault) => update({ styleDefault })}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Label htmlFor="allow-user-override" className="text-[13px] font-medium text-sidebar-foreground">
+                Permitir que cada persona elija su estilo y tema
+              </Label>
+              <Switch
+                id="allow-user-override"
+                checked={draft.allowUserOverride}
+                onCheckedChange={(checked) => update({ allowUserOverride: checked })}
+              />
+            </div>
+          </SettingsSection>
+        </div>
+
+        <aside
+          aria-label="Vista previa"
+          className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-6 lg:min-w-[280px] lg:flex-[0_1_340px]"
+        >
+          <span className="font-mono text-[11px] tracking-wider text-muted-foreground">VISTA PREVIA</span>
+          <ThemePreview draft={draft} mode={mode} />
+          <ContrastBadge pairs={badgePairs} />
+          <div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => downloadText(THEME_CSS_FILENAME, themeCss(draft), "text/css")}
+            >
+              Exportar CSS
+            </Button>
+          </div>
+        </aside>
       </div>
 
       {error ? (
@@ -220,188 +442,64 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
         </Alert>
       ) : null}
 
-      {anyFailing ? (
-        <Alert variant="destructive" id={LOW_CONTRAST_HINT_ID}>
-          <AlertDescription>
-            {actionErrorText("LOW_CONTRAST")}
-            {failingCount[otherMode] > 0 ? ` También hay colores marcados en el modo ${EDIT_MODE_LABELS[otherMode]}.` : ""}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 space-y-6">
-          <SettingsSection title="Estilo de la organización" description="El estilo con que todos ven los datos, salvo que elijan otro.">
-            <RadioGroup
-              aria-label="Estilo de presentación"
-              value={draft.styleDefault}
-              onValueChange={(v) => {
-                const card = STYLE_CARDS.find((c) => c.value === v);
-                if (card) update({ styleDefault: card.value });
-              }}
-              className="grid gap-3 sm:grid-cols-3"
+      <div
+        data-slot="settings-save-bar"
+        className="sticky bottom-4 z-10 flex w-full flex-wrap items-center justify-between gap-3 rounded-[14px] border border-border bg-card px-4 py-3 shadow-md"
+      >
+        <p role="status" aria-live="polite" className="text-[13px] text-sidebar-foreground">
+          <SaveBarStatus dirty={dirty} failing={failing} />
+        </p>
+        <div className="flex items-center gap-2">
+          {IMPLEMENTED.resetOrgAppearanceAction ? (
+            <Button type="button" variant="outline" onClick={() => setResetOpen(true)} disabled={publishing}>
+              Restablecer
+            </Button>
+          ) : null}
+          {IMPLEMENTED.saveOrgAppearanceAction ? (
+            <Button
+              type="button"
+              aria-disabled={!dirty || publishing || undefined}
+              aria-busy={publishing || undefined}
+              className="aria-disabled:opacity-50"
+              onClick={requestPublish}
             >
-              {STYLE_CARDS.map((card) => (
-                <Label
-                  key={card.value}
-                  htmlFor={`style-${card.value}`}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3"
-                >
-                  <RadioGroupItem id={`style-${card.value}`} value={card.value} className="mt-0.5" />
-                  <span className="flex flex-col gap-0.5">
-                    <span className="font-medium">{card.label}</span>
-                    <span className="text-xs font-normal text-muted-foreground">{card.description}</span>
-                  </span>
-                </Label>
-              ))}
-            </RadioGroup>
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="allow-user-override"
-                  checked={draft.allowUserOverride}
-                  onCheckedChange={(checked) => update({ allowUserOverride: checked === true })}
-                />
-                <Label htmlFor="allow-user-override">Permitir que cada persona elija su estilo y tema</Label>
-              </div>
-            </div>
-          </SettingsSection>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <span id="edit-mode-label" className="text-sm font-medium">
-              Modo que editas
-            </span>
-            <RadioGroup
-              aria-labelledby="edit-mode-label"
-              value={mode}
-              onValueChange={(v) => {
-                if (v === "light" || v === "dark") setMode(v);
-              }}
-              className="flex gap-4"
-            >
-              {EDIT_MODES.map((m) => (
-                <div key={m} className="flex items-center gap-2">
-                  <RadioGroupItem id={`edit-mode-${m}`} value={m} />
-                  <Label htmlFor={`edit-mode-${m}`}>
-                    {EDIT_MODE_LABELS[m]}
-                    {failingCount[m] > 0 ? <span className="sr-only"> (con colores marcados)</span> : null}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          </div>
-
-          {TOKEN_SECTIONS.map((section) => (
-            <SettingsSection key={section.title} title={section.title}>
-              {section.tokens.map((token) => (
-                <TokenRow
-                  key={`${mode}-${token.name}`}
-                  name={token.name}
-                  label={token.label}
-                  value={draft.tokens[token.name][mode]}
-                  onChange={(value) => setToken(token.name, value)}
-                  invalid={rowMessages.get(token.name)}
-                />
-              ))}
-            </SettingsSection>
-          ))}
-
-          <SettingsSection title="Tipografía">
-            <SettingsRow
-              label="Familia"
-              htmlFor="font-family"
-              control={
-                <Select
-                  items={FONT_ITEMS}
-                  value={draft.fontFamily}
-                  onValueChange={(v) => {
-                    const font = FONT_FAMILIES.find((f) => f === v);
-                    if (font) update({ fontFamily: font });
-                  }}
-                >
-                  <SelectTrigger id="font-family" aria-label="Familia" className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FONT_FAMILIES.map((f) => (
-                      <SelectItem key={f} value={f}>
-                        {f}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              }
-            />
-            {TYPE_ROLE_LABELS.map(({ role, label }) => (
-              <TypeScaleRow
-                key={role}
-                role={role}
-                label={label}
-                value={draft.typeScale[role]}
-                min={TYPE_SCALE_BOUNDS[role].min}
-                max={TYPE_SCALE_BOUNDS[role].max}
-                onChange={(v) => setType(role, v)}
-              />
-            ))}
-          </SettingsSection>
-
-          <SettingsSection title="Forma y espacio">
-            <ShapeRow
-              id="shape-radius"
-              label="Radio de tarjetas"
-              value={draft.shape.radius}
-              bounds={SHAPE_BOUNDS.radius}
-              onChange={(radius) => setShape({ radius })}
-            />
-            <ShapeRow
-              id="shape-card-padding"
-              label="Relleno de tarjetas"
-              value={draft.shape.cardPadding}
-              bounds={SHAPE_BOUNDS.cardPadding}
-              onChange={(cardPadding) => setShape({ cardPadding })}
-            />
-            <ShapeRow
-              id="shape-gap"
-              label="Separación"
-              value={draft.shape.gap}
-              bounds={SHAPE_BOUNDS.gap}
-              onChange={(gap) => setShape({ gap })}
-            />
-            <SettingsRow
-              label="Sombra de tarjetas"
-              control={
-                <RadioGroup
-                  aria-label="Sombra de tarjetas"
-                  value={draft.shape.shadow}
-                  onValueChange={(v) => {
-                    const shadow = SHADOWS.find((s) => s === v);
-                    if (shadow) setShape({ shadow });
-                  }}
-                  className="flex gap-4"
-                >
-                  {SHADOWS.map((s) => (
-                    <div key={s} className="flex items-center gap-2">
-                      <RadioGroupItem id={`shadow-${s}`} value={s} />
-                      <Label htmlFor={`shadow-${s}`}>{SHADOW_LABELS[s]}</Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-              }
-            />
-          </SettingsSection>
+              {publishing ? (
+                <>
+                  <Loader2Icon aria-hidden="true" data-icon="inline-start" className="spin" />
+                  Publicando…
+                </>
+              ) : (
+                "Publicar para todos"
+              )}
+            </Button>
+          ) : null}
         </div>
-
-        <aside aria-label="Vista previa en vivo" className="space-y-3 self-start lg:sticky lg:top-6">
-          <div className="flex items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold">Vista previa en vivo</h2>
-            <span className="text-xs text-muted-foreground">
-              así lo verá todo el equipo · {EDIT_MODE_LABELS[mode]}
-            </span>
-          </div>
-          <ThemePreview draft={draft} mode={mode} />
-          <ContrastBadge pairs={badgePairs} />
-        </aside>
       </div>
+
+      <ConfirmDialog
+        open={pendingPreset !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPreset(null);
+        }}
+        title={pendingPreset ? presetConfirmTitle(pendingPreset) : ""}
+        description="Se pierden los cambios sin publicar."
+        confirmLabel={pendingPreset ? `Partir de ${THEME_LABELS[pendingPreset]}` : ""}
+        onConfirm={() => {
+          const id = pendingPreset;
+          setPendingPreset(null);
+          if (id) setDraft((d) => applyPreset(d, presets[id]));
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmPublish}
+        onOpenChange={setConfirmPublish}
+        title="¿Publicar de todos modos?"
+        description={publishLowContrastQuestion(failing)}
+        confirmLabel="Publicar"
+        cancelLabel="Revisar"
+        onConfirm={() => publish(true)}
+      />
 
       <FormDialog
         title="¿Restablecer el tema?"
@@ -422,49 +520,73 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
   );
 }
 
-function ShapeRow({
-  id,
+function ConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel,
+  cancelLabel = "Cancelar",
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  title: string;
+  description: ReactNode;
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm(): void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/** One "Forma y espacio" slider: label, `Slider` within the bounds and the value in Geist Mono ("14 px"). */
+function ShapeSlider({
   label,
   value,
   bounds,
   onChange,
 }: {
-  id: string;
   label: string;
   value: number;
   bounds: { min: number; max: number };
   onChange(v: number): void;
 }) {
   return (
-    <SettingsRow
-      label={label}
-      htmlFor={id}
-      control={
-        <div className="flex items-center gap-3">
-          <input
-            id={id}
-            type="range"
-            min={bounds.min}
-            max={bounds.max}
-            step={1}
-            value={value}
-            aria-valuetext={`${value} px`}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="w-36 accent-primary"
-          />
-          <span className="w-12 text-right font-mono text-sm tabular-nums">{value}px</span>
-        </div>
-      }
-    />
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[10rem_minmax(0,1fr)_auto]">
+      <span className="col-span-2 text-[13px] font-medium text-sidebar-foreground sm:col-span-1">{label}</span>
+      <Slider
+        min={bounds.min}
+        max={bounds.max}
+        step={1}
+        value={value}
+        thumbLabel={label}
+        onValueChange={(next) => onChange(typeof next === "number" ? next : (next[0] ?? value))}
+      />
+      <span className="w-14 text-right font-mono text-[13px] tabular-nums text-foreground">{value} px</span>
+    </div>
   );
 }
 
 const PREVIEW_NAV = ["Inicio", "Mi espacio", "Tareas", "Proyectos", "Personas"] as const;
 
-const PREVIEW_ATTENTION: readonly { title: string; tag: string; slot: ChartSlot | null }[] = [
-  { title: "Revisar acabados", tag: "Construcción", slot: 3 },
+const PREVIEW_TASKS: readonly { title: string; tag: string; slot: ChartSlot | null }[] = [
+  { title: "Contrato firmado", tag: "Presale", slot: 1 },
   { title: "Producción de renders", tag: "Diseño", slot: 2 },
-  { title: "Contrato firmado", tag: "Vencida", slot: null },
+  { title: "Permiso de obra", tag: "Requiere atención", slot: null },
 ];
 
 /**
@@ -480,6 +602,7 @@ function ThemePreview({ draft, mode }: { draft: OrgAppearance; mode: EditMode })
   });
   const card: CSSProperties = {
     padding: `${draft.shape.cardPadding}px`,
+    borderRadius: `${draft.shape.radius}px`,
     boxShadow: "var(--shadow-card)",
   };
 
@@ -487,11 +610,11 @@ function ThemePreview({ draft, mode }: { draft: OrgAppearance; mode: EditMode })
     <div
       data-testid="theme-preview"
       data-mode={mode}
-      className={`${mode === "dark" ? "dark " : ""}overflow-hidden rounded-lg border border-border bg-background text-foreground`}
+      className={`${mode === "dark" ? "dark " : ""}overflow-hidden rounded-[14px] border border-border bg-background text-foreground`}
       style={{ ...(vars as CSSProperties), fontFamily: "var(--font-sans)" }}
     >
       <div className="flex min-h-80">
-        <div className="flex w-28 shrink-0 flex-col gap-1 border-r border-sidebar-border bg-sidebar p-3 text-sidebar-foreground">
+        <div className="flex w-24 shrink-0 flex-col gap-1 border-r border-sidebar-border bg-sidebar p-2.5 text-sidebar-foreground">
           <span className="mb-2 text-xs font-semibold tracking-wide">CINCEL</span>
           {PREVIEW_NAV.map((item, i) => (
             <span
@@ -510,10 +633,10 @@ function ThemePreview({ draft, mode }: { draft: OrgAppearance; mode: EditMode })
           <span style={type("pageTitle")}>Buenos días</span>
           <div className="grid grid-cols-2" style={{ gap: `${draft.shape.gap}px` }}>
             {[
-              { label: "Proyectos activos", value: "2" },
-              { label: "Tareas vencidas", value: "0" },
+              { label: "Proyectos activos", value: "12" },
+              { label: "Tareas vencidas", value: "7" },
             ].map((kpi) => (
-              <div key={kpi.label} className="flex flex-col rounded-lg border border-border bg-card text-card-foreground" style={card}>
+              <div key={kpi.label} className="flex min-w-0 flex-col border border-border bg-card text-card-foreground" style={card}>
                 <span className="text-muted-foreground" style={type("label")}>
                   {kpi.label}
                 </span>
@@ -521,13 +644,12 @@ function ThemePreview({ draft, mode }: { draft: OrgAppearance; mode: EditMode })
               </div>
             ))}
           </div>
-          <div className="flex flex-col gap-2 rounded-lg border border-border bg-card text-card-foreground" style={card}>
-            <span style={type("cardTitle")}>Requiere atención</span>
-            {PREVIEW_ATTENTION.map((row) => (
+          <div className="flex flex-col gap-2 border border-border bg-card text-card-foreground" style={card}>
+            {PREVIEW_TASKS.map((row) => (
               <div key={row.title} className="flex items-center justify-between gap-2" style={type("body")}>
                 <span className="truncate">{row.title}</span>
                 <span
-                  className={row.slot ? "rounded-full px-2 py-0.5" : "rounded-full px-2 py-0.5 text-destructive"}
+                  className={row.slot ? "shrink-0 rounded-full px-2 py-0.5" : "shrink-0 rounded-full px-2 py-0.5 text-destructive"}
                   style={{
                     ...type("label"),
                     ...(row.slot
@@ -544,7 +666,6 @@ function ThemePreview({ draft, mode }: { draft: OrgAppearance; mode: EditMode })
             <span className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground">Nueva tarea</span>
             <span className="rounded-md bg-secondary px-3 py-1.5 text-secondary-foreground">Secundario</span>
             <span className="rounded-md border border-border bg-background px-3 py-1.5">Outline</span>
-            <span className="rounded-md border border-border px-3 py-1.5 ring-2 ring-ring">Foco</span>
           </div>
         </div>
       </div>

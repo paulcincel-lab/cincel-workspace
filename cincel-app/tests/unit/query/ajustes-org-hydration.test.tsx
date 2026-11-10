@@ -5,7 +5,7 @@
  * RSC payload) and the client renders from it with **0** action calls on
  * mount, page data and legacy reads alike.
  */
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const pageData = vi.hoisted(() => ({
@@ -68,6 +68,7 @@ vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixt
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 vi.mock("@/components/patterns/FormDialog", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 vi.mock("@/components/widgets/RecordTable", () => import("@/tests/unit/fixtures/horario"));
+vi.mock("@/components/ajustes/SettingsSaveBar", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
 import { AjustesGeneralClient } from "@/components/ajustes/AjustesGeneralClient";
 import { GoogleSettings } from "@/components/ajustes/GoogleSettings";
@@ -108,7 +109,7 @@ describe("Ajustes org segments hydrate their page data (0 client calls on mount)
     client.setQueryData(qk.org.general(), buildDefaultLoadedGeneralSettings());
     renderWithQueryClient(<AjustesGeneralClient />, { client, hydrate: state });
 
-    expect(screen.getByRole("button", { name: "Abrir Tema y estilo" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Abrir Tema y estilo →" })).toBeTruthy();
     expectNoClientCalls();
   });
 
@@ -118,7 +119,8 @@ describe("Ajustes org segments hydrate their page data (0 client calls on mount)
     });
     renderWithQueryClient(<ThemeEditor presets={THEME_PRESETS} />, { client, hydrate: state });
 
-    expect(screen.getByRole("button", { name: /Cálido/ }).getAttribute("aria-pressed")).toBe("true");
+    const presets = screen.getByRole("radiogroup", { name: "Partir de un tema" });
+    expect(within(presets).getByRole("radio", { name: /Cálido/ }).getAttribute("aria-checked")).toBe("true");
     expectNoClientCalls();
   });
 
@@ -136,7 +138,7 @@ describe("Ajustes org segments hydrate their page data (0 client calls on mount)
       { client, hydrate: state },
     );
 
-    expect(screen.getByRole("region", { name: "Horas del equipo · semana del 2 nov" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Horas del equipo" })).toBeTruthy();
     expectNoClientCalls();
   });
 
@@ -151,6 +153,8 @@ describe("Ajustes org segments hydrate their page data (0 client calls on mount)
           positionId: null,
           positionName: null,
           rank: 70,
+          memberCount: 4,
+          exists: true,
         },
       ],
       positions: [],

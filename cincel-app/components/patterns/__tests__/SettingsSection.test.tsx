@@ -43,8 +43,31 @@ describe("SettingsSection", () => {
     );
     const region = screen.getByRole("region", { name: "Modo" });
     expect(region.hasAttribute("aria-describedby")).toBe(false);
-    expect(container.querySelector('[data-slot="card-description"]')).toBeNull();
+    expect(container.querySelector('[data-slot="settings-section-description"]')).toBeNull();
     expect(container.querySelector('[data-slot="settings-section-actions"]')).toBeNull();
+  });
+
+  it("puts the title and the control on one row with inline", () => {
+    render(
+      <SettingsSection title="Modo" description="Claro, oscuro o el de tu sistema." inline>
+        <Button variant="outline">Claro</Button>
+      </SettingsSection>,
+    );
+    const region = screen.getByRole("region", { name: "Modo" });
+    expect(region.hasAttribute("data-inline")).toBe(true);
+    expect(region.className).toMatch(/flex-row/);
+    expect(region.className).toMatch(/flex-wrap/);
+    expect(region.className).toMatch(/justify-between/);
+  });
+
+  it("titles the section with an h3 under an admin page heading", () => {
+    render(
+      <SettingsSection title="Enlaces" level={3}>
+        <span />
+      </SettingsSection>,
+    );
+    expect(screen.getByRole("heading", { level: 3, name: "Enlaces" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Enlaces" })).toBeTruthy();
   });
 
   it("gives each section its own ids", () => {

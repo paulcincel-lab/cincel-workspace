@@ -6,7 +6,7 @@
  * results that carry third-party text are stored as `{ untrusted: true,
  * content }`, and a turn that read one makes every write tool ask first.
  */
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { ModelMessage, UIMessage } from "ai";
 
 import { assistantMessages, assistantThreads } from "@/lib/db/schema";
@@ -161,6 +161,7 @@ export async function saveThreadMessages(
       message.id.length > 0 &&
       (message.role === "user" || message.role === "assistant" || message.role === "system"),
   );
+  const toolCallDelta = await toolCallCountDelta(db, threadId, storable);
   if (storable.length > 0) {
     const base = Date.now();
     await db
@@ -189,7 +190,17 @@ export async function saveThreadMessages(
       });
   }
 
-  await db.update(assistantThreads).set({ updatedAt: new Date() }).where(eq(assistantThreads.id, threadId));
+  await db
+    .update(assistantThreads)
+    .set(
+      toolCallDelta === 0
+        ? { updatedAt: new Date() }
+        : {
+            updatedAt: new Date(),
+            toolCallCount: sql`greatest(${assistantThreads.toolCallCount} + ${toolCallDelta}, 0)`,
+          },
+    )
+    .where(eq(assistantThreads.id, threadId));
   const title = threadTitleFrom(opts.titleFrom ?? messages);
   if (title) {
     await db
@@ -197,6 +208,57 @@ export async function saveThreadMessages(
       .set({ title })
       .where(and(eq(assistantThreads.id, threadId), eq(assistantThreads.title, DEFAULT_THREAD_TITLE)));
   }
+}
+
+/** Render widgets: shown as rich results, not counted as tool calls. */
+export const WIDGET_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "render_chart",
+  "render_card",
+  "render_stat_grid",
+  "render_list",
+  "render_table",
+  "render_timeline",
+]);
+
+/**
+ * Distinct non-widget tool calls (`tool-*` / `dynamic-tool` parts, by
+ * `toolCallId`) in one message's parts. A call is counted once whatever its
+ * state, so the approval resume of the same message adds nothing.
+ */
+export function countToolCalls(parts: readonly unknown[] | null | undefined): number {
+  if (!Array.isArray(parts)) return 0;
+  const ids = new Set<string>();
+  for (const part of parts) {
+    const tool = asToolPart(part);
+    if (!tool || WIDGET_TOOL_NAMES.has(toolNameOf(tool))) continue;
+    ids.add(tool.toolCallId);
+  }
+  return ids.size;
+}
+
+/**
+ * How much `assistant_threads.tool_call_count` changes when these messages
+ * are upserted: their tool calls minus what their stored versions already
+ * counted. Read before the upsert; only the changed assistant rows are read.
+ */
+async function toolCallCountDelta(db: OwnerDb, threadId: string, messages: readonly UIMessage[]): Promise<number> {
+  const assistant = messages.filter((message) => message.role === "assistant");
+  if (assistant.length === 0) return 0;
+  const next = assistant.reduce((sum, message) => sum + countToolCalls(message.parts), 0);
+  const stored = await db
+    .select({ parts: assistantMessages.parts })
+    .from(assistantMessages)
+    .where(
+      and(
+        eq(assistantMessages.threadId, threadId),
+        inArray(
+          assistantMessages.id,
+          assistant.map((message) => message.id),
+        ),
+      ),
+    );
+  const previous = stored.reduce((sum, row) => sum + countToolCalls(row.parts), 0);
+  return next - previous;
 }
 
 /** The first user message's text, one line, at most 80 characters; null without one. */

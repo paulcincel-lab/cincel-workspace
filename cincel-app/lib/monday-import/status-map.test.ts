@@ -10,6 +10,7 @@ import {
   isDefaultedTarget,
   parseStoredStatusMap,
   statusMapCustomIds,
+  statusesToReview,
 } from "@/lib/monday-import/status-map";
 
 const CANCELADO = "00000000-0000-4000-8000-0000000000c1";
@@ -85,5 +86,17 @@ describe("stored setting", () => {
         c: { target: { status: "pendiente" }, priority: null },
       }),
     ).toEqual([CANCELADO]);
+  });
+});
+
+describe("statusesToReview", () => {
+  const labels = [
+    { key: "en proceso", name: "En Proceso", items: 4, isDone: false },
+    { key: "raro", name: "Raro", items: 2, isDone: false },
+  ];
+
+  it("counts the labels without an equivalent or a saved choice", () => {
+    expect(statusesToReview(labels, {}, [])).toBe(1);
+    expect(statusesToReview(labels, { raro: { target: { status: "pendiente" }, priority: null } }, [])).toBe(0);
   });
 });

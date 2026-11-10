@@ -42,6 +42,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/shell/EstiloSwitch", () => ({
   EstiloSwitch: () => <div data-testid="estilo-switch" />,
 }));
+vi.mock("@/components/portal/PortalProjectMenu", () => ({
+  default: () => <div data-testid="project-menu" />,
+}));
 vi.mock("@/components/portal/PortalStyleSwitch", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/components/portal/PortalStyleSwitch")>();
   const RealSwitch = real.default;
@@ -81,7 +84,8 @@ describe("portal layout: presentation style (FE §3.11)", () => {
 
     const header = screen.getByRole("banner");
     expect(header.contains(screen.getByTestId("estilo-switch"))).toBe(true);
-    expect(screen.getByText("Portal de clientes").className).toContain("font-semibold");
+    expect(header.contains(screen.getByTestId("project-menu"))).toBe(true);
+    expect(screen.getByRole("link", { name: "Cincel, inicio del portal" }).className).toContain("font-semibold");
   });
 
   it("shows no switch without a signed-in client", async () => {

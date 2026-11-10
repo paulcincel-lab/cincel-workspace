@@ -45,6 +45,11 @@ vi.mock("@/lib/actions/tramo-start-actions", () => ({
   startTramoAction: vi.fn(),
 }));
 
+const fetchStaffActionMock = vi.fn();
+vi.mock("@/lib/actions/staff-actions", () => ({
+  fetchStaffAction: (...args: unknown[]) => fetchStaffActionMock(...args),
+}));
+
 const fetchWorkflowsActionMock = vi.fn();
 vi.mock("@/lib/actions/workflows-actions", () => ({
   fetchWorkflowsAction: (...args: unknown[]) => fetchWorkflowsActionMock(...args),
@@ -515,5 +520,68 @@ describe("merge_duplicate_activities", () => {
       project: "Casa Roma",
       mergedCount: 1,
     });
+  });
+});
+
+describe("Analítico data panel fields", () => {
+  function task(overrides: Record<string, unknown>) {
+    return {
+      id: "t1",
+      title: "Revisar planos",
+      projectId: "p1",
+      project: { id: "p1", name: "Oficina Polanco", clientName: null },
+      workflow: { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
+      phase: null,
+      status: "pendiente",
+      priority: "media",
+      commitmentDate: "2026-11-01",
+      reviewDate: null,
+      manager: { id: "s1", name: "Ana Ruiz" },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    listViewerTasksMock.mockReset();
+    fetchStaffActionMock.mockReset();
+  });
+
+  it("list_activities_due rows carry id and tramo identity", async () => {
+    listViewerTasksMock.mockResolvedValue([
+      task({}),
+      task({ id: "t2", status: "bloqueado", workflow: null }),
+    ]);
+    const out = (await list_activities_due.execute!(
+      { withinDays: 7, onlyBlocked: false },
+      { toolCallId: "t", messages: [] } as never,
+    )) as Record<string, unknown>[];
+    expect(out[0]).toMatchObject({
+      id: "t1",
+      projectId: "p1",
+      workflow: "Diseño",
+      workflowKey: "diseno",
+      workflowSortOrder: 2,
+      blocked: false,
+    });
+    expect(out[1]).toMatchObject({ id: "t2", workflowKey: null, workflowSortOrder: null, blocked: true });
+  });
+
+  it("team_workload_summary carries mainWorkflow", async () => {
+    fetchStaffActionMock.mockResolvedValue([
+      { id: "s1", name: "Ana Ruiz", role: "Arquitecta", capacity: 4 },
+      { id: "s2", name: "Jorge Mena", role: "Residente", capacity: 4 },
+    ]);
+    const construccion = { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 };
+    listViewerTasksMock.mockResolvedValue([
+      task({ id: "a" }),
+      task({ id: "b", workflow: construccion }),
+      task({ id: "c", workflow: construccion }),
+    ]);
+    const out = (await team_workload_summary.execute!({}, { toolCallId: "t", messages: [] } as never)) as Record<
+      string,
+      unknown
+    >[];
+    expect(out[0]).toMatchObject({ name: "Ana Ruiz", activeTasks: 3, occupancyPct: 75, mainWorkflow: "Construcción" });
+    expect(out[1]).toMatchObject({ name: "Jorge Mena", activeTasks: 0, mainWorkflow: null });
   });
 });

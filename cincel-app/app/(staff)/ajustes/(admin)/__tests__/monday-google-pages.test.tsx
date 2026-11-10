@@ -70,6 +70,8 @@ vi.mock("@/lib/repositories/positions-repository", async (importOriginal) => ({
   listPositions: googleReads.listPositions,
 }));
 vi.mock("@/lib/auth/google-health", () => ({ loadGoogleHealth: googleReads.loadGoogleHealth }));
+// No Directory in these tests: the mappings come back as listed.
+vi.mock("@/lib/google/group-stats", () => ({ withGroupStats: async (rows: unknown[]) => rows }));
 const positions = vi.hoisted(() => ({ fetchPositionsAction: vi.fn() }));
 vi.mock("@/lib/actions/positions-actions", () => positions);
 const workflows = vi.hoisted(() => ({ fetchWorkflowsAction: vi.fn() }));
@@ -271,6 +273,9 @@ describe("/ajustes/google", () => {
     lastDriveError: null,
     googleLinkedStaff: 4,
     activeStaff: 9,
+    pendingGoogleStaff: [],
+    projectsWithoutFolder: 0,
+    projectsWithFolder: 0,
   };
 
   beforeEach(() => {

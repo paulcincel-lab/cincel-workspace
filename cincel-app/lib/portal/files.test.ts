@@ -5,6 +5,8 @@ import { DriveAdminError, FOLDER_MIME_TYPE, type DriveFile, type ListOptions } f
 import { createDriveGuard, isPortalNotFound, PortalNotFoundError } from "@/lib/portal/drive-guard";
 import {
   createPortalFileLister,
+  listPortalFolderGroupsWith,
+  PORTAL_FOLDER_GROUPS_MAX_SUBFOLDERS,
   PORTAL_LIST_CACHE_TTL_MS,
   PORTAL_LIST_FIELDS,
   PORTAL_ROOT_BREADCRUMB,
@@ -223,5 +225,48 @@ describe("toPortalFileDTO", () => {
   it("drops shortcuts and non-exportable native types", () => {
     expect(toPortalFileDTO({ id: "s", name: "s", mimeType: SHORTCUT_MIME_TYPE })).toBeNull();
     expect(toPortalFileDTO({ id: "m", name: "m", mimeType: "application/vnd.google-apps.map" })).toBeNull();
+  });
+});
+
+describe("listPortalFolderGroups", () => {
+  it("listPortalFolderGroups lists root and first 10 subfolders", async () => {
+    // Twelve subfolders, named out of order; only the first 10 by name are listed.
+    for (let i = 12; i >= 1; i--) {
+      const id = `d${i}`;
+      tree[id] = { name: `Carpeta ${String(i).padStart(2, "0")}`, parent: "a-cliente", mimeType: FOLDER_MIME_TYPE };
+      tree[`${id}-file`] = { name: `doc ${i}.pdf`, parent: id, mimeType: "application/pdf", size: "1" };
+      tree[`${id}-sub`] = { name: "Más", parent: id, mimeType: FOLDER_MIME_TYPE };
+    }
+    const l = lister();
+    const groups = await listPortalFolderGroupsWith(l.listFolder, projectA);
+
+    expect(PORTAL_FOLDER_GROUPS_MAX_SUBFOLDERS).toBe(10);
+    expect(groups[0]).toMatchObject({ folderId: "a-cliente", name: "General" });
+    expect(groups[0].files.map((f) => f.id)).toEqual(["memoria", "plano"]);
+    expect(groups.slice(1).map((g) => g.name)).toEqual([
+      "Carpeta 01", "Carpeta 02", "Carpeta 03", "Carpeta 04", "Carpeta 05",
+      "Carpeta 06", "Carpeta 07", "Carpeta 08", "Carpeta 09", "Carpeta 10",
+    ]);
+    expect(groups.find((g) => g.name === "Renders")).toBeUndefined();
+    // Only files: the nested "Más" folders are not listed and not opened.
+    expect(groups[1].files.map((f) => f.id)).toEqual(["d1-file"]);
+    expect(groups.every((g) => g.files.every((f) => f.kind === "file"))).toBe(true);
+    // 1 root + 10 subfolders, each through the guard and the safe fields.
+    expect(listAll).toHaveBeenCalledTimes(11);
+    for (const call of listAll.mock.calls) expect(call[0]).toMatchObject({ fields: PORTAL_LIST_FIELDS });
+  });
+
+  it("lists the root and every subfolder when there are fewer than 10", async () => {
+    const groups = await listPortalFolderGroupsWith(lister().listFolder, projectA);
+    expect(groups.map((g) => [g.name, g.files.map((f) => f.id)])).toEqual([
+      ["General", ["memoria", "plano"]],
+      ["Renders", ["nested"]],
+    ]);
+  });
+
+  it("fails like the Archivos tab for a project without a client folder", async () => {
+    await expect(listPortalFolderGroupsWith(lister().listFolder, { driveClientFolderId: null })).rejects.toBeInstanceOf(
+      PortalNotFoundError,
+    );
   });
 });

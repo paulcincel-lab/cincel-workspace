@@ -11,7 +11,10 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
+import { GripVertical } from "lucide-react";
+
 import { Input } from "@/components/ui/shadcn/input";
+import { useKeyboardReorder } from "@/components/ui/use-keyboard-reorder";
 import {
   Table,
   TableBody,
@@ -57,6 +60,14 @@ type DataTableProps<T> = {
    * can't produce a single well-defined order to persist.
    */
   onReorderRows?: (orderedIds: string[]) => void;
+  /**
+   * The row's name for its grip button ("Mover {nombre}") and the keyboard
+   * reorder announcements (Space lifts, ↑ / ↓ move, Space drops, Escape
+   * cancels). Defaults to the row id.
+   */
+  getRowLabel?: (row: T) => string;
+  /** Header of the grip column (e.g. "Orden"); empty and hidden by default. */
+  reorderHeader?: ReactNode;
   /** Extra classes per header cell, by column id. */
   headerClassName?: (columnId: string) => string | undefined;
   /** Extra classes per body cell, by column id and row. */
@@ -105,6 +116,8 @@ export function DataTable<T>({
   tableClassName = "",
   wrapperClassName = "",
   onReorderRows,
+  getRowLabel,
+  reorderHeader,
   headerClassName,
   cellClassName,
   footer,
@@ -131,7 +144,20 @@ export function DataTable<T>({
 
   const sortedRows = table.getRowModel().rows;
   const groups = groupBy ? groupRows(sortedRows, (row) => groupBy(row.original)) : null;
-  const rows = groups ? groups.flatMap((g) => g.rows) : sortedRows;
+  const shownRows = groups ? groups.flatMap((g) => g.rows) : sortedRows;
+  const rowById = new Map(shownRows.map((row) => [row.id, row]));
+  const keyboard = useKeyboardReorder({
+    ids: shownRows.map((row) => row.id),
+    labelOf: (id) => {
+      const row = rowById.get(id);
+      return row && getRowLabel ? getRowLabel(row.original) : id;
+    },
+    onReorder: (orderedIds) => onReorderRows?.(orderedIds),
+  });
+  // While a row is lifted with the keyboard, the rows show in its preview order.
+  const rows = keyboard.liftedId
+    ? keyboard.order.map((id) => rowById.get(id)).filter((row): row is (typeof shownRows)[number] => Boolean(row))
+    : shownRows;
   const colSpan = columns.length + (reorderEnabled ? 1 : 0);
   const groupStarts = new Map((groups ?? []).map((g) => [g.rows[0].id, g] as const));
 
@@ -153,7 +179,13 @@ export function DataTable<T>({
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
-              {reorderEnabled ? <TableHead className="w-8" aria-hidden /> : null}
+              {reorderEnabled ? (
+                reorderHeader ? (
+                  <TableHead className="w-8">{reorderHeader}</TableHead>
+                ) : (
+                  <TableHead className="w-8" aria-hidden />
+                )
+              ) : null}
               {headerGroup.headers.map((header) => {
                 const sortable = header.column.getCanSort();
                 return (
@@ -232,24 +264,28 @@ export function DataTable<T>({
                         }
                       : undefined
                   }
-                  className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}`}
+                  data-lifted={keyboard.liftedId === row.id ? "true" : undefined}
+                  className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id || keyboard.liftedId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}`}
                 >
                   {reorderEnabled ? (
-                    <TableCell
-                      className="w-8 cursor-grab text-muted-foreground active:cursor-grabbing"
-                      draggable
-                      onClick={(e) => e.stopPropagation()}
-                      onDragStart={(e) => {
-                        e.stopPropagation();
-                        setDragRowId(row.id);
-                      }}
-                      onDragEnd={() => {
-                        setDragRowId(null);
-                        setDragOverRowId(null);
-                      }}
-                      title="Arrastra para reordenar"
-                    >
-                      ⠿
+                    <TableCell className="w-8 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        {...keyboard.handleProps(row.id)}
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          setDragRowId(row.id);
+                        }}
+                        onDragEnd={() => {
+                          setDragRowId(null);
+                          setDragOverRowId(null);
+                        }}
+                        title="Arrastra para reordenar"
+                        className="inline-flex size-7 cursor-grab items-center justify-center rounded-md outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+                      >
+                        <GripVertical aria-hidden="true" className="size-4" />
+                      </button>
                     </TableCell>
                   ) : null}
                   {row.getVisibleCells().map((cell) => (
@@ -264,6 +300,11 @@ export function DataTable<T>({
         </TableBody>
         {footer && !isLoading && rows.length > 0 ? <TableFooter>{footer}</TableFooter> : null}
       </Table>
+      {reorderEnabled ? (
+        <p aria-live="polite" className="sr-only">
+          {keyboard.announcement}
+        </p>
+      ) : null}
     </div>
   );
 }

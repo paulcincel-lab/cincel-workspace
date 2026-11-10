@@ -85,6 +85,9 @@ vi.mock("@/lib/auth/access-recheck", async (importOriginal) => {
     async getGroup() {
       return null;
     },
+    async countMembers() {
+      return 0;
+    },
   };
   return {
     ...real,
@@ -330,6 +333,9 @@ describe.skipIf(!url)("access re-check (test DB)", async () => {
       [
         "activeStaff",
         "googleLinkedStaff",
+        "pendingGoogleStaff",
+        "projectsWithFolder",
+        "projectsWithoutFolder",
         "groupMappingCount",
         "lastDirectoryError",
         "lastDriveError",
@@ -354,5 +360,30 @@ describe.skipIf(!url)("access re-check (test DB)", async () => {
       sharedDriveId: null,
       tokenKeyConfigured: false,
     });
+  });
+
+  it("pendingGoogleStaff lists active staff without google_sub", async () => {
+    const linked = await googleStaff();
+    const insertStaff = async (label: string, active: boolean) => {
+      const [row] = await db
+        .insert(schema.staff)
+        .values({ name: `Pendiente ${run} ${label}`, lastName: "Prueba", role: "Colaborador", active })
+        .returning({ id: schema.staff.id });
+      staffIds.push(row.id);
+      return row.id;
+    };
+    const pendingB = await insertStaff("B", true);
+    const pendingA = await insertStaff("A", true);
+    const inactive = await insertStaff("C", false);
+
+    const health = await loadGoogleHealth({});
+    const ids = health.pendingGoogleStaff.map((person) => person.id);
+    expect(ids).toContain(pendingA);
+    expect(ids).toContain(pendingB);
+    expect(ids).not.toContain(inactive);
+    expect(ids).not.toContain(linked.id);
+    // By name, with the last name joined.
+    expect(ids.indexOf(pendingA)).toBeLessThan(ids.indexOf(pendingB));
+    expect(health.pendingGoogleStaff.find((person) => person.id === pendingA)?.name).toBe(`Pendiente ${run} A Prueba`);
   });
 });

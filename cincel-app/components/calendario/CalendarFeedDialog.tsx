@@ -1,8 +1,21 @@
 "use client";
 
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { CopyIcon } from "lucide-react";
+import { useId, useState } from "react";
+import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/shadcn/alert-dialog";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import {
@@ -36,6 +49,9 @@ type SyncStep = { action: () => Promise<GoogleCalendarSyncOutcome | null | void>
 function formatSyncedAt(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
+
+export const GOOGLE_CALENDAR_SYNC_NOTE =
+  "Tus tareas con fecha se copian al calendario «Cincel» en tu Google Calendar. Si dejas de sincronizar, el calendario se queda en Google; puedes borrarlo ahí.";
 
 /** Where "Conectar Google Calendar" sends the browser: the incremental staff consent (FE §2.7). */
 export const CALENDAR_CONNECT_URL = "/api/auth/google/start?scope=calendar&return_to=/calendario";
@@ -107,11 +123,16 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
         </>
       ) : (
         <>
-          <p className="text-muted-foreground">
-            Sincronizando con <span className="text-foreground">{status.connectedEmail}</span> en el calendario
-            «Cincel».{" "}
-            {status.lastSyncedAt ? `Última sincronización: ${formatSyncedAt(status.lastSyncedAt)}.` : null}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="success">Activa</Badge>
+            <span className="text-[12.5px] text-muted-foreground">
+              <span className="text-foreground">{status.connectedEmail}</span>
+              {status.lastSyncedAt ? (
+                <span className="font-mono"> · Última sincronización: {formatSyncedAt(status.lastSyncedAt)}</span>
+              ) : null}
+            </span>
+          </div>
+          <p className="text-[12.5px] text-muted-foreground">{GOOGLE_CALENDAR_SYNC_NOTE}</p>
           {status.lastError && !shownError && !message ? (
             <p className="text-destructive">Último error: {status.lastError}</p>
           ) : null}
@@ -127,7 +148,7 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
                 run(disableGoogleCalendarSyncAction, "Sincronización desactivada.");
               }}
             >
-              Desactivar
+              Dejar de sincronizar
             </Button>
             {shownError || status.lastError ? (
               <Button variant="ghost" disabled={busy} onClick={connect}>
@@ -139,6 +160,154 @@ export function GoogleCalendarSyncSection({ open }: { open: boolean }) {
       )}
       {message ? <p className="text-muted-foreground">{message}</p> : null}
       {shownError ? <p className="text-destructive">{shownError}</p> : null}
+    </section>
+  );
+}
+
+export const FEED_REGENERATE_TITLE = "¿Regenerar el enlace? El enlace anterior deja de funcionar.";
+export const FEED_DISABLE_TITLE = "¿Desactivar el enlace? Las apps suscritas dejan de recibir tus tareas.";
+
+/**
+ * "Enlace de suscripción" rendered inline (Ajustes › Gmail, calendario y
+ * Cutto): the private ICS link for Apple Calendar, Outlook or any other app.
+ * The token is shown once, right after it is generated (only its hash is
+ * stored), so the read-only field is empty for an existing link until it is
+ * regenerated. "Copiar" copies it (toast "Enlace copiado"), "Regenerar" asks
+ * first (the old link stops working) and "Desactivar" turns it off.
+ */
+export function CalendarFeedLinkSection({ open = true }: { open?: boolean }) {
+  const statusQuery = useQuery({ ...calendarFeedStatusOptions(), enabled: open });
+  const enabled = statusQuery.data?.enabled ?? null;
+  const [feedUrl, setFeedUrl] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<"regenerate" | "disable" | null>(null);
+  const [error, setError] = useState("");
+  const inputId = useId();
+  const titleId = useId();
+
+  const setFeedEnabled = (qc: QueryClient, value: boolean) =>
+    qc.setQueryData(calendarFeedStatusOptions().queryKey, { enabled: value });
+
+  const generateMutation = useActionMutation<void, { token: string }>(() => generateCalendarFeedAction(), {
+    invalidate: CALENDAR_INTEGRATION_INVALIDATE,
+    setData: (qc) => setFeedEnabled(qc, true),
+    onFormError: () => setError("No se pudo generar el enlace."),
+  });
+  const disableMutation = useActionMutation<void, void>(() => disableCalendarFeedAction(), {
+    invalidate: CALENDAR_INTEGRATION_INVALIDATE,
+    setData: (qc) => setFeedEnabled(qc, false),
+    onFormError: () => setError("No se pudo desactivar el enlace."),
+  });
+  const busy = generateMutation.isPending || disableMutation.isPending;
+
+  function generate() {
+    setError("");
+    generateMutation.mutate(undefined, {
+      onSuccess: ({ token }) => setFeedUrl(`${window.location.origin}/api/calendario/feed/${token}.ics`),
+    });
+  }
+
+  function disable() {
+    setError("");
+    disableMutation.mutate(undefined, { onSuccess: () => setFeedUrl(null) });
+  }
+
+  async function copy() {
+    if (!feedUrl) return;
+    try {
+      await navigator.clipboard.writeText(feedUrl);
+      toast.success("Enlace copiado");
+    } catch {
+      setError("No se pudo copiar el enlace. Selecciónalo y cópialo a mano.");
+    }
+  }
+
+  const shownError = error || (statusQuery.isError ? "No se pudo consultar el estado del enlace." : "");
+
+  return (
+    <section aria-labelledby={titleId} className="flex flex-col gap-3 border-t border-border pt-3.5 text-sm">
+      <div className="flex flex-col gap-0.5">
+        <h3 id={titleId} className="text-[13.5px] font-semibold text-foreground">
+          Enlace de suscripción
+        </h3>
+        <p className="text-[12.5px] text-muted-foreground">Para Apple Calendar, Outlook u otra app.</p>
+      </div>
+      {enabled ? (
+        <>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={inputId} className="text-[13px] font-medium text-foreground">
+              Enlace del calendario
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                id={inputId}
+                readOnly
+                value={feedUrl ?? ""}
+                placeholder="Regenera el enlace para verlo de nuevo"
+                className="min-w-0 flex-1 bg-muted font-mono text-sidebar-foreground"
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <Button disabled={busy || !feedUrl} onClick={() => void copy()}>
+                <CopyIcon aria-hidden="true" data-icon="inline-start" />
+                Copiar
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={() => setConfirm("regenerate")}>
+                Regenerar
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={() => setConfirm("disable")}>
+                Desactivar
+              </Button>
+            </div>
+          </div>
+          <p className="text-[12.5px] text-muted-foreground">
+            {feedUrl
+              ? "Cópialo ahora: por seguridad no se vuelve a mostrar. Cualquiera con el enlace puede ver tus tareas."
+              : "Ya tienes un enlace activo. Si lo perdiste, regenera uno nuevo; el anterior deja de funcionar."}
+          </p>
+        </>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[12.5px] text-muted-foreground">Aún no has creado un enlace.</p>
+          <Button disabled={busy || enabled === null} onClick={generate}>
+            Crear enlace
+          </Button>
+        </div>
+      )}
+      {shownError ? (
+        <p role="alert" className="text-destructive">
+          {shownError}
+        </p>
+      ) : null}
+      <AlertDialog
+        open={confirm !== null}
+        onOpenChange={(next) => {
+          if (!next) setConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirm === "disable" ? FEED_DISABLE_TITLE : FEED_REGENERATE_TITLE}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === "disable"
+                ? "Puedes crear uno nuevo cuando quieras."
+                : "Tendrás que pegar el nuevo enlace en las apps donde lo usabas."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              variant={confirm === "disable" ? "destructive" : "default"}
+              onClick={() => {
+                const action = confirm;
+                setConfirm(null);
+                if (action === "disable") disable();
+                else generate();
+              }}
+            >
+              {confirm === "disable" ? "Desactivar" : "Regenerar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

@@ -45,16 +45,16 @@ describe("toCssVars", () => {
   it("emits the type scale for the six roles", () => {
     const vars = toCssVars(THEME_PRESETS.azul, "light");
     expect(TYPE_ROLES).toEqual(["pageTitle", "sectionTitle", "cardTitle", "body", "label", "kpi"]);
-    expect(vars["--type-pageTitle-size"]).toBe("22px");
+    expect(vars["--type-pageTitle-size"]).toBe("32px");
     expect(vars["--type-pageTitle-weight"]).toBe("600");
-    expect(vars["--type-sectionTitle-size"]).toBe("16px");
-    expect(vars["--type-cardTitle-size"]).toBe("14px");
-    expect(vars["--type-cardTitle-weight"]).toBe("500");
-    expect(vars["--type-body-size"]).toBe("14px");
+    expect(vars["--type-sectionTitle-size"]).toBe("20px");
+    expect(vars["--type-cardTitle-size"]).toBe("15px");
+    expect(vars["--type-cardTitle-weight"]).toBe("600");
+    expect(vars["--type-body-size"]).toBe("13.5px");
     expect(vars["--type-body-weight"]).toBe("400");
     expect(vars["--type-label-size"]).toBe("12px");
-    expect(vars["--type-kpi-size"]).toBe("28px");
-    expect(vars["--type-kpi-weight"]).toBe("500");
+    expect(vars["--type-kpi-size"]).toBe("26px");
+    expect(vars["--type-kpi-weight"]).toBe("600");
   });
 
   it("emits the shape: radius in rem, padding and gap in px, card shadow", () => {
@@ -89,7 +89,7 @@ describe("toCssVars", () => {
   it("--text-base is the text size, else the org body size", () => {
     expect(toCssVars(THEME_PRESETS.azul, "light", 15.5)["--text-base"]).toBe("15.5px");
     expect(toCssVars(THEME_PRESETS.azul, "dark", 13)["--text-base"]).toBe("13px");
-    expect(toCssVars(THEME_PRESETS.azul, "light")["--text-base"]).toBe("14px");
+    expect(toCssVars(THEME_PRESETS.azul, "light")["--text-base"]).toBe("13.5px");
   });
 
   it("uses org token edits", () => {

@@ -167,5 +167,44 @@ describe.skipIf(!url)("assistant threads (test DB)", async () => {
 
     const loaded = (await threads.loadThreadMessages(db, id)).find((m) => m.id === "a1")!;
     expect(loaded.metadata).toMatchObject({ toolMs: { "call-read": 300, "call-write": 650 }, responseMs: 1200 });
+  it("tool_call_count counts non-widget tool parts once", async () => {
+    const id = randomUUID();
+    await threads.upsertOwnedThread(db, { threadId: id, staffId: owner, context: { route: "/" } });
+    const user: UIMessage = { id: "u1", role: "user", parts: [{ type: "text", text: "Crea dos tareas" }] };
+    const requested = {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        { type: "tool-list_activities_due", toolCallId: "c1", state: "output-available", input: {}, output: [] },
+        { type: "tool-render_chart", toolCallId: "c2", state: "output-available", input: {}, output: { ok: true } },
+        { type: "tool-create_task", toolCallId: "c3", state: "approval-requested", input: {}, approval: { id: "p3" } },
+        { type: "tool-create_task", toolCallId: "c4", state: "approval-requested", input: {}, approval: { id: "p4" } },
+        { type: "text", text: "¿Confirmas?" },
+      ],
+    } as unknown as UIMessage;
+    await threads.saveThreadMessages(db, id, [user, requested]);
+    expect((await threadRow(id)).toolCallCount).toBe(3);
+
+    // The approval resume rewrites the same message: no call is counted twice.
+    const resumed = {
+      ...requested,
+      parts: requested.parts.map((part) =>
+        "approval" in part ? { ...part, state: "output-available", output: { ok: true } } : part,
+      ),
+    } as UIMessage;
+    await threads.saveThreadMessages(db, id, [resumed]);
+    expect((await threadRow(id)).toolCallCount).toBe(3);
+
+    // A new assistant message adds its own calls; a repeated toolCallId counts once.
+    const next = {
+      id: "a2",
+      role: "assistant",
+      parts: [
+        { type: "dynamic-tool", toolName: "team_workload_summary", toolCallId: "c5", state: "input-available", input: {} },
+        { type: "dynamic-tool", toolName: "team_workload_summary", toolCallId: "c5", state: "output-available", input: {}, output: [] },
+      ],
+    } as unknown as UIMessage;
+    await threads.saveThreadMessages(db, id, [next]);
+    expect((await threadRow(id)).toolCallCount).toBe(4);
   });
 });

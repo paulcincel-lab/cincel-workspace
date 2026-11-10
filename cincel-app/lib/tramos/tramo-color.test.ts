@@ -42,3 +42,17 @@ describe("tramoColorClass / tramoColorVar", () => {
     expect(tramoColorVar({ key: "otro", sortOrder: 9 })).toBe("var(--muted-foreground)");
   });
 });
+
+describe("tramoColorSlot with an explicit color_slot", () => {
+  it("explicit slot wins over key and sortOrder", () => {
+    expect(tramoColorSlot({ key: "presale", sortOrder: 1, colorSlot: 5 })).toBe(5);
+    expect(tramoColorSlot({ key: "otro", sortOrder: 2, colorSlot: 4 })).toBe(4);
+    expect(tramoColorVar({ key: "diseno", sortOrder: 2, colorSlot: 3 })).toBe("var(--chart-3)");
+    expect(tramoColorClass({ key: "construccion", sortOrder: 3, colorSlot: 1 })).toBe("bg-chart-1");
+  });
+
+  it("falls back to the key / sortOrder rule without a valid slot", () => {
+    expect(tramoColorSlot({ key: "presale", sortOrder: 4, colorSlot: null })).toBe(1);
+    expect(tramoColorSlot({ key: "otro", sortOrder: 2, colorSlot: 9 })).toBe(2);
+  });
+});

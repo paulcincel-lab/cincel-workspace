@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
 import PortalAppearance from "@/components/portal/PortalAppearance";
+import PortalProjectMenu from "@/components/portal/PortalProjectMenu";
 import PortalShell from "@/components/portal/PortalShell";
 import PortalStyleSwitch from "@/components/portal/PortalStyleSwitch";
 import { StyleProvider } from "@/components/shell/StyleProvider";
@@ -27,7 +28,8 @@ export const metadata: Metadata = { title: "Portal de clientes · Cincel" };
  *
  * The presentation style comes from the `cincel-portal-style` cookie (org default when missing or invalid,
  * FE §3.11) and wraps the shell in `StyleProvider scope="portal"`; a signed-in client gets
- * `EstiloSwitch scope="portal"` in the top bar on the pages that have the three styles. When the organization
+ * `EstiloSwitch scope="portal"` inline in the top bar on the pages that have the three styles, and the project
+ * menu on the project pages. When the organization
  * fixed the style (`allowUserOverride: false`), `fixedByOrg` reaches the provider: the cookie is ignored
  * (`getPortalPresentation`) and `PortalStyleSwitch` renders nothing.
  *
@@ -48,6 +50,14 @@ export default async function PortalLayout({ children }: { children: ReactNode }
       <StyleProvider style={presentation.style} scope="portal" fixedByOrg={presentation.fixedByOrg}>
         <PortalShell
           clientName={user?.name ?? null}
+          companyName={user?.companyName ?? null}
+          projectMenu={
+            user ? (
+              <Suspense fallback={null}>
+                <PortalProjectMenu />
+              </Suspense>
+            ) : undefined
+          }
           styleSwitch={
             user ? (
               <Suspense fallback={null}>

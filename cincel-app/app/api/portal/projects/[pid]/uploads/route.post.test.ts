@@ -118,7 +118,7 @@ function call(pid: string) {
 describe("POST /api/portal/projects/[pid]/uploads", () => {
   beforeEach(() => {
     state.cookie = "tok";
-    state.user = { id: "u-me", name: "Ana López", email: "ana@cliente.example", contactId: "c-9" };
+    state.user = { id: "u-me", name: "Ana López", email: "ana@cliente.example", contactId: "c-9", companyName: null };
     state.access = new Map([[`u-me:${PID}`, readyAccess()]]);
     state.afterTasks = [];
     for (const mock of Object.values(mocks)) mock.mockReset();

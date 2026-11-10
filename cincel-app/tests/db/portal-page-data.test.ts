@@ -44,6 +44,9 @@ vi.mock("@/lib/portal/files", () => ({
   listPortalFolder: vi.fn(async () => {
     throw new Error("Drive called");
   }),
+  listPortalFolderGroups: vi.fn(async () => {
+    throw new Error("Drive called");
+  }),
 }));
 
 const run = randomUUID().slice(0, 8);

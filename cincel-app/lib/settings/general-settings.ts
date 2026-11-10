@@ -12,9 +12,10 @@ export type GeneralLanguage = "es-MX";
 
 export type GeneralTimeZone = "America/Mexico_City";
 
-export type GeneralDateFormat = "dd/MM/yyyy";
+/** "9 nov 2026" or "09/11/2026". */
+export type GeneralDateFormat = "d MMM yyyy" | "dd/MM/yyyy";
 
-export type WeekStartDay = "monday";
+export type WeekStartDay = "monday" | "sunday";
 
 export type GeneralCompanySettings = {
   legalName: string;
@@ -188,12 +189,12 @@ export function sanitizeGeneralSettings(candidate: unknown): GeneralSettings {
       }),
       dateFormat: sanitizeEnum({
         value: regionalCandidate.dateFormat,
-        allowed: ["dd/MM/yyyy"],
+        allowed: ["d MMM yyyy", "dd/MM/yyyy"],
         fallback: defaults.regional.dateFormat,
       }),
       weekStartsOn: sanitizeEnum({
         value: regionalCandidate.weekStartsOn,
-        allowed: ["monday"],
+        allowed: ["monday", "sunday"],
         fallback: defaults.regional.weekStartsOn,
       }),
     },

@@ -11,6 +11,7 @@ import {
   type AssistantTurn,
 } from "@/components/asistente/use-asistente-cache";
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
+import { AsistenteAnaliticoLayout } from "@/components/widgets/asistente/AsistenteAnaliticoLayout";
 import { AsistenteEsencialLayout } from "@/components/widgets/asistente/AsistenteEsencialLayout";
 import { AsistenteVisualLayout } from "@/components/widgets/asistente/AsistenteVisualLayout";
 import { actionErrorText } from "@/lib/errors";
@@ -218,6 +219,19 @@ export function AsistentePageClient({
     />
   );
 
+  const analitico = () => (
+    <AsistenteAnaliticoLayout
+      threads={threads}
+      thread={{ id: active.id, isNew: active.isNew, title: activeTitle, messages: chatMessages }}
+      notice={shownNotice}
+      context={context}
+      loadingThreadId={loadingId}
+      onNewConversation={startNewConversation}
+      onSelectThread={(id) => void selectThread(id)}
+      onTurnFinished={onTurnFinished}
+    />
+  );
+
   return (
     <PageStyleLayout
       visual={visual}
@@ -235,7 +249,7 @@ export function AsistentePageClient({
           onTurnFinished={onTurnFinished}
         />
       )}
-      analitico={visual}
+      analitico={analitico}
     />
   );
 }

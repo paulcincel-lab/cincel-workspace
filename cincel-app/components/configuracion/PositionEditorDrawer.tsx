@@ -1,16 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
+import { CatalogEditorPanel } from "@/components/ajustes/CatalogEditorPanel";
+import { CatalogPanelFooter } from "@/components/ajustes/catalog-parts";
+import { Avatar, AvatarFallback } from "@/components/ui/shadcn/avatar";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
-import { FormField } from "@/components/ui/shadcn/form-field";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
+import { tramoColorClass } from "@/lib/tramos/tramo-color";
 import type { Position, WorkflowDetail } from "@/lib/types/core";
+import { cn } from "@/lib/utils";
 
-export type PositionDraft = { name: string; phaseIds: string[] };
+export type PositionDraft = { name: string; weeklyCapacityHours: number | null; phaseIds: string[] };
+
+export const CAPACITY_RANGE_ERROR = "Escribe un número de 0 a 80.";
+
+/** "40" → 40, "" → null; undefined when it is not a whole number from 0 to 80. */
+export function parseCapacity(raw: string): number | null | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed);
+  if (!Number.isInteger(value) || value < 0 || value > 80) return undefined;
+  return value;
+}
 
 /** Tramos in `sortOrder`, each with its active fases in catalog order; tramos without fases are left out. */
 export function groupPhasesByTramo(workflows: WorkflowDetail[]) {
@@ -19,6 +34,9 @@ export function groupPhasesByTramo(workflows: WorkflowDetail[]) {
     .map((workflow) => ({
       id: workflow.id,
       name: workflow.name,
+      key: workflow.key,
+      sortOrder: workflow.sortOrder,
+      colorSlot: workflow.colorSlot ?? null,
       phases: workflow.phases
         .filter((phase) => phase.active)
         .sort((a, b) => a.sortOrder - b.sortOrder),
@@ -36,32 +54,84 @@ interface PositionEditorDrawerProps {
   isSaving: boolean;
   formError: string;
   onSave: (draft: PositionDraft) => void;
+  /** "Eliminar puesto" (the page asks first). */
+  onDelete?: (position: Position) => void;
+  /** Where focus goes back on close (the row's "•••"). */
+  returnFocus?: () => HTMLElement | null | undefined;
 }
 
-/** Slide-in form for a puesto: its name and its candidate fases, grouped by tramo. */
-export function PositionEditorDrawer({ show, ...rest }: PositionEditorDrawerProps) {
+/**
+ * Editor of a puesto (Ajustes › Puestos, frame `Ajustes-Puestos`): its name,
+ * weekly capacity, candidate fases grouped by tramo and its members
+ * (read-only). Inline next to the list from 1024 px, a `Sheet` below.
+ */
+export function PositionEditorDrawer({ show, onClose, position, returnFocus, onDelete, ...rest }: PositionEditorDrawerProps) {
+  const formId = useId();
+  const [localError, setLocalError] = useState("");
+  // Clear the capacity error whenever the panel opens or switches puesto (state adjusted during render).
+  const [shown, setShown] = useState({ show, id: position?.id ?? null });
+  if (shown.show !== show || shown.id !== (position?.id ?? null)) {
+    setShown({ show, id: position?.id ?? null });
+    setLocalError("");
+  }
+  const googleManaged = Boolean(position?.googleManaged);
+
   return (
-    <Sheet open={show} onOpenChange={(next) => { if (!next) rest.onClose(); }}>
-      <SheetContent className="w-[560px] max-w-[560px] overflow-y-auto text-foreground">
-        {/* Keyed so the form resets each time a different puesto (or a new one) opens. */}
-        {show ? <PositionEditorForm key={rest.position?.id ?? "new"} {...rest} /> : null}
-      </SheetContent>
-    </Sheet>
+    <CatalogEditorPanel
+      title={position ? `Editar puesto · ${position.name}` : "Nuevo puesto"}
+      open={show}
+      onClose={onClose}
+      returnFocus={returnFocus}
+      footer={
+        <CatalogPanelFooter
+          onCancel={onClose}
+          formId={formId}
+          saving={rest.isSaving}
+          canSave={rest.canManage}
+          error={localError || rest.formError || null}
+          destructive={
+            position && rest.canManage && onDelete ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={googleManaged}
+                title={googleManaged ? "Lo usa un grupo de Google." : undefined}
+                onClick={() => onDelete(position)}
+              >
+                Eliminar puesto
+              </Button>
+            ) : null
+          }
+        />
+      }
+    >
+      {/* Keyed so the form resets each time a different puesto (or a new one) opens. */}
+      <PositionEditorForm key={position?.id ?? "new"} formId={formId} position={position} onInvalid={setLocalError} {...rest} />
+    </CatalogEditorPanel>
   );
 }
 
 function PositionEditorForm({
-  onClose,
+  formId,
   position,
   workflows,
   canManage,
-  isSaving,
-  formError,
   onSave,
-}: Omit<PositionEditorDrawerProps, "show">) {
+  onInvalid,
+}: Pick<PositionEditorDrawerProps, "position" | "workflows" | "canManage" | "onSave"> & {
+  formId: string;
+  onInvalid: (message: string) => void;
+}) {
   const [name, setName] = useState(position?.name ?? "");
+  const [capacity, setCapacity] = useState(
+    position?.weeklyCapacityHours === null || position?.weeklyCapacityHours === undefined
+      ? ""
+      : String(position.weeklyCapacityHours),
+  );
   const [phaseIds, setPhaseIds] = useState<string[]>(() => position?.phases.map((phase) => phase.id) ?? []);
   const groups = groupPhasesByTramo(workflows);
+  const members = position?.members ?? [];
+  const capacityInvalid = parseCapacity(capacity) === undefined;
 
   function togglePhase(phaseId: string, checked: boolean) {
     setPhaseIds((current) =>
@@ -70,79 +140,112 @@ function PositionEditorForm({
   }
 
   return (
-    <>
-      <SheetHeader>
-        <SheetTitle>{position ? "Editar puesto" : "Nuevo puesto"}</SheetTitle>
-      </SheetHeader>
+    <form
+      id={formId}
+      className="flex flex-col gap-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const weeklyCapacityHours = parseCapacity(capacity);
+        if (weeklyCapacityHours === undefined) {
+          onInvalid(CAPACITY_RANGE_ERROR);
+          return;
+        }
+        onInvalid("");
+        onSave({ name, weeklyCapacityHours, phaseIds });
+      }}
+    >
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${formId}-name`}>Nombre</Label>
+        <Input
+          id={`${formId}-name`}
+          type="text"
+          value={name}
+          disabled={!canManage}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </div>
 
-      <form
-        className="space-y-6 px-6 py-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave({ name, phaseIds });
-        }}
-      >
-        {formError ? (
-          <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {formError}
-          </div>
-        ) : null}
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${formId}-capacity`}>Capacidad por semana (horas)</Label>
+        <Input
+          id={`${formId}-capacity`}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={80}
+          step={1}
+          value={capacity}
+          disabled={!canManage}
+          aria-invalid={capacityInvalid ? true : undefined}
+          onChange={(event) => setCapacity(event.target.value)}
+        />
+      </div>
 
-        <FormField>
-          <Label htmlFor="position-name" className="mb-2 block">Nombre</Label>
-          <Input
-            id="position-name"
-            type="text"
-            value={name}
-            disabled={!canManage}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </FormField>
-
-        <section className="space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Fases candidatas</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Los candidatos solo se sugieren al asignar tareas; cualquiera puede asignarse.
-            </p>
-          </div>
-
-          {groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aún no hay fases.</p>
-          ) : (
-            groups.map((group) => (
-              <fieldset key={group.id} className="space-y-2">
-                <legend className="text-xs font-medium text-muted-foreground">{group.name}</legend>
-                {group.phases.map((phase) => {
-                  const id = `position-phase-${phase.id}`;
-                  return (
-                    <div key={phase.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={id}
-                        checked={phaseIds.includes(phase.id)}
-                        disabled={!canManage}
-                        onCheckedChange={(checked) => togglePhase(phase.id, checked === true)}
-                      />
-                      <Label htmlFor={id} className="text-sm font-normal">{phase.name}</Label>
-                    </div>
-                  );
-                })}
-              </fieldset>
-            ))
-          )}
-        </section>
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          {canManage ? (
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Guardando…" : "Guardar"}
-            </Button>
-          ) : null}
+      <section className="flex flex-col gap-3" aria-labelledby={`${formId}-phases`}>
+        <div>
+          <h3 id={`${formId}-phases`} className="text-sm font-semibold text-foreground">
+            Fases candidatas
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Los candidatos solo se sugieren al asignar tareas; cualquiera puede asignarse.
+          </p>
         </div>
-      </form>
-    </>
+
+        {groups.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aún no hay fases.</p>
+        ) : (
+          groups.map((group) => (
+            <fieldset key={group.id} className="flex flex-col gap-2">
+              <legend className="mb-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", tramoColorClass(group))} />
+                {group.name}
+              </legend>
+              {group.phases.map((phase) => {
+                const id = `${formId}-phase-${phase.id}`;
+                return (
+                  <div key={phase.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={id}
+                      checked={phaseIds.includes(phase.id)}
+                      disabled={!canManage}
+                      onCheckedChange={(checked) => togglePhase(phase.id, checked === true)}
+                    />
+                    <Label htmlFor={id} className="text-sm font-normal">
+                      {phase.name}
+                    </Label>
+                  </div>
+                );
+              })}
+            </fieldset>
+          ))
+        )}
+      </section>
+
+      {position ? (
+        <section className="flex flex-col gap-2" aria-labelledby={`${formId}-members`}>
+          <div className="flex items-center gap-2">
+            <h3 id={`${formId}-members`} className="text-sm font-semibold text-foreground">
+              Integrantes
+            </h3>
+            <Badge variant="count">{members.length}</Badge>
+          </div>
+          {members.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nadie tiene este puesto todavía.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {members.map((member) => (
+                <li key={member.id} className="flex items-center gap-2 text-sm">
+                  <Avatar size="sm">
+                    <AvatarFallback>{member.initials}</AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 truncate">{member.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-muted-foreground">El puesto de cada persona se cambia en Personas.</p>
+        </section>
+      ) : null}
+    </form>
   );
 }

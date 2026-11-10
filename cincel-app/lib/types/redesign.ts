@@ -251,6 +251,8 @@ export type TeamHoursRow = {
   target: number;
   lateCount: number;
   status: "completo" | "incompleto" | "sin_registro";
+  /** A day of the week was closed automatically (`time_entries.closed_by = 'auto_close'`): "Salida sin registrar". */
+  needsReview: boolean;
 };
 
 // ── Vacations ───────────────────────────────────────────────────────────────
@@ -321,6 +323,8 @@ export type AssistantThreadSummary = {
   pendingApprovals: number;
   /** The last assistant message is newer than `last_read_at`. */
   unread: boolean;
+  /** Non-widget tool calls of the thread (`assistant_threads.tool_call_count`). */
+  toolCalls: number;
 };
 
 // ── Aggregates (BE §7.10–§7.12, FE §7.1) ────────────────────────────────────

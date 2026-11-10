@@ -23,6 +23,16 @@ const { flags, syncGmailAction, disconnectGmailAction, fetchGmailStatusAction, t
   pageData: vi.fn(),
 }));
 
+const calendarActions = vi.hoisted(() => ({
+  disableCalendarFeedAction: vi.fn(),
+  disableGoogleCalendarSyncAction: vi.fn(),
+  enableGoogleCalendarSyncAction: vi.fn(),
+  fetchCalendarFeedStatusAction: vi.fn(),
+  fetchGoogleCalendarSyncStatusAction: vi.fn(),
+  generateCalendarFeedAction: vi.fn(),
+  syncGoogleCalendarAction: vi.fn(),
+}));
+
 vi.mock("@/lib/actions/gmail-actions.flags", () => ({ IMPLEMENTED: flags }));
 vi.mock("@/lib/actions/gmail-actions", () => ({ syncGmailAction, disconnectGmailAction, fetchGmailStatusAction }));
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: vi.fn() } }));
@@ -33,8 +43,13 @@ vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
   getAjustesIntegracionesPageData: pageData,
 }));
 
-// The existing Calendar controls are reused as is; a stand-in keeps their server actions out of this test.
-vi.mock("@/components/calendario/CalendarFeedDialog", () => ({
+vi.mock("@/lib/actions/calendar-actions", () => calendarActions);
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
+
+// The direct sync controls of Calendario are covered by their own test; a stand-in keeps them out of this one.
+// The subscription link section is the real one (its actions are mocked above).
+vi.mock("@/components/calendario/CalendarFeedDialog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/calendario/CalendarFeedDialog")>()),
   GoogleCalendarSyncSection: ({ open }: { open: boolean }) => (
     <section aria-label="Sincronización directa" data-open={String(open)}>
       <button type="button">Activar sincronización</button>
@@ -42,27 +57,6 @@ vi.mock("@/components/calendario/CalendarFeedDialog", () => ({
   ),
 }));
 
-// Contract-shaped stand-ins for the shared patterns (FE §4.11), so this test covers the page content on its own.
-vi.mock("@/components/patterns/SettingsSection", () => ({
-  SettingsSection: ({
-    title,
-    description,
-    actions,
-    children,
-  }: {
-    title: string;
-    description?: string;
-    actions?: ReactNode;
-    children: ReactNode;
-  }) => (
-    <section aria-label={title}>
-      <h2>{title}</h2>
-      {description ? <p>{description}</p> : null}
-      {actions}
-      {children}
-    </section>
-  ),
-}));
 vi.mock("@/components/patterns/FormDialog", () => ({
   FormDialog: ({
     title,
@@ -98,6 +92,7 @@ vi.mock("@/components/patterns/FormDialog", () => ({
     ) : null,
 }));
 
+import { FEED_REGENERATE_TITLE } from "@/components/calendario/CalendarFeedDialog";
 import {
   CUTTO_BASE_URL,
   CUTTO_COPY,
@@ -113,6 +108,7 @@ import {
   IntegracionesGoogleCalendar,
   IntegracionesGoogleDrive,
   IntegracionesMonday,
+  formatLastSync,
   formatSyncedAt,
   gmailCardState,
   isWithinSyncCooldown,
@@ -122,6 +118,7 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { actionErrorText } from "@/lib/errors";
 import { qk } from "@/lib/query/keys";
 import type { AjustesIntegracionesPageData } from "@/lib/query/options/ajustes";
+import { CUTTO_LINK_TARGET } from "@/lib/integrations/cutto-links";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { resetSessionStoreForTests, useSessionStore } from "@/lib/stores/session-store";
 import { integracionesGmailSection } from "@/lib/shell/settings-sections/integraciones/gmail";
@@ -214,6 +211,8 @@ beforeEach(() => {
   fetchGmailStatusAction.mockReset();
   toastSuccess.mockReset();
   pageData.mockReset();
+  for (const fn of Object.values(calendarActions)) fn.mockReset();
+  calendarActions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: false });
 });
 
 afterEach(() => {
@@ -241,6 +240,12 @@ describe("gmail helpers", () => {
     expect(isWithinSyncCooldown(CONNECTED.lastSyncedAt, at + 30_000)).toBe(false);
   });
 
+  it("formats a sync of today as hoy HH:mm (Ciudad de México)", () => {
+    const at = Date.parse("2026-11-06T15:42:00.000Z");
+    expect(formatLastSync("2026-11-06T15:42:00.000Z", at + 60_000)).toBe("hoy 09:42");
+    expect(formatLastSync("2026-11-06T15:42:00.000Z", at + 2 * 86_400_000)).toBe(formatSyncedAt("2026-11-06T15:42:00.000Z"));
+  });
+
   it("formats the last sync in lowercase es-MX", () => {
     const text = formatSyncedAt(CONNECTED.lastSyncedAt!);
     expect(text).toBe(text.toLowerCase());
@@ -264,7 +269,7 @@ describe("Gmail card states", () => {
     expect(within(gmail).getByText("Conectado")).toBeTruthy();
     expect(within(gmail).getByText("ana@cincel.mx")).toBeTruthy();
     expect(within(gmail).getByText(/Última sincronización:/).textContent).toContain(
-      formatSyncedAt(CONNECTED.lastSyncedAt!),
+      formatLastSync(CONNECTED.lastSyncedAt!),
     );
     expect(within(gmail).getByRole("button", { name: "Sincronizar ahora" })).toBeTruthy();
     expect(within(gmail).getByRole("button", { name: "Desconectar" })).toBeTruthy();
@@ -300,14 +305,15 @@ describe("Gmail card states", () => {
 });
 
 describe("Sincronizar ahora", () => {
-  it("shows the rate-limit copy within 30 s of the last sync without calling the action", async () => {
+  it("is disabled within 30 s of the last sync and never calls the action", async () => {
     vi.useFakeTimers({ now: Date.parse(CONNECTED.lastSyncedAt!) + 10_000, toFake: ["Date"] });
     renderPage();
+    const button = screen.getByRole("button", { name: "Sincronizar ahora" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Sincronizar ahora" }));
+      fireEvent.click(button);
     });
     expect(syncGmailAction).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toBe(RATE_LIMITED_COPY);
   });
 
   it("syncs, then refreshes the status through the page query (one refetch)", async () => {
@@ -323,7 +329,7 @@ describe("Sincronizar ahora", () => {
     });
     expect(syncGmailAction).toHaveBeenCalledTimes(1);
     await waitFor(() =>
-      expect(screen.getByText(/Última sincronización:/).textContent).toContain(formatSyncedAt("2026-11-06T15:03:00.000Z")),
+      expect(screen.getByText(/Última sincronización:/).textContent).toContain(formatLastSync("2026-11-06T15:03:00.000Z")),
     );
     expect(pageData).toHaveBeenCalledTimes(1);
     expect(fetchGmailStatusAction).not.toHaveBeenCalled();
@@ -502,8 +508,8 @@ describe("Cutto and monday", () => {
     expect(CUTTO_COPY).toBe("Cutto es una aplicación aparte. Cincel enlaza a los canales de cada proyecto.");
     const link = within(cutto).getByRole("link", { name: "Abrir Cutto" });
     expect(link.getAttribute("href")).toBe(CUTTO_BASE_URL);
-    expect(link.getAttribute("target")).toBe("_blank");
-    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(link.getAttribute("target")).toBe(CUTTO_LINK_TARGET.target);
+    expect(link.getAttribute("rel")).toBe(CUTTO_LINK_TARGET.rel);
     expect(within(cutto).queryAllByRole("button")).toHaveLength(0);
     expect(within(cutto).queryAllByRole("switch")).toHaveLength(0);
     expect(within(cutto).queryAllByRole("checkbox")).toHaveLength(0);
@@ -511,9 +517,93 @@ describe("Cutto and monday", () => {
 
   it("monday links to /ajustes/monday", () => {
     renderPage();
-    expect(within(card("monday")).getByRole("link", { name: "Ver importaciones" }).getAttribute("href")).toBe(
+    expect(within(card("monday")).getByRole("link", { name: "Ir a Importar de monday" }).getAttribute("href")).toBe(
       "/ajustes/monday",
     );
+  });
+
+  it("monday card only for admins", () => {
+    expect(integracionesMondaySection.visible(user("Administrador"))).toBe(true);
+    expect(integracionesMondaySection.visible(user("Colaborador"))).toBe(false);
+    renderPage({ withMonday: false });
+    expect(screen.queryByRole("region", { name: "monday" })).toBeNull();
+  });
+});
+
+describe("scopes", () => {
+  it("scope chips list the requested scopes", () => {
+    renderPage();
+    const chips = within(card("Gmail")).getByRole("list", { name: "Permisos de Gmail" });
+    expect(within(chips).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["gmail.readonly", "gmail.compose"]);
+    expect(within(card("Gmail")).queryByText("gmail.send")).toBeNull();
+  });
+
+  it("Drive without the grant names the drive.file permission it will ask for", () => {
+    renderPage({ drive: { configured: true, hasDriveGrant: false } });
+    const drive = card("Google Drive");
+    expect(within(drive).getByText("Permiso que pedirá:")).toBeTruthy();
+    expect(within(drive).getByText("drive.file")).toBeTruthy();
+  });
+});
+
+describe("Enlace de suscripción", () => {
+  it("copy shows a toast", async () => {
+    calendarActions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: false });
+    calendarActions.generateCalendarFeedAction.mockResolvedValue({ token: "abc123" });
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderPage();
+    const calendar = card("Google Calendar");
+
+    const create = await within(calendar).findByRole("button", { name: "Crear enlace" });
+    await waitFor(() => expect((create as HTMLButtonElement).disabled).toBe(false));
+    await act(async () => {
+      fireEvent.click(create);
+    });
+    const field = (await within(calendar).findByLabelText("Enlace del calendario")) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toContain("/api/calendario/feed/abc123.ics"));
+
+    await act(async () => {
+      fireEvent.click(within(calendar).getByRole("button", { name: "Copiar" }));
+    });
+    expect(writeText).toHaveBeenCalledWith(field.value);
+    expect(toastSuccess).toHaveBeenCalledWith("Enlace copiado");
+  });
+
+  it("regenerate asks first", async () => {
+    calendarActions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: true });
+    calendarActions.generateCalendarFeedAction.mockResolvedValue({ token: "nuevo" });
+    renderPage();
+    const calendar = card("Google Calendar");
+
+    fireEvent.click(await within(calendar).findByRole("button", { name: "Regenerar" }));
+    expect(await screen.findByText(FEED_REGENERATE_TITLE)).toBeTruthy();
+    expect(calendarActions.generateCalendarFeedAction).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("alertdialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Regenerar" }));
+    });
+    expect(calendarActions.generateCalendarFeedAction).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect((within(calendar).getByLabelText("Enlace del calendario") as HTMLInputElement).value).toContain("nuevo.ics"),
+    );
+  });
+
+  it("turns the link off inline", async () => {
+    calendarActions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: true });
+    calendarActions.disableCalendarFeedAction.mockResolvedValue(undefined);
+    renderPage();
+    const calendar = card("Google Calendar");
+
+    fireEvent.click(await within(calendar).findByRole("button", { name: "Desactivar" }));
+    const dialog = await screen.findByRole("alertdialog");
+    calendarActions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: false });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Desactivar" }));
+    });
+    expect(calendarActions.disableCalendarFeedAction).toHaveBeenCalledTimes(1);
+    expect(await within(calendar).findByRole("button", { name: "Crear enlace" })).toBeTruthy();
   });
 });
 

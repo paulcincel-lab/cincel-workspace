@@ -17,6 +17,11 @@ export type PortalProjectDTO = {
   endDate: string | null;
   /** projects.manager_id */
   manager: { name: string; email: string | null } | null;
+  /**
+   * Points gained this month (today's progress minus the first snapshot of the month). Not emitted yet: it
+   * arrives with `project_progress_snapshots`; until then the Analítico KPI leaves its sub-line out.
+   */
+  progressDeltaMonth?: number | null;
 };
 
 /** One `seccion` (partida) of one `planta`: first `inicio`, last `fin`, % of its tasks done. */
@@ -27,6 +32,14 @@ export type PortalScheduleSectionDTO = {
   start: string;
   end: string;
   progressPct: number;
+  /**
+   * First and last real dates of the section (`schedule_tasks.started_on` / `finished_on`). Not emitted yet:
+   * absent until those columns exist, and the Analítico Real / Desvío columns stay hidden meanwhile.
+   */
+  actualStart?: string | null;
+  actualEnd?: string | null;
+  /** The tramo the section belongs to (`schedule_tasks.workflow_id`). Not emitted yet; phases group by planta. */
+  tramoKey?: string | null;
 };
 
 /** Null when the project has no schedule. */
@@ -42,7 +55,17 @@ export type PortalTramoDTO = {
   key: string;
   name: string;
   state: "completado" | "en_curso" | "por_iniciar";
+  /** 0–100: closed over all live tasks of the tramo in this project; completado 100, por_iniciar 0. */
+  progressPct: number;
+  /** `YYYY-MM` from `project_stages.started_at`; null when the tramo hasn't started. */
+  startMonth: string | null;
 };
+
+/** One person of the project's Cincel team: the manager first, then `project_members`. Email only for the manager. */
+export type PortalTeamMemberDTO = { name: string; role: string | null; email: string | null };
+
+/** The files (no subfolders) of one `02 Cliente` folder; the client folder itself is named "General". */
+export type PortalFolderGroupDTO = { folderId: string; name: string; files: PortalFileDTO[] };
 
 /** One file the client sent (Mis envíos), from `portal_file_events` (`upload`). */
 export type PortalUploadDTO = { id: string; fileName: string; sizeBytes: number | null; at: string };
@@ -57,6 +80,11 @@ export type PortalFileDTO = {
   kind: "file" | "folder";
   /** `pdf` for Google Docs, Sheets, Slides and Drawings, which download as an exported PDF. */
   deliveredAs: "original" | "pdf";
+  /**
+   * `cliente` when this portal user's own upload event names the file, else `cincel`. Never a staff name or
+   * Drive owner. Set by the listing mapper (`cincel`) and `markPortalClientUploads` in the loader.
+   */
+  uploadedBy?: "cliente" | "cincel";
 };
 
 /** `breadcrumbs` run from the client folder (first) to `folderId` (last). */

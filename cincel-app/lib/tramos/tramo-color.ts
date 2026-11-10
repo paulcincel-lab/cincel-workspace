@@ -1,8 +1,9 @@
 /**
  * Stable color per tramo.
  *
- * A tramo has no color column: its slot (1–5) comes from its key for the
- * firm's known tramos, otherwise from its `sortOrder`. The slot maps to one of
+ * A tramo's slot (1–5) is its `color_slot` when an admin chose one (Ajustes ›
+ * Tramos y fases), else its key for the firm's known tramos, otherwise its
+ * `sortOrder`. The slot maps to one of
  * the theme's chart tokens (`--chart-1` … `--chart-5`); no slot is the neutral
  * gray. Every UI that colors by tramo (badges, charts, legends) goes through
  * this module, so a given tramo looks the same everywhere.
@@ -11,7 +12,16 @@
 export const TRAMO_COLOR_SLOTS = [1, 2, 3, 4, 5] as const;
 export type TramoColorSlot = (typeof TRAMO_COLOR_SLOTS)[number];
 
-type TramoColorInput = { key: string; sortOrder: number };
+type TramoColorInput = { key: string; sortOrder: number; colorSlot?: number | null };
+
+/** Display name of each slot's color (Ajustes › Tramos y fases). */
+export const TRAMO_COLOR_NAMES: Record<TramoColorSlot, string> = {
+  1: "Azul",
+  2: "Violeta",
+  3: "Ámbar",
+  4: "Cian",
+  5: "Verde",
+};
 
 /** Fixed slot for the firm's known tramos, keyed by workflow key. */
 const SLOT_BY_KEY: Record<string, TramoColorSlot> = {
@@ -36,8 +46,9 @@ function isSlot(value: number): value is TramoColorSlot {
   return (TRAMO_COLOR_SLOTS as readonly number[]).includes(value);
 }
 
-/** The tramo's chart slot: by known key, else its sortOrder when 1..5, else null. */
+/** The tramo's chart slot: its explicit `colorSlot`, else by known key, else its sortOrder when 1..5, else null. */
 export function tramoColorSlot(w: TramoColorInput): TramoColorSlot | null {
+  if (typeof w.colorSlot === "number" && isSlot(w.colorSlot)) return w.colorSlot;
   const known = SLOT_BY_KEY[w.key.trim().toLowerCase()];
   if (known) return known;
   return isSlot(w.sortOrder) ? w.sortOrder : null;

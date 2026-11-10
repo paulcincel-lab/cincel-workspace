@@ -61,6 +61,7 @@ const THREADS: AssistantThreadSummary[] = [
     pinnedAt: null,
     pendingApprovals: 0,
     unread: false,
+    toolCalls: 0,
   },
 ];
 

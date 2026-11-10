@@ -61,6 +61,8 @@ const mapping: GroupMapping = {
   positionId: null,
   positionName: null,
   rank: 70,
+  memberCount: null,
+  exists: null,
 };
 
 const roleInput = {

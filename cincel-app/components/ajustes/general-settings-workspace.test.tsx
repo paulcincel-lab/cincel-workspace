@@ -9,6 +9,7 @@ vi.mock("@/components/patterns/SettingsSection", async () => ({
 vi.mock("@/components/patterns/SettingsRow", async () => ({
   SettingsRow: (await import("./general-settings-test-utils")).TestSettingsRow,
 }));
+vi.mock("@/components/ajustes/SettingsSaveBar", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
@@ -74,9 +75,11 @@ describe("Ajustes › General", () => {
   it("renders the sections of the frame with the existing fields and the links", () => {
     renderPage(savedWithLinks());
 
-    for (const title of ["Logo", "Organización", "Región y formatos", "Sistema", "Enlaces del despacho"]) {
+    for (const title of ["Organización", "Sistema", "Región y formatos", "Enlaces del despacho"]) {
       expect(screen.getByRole("heading", { name: title })).toBeTruthy();
     }
+    expect(screen.getByRole("heading", { name: /^General/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Vista previa del logotipo de la empresa" })).toBeTruthy();
     expect(field("Nombre comercial").value).toBe("Cincel Workspace");
     expect(field("Instagram").value).toBe("https://instagram.com/cincel");
     expect(field("Sitio web").value).toBe("https://cincel.mx");
@@ -125,10 +128,64 @@ describe("Ajustes › General", () => {
     expect(screen.getAllByText(HTTPS_URL_ERROR)).toHaveLength(2);
     expect(screen.getByText(CONTACT_EMAIL_ERROR)).toBeTruthy();
     expect(field("Instagram").getAttribute("aria-invalid")).toBe("true");
-    expect(field("Instagram").getAttribute("aria-describedby")).toBe("general-instagramUrl-error");
-    expect(saveButton().hasAttribute("disabled")).toBe(true);
+    expect(field("Instagram").getAttribute("aria-describedby")).toBe("general-instagramUrl-error general-instagramUrl-hint");
     fireEvent.click(saveButton());
     expect(actions.saveGeneralSettingsAction).not.toHaveBeenCalled();
+    // Focus goes to the first invalid field.
+    expect(document.activeElement).toBe(field("Sitio web"));
+  });
+
+  it("invalid https link shows inline error", () => {
+    renderPage();
+
+    fireEvent.change(field("Sitio web"), { target: { value: "http://cincel.mx" } });
+
+    const error = screen.getByText(HTTPS_URL_ERROR);
+    expect(error.id).toBe("general-website-error");
+    expect(field("Sitio web").getAttribute("aria-describedby")).toContain("general-website-error");
+    fireEvent.change(field("Sitio web"), { target: { value: "https://cincel.mx" } });
+    expect(screen.queryByText(HTTPS_URL_ERROR)).toBeNull();
+  });
+
+  it("dirty count follows changed fields", () => {
+    renderPage();
+    const status = () => screen.getByRole("status").textContent;
+
+    expect(status()).toBe("");
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(field("Nombre comercial"), { target: { value: "Cincel Studio" } });
+    expect(status()).toBe("1 cambio sin guardar");
+
+    fireEvent.change(field("Teléfono"), { target: { value: "55 1234 5678" } });
+    fireEvent.change(field("Nombre comercial"), { target: { value: "Cincel Studio 2" } });
+    expect(status()).toBe("2 cambios sin guardar");
+
+    // Back to the saved value: that field no longer counts.
+    fireEvent.change(field("Nombre comercial"), { target: { value: "Cincel Workspace" } });
+    expect(status()).toBe("1 cambio sin guardar");
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("Descartar returns every field to the saved settings", () => {
+    renderPage(savedWithLinks());
+
+    fireEvent.change(field("Nombre comercial"), { target: { value: "Cincel Studio" } });
+    fireEvent.change(field("Instagram"), { target: { value: "https://instagram.com/otro" } });
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+
+    expect(field("Nombre comercial").value).toBe("Cincel Workspace");
+    expect(field("Instagram").value).toBe("https://instagram.com/cincel");
+    expect(screen.getByRole("status").textContent).toBe("");
+    expect(actions.saveGeneralSettingsAction).not.toHaveBeenCalled();
+  });
+
+  it("uppercases the RFC and keeps the version read-only", () => {
+    renderPage();
+
+    fireEvent.change(field("RFC (opcional)"), { target: { value: "abc123" } });
+    expect(field("RFC (opcional)").value).toBe("ABC123");
+    expect(field("Versión").readOnly).toBe(true);
   });
 
   it("persists valid links trimmed, and blanks as null", async () => {
@@ -144,21 +201,6 @@ describe("Ajustes › General", () => {
     expect(company.instagramUrl).toBe("https://www.instagram.com/cincel.mx/");
     expect(company.contactEmail).toBeNull();
     expect(company.website).toBe("https://cincel.mx");
-  });
-
-  it("restores the defaults, clearing the link fields", async () => {
-    actions.restoreGeneralSettingsAction.mockResolvedValue(undefined);
-    renderPage(savedWithLinks());
-
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar configuración por defecto" }));
-
-    await waitFor(() => expect(field("Instagram").value).toBe(""));
-    expect(actions.restoreGeneralSettingsAction).toHaveBeenCalledTimes(1);
-    expect(field("Correo").value).toBe("");
-    expect(field("Sitio web").value).toBe(buildDefaultGeneralSettings().company.website);
-    expect(screen.queryByText(/^Guardado /)).toBeNull();
-    expect(client.getQueryData(qk.org.general())).toEqual(buildDefaultLoadedGeneralSettings());
-    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("shows the error copy when the save fails", async () => {

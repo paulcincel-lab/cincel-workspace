@@ -106,3 +106,42 @@ export function FormDialog({
     </div>
   );
 }
+
+/**
+ * Stand-in for `components/ajustes/SettingsSaveBar` (same props): the dirty
+ * text (or `status` while dirty), "Descartar" and the save button, both
+ * disabled while clean or saving, and the save error as an alert.
+ */
+export function SettingsSaveBar({
+  dirtyCount,
+  saving,
+  onDiscard,
+  onSave,
+  saveLabel = "Guardar",
+  error = null,
+  status,
+}: {
+  dirtyCount: number;
+  saving: boolean;
+  onDiscard(): void;
+  onSave(): void;
+  saveLabel?: string;
+  error?: string | null;
+  status?: string;
+}) {
+  const inert = dirtyCount === 0 || saving;
+  const text =
+    dirtyCount === 0 ? "" : status ?? (dirtyCount === 1 ? "1 cambio sin guardar" : `${dirtyCount} cambios sin guardar`);
+  return (
+    <div data-slot="settings-save-bar">
+      {error ? <p role="alert">{error}</p> : null}
+      <p role="status">{text}</p>
+      <button type="button" disabled={inert} onClick={onDiscard}>
+        Descartar
+      </button>
+      <button type="button" disabled={inert} onClick={onSave}>
+        {saving ? "Guardando…" : saveLabel}
+      </button>
+    </div>
+  );
+}

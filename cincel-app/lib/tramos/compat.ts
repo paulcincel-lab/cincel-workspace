@@ -53,7 +53,7 @@ export const listTramos = cache(async function listTramos(): Promise<WorkflowRef
   const rows = await fetchTramosNavAction();
   return rows
     .filter((row) => row.key.trim() !== "")
-    .map((row) => ({ id: row.id, key: row.key, name: row.name, sortOrder: row.sortOrder }))
+    .map((row) => ({ id: row.id, key: row.key, name: row.name, sortOrder: row.sortOrder, colorSlot: row.colorSlot ?? null }))
     .sort(bySortOrder);
 });
 

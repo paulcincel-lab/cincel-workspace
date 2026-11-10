@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { PortalPageColumn } from "@/components/portal/PortalShell";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
@@ -28,32 +29,34 @@ export default async function PortalAccessPage({ searchParams }: PortalAccessPag
   const token = (Array.isArray(raw) ? raw[0] : raw)?.trim() ?? "";
 
   return (
-    <Card className="mx-auto w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Entrar al portal</CardTitle>
-        <CardDescription>
-          {token ? "Presiona el botón para entrar con este enlace." : "Este enlace no está completo."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {token ? (
-          <form method="post" action={PORTAL_VERIFY_ENDPOINT}>
-            <input type="hidden" name="token" value={token} />
-            <Button type="submit" size="lg" className="min-h-11 w-full">
-              Entrar al portal
-            </Button>
-          </form>
-        ) : (
-          <>
-            <Alert variant="destructive">
-              <AlertDescription>{PORTAL_LINK_INVALID_MESSAGE}</AlertDescription>
-            </Alert>
-            <Link href={PORTAL_LOGIN_ROUTE} className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11 w-full")}>
-              Pedir un enlace nuevo
-            </Link>
-          </>
-        )}
-      </CardContent>
-    </Card>
+    <PortalPageColumn>
+      <Card className="mx-auto w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Entrar al portal</CardTitle>
+          <CardDescription>
+            {token ? "Presiona el botón para entrar con este enlace." : "Este enlace no está completo."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {token ? (
+            <form method="post" action={PORTAL_VERIFY_ENDPOINT}>
+              <input type="hidden" name="token" value={token} />
+              <Button type="submit" size="lg" className="min-h-11 w-full">
+                Entrar al portal
+              </Button>
+            </form>
+          ) : (
+            <>
+              <Alert variant="destructive">
+                <AlertDescription>{PORTAL_LINK_INVALID_MESSAGE}</AlertDescription>
+              </Alert>
+              <Link href={PORTAL_LOGIN_ROUTE} className={cn(buttonVariants({ variant: "outline", size: "lg" }), "min-h-11 w-full")}>
+                Pedir un enlace nuevo
+              </Link>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </PortalPageColumn>
   );
 }

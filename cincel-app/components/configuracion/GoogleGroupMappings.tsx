@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { ColumnDef } from "@tanstack/react-table";
+import { useState } from "react";
+import { Pencil } from "lucide-react";
 
-import { DataTable } from "@/components/ui/DataTable";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import {
   AlertDialog,
@@ -15,6 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/shadcn/alert-dialog";
+import { SettingsSection } from "@/components/patterns/SettingsSection";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
@@ -27,7 +27,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/shadcn/sheet";
-import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
 import {
   createGroupMappingAction,
   deleteGroupMappingAction,
@@ -106,17 +105,33 @@ export type GoogleGroupMappingsProps = {
   mappings: GroupMapping[];
   positions: PositionOption[];
   /**
-   * Without the card and its "Grupos de Google" heading ("Agregar grupo" stays
-   * on top): Ajustes › Google renders it inside a `SettingsSection`.
+   * As an Ajustes `SettingsSection` (canvas `Ajustes-Google`): the "Grupos de
+   * Google" heading (h3) with an outline "Agregar grupo" on the right.
+   * Otherwise its own card (the Google setup wizard).
    */
-  bare?: boolean;
+  section?: boolean;
 };
 
 export const GOOGLE_GROUPS_TITLE = "Grupos de Google";
 export const GOOGLE_GROUPS_DESCRIPTION = "Qué grupo de Google Workspace da cada rol o puesto.";
+export const GOOGLE_GROUPS_EMPTY = "Aún no hay grupos.";
+export const GROUP_LOOKUP_NOTE = "El grupo se busca en Google Workspace al guardar.";
 
-/** Configuración → Google, section 2 "Grupos de Google" (FE §2.5). */
-export function GoogleGroupMappings({ mappings, positions, bare = false }: GoogleGroupMappingsProps) {
+const TH = "whitespace-nowrap border-b border-border bg-muted px-3 py-2 text-left font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase";
+const TD = "border-b border-accent px-3 py-2 text-[13px]";
+
+/** "Miembros": the Directory count, "El grupo no existe" (destructive) or "—" while unchecked. */
+function MembersCell({ mapping }: { mapping: GroupMapping }) {
+  if (mapping.exists === false) return <span className="text-destructive">{GROUP_MAPPING_ERROR_MESSAGES.group_not_found}</span>;
+  return <span className="font-mono">{mapping.memberCount ?? "—"}</span>;
+}
+
+/**
+ * "Grupos de Google" (FE §2.5, canvas `Ajustes-Google`): the mapped groups
+ * with their Directory member count ("El grupo no existe" when `groups.get`
+ * no longer finds one), and the create / edit sheet (delete from the sheet).
+ */
+export function GoogleGroupMappings({ mappings, positions, section = false }: GoogleGroupMappingsProps) {
   const saveMutation = useActionMutation(saveGroupMapping, {
     invalidate: GROUP_MAPPING_INVALIDATIONS,
     onFormError: SILENT,
@@ -182,67 +197,86 @@ export function GoogleGroupMappings({ mappings, positions, bare = false }: Googl
     });
   }
 
-  const columns = useMemo<ColumnDef<GroupMapping, unknown>[]>(
-    () => [
-      { accessorKey: "groupEmail", header: "Grupo" },
-      { id: "kind", header: "Tipo", cell: ({ row }) => KIND_LABELS[row.original.kind] },
-      {
-        id: "value",
-        header: "Valor",
-        cell: ({ row }) => (row.original.kind === "role" ? row.original.role : row.original.positionName) ?? "—",
-      },
-      {
-        id: "rank",
-        header: "Rango",
-        cell: ({ row }) => (row.original.kind === "role" ? row.original.rank : "—"),
-      },
-      createRowActionsColumn<GroupMapping>(() => [
-        { label: "Editar", onSelect: (mapping) => openEdit(mapping) },
-        {
-          label: "Eliminar",
-          separatorBefore: true,
-          variant: "destructive",
-          onSelect: (mapping) => setDeleting(mapping),
-        },
-      ]),
-    ],
-    [],
-  );
-
   const roleItems = Object.fromEntries(OFFICIAL_CINCEL_ROLES.map((role) => [role, role]));
   const positionItems = Object.fromEntries(positions.map((position) => [position.id, position.name]));
 
-  const Wrapper = bare ? "div" : "section";
-
-  return (
-    <Wrapper className={bare ? "space-y-4" : "space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm"}>
-      {bare ? (
-        <div className="flex justify-end">
-          <Button onClick={openCreate}>Agregar grupo</Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">{GOOGLE_GROUPS_TITLE}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{GOOGLE_GROUPS_DESCRIPTION}</p>
-          </div>
-          <Button onClick={openCreate}>Agregar grupo</Button>
-        </div>
-      )}
-
+  const body = (
+    <>
       {listError ? (
         <Alert variant="destructive">
           <AlertDescription>{listError}</AlertDescription>
         </Alert>
       ) : null}
 
-      <DataTable columns={columns} data={mappings} getRowId={(row) => row.id} emptyMessage="No hay grupos asignados." />
+      {mappings.length === 0 ? (
+        <div className="flex flex-col items-start gap-2 rounded-[10px] border border-dashed border-border px-4 py-5">
+          <p className="text-[13px] text-muted-foreground">{GOOGLE_GROUPS_EMPTY}</p>
+          <Button type="button" variant="outline" size="sm" onClick={openCreate}>
+            Agregar grupo
+          </Button>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-[10px] border border-border">
+          <table className="w-full min-w-[640px] border-collapse">
+            <caption className="sr-only">{GOOGLE_GROUPS_TITLE}</caption>
+            <thead>
+              <tr>
+                <th scope="col" className={TH}>
+                  Correo del grupo
+                </th>
+                <th scope="col" className={TH}>
+                  Tipo
+                </th>
+                <th scope="col" className={TH}>
+                  Rango
+                </th>
+                <th scope="col" className={TH}>
+                  Puesto
+                </th>
+                <th scope="col" className={`${TH} text-right`}>
+                  Miembros
+                </th>
+                <th scope="col" className={`${TH} text-right`}>
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {mappings.map((mapping) => (
+                <tr key={mapping.id} data-mapping={mapping.id}>
+                  <th scope="row" className={`${TD} text-left font-mono font-normal text-foreground`}>
+                    {mapping.groupEmail}
+                  </th>
+                  <td className={TD}>{KIND_LABELS[mapping.kind]}</td>
+                  <td className={TD}>{mapping.kind === "role" ? (mapping.role ?? "—") : "—"}</td>
+                  <td className={TD}>{mapping.kind === "position" ? (mapping.positionName ?? "—") : "—"}</td>
+                  <td className={`${TD} text-right`}>
+                    <MembersCell mapping={mapping} />
+                  </td>
+                  <td className={`${TD} text-right`}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Editar ${mapping.groupEmail}`}
+                      onClick={() => openEdit(mapping)}
+                    >
+                      <Pencil aria-hidden="true" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[12.5px] text-muted-foreground">{GROUP_LOOKUP_NOTE}</p>
 
       <Sheet open={sheetOpen} onOpenChange={(next) => (next ? setSheetOpen(true) : setSheetOpen(false))}>
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editing ? "Editar grupo" : "Agregar grupo"}</SheetTitle>
-            <SheetDescription>El grupo se busca en Google Workspace al guardar.</SheetDescription>
+            <SheetDescription>{GROUP_LOOKUP_NOTE}</SheetDescription>
           </SheetHeader>
 
           <form
@@ -354,6 +388,21 @@ export function GoogleGroupMappings({ mappings, positions, bare = false }: Googl
             <Button type="button" variant="outline" onClick={() => setSheetOpen(false)}>
               Cancelar
             </Button>
+            {editing ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isPending}
+                onClick={() => {
+                  const target = editing;
+                  setSheetOpen(false);
+                  setEditing(null);
+                  setDeleting(target);
+                }}
+              >
+                Eliminar grupo
+              </Button>
+            ) : null}
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -374,6 +423,36 @@ export function GoogleGroupMappings({ mappings, positions, bare = false }: Googl
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Wrapper>
+    </>
+  );
+
+  if (section) {
+    return (
+      <SettingsSection
+        title={GOOGLE_GROUPS_TITLE}
+        description={GOOGLE_GROUPS_DESCRIPTION}
+        level={3}
+        actions={
+          <Button type="button" variant="outline" size="sm" onClick={openCreate}>
+            Agregar grupo
+          </Button>
+        }
+      >
+        {body}
+      </SettingsSection>
+    );
+  }
+
+  return (
+    <section className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">{GOOGLE_GROUPS_TITLE}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{GOOGLE_GROUPS_DESCRIPTION}</p>
+        </div>
+        <Button onClick={openCreate}>Agregar grupo</Button>
+      </div>
+      {body}
+    </section>
   );
 }

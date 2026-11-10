@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Download, Upload, X } from "lucide-react";
+import { Check, Download, Upload, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/shadcn/alert";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { SelectionBar } from "@/components/configuracion/monday-import/BoardGallery";
 import { BoardsStep, type ExportChoice } from "@/components/configuracion/monday-import/BoardsStep";
@@ -30,6 +31,8 @@ import {
 } from "@/lib/actions/monday-import-actions";
 import { completeOnboardingAction } from "@/lib/actions/onboarding-actions";
 import { buildBoardCards, needsExport, selectionTotals } from "@/lib/monday-import/board-cards";
+import { draftHeaderLine } from "@/lib/monday-import/draft-time";
+import { statusMapLabels, statusesToReview } from "@/lib/monday-import/status-map";
 import {
   MONDAY_IMPORT_STEPS,
   canAdvance,
@@ -71,6 +74,33 @@ import type { CreatedStaff } from "@/scripts/monday/created-staff";
 const DRAFT_STEPS: MondayImportStep[] = ["tableros", "equivalencias", "personas", "opciones"];
 /** Where the ✕ goes; the run stays on the server and "Continuar importación" resumes it. */
 const CLOSE_HREF = "/configuracion";
+
+/** "Nada se crea…": shown under the header on the start screen and in the wizard. */
+const DRAFT_NOTE =
+  "Nada se crea en Cincel hasta que pulses «Iniciar importación» en el último paso. Puedes salir y volver: el borrador se guarda.";
+
+/** The current time, refreshed every minute (for "borrador guardado hace …"). */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
+}
+
+function DraftNote() {
+  return (
+    <p role="note" className="rounded-[10px] border border-border bg-muted/50 px-3 py-2 text-[13px] text-muted-foreground">
+      {DRAFT_NOTE}
+    </p>
+  );
+}
+
+/** "{k} estatus por revisar". */
+export function statusesToReviewText(k: number): string {
+  return k === 1 ? "1 estatus por revisar" : `${k} estatus por revisar`;
+}
 
 /** Boards whose card was opened, per run, in this browser only (a convenience: «mapear» until opened). */
 function reviewedKey(runId: string): string {
@@ -147,6 +177,7 @@ export function MondayImportWizard({ latestRun, hasServerToken, loadError }: Mon
   const [token, setToken] = useState("");
   const [connection, setConnection] = useState<MondayConnection | null>(null);
   const [openError, setOpenError] = useState("");
+  const now = useMinuteClock();
   const preview = usePreviewMutation();
   const openRun = useMondayMutation((fresh: boolean) => openMondayImportRunAction(fresh), {
     setData: (qc, result) => qc.setQueryData(qk.monday.run(result.run.runId), result.run),
@@ -176,6 +207,12 @@ export function MondayImportWizard({ latestRun, hasServerToken, loadError }: Mon
     const resumeStep = latestRun ? MONDAY_IMPORT_STEPS[stepIndex(initialStep(latestRun))] : null;
     return (
       <div className="space-y-4">
+        {latestRun ? (
+          <p className="font-mono text-xs text-muted-foreground" suppressHydrationWarning>
+            {draftHeaderLine(stepIndex(initialStep(latestRun)) + 1, MONDAY_IMPORT_STEPS.length, latestRun.updatedAt, now)}
+          </p>
+        ) : null}
+        <DraftNote />
         {loadError ? (
           <Alert variant="destructive">
             <AlertDescription>{loadError}</AlertDescription>
@@ -268,6 +305,9 @@ function MondayRunWizard({
   const [reviewed, setReviewed] = useState<string[]>(() => readReviewed(runId));
   const fileInput = useRef<HTMLInputElement>(null);
   const anyJobRunning = isMondayRunBusy(run);
+  const now = useMinuteClock();
+  /** When this browser last saved the draft; the run's `updatedAt` until then. */
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   // The poll brought a new run state: when the export finished (or a draft appeared), take init's draft.
   const [seenRun, setSeenRun] = useState(run);
@@ -295,7 +335,7 @@ function MondayRunWizard({
   const optionsInfo = optionsQuery.data ?? null;
   const optionsError = step === "opciones" && optionsQuery.error ? mondayErrorText(optionsQuery.error) : "";
   // A draft that still asks for what can't be imported (files without Drive) is turned off once the options
-  // arrive, so it is saved that way on Siguiente instead of blocking Vista previa.
+  // arrive, so it is saved that way on Continuar instead of blocking Vista previa.
   const [clampedWith, setClampedWith] = useState<MondayImportOptionsInfo | null>(null);
   if (optionsInfo && optionsInfo !== clampedWith) {
     setClampedWith(optionsInfo);
@@ -401,7 +441,9 @@ function MondayRunWizard({
   async function saveDraft(target: MondayImportStep): Promise<string[] | null> {
     if (!mapping) return [];
     try {
-      return (await saveDraftMutation.mutateAsync({ mapping, step: target })).issues;
+      const { issues: found } = await saveDraftMutation.mutateAsync({ mapping, step: target });
+      setSavedAt(new Date().toISOString());
+      return found;
     } catch (err) {
       setError(mondayErrorText(err));
       return null;
@@ -559,6 +601,13 @@ function MondayRunWizard({
     .map((board) => ({ id: board.mondayBoardId, name: board.name }));
   const readError = sourceQuery.error ? mondayErrorText(sourceQuery.error) : "";
   const shownError = error || readError;
+  // Equivalencias: monday labels still «Sin equivalente» in the firm's status map keep Continuar off.
+  const toReview =
+    step === "equivalencias" && mapping && source && choices
+      ? statusesToReview(statusMapLabels(mapping, source), choices.statusMap ?? {}, choices.statuses)
+      : 0;
+  const draftSaving = saveDraftMutation.isPending || saveStepMutation.isPending;
+  const headerLine = draftHeaderLine(stepIndex(step) + 1, MONDAY_IMPORT_STEPS.length, savedAt ?? run.updatedAt, now);
 
   /** "Importar n tableros": exports the picked boards when they aren't the exported ones, else goes on to map them. */
   function importSelected() {
@@ -585,15 +634,24 @@ function MondayRunWizard({
     <header className="sticky top-0 z-20 border-b bg-card">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 md:px-6">
         <div className="flex items-center justify-between gap-4">
-          <h1 className="min-w-0 truncate text-lg font-semibold text-foreground">Importar de monday</h1>
+          <div className="min-w-0">
+            <h1 className="min-w-0 truncate text-lg font-semibold text-foreground">Importar de monday</h1>
+            <p className="font-mono text-xs text-muted-foreground" suppressHydrationWarning>
+              {headerLine}
+            </p>
+          </div>
           {closeButton}
         </div>
         <WizardStepper
           steps={MONDAY_IMPORT_STEPS}
           current={step}
+          label="Pasos de la importación"
+          currentTone="primary"
+          layout="grid"
           canJump={(target) => !isPending && canJumpTo(target, step, state)}
           onJump={(target) => void goTo(target)}
         />
+        {finished ? null : <DraftNote />}
       </div>
     </header>
   );
@@ -748,7 +806,20 @@ function MondayRunWizard({
               onImport={importSelected}
             />
           ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {mapping && !finished && DRAFT_STEPS.includes(step) ? (
+              <span role="status" className="inline-flex items-center gap-1 text-[13px] text-muted-foreground">
+                {draftSaving ? (
+                  "Guardando…"
+                ) : (
+                  <>
+                    <Check aria-hidden="true" className="size-3.5" />
+                    Guardado
+                  </>
+                )}
+              </span>
+            ) : null}
+            {toReview > 0 ? <Badge variant="warning">{statusesToReviewText(toReview)}</Badge> : null}
             {step !== "conectar" && step !== "importar" ? (
               <Button variant="outline" disabled={isPending || anyJobRunning} onClick={() => void goTo(previousStep(step))}>
                 Atrás
@@ -761,11 +832,11 @@ function MondayRunWizard({
             ) : null}
             {step !== "importar" ? (
               <Button
-                disabled={isPending || anyJobRunning || !canAdvance(step, state)}
+                disabled={isPending || anyJobRunning || toReview > 0 || !canAdvance(step, state)}
                 aria-describedby={issues.length > 0 ? "monday-mapping-issues" : undefined}
                 onClick={() => void goTo(nextStep(step))}
               >
-                {step === "vista_previa" ? "Continuar a importar" : "Siguiente"}
+                {step === "vista_previa" ? "Continuar a importar" : "Continuar"}
               </Button>
             ) : null}
           </div>

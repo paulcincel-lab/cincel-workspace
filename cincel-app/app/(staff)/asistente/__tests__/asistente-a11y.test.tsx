@@ -48,7 +48,7 @@ import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-u
 import type { AssistantThreadSummary } from "@/lib/types/redesign";
 
 const now = Date.now();
-const STATUS = { pinnedAt: null, pendingApprovals: 0, unread: false };
+const STATUS = { pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0 };
 const THREADS: AssistantThreadSummary[] = [
   { ...STATUS, id: "t1", title: "Avance de Local Espinopapa", updatedAt: new Date(now - 60_000).toISOString() },
   {

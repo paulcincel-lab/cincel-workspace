@@ -51,6 +51,7 @@ export function toThreadSummary(row: assistantRepository.AssistantThreadListRow)
     pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
     pendingApprovals: row.pendingApprovals,
     unread: row.unread,
+    toolCalls: row.toolCallCount,
   };
 }
 

@@ -142,7 +142,7 @@ describe.skipIf(!url)("Ajustes org page data (test DB)", async () => {
       await asViewer(admin, async () => {
         const { rows } = await actions.getAjustesHorarioPageData({ weekStart });
         for (const row of rows) {
-          expect(Object.keys(row).sort()).toEqual(["days", "lateCount", "name", "staffId", "status", "target", "total"]);
+          expect(Object.keys(row).sort()).toEqual(["days", "lateCount", "name", "needsReview", "staffId", "status", "target", "total"]);
         }
       });
     });

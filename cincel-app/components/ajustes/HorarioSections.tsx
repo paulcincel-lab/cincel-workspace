@@ -1,30 +1,36 @@
 "use client";
 
+import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
+import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { useId, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { TeamHoursTable } from "@/components/ajustes/TeamHoursTable";
+import { Field, FieldGrid, InsetRow, TonePill, hintId } from "@/components/ajustes/AdminFields";
+import { TeamHoursTable, TRIAL_NOTE } from "@/components/ajustes/TeamHoursTable";
 import { SettingsRow } from "@/components/patterns/SettingsRow";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
-import { useStyle } from "@/components/shell/StyleProvider";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Switch } from "@/components/ui/shadcn/switch";
 import { IMPLEMENTED } from "@/lib/actions/time-tracking-actions.flags";
 import { OFFICIAL_CINCEL_ROLES } from "@/lib/data/roles";
 import {
-  clockInPromptCopy,
-  enabledStateCopy,
-  formatDayMonth,
+  CONTROL_MODE_OPTIONS,
+  CONTROL_MODE_PILL,
+  controlMode,
+  formatDateRange,
   formatDayMonthYear,
   formatHours,
+  isTrialDay,
+  loginPromptPreview,
   minRequiredFrom,
-  timelineSegments,
+  reportDays,
   WEEKDAY_SHORT,
+  WORK_DAY_PILLS,
   WORK_DAY_TOGGLES,
-  type TimelineSegment,
+  type ControlMode,
 } from "@/lib/time-tracking/horario-copy";
 import { addDays, mondayOf } from "@/lib/time-tracking/local-time";
 import type { TimeTrackingSettings } from "@/lib/types/redesign";
@@ -33,14 +39,15 @@ import { cn } from "@/lib/utils";
 import { useHorario } from "./horario-context";
 
 /**
- * The sections of Ajustes › Control de horario (redesign FE §3.8). Each reads
- * the page state with `useHorario()` (the page-scoped form store of
- * `HorarioClient` plus the hydrated page data), checks its own capability and is
- * registered in `lib/shell/settings-sections/horario/*`. Only the team report
- * changes with the presentation style, through `TeamHoursTable`.
+ * The sections of Ajustes › Control de horario (canvas `Ajustes-Horario`).
+ * Each reads the page state with `useHorario()` (the page-scoped form store of
+ * `HorarioClient` plus the hydrated page data), checks its own capability and
+ * is registered in `lib/shell/settings-sections/horario/*`. With the control
+ * off, only the first section shows. Only the team report changes with the
+ * presentation style, inside `TeamHoursWidget`.
  */
 
-/** Default values when a rule checkbox is turned back on. */
+/** Default values when a rule switch is turned back on. */
 const DEFAULT_AUTO_CLOSE_AT = "20:00";
 const DEFAULT_LUNCH_MINUTES = 60;
 
@@ -54,68 +61,76 @@ function numberValue(raw: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-// ── Control (switch, required date, timeline) ──────────────────────────────
+// ── Control (mode cards and the mandatory date) ────────────────────────────
 
-const TIMELINE_CLASS: Record<TimelineSegment["key"], string> = {
-  hoy: "flex-[2] bg-muted text-foreground",
-  prueba: "flex-[5] bg-secondary text-secondary-foreground",
-  obligatorio: "flex-[4] bg-primary text-primary-foreground",
-};
+/** The draft for a newly chosen mode; Obligatorio keeps the saved date or starts tomorrow. */
+function settingsForMode(
+  mode: ControlMode,
+  saved: TimeTrackingSettings,
+  draft: TimeTrackingSettings,
+  today: string,
+): Partial<TimeTrackingSettings> {
+  if (mode === "off") return { enabled: false };
+  if (mode === "prueba") return { enabled: true, requiredFrom: null };
+  return { enabled: true, requiredFrom: draft.requiredFrom ?? saved.requiredFrom ?? minRequiredFrom(today) };
+}
 
 export function HorarioControl() {
-  const { draft, update, canManage, editable, today } = useHorario();
-  const switchId = useId();
+  const { draft, saved, update, canManage, editable, today } = useHorario();
   const dateId = useId();
-  const stateId = useId();
   if (!canManage) return null;
 
-  const state = enabledStateCopy(draft, today);
-  const segments = timelineSegments(today, draft.requiredFrom);
+  const mode = controlMode(draft);
+  const pill = CONTROL_MODE_PILL[mode];
 
   return (
-    <SettingsSection
-      title="Control de horario"
-      description="Registro de entrada y salida para medir las horas trabajadas del equipo."
-    >
-      <div className="flex flex-wrap items-center gap-4">
-        <Switch
-          id={switchId}
-          aria-label="Activar control de horario"
-          aria-describedby={stateId}
-          checked={draft.enabled}
-          disabled={!editable}
-          onCheckedChange={(checked) => update({ enabled: checked })}
-        />
-        <div id={stateId} className="flex min-w-[16rem] flex-1 flex-col gap-0.5">
-          <span className="text-base font-semibold text-foreground">{state.title}</span>
-          <span className="text-sm text-muted-foreground">{state.description}</span>
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={dateId}>Obligatorio a partir de</Label>
-          <Input
-            id={dateId}
-            type="date"
-            className="w-44"
-            value={draft.requiredFrom ?? ""}
-            min={minRequiredFrom(today)}
-            disabled={!editable || !draft.enabled}
-            onChange={(event) => update({ requiredFrom: event.target.value || null })}
-          />
-        </div>
-      </div>
+    <SettingsSection title="Activar control de horario" level={3} actions={<TonePill tone={pill.tone}>{pill.label}</TonePill>}>
+      <RadioGroupPrimitive
+        aria-label="Control de horario"
+        value={mode}
+        disabled={!editable}
+        onValueChange={(next) => {
+          const option = CONTROL_MODE_OPTIONS.find((o) => o.value === next);
+          if (option) update(settingsForMode(option.value, saved, draft, today));
+        }}
+        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+      >
+        {CONTROL_MODE_OPTIONS.map((option) => (
+          <RadioPrimitive.Root
+            key={option.value}
+            value={option.value}
+            data-slot="control-mode"
+            aria-describedby={`${dateId}-${option.value}`}
+            className={cn(
+              "flex cursor-pointer flex-col gap-1 rounded-xl border border-border bg-card p-3 text-left text-card-foreground outline-none",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "data-[checked]:border-2 data-[checked]:border-primary data-[checked]:p-[11px]",
+              "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-70",
+            )}
+          >
+            <span className="text-[13.5px] font-semibold">{option.title}</span>
+            <span id={`${dateId}-${option.value}`} className="text-[12.5px] text-muted-foreground">
+              {option.description}
+            </span>
+          </RadioPrimitive.Root>
+        ))}
+      </RadioGroupPrimitive>
 
-      {draft.enabled ? (
-        <div className="flex flex-col gap-2">
-          <ol aria-label="Etapas del control de horario" className="flex min-h-9 overflow-hidden rounded-lg text-xs font-medium">
-            {segments.map((segment) => (
-              <li key={segment.key} className={cn("flex items-center px-3 py-2", TIMELINE_CLASS[segment.key])}>
-                {segment.label}
-              </li>
-            ))}
-          </ol>
-          <p className="text-xs text-muted-foreground">
-            El reloj de jornada aparece en el menú lateral de todas las pantallas mientras esto esté activado.
-          </p>
+      {mode === "obligatorio" ? (
+        <div className="sm:max-w-xs">
+          <Field htmlFor={dateId} label="Obligatorio a partir de">
+            <Input
+              id={dateId}
+              type="date"
+              className="h-9 font-mono"
+              value={draft.requiredFrom ?? ""}
+              min={minRequiredFrom(today)}
+              disabled={!editable}
+              onChange={(event) => {
+                if (event.target.value) update({ requiredFrom: event.target.value });
+              }}
+            />
+          </Field>
         </div>
       ) : null}
     </SettingsSection>
@@ -123,50 +138,6 @@ export function HorarioControl() {
 }
 
 // ── Reglas de la jornada ───────────────────────────────────────────────────
-
-function RuleCheckbox({
-  checked,
-  disabled,
-  onChange,
-  title,
-  description,
-  children,
-}: {
-  checked: boolean;
-  disabled: boolean;
-  onChange(checked: boolean): void;
-  title: string;
-  description: string;
-  children?: ReactNode;
-}) {
-  const checkboxId = useId();
-  const titleId = useId();
-  const descriptionId = useId();
-  return (
-    <div className="flex flex-col gap-2 border-t border-border py-3">
-      <div className="flex items-start gap-3">
-        <Checkbox
-          id={checkboxId}
-          className="mt-0.5"
-          checked={checked}
-          disabled={disabled}
-          aria-labelledby={titleId}
-          aria-describedby={descriptionId}
-          onCheckedChange={(value) => onChange(value === true)}
-        />
-        <span className="flex flex-col gap-0.5">
-          <Label id={titleId} htmlFor={checkboxId} className="cursor-pointer text-sm font-medium text-foreground">
-            {title}
-          </Label>
-          <span id={descriptionId} className="text-xs text-muted-foreground">
-            {description}
-          </span>
-        </span>
-      </div>
-      {children ? <div className="pl-7">{children}</div> : null}
-    </div>
-  );
-}
 
 function workDaysText(days: number[]): string {
   const order = WORK_DAY_TOGGLES.map((toggle) => toggle.day);
@@ -210,6 +181,55 @@ function ReglasResumen({ settings }: { settings: TimeTrackingSettings }) {
   );
 }
 
+/** An inset rule row: title + hint on the left; an optional field and the switch on the right. */
+function RuleRow({
+  title,
+  hint,
+  checked,
+  disabled,
+  onChange,
+  children,
+}: {
+  title: string;
+  hint: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange(checked: boolean): void;
+  children?: ReactNode;
+}) {
+  const switchId = useId();
+  return (
+    <InsetRow>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <Label htmlFor={switchId} className="text-[13px] font-medium text-foreground">
+          {title}
+        </Label>
+        <p id={hintId(switchId)} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        {children}
+        <Switch
+          id={switchId}
+          aria-describedby={hintId(switchId)}
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={onChange}
+        />
+      </div>
+    </InsetRow>
+  );
+}
+
+const NO_ROLES = "Ninguno";
+const ROLE_ITEMS = Object.fromEntries(OFFICIAL_CINCEL_ROLES.map((role) => [role, role]));
+
+function rolesText(value: unknown): string {
+  const roles = Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+  return roles.length === 0 ? NO_ROLES : roles.join(", ");
+}
+
 export function HorarioReglas() {
   const { draft, saved, update, canManage, canViewReport, editable } = useHorario();
   const ids = {
@@ -217,8 +237,6 @@ export function HorarioReglas() {
     dayEnd: useId(),
     hours: useId(),
     tolerance: useId(),
-    toleranceHint: useId(),
-    days: useId(),
     autoClose: useId(),
     lunch: useId(),
     roles: useId(),
@@ -227,11 +245,12 @@ export function HorarioReglas() {
 
   if (!canManage) {
     return (
-      <SettingsSection title="Reglas de la jornada" description="Las define un administrador.">
+      <SettingsSection title="Reglas de la jornada" description="Las define un administrador." level={3}>
         <ReglasResumen settings={saved} />
       </SettingsSection>
     );
   }
+  if (!draft.enabled) return null;
 
   const disabled = !editable;
   const toggleDay = (day: number) =>
@@ -240,42 +259,63 @@ export function HorarioReglas() {
         ? draft.workDays.filter((d) => d !== day)
         : [...draft.workDays, day].sort((a, b) => a - b),
     });
-  const toggleRole = (role: string, checked: boolean) =>
-    update({
-      exemptRoles: checked
-        ? [...new Set([...draft.exemptRoles, role])]
-        : draft.exemptRoles.filter((r) => r !== role),
-    });
 
   return (
-    <SettingsSection title="Reglas de la jornada">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={ids.dayStart}>Entrada</Label>
+    <SettingsSection title="Reglas de la jornada" level={3}>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1.5 text-[13px] font-medium text-sidebar-foreground">Días laborales</legend>
+        <div className="flex flex-wrap gap-1.5">
+          {WORK_DAY_PILLS.map((pill) => {
+            const on = draft.workDays.includes(pill.day);
+            return (
+              <button
+                key={pill.day}
+                type="button"
+                aria-pressed={on}
+                disabled={disabled}
+                onClick={() => toggleDay(pill.day)}
+                className={cn(
+                  "inline-flex h-8 items-center rounded-full border px-3.5 text-[12.5px] font-medium outline-none transition-colors",
+                  "focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+                  on
+                    ? "border-primary bg-secondary text-secondary-foreground"
+                    : "border-border bg-card text-sidebar-foreground hover:bg-muted",
+                )}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <FieldGrid columns={4}>
+        <Field htmlFor={ids.dayStart} label="Entrada">
           <Input
             id={ids.dayStart}
             type="time"
+            className="h-9 font-mono"
             value={draft.dayStart}
             disabled={disabled}
             onChange={(event) => update({ dayStart: event.target.value })}
           />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={ids.dayEnd}>Salida</Label>
+        </Field>
+        <Field htmlFor={ids.dayEnd} label="Salida">
           <Input
             id={ids.dayEnd}
             type="time"
+            className="h-9 font-mono"
             value={draft.dayEnd}
             disabled={disabled}
             onChange={(event) => update({ dayEnd: event.target.value })}
           />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={ids.hours}>Horas esperadas por día</Label>
+        </Field>
+        <Field htmlFor={ids.hours} label="Horas esperadas por día">
           <Input
             id={ids.hours}
             type="number"
             inputMode="decimal"
+            className="h-9 font-mono"
             min={1}
             max={12}
             step={0.5}
@@ -283,138 +323,100 @@ export function HorarioReglas() {
             disabled={disabled}
             onChange={(event) => update({ hoursPerDay: numberValue(event.target.value) })}
           />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={ids.tolerance}>Tolerancia de retardo</Label>
+        </Field>
+        <Field htmlFor={ids.tolerance} label="Tolerancia de retardo" hint="En minutos.">
           <Input
             id={ids.tolerance}
             type="number"
             inputMode="numeric"
+            className="h-9 font-mono"
             min={0}
             step={5}
-            aria-describedby={ids.toleranceHint}
+            aria-describedby={hintId(ids.tolerance)}
             value={draft.lateToleranceMin}
             disabled={disabled}
             onChange={(event) => update({ lateToleranceMin: numberValue(event.target.value) })}
           />
-          <span id={ids.toleranceHint} className="text-xs text-muted-foreground">
-            En minutos.
-          </span>
-        </div>
-      </div>
+        </Field>
+      </FieldGrid>
 
-      <div className="flex flex-col gap-1.5">
-        <span id={ids.days} className="text-sm font-medium text-foreground">
-          Días laborales
-        </span>
-        <div role="group" aria-labelledby={ids.days} className="flex flex-wrap gap-1.5">
-          {WORK_DAY_TOGGLES.map((toggle) => {
-            const on = draft.workDays.includes(toggle.day);
-            return (
-              <Button
-                key={toggle.day}
-                type="button"
-                size="icon"
-                variant={on ? "default" : "outline"}
-                aria-pressed={on}
-                aria-label={toggle.label}
-                disabled={disabled}
-                onClick={() => toggleDay(toggle.day)}
-              >
-                {toggle.letter}
-              </Button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex flex-col">
-        <RuleCheckbox
-          checked={draft.promptAtLogin}
-          disabled={disabled}
-          onChange={(checked) => update({ promptAtLogin: checked })}
-          title="Pedir registro de entrada al iniciar sesión"
-          description="Aparece una ventana la primera vez que alguien entra en el día."
-        />
-        <RuleCheckbox
-          checked={draft.autoCloseAt !== null}
-          disabled={disabled}
-          onChange={(checked) =>
-            update({ autoCloseAt: checked ? (saved.autoCloseAt ?? DEFAULT_AUTO_CLOSE_AT) : null })
-          }
-          title={
-            draft.autoCloseAt !== null
-              ? `Cerrar la jornada automáticamente a las ${draft.autoCloseAt}`
-              : "Cerrar la jornada automáticamente"
-          }
-          description="Si alguien olvida registrar su salida, se cierra y se marca para revisión."
-        >
-          {draft.autoCloseAt !== null ? (
-            <div className="flex flex-col gap-1">
-              <Label htmlFor={ids.autoClose}>Hora de cierre</Label>
-              <Input
-                id={ids.autoClose}
-                type="time"
-                className="w-32"
-                value={draft.autoCloseAt}
-                disabled={disabled}
-                onChange={(event) => update({ autoCloseAt: event.target.value || null })}
-              />
-            </div>
-          ) : null}
-        </RuleCheckbox>
-        <RuleCheckbox
-          checked={draft.lunchMinutes > 0}
-          disabled={disabled}
-          onChange={(checked) =>
-            update({ lunchMinutes: checked ? (saved.lunchMinutes > 0 ? saved.lunchMinutes : DEFAULT_LUNCH_MINUTES) : 0 })
-          }
-          title={draft.lunchMinutes > 0 ? `Descontar ${draft.lunchMinutes} min de comida` : "Descontar tiempo de comida"}
-          description="Se resta de las horas del día si no se registró una pausa."
-        >
-          {draft.lunchMinutes > 0 ? (
-            <div className="flex flex-col gap-1">
-              <Label htmlFor={ids.lunch}>Minutos de comida</Label>
-              <Input
-                id={ids.lunch}
-                type="number"
-                inputMode="numeric"
-                className="w-32"
-                min={0}
-                step={5}
-                value={draft.lunchMinutes}
-                disabled={disabled}
-                onChange={(event) => update({ lunchMinutes: numberValue(event.target.value) })}
-              />
-            </div>
-          ) : null}
-        </RuleCheckbox>
-        <fieldset className="flex flex-col gap-2 border-t border-border py-3" aria-describedby={ids.roles}>
-          <legend className="text-sm font-medium text-foreground">Excluir roles</legend>
-          <span id={ids.roles} className="text-xs text-muted-foreground">
-            Quienes tienen estos roles no registran horario.
-          </span>
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-2">
-            {OFFICIAL_CINCEL_ROLES.map((role, index) => (
-              <div key={role} className="flex items-center gap-2">
-                <Checkbox
-                  id={`${ids.roles}-role-${index}`}
-                  aria-labelledby={`${ids.roles}-role-${index}-label`}
-                  checked={draft.exemptRoles.includes(role)}
-                  disabled={disabled}
-                  onCheckedChange={(value) => toggleRole(role, value === true)}
-                />
-                <Label
-                  id={`${ids.roles}-role-${index}-label`}
-                  htmlFor={`${ids.roles}-role-${index}`}
-                  className="cursor-pointer text-sm font-normal text-foreground"
-                >
-                  {role}
-                </Label>
-              </div>
-            ))}
+      <RuleRow
+        title="Descontar tiempo de comida"
+        hint="Se resta de las horas del día si no se registró una pausa."
+        checked={draft.lunchMinutes > 0}
+        disabled={disabled}
+        onChange={(checked) =>
+          update({ lunchMinutes: checked ? (saved.lunchMinutes > 0 ? saved.lunchMinutes : DEFAULT_LUNCH_MINUTES) : 0 })
+        }
+      >
+        {draft.lunchMinutes > 0 ? (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={ids.lunch} className="text-xs text-sidebar-foreground">
+              Minutos de comida
+            </Label>
+            <Input
+              id={ids.lunch}
+              type="number"
+              inputMode="numeric"
+              className="h-8 w-24 font-mono"
+              min={0}
+              step={5}
+              value={draft.lunchMinutes}
+              disabled={disabled}
+              onChange={(event) => update({ lunchMinutes: numberValue(event.target.value) })}
+            />
           </div>
-        </fieldset>
+        ) : null}
+      </RuleRow>
+
+      <RuleRow
+        title="Cerrar la jornada automáticamente"
+        hint="Si alguien olvida registrar su salida, se cierra y se marca para revisión."
+        checked={draft.autoCloseAt !== null}
+        disabled={disabled}
+        onChange={(checked) => update({ autoCloseAt: checked ? (saved.autoCloseAt ?? DEFAULT_AUTO_CLOSE_AT) : null })}
+      >
+        {draft.autoCloseAt !== null ? (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={ids.autoClose} className="text-xs text-sidebar-foreground">
+              Hora de cierre
+            </Label>
+            <Input
+              id={ids.autoClose}
+              type="time"
+              className="h-8 w-28 font-mono"
+              value={draft.autoCloseAt}
+              disabled={disabled}
+              onChange={(event) => update({ autoCloseAt: event.target.value || null })}
+            />
+          </div>
+        ) : null}
+      </RuleRow>
+
+      <div className="sm:max-w-sm">
+        <Field htmlFor={ids.roles} label="Excluir roles" hint="Quienes tienen estos roles no registran horario.">
+          <Select
+            multiple
+            items={ROLE_ITEMS}
+            value={draft.exemptRoles}
+            disabled={disabled}
+            onValueChange={(next: unknown) => {
+              const roles = Array.isArray(next) ? next.filter((v): v is string => typeof v === "string") : [];
+              update({ exemptRoles: OFFICIAL_CINCEL_ROLES.filter((role) => roles.includes(role)) });
+            }}
+          >
+            <SelectTrigger id={ids.roles} aria-describedby={hintId(ids.roles)} className="w-full">
+              <SelectValue>{(value: unknown) => rolesText(value)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {OFFICIAL_CINCEL_ROLES.map((role) => (
+                <SelectItem key={role} value={role}>
+                  {role}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
       </div>
     </SettingsSection>
   );
@@ -423,31 +425,43 @@ export function HorarioReglas() {
 // ── Lo que ve el equipo al iniciar sesión ──────────────────────────────────
 
 export function HorarioVistaPrevia() {
-  const { draft, canManage, today, viewerName } = useHorario();
-  if (!canManage) return null;
-  const copy = clockInPromptCopy(viewerName, draft.requiredFrom, today);
+  const { draft, update, canManage, editable, today, viewerName } = useHorario();
+  const switchId = useId();
+  if (!canManage || !draft.enabled) return null;
+  const copy = loginPromptPreview(viewerName, draft.dayStart, draft.requiredFrom, today);
   return (
-    <SettingsSection title="Lo que ve el equipo al iniciar sesión">
-      <figure aria-label="Vista previa de la ventana de registro" className="flex justify-center rounded-xl bg-muted p-4">
-        <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-xl border border-border bg-card p-5 text-center text-card-foreground shadow-sm">
-          <span className="inline-flex size-11 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
-            <Clock aria-hidden="true" className="size-5" strokeWidth={1.9} />
+    <SettingsSection title="Lo que ve el equipo al iniciar sesión" level={3}>
+      <div className="flex flex-wrap items-start gap-4">
+        <InsetRow className="min-w-0 flex-[1_1_260px] flex-nowrap items-start">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Label htmlFor={switchId} className="text-[13px] font-medium text-foreground">
+              Pedir registro de entrada al iniciar sesión
+            </Label>
+            <p id={hintId(switchId)} className="text-xs text-muted-foreground">
+              Aparece una ventana la primera vez que alguien entra en el día.
+            </p>
+          </div>
+          <Switch
+            id={switchId}
+            aria-describedby={hintId(switchId)}
+            checked={draft.promptAtLogin}
+            disabled={!editable}
+            onCheckedChange={(checked) => update({ promptAtLogin: checked })}
+          />
+        </InsetRow>
+        <div
+          role="img"
+          aria-label="Vista previa de la ventana de registro"
+          className="flex min-w-0 flex-[0_1_300px] flex-col gap-2 rounded-[14px] border border-border bg-card p-4 text-card-foreground shadow-md"
+        >
+          <span className="text-[15px] font-semibold">{copy.title}</span>
+          <span className="text-[13px] text-muted-foreground">{copy.body}</span>
+          <span className="mt-1 flex flex-wrap gap-2">
+            <span className={buttonVariants({ size: "sm" })}>{copy.primary}</span>
+            {copy.dismiss ? <span className={buttonVariants({ variant: "ghost", size: "sm" })}>{copy.dismiss}</span> : null}
           </span>
-          <span className="text-base font-semibold">{copy.title}</span>
-          <span className="text-sm text-muted-foreground">{copy.body}</span>
-          <span aria-hidden="true" className={cn(buttonVariants({ size: "lg" }), "w-full")}>
-            {copy.primary}
-          </span>
-          {copy.dismiss ? (
-            <span aria-hidden="true" className="text-xs text-muted-foreground">
-              {copy.dismiss}
-            </span>
-          ) : null}
         </div>
-        <figcaption className="sr-only">
-          {[copy.title, copy.body, copy.primary, copy.dismiss].filter(Boolean).join(". ")}
-        </figcaption>
-      </figure>
+      </div>
     </SettingsSection>
   );
 }
@@ -460,15 +474,21 @@ export function HorarioVistaPrevia() {
  * call per new week, no route refresh. The current week is the last one.
  */
 export function HorarioHorasEquipo() {
-  const { canViewReport, weekStart, setWeekStart, rows, saved, today, loadingWeek } = useHorario();
-  const { style } = useStyle();
+  const { canViewReport, canManage, draft, weekStart, setWeekStart, rows, saved, today, loadingWeek } = useHorario();
   if (!canViewReport || !IMPLEMENTED.fetchTeamHoursAction) return null;
+  if (canManage && !draft.enabled) return null;
   const isCurrentWeek = weekStart >= mondayOf(today);
+  const days = reportDays(weekStart, saved.workDays, rows);
+  const range = formatDateRange(days[0] ?? weekStart, days.at(-1) ?? addDays(weekStart, 6));
+  const trial = saved.enabled && days.some((date) => isTrialDay(date, saved.requiredFrom));
+
   return (
     <SettingsSection
-      title={`Horas del equipo · semana del ${formatDayMonth(weekStart)}`}
+      title="Horas del equipo"
+      description={trial ? TRIAL_NOTE : undefined}
+      level={3}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -478,6 +498,9 @@ export function HorarioHorasEquipo() {
           >
             <ChevronLeft aria-hidden="true" />
           </Button>
+          <span data-slot="week-range" aria-live="polite" className="min-w-[6.5rem] text-center font-mono text-[13px] text-foreground">
+            {range}
+          </span>
           <Button
             type="button"
             variant="outline"
@@ -498,13 +521,7 @@ export function HorarioHorasEquipo() {
         </div>
       }
     >
-      <TeamHoursTable
-        weekStart={weekStart}
-        rows={rows}
-        style={style}
-        requiredFrom={saved.requiredFrom}
-        loading={loadingWeek}
-      />
+      <TeamHoursTable weekStart={weekStart} rows={rows} workDays={saved.workDays} loading={loadingWeek} />
     </SettingsSection>
   );
 }

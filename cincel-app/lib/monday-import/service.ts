@@ -106,6 +106,7 @@ import { TOKEN_ENV } from "@/scripts/monday/token";
 import { importedProjectHref } from "./links";
 import { MONDAY_STATUS_MAP_SETTING } from "@/lib/project-flow/catalog";
 import { parseStoredStatusMap, statusMapCustomIds } from "./status-map";
+import { columnFill } from "./column-fill";
 
 type Env = Record<string, string | undefined>;
 
@@ -523,6 +524,22 @@ function boardPeople(items: Awaited<ReturnType<typeof readExport>>["boards"][num
   return [...out];
 }
 
+/**
+ * "Con dato" per column: board columns over the items, subitem columns over
+ * the subitems (an id both have keeps the board column's share).
+ */
+function boardColumnFill(
+  board: { columns: { id: string }[]; subitem_columns?: { id: string }[] | null },
+  items: readonly unknown[],
+): Record<string, number> {
+  type Row = { column_values?: { id?: string | null; text?: string | null; label?: string | null }[] | null };
+  const rows = items as readonly Row[];
+  const subitems = rows.flatMap((item) => ((item as { subitems?: Row[] | null }).subitems ?? []) as Row[]);
+  const boardFill = columnFill(board.columns.map((c) => c.id), rows, rows.length);
+  const subFill = columnFill((board.subitem_columns ?? []).map((c) => c.id), subitems, subitems.length);
+  return { ...subFill, ...boardFill };
+}
+
 /** Paso 2–4 source side: every board's columns, groups, status labels and the monday users. */
 export async function getExportSource(runId: string, deps: WizardDeps): Promise<MondayExportSource> {
   const run = await requireRun(runId, deps);
@@ -557,6 +574,7 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
         groups: board.groups.map((g) => ({ id: g.id, title: g.title })),
         statusLabels: labelsOf([...board.columns, ...(board.subitem_columns ?? [])], items),
         itemCount: items.length,
+        columnFill: boardColumnFill(board, items),
         items: items
           .filter((i) => i.state == null || i.state === "active")
           .map((i) => ({ id: i.id, name: i.name, groupId: i.group?.id ?? null })),

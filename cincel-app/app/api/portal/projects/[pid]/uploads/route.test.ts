@@ -56,7 +56,7 @@ function call(pid: string) {
 describe("GET /api/portal/projects/[pid]/uploads", () => {
   beforeEach(() => {
     state.cookie = "tok";
-    state.user = { id: "u-me", name: "Yo", email: "yo@cliente.example", contactId: "c-1" };
+    state.user = { id: "u-me", name: "Yo", email: "yo@cliente.example", contactId: "c-1", companyName: null };
     state.access = new Set([`u-me:${PID}`]);
     listOwnPortalUploads.mockReset();
     listOwnPortalUploads.mockResolvedValue([
@@ -103,7 +103,7 @@ describe("GET /api/portal/projects/[pid]/uploads", () => {
   });
 
   it("never lists for another portal user even on a shared project", async () => {
-    state.user = { id: "u-otro", name: "Otro", email: "otro@cliente.example", contactId: "c-2" };
+    state.user = { id: "u-otro", name: "Otro", email: "otro@cliente.example", contactId: "c-2", companyName: null };
     state.access.add(`u-otro:${PID}`);
     await call(PID);
     expect(listOwnPortalUploads).toHaveBeenCalledExactlyOnceWith("u-otro", PID);

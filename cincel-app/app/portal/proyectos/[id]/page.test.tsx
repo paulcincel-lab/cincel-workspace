@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => {
     getPortalProjectTramos: vi.fn(),
     listPortalProjects: vi.fn(),
     listPortalFolder: vi.fn(),
+    listPortalFolderGroups: vi.fn(),
+    getPortalTeam: vi.fn(),
     notFound: vi.fn(() => {
       throw new Error("NEXT_NOT_FOUND");
     }),
@@ -50,9 +52,13 @@ vi.mock("@/lib/portal/queries", () => ({
   getPortalProject: mocks.getPortalProject,
   getPortalSchedule: mocks.getPortalSchedule,
   getPortalProjectTramos: mocks.getPortalProjectTramos,
+  getPortalTeam: mocks.getPortalTeam,
   listPortalProjects: mocks.listPortalProjects,
 }));
-vi.mock("@/lib/portal/files", () => ({ listPortalFolder: mocks.listPortalFolder }));
+vi.mock("@/lib/portal/files", () => ({
+  listPortalFolder: mocks.listPortalFolder,
+  listPortalFolderGroups: mocks.listPortalFolderGroups,
+}));
 vi.mock("@/components/portal/PortalProjectOverview", () => ({
   default: ({ project, data }: { project: { id: string }; data: Record<string, unknown> }) => (
     <div data-testid="overview" data-project={project.id} data-overview={JSON.stringify(data)} />
@@ -98,11 +104,13 @@ async function renderInto(tab?: string, id = PID, folder?: string) {
 describe("/portal/proyectos/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requirePortalUser.mockResolvedValue({ id: "pu1", name: "Ana", email: "ana@example.com", contactId: "c1" });
+    mocks.requirePortalUser.mockResolvedValue({ id: "pu1", name: "Ana", email: "ana@example.com", contactId: "c1", companyName: null });
     mocks.requireProjectAccess.mockResolvedValue(ACCESS);
     mocks.getPortalProject.mockResolvedValue(project);
     mocks.getPortalSchedule.mockResolvedValue(schedule);
     mocks.getPortalProjectTramos.mockResolvedValue([]);
+    mocks.getPortalTeam.mockResolvedValue([]);
+    mocks.listPortalProjects.mockResolvedValue([project]);
   });
   afterEach(cleanup);
 
@@ -132,7 +140,22 @@ describe("/portal/proyectos/[id]", () => {
       schedule,
       tramos: [],
       documents: null,
+      documentFolders: null,
+      team: [],
     });
+  });
+
+  it("seeds portal.projects() for the top bar's project menu", async () => {
+    const { client } = await renderInto("cronograma");
+
+    expect(client.getQueryData(qk.portal.projects())).toEqual({ projects: [project] });
+  });
+
+  it("keeps the project's name above the tabs on Cronograma", async () => {
+    await renderInto("cronograma");
+
+    expect(screen.getByRole("heading", { level: 1, name: "Casa Lomas" }).className).toContain("font-semibold");
+    expect(screen.queryByRole("link", { name: "Mis proyectos" })).toBeNull();
   });
 
   it("renders Cronograma grouped by planta, one row per section", async () => {
@@ -217,8 +240,8 @@ describe("/portal/proyectos/[id]", () => {
 
 describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
   const tramos = [
-    { key: "presale", name: "Presale", state: "completado" },
-    { key: "diseno", name: "Diseño", state: "en_curso" },
+    { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
+    { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 62, startMonth: "2026-06" },
   ];
   const files = [
     { id: "f1", name: "Contrato.pdf", mimeType: "application/pdf", sizeBytes: 10, modifiedAt: "2026-09-15T00:00:00Z", kind: "file", deliveredAs: "original" },
@@ -227,12 +250,15 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requirePortalUser.mockResolvedValue({ id: "pu1", name: "Ana", email: "ana@example.com", contactId: "c1" });
+    mocks.requirePortalUser.mockResolvedValue({ id: "pu1", name: "Ana", email: "ana@example.com", contactId: "c1", companyName: null });
     mocks.requireProjectAccess.mockResolvedValue(READY);
     mocks.getPortalProject.mockResolvedValue(project);
     mocks.getPortalSchedule.mockResolvedValue(schedule);
     mocks.getPortalProjectTramos.mockResolvedValue(tramos);
     mocks.listPortalFolder.mockResolvedValue({ folderId: "client-root", breadcrumbs: [], items: files });
+    mocks.listPortalFolderGroups.mockResolvedValue([{ folderId: "client-root", name: "General", files }]);
+    mocks.getPortalTeam.mockResolvedValue([{ name: "Laura Pérez", role: "Responsable del proyecto", email: "laura@cincel.mx" }]);
+    mocks.listPortalProjects.mockResolvedValue([project]);
   });
   afterEach(cleanup);
 
@@ -253,7 +279,10 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
     expect(data.tramos).toEqual(tramos);
     expect(data.progress[0]).toMatchObject({ label: "Avance general", real: 42 });
     expect(data.documentos.rows.map((r: { id: string }) => r.id)).toEqual(["f1"]);
-    expect(screen.getByRole("heading", { level: 1, name: "Casa Lomas" }).className).toContain("font-semibold");
+    expect(mocks.getPortalTeam).toHaveBeenCalledWith(READY);
+    expect(mocks.listPortalFolderGroups).toHaveBeenCalledWith({ driveClientFolderId: "client-root" });
+    expect(data.recentFiles.map((f: { id: string; folder: string }) => [f.id, f.folder])).toEqual([["f1", "General"]]);
+    expect(data.team).toEqual([{ name: "Laura Pérez", role: "Responsable del proyecto", email: "laura@cincel.mx" }]);
   });
 
   it("drops the documents section when the client folder isn't ready or Drive fails", async () => {
@@ -275,6 +304,8 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
     expect(screen.queryByTestId("overview")).toBeNull();
     expect(mocks.getPortalProjectTramos).not.toHaveBeenCalled();
     expect(mocks.listPortalFolder).not.toHaveBeenCalled();
+    expect(mocks.listPortalFolderGroups).not.toHaveBeenCalled();
+    expect(mocks.getPortalTeam).not.toHaveBeenCalled();
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["PB", "PA"]);
   });
 

@@ -37,7 +37,8 @@ import {
 } from "./org-appearance-actions";
 
 /** The actions return `ActionResult`; unwrapped, a failure throws its code as before. */
-const saveOrgAppearanceAction = async (input: OrgAppearance) => unwrapActionResult(await saveOrgAppearanceResult(input));
+const saveOrgAppearanceAction = async (input: OrgAppearance, options?: { acceptLowContrast?: boolean }) =>
+  unwrapActionResult(await saveOrgAppearanceResult(input, options));
 const resetOrgAppearanceAction = async (base: ThemeId) => unwrapActionResult(await resetOrgAppearanceResult(base));
 
 function clone(theme: ThemeId = "azul"): OrgAppearance {
@@ -110,6 +111,15 @@ describe("saveOrgAppearanceAction", () => {
       .filter((result) => !result.ok);
     expect(message.slice("LOW_CONTRAST: ".length).split(", ")).toHaveLength(expected.length);
     expect(repo.writeOrgAppearance).not.toHaveBeenCalled();
+  });
+
+  it("stores a low-contrast appearance when the admin accepted it (acceptLowContrast)", async () => {
+    const edit = clone();
+    edit.tokens["muted-foreground"].light = "#c0c0c0";
+
+    await expect(saveOrgAppearanceAction(edit, { acceptLowContrast: true })).resolves.toEqual(edit);
+    expect(repo.writeOrgAppearance).toHaveBeenCalledTimes(1);
+    expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 
   it("stores the full appearance, bumps v and revalidates the root layout", async () => {

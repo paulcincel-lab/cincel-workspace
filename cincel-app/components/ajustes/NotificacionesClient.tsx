@@ -1,14 +1,14 @@
 "use client";
 
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useId, type ReactNode } from "react";
+import { MailIcon } from "lucide-react";
+import { useId, useMemo, useRef, type ReactNode } from "react";
 
-import { SettingsRow } from "@/components/patterns/SettingsRow";
+import { SettingsSaveBar } from "@/components/ajustes/SettingsSaveBar";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
-import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
-import { Button } from "@/components/ui/shadcn/button";
-import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
 import { Switch } from "@/components/ui/shadcn/switch";
 import {
   Table,
@@ -28,8 +28,10 @@ import {
   NOTIFICATION_MATRIX_KINDS,
   NotificacionesFormStoreProvider,
   notificacionesInput,
+  toNotificacionesDraft,
   useNotificacionesForm,
   useNotificacionesFormApi,
+  type NotificacionesDraft,
   type NotificationChannel,
 } from "@/lib/stores/ajustes/notificaciones-form-store";
 import type { NotificationKind } from "@/lib/types/redesign";
@@ -48,6 +50,17 @@ export const NOTIFICATION_KIND_LABELS: Readonly<Record<NotificationKind, string>
 
 type Channel = NotificationChannel;
 
+/** One-line description under each event (canvas `Ajustes-Notificaciones`). */
+export const NOTIFICATION_KIND_DESCRIPTIONS: Readonly<Record<NotificationKind, string>> = {
+  asignacion: "Te asignan una tarea o subtarea",
+  mencion: "Alguien te menciona en una nota o comentario",
+  vencimiento: "Una tarea tuya vence hoy o ya venció",
+  comentario: "Comentan en una tarea que sigues",
+  aprobacion_cliente: "El cliente aprueba o rechaza desde el portal",
+  recordatorio: "Recordatorios que creaste en Mi espacio",
+  sistema: "Importaciones, accesos y avisos del despacho",
+};
+
 /** Matrix columns (FE §3.8). There is no Cutto column (RD-9). */
 export const NOTIFICATION_CHANNEL_LABELS: Readonly<Record<Channel, string>> = {
   inApp: "En la app",
@@ -59,19 +72,45 @@ const KINDS = NOTIFICATION_MATRIX_KINDS;
 const CHANNELS = NOTIFICATION_MATRIX_CHANNELS;
 
 /** Fixed digest time (R3-1). */
-export const DIGEST_NOTE = "Resumen diario a las 07:30";
+export const DIGEST_NOTE = "Resumen diario a las 07:30 con los eventos marcados en la columna «Resumen diario».";
+export const DIGEST_BADGE = "07:30 · lun a vie";
+
+/** Accessible name of a matrix switch: "Mención en la app", "Mención por correo", "Mención en el resumen diario". */
+export function channelSwitchLabel(kind: NotificationKind, channel: Channel): string {
+  const event = NOTIFICATION_KIND_LABELS[kind];
+  if (channel === "inApp") return `${event} en la app`;
+  if (channel === "email") return `${event} por correo`;
+  return `${event} en el resumen diario`;
+}
+
+/** Changed fields between the draft and the saved preferences (each cell, the switch and each time). */
+export function notificacionesDirtyCount(draft: NotificacionesDraft, saved: NotificacionesDraft): number {
+  let count = 0;
+  for (const kind of KINDS) {
+    for (const channel of CHANNELS) {
+      if (draft.matrix[kind][channel] !== saved.matrix[kind][channel]) count += 1;
+    }
+  }
+  if (draft.quietEnabled !== saved.quietEnabled) count += 1;
+  if (draft.quietEnabled) {
+    if (draft.quietFrom !== saved.quietFrom) count += 1;
+    if (draft.quietTo !== saved.quietTo) count += 1;
+  }
+  return count;
+}
 
 export type NotificacionesClientProps = {
-  /** The page's visible settings sections (`settingsSectionsFor("notificaciones")`); defaults to both. */
+  /** The page's visible settings sections (`settingsSectionsFor("notificaciones")`); defaults to all three. */
   children?: ReactNode;
 };
 
 /**
- * Ajustes › Notificaciones (redesign FE §3.8): kind × channel matrix and
- * quiet hours. The saved preferences are the hydrated
- * `qk.ajustes.page('notificaciones')`; the draft the two settings sections
- * edit lives in a page-scoped store (reset when the page unmounts) and
- * "Guardar" saves it through a mutation. Ignores the presentation style.
+ * Ajustes › Notificaciones (redesign FE §3.8, canvas `Ajustes-Notificaciones`):
+ * kind × channel matrix, quiet hours and the daily digest note, then the save
+ * bar. The saved preferences are the hydrated `qk.ajustes.page('notificaciones')`;
+ * the draft the sections edit lives in a page-scoped store (reset when the
+ * page unmounts), "Guardar" saves it through a mutation and "Descartar" goes
+ * back to the saved values. Ignores the presentation style.
  */
 export function NotificacionesClient({ children }: NotificacionesClientProps) {
   const { preferences } = useSuspenseQuery(ajustesNotificacionesOptions()).data;
@@ -84,15 +123,28 @@ export function NotificacionesClient({ children }: NotificacionesClientProps) {
 
 function NotificacionesForm({ children }: { children?: ReactNode }) {
   const form = useNotificacionesFormApi();
+  const { preferences } = useSuspenseQuery(ajustesNotificacionesOptions()).data;
   const formError = useNotificacionesForm((s) => s.formError);
   const pending = useNotificacionesForm((s) => s.pending);
+  const matrix = useNotificacionesForm((s) => s.matrix);
+  const quietEnabled = useNotificacionesForm((s) => s.quietEnabled);
+  const quietFrom = useNotificacionesForm((s) => s.quietFrom);
+  const quietTo = useNotificacionesForm((s) => s.quietTo);
+  const saved = useMemo(() => toNotificacionesDraft(preferences), [preferences]);
+  const dirtyCount = notificacionesDirtyCount({ matrix, quietEnabled, quietFrom, quietTo }, saved);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  /** After a validation error renders, focus moves to the first invalid field. */
+  function focusFirstInvalid() {
+    setTimeout(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(), 0);
+  }
 
   const save = useActionMutation(updateNotificationPreferencesAction, {
     // The action answers one row per kind (defaults filled), the shape the page data holds.
     setData: (qc, saved) =>
       qc.setQueryData<AjustesNotificacionesPageData>(qk.ajustes.page("notificaciones"), { preferences: saved }),
     invalidate: [qk.me.notificationPrefs(), qk.me.preferences()],
-    successToast: "Notificaciones guardadas",
+    successToast: "Cambios guardados",
     onFormError: (text) => form.getState().setFormError(text),
   });
 
@@ -103,6 +155,7 @@ function NotificacionesForm({ children }: { children?: ReactNode }) {
     const input = notificacionesInput(state);
     if (!NotificationPreferencesSchema.safeParse(input).success) {
       state.setTimeError(actionErrorText(new Error("INVALID")));
+      focusFirstInvalid();
       return;
     }
     state.setPending(true);
@@ -115,6 +168,7 @@ function NotificacionesForm({ children }: { children?: ReactNode }) {
         if (aboutTimes) {
           form.getState().setFormError(null);
           form.getState().setTimeError(actionErrorText(err));
+          focusFirstInvalid();
         }
       },
       onSettled: () => form.getState().setPending(false),
@@ -123,6 +177,7 @@ function NotificacionesForm({ children }: { children?: ReactNode }) {
 
   return (
     <form
+      ref={formRef}
       className="flex flex-col gap-4"
       noValidate
       onSubmit={(event) => {
@@ -134,66 +189,72 @@ function NotificacionesForm({ children }: { children?: ReactNode }) {
         <>
           <NotificacionesCanales />
           <NotificacionesHorasSilencio />
+          <NotificacionesResumenDiario />
         </>
       )}
-      {formError ? (
-        <Alert variant="destructive">
-          <AlertDescription>{formError}</AlertDescription>
-        </Alert>
-      ) : null}
-      <div className="flex justify-end">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Guardando…" : "Guardar"}
-        </Button>
-      </div>
+      <SettingsSaveBar
+        dirtyCount={dirtyCount}
+        saving={pending}
+        error={formError}
+        onDiscard={() => form.getState().reset()}
+        onSave={submit}
+      />
     </form>
   );
 }
 
-/** Section "Qué te avisamos y por dónde": the kind × channel matrix. Renders inside `NotificacionesClient`. */
+/** Section "Qué te avisamos y por dónde": the kind × channel matrix of switches. Renders inside `NotificacionesClient`. */
 export function NotificacionesCanales() {
   const matrix = useNotificacionesForm((s) => s.matrix);
   const pending = useNotificacionesForm((s) => s.pending);
   const setChannel = useNotificacionesForm((s) => s.setChannel);
   return (
     <SettingsSection title="Qué te avisamos y por dónde" description="Marca los canales para cada evento.">
-      <Table>
-        <caption className="sr-only">Canales por tipo de aviso</caption>
-        <TableHeader>
-          <TableRow>
-            <TableHead scope="col">Evento</TableHead>
-            {CHANNELS.map((channel) => (
-              <TableHead key={channel} scope="col" className="text-center">
-                {NOTIFICATION_CHANNEL_LABELS[channel]}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {KINDS.map((kind) => (
-            <TableRow key={kind}>
-              <TableHead scope="row" className="font-normal">
-                {NOTIFICATION_KIND_LABELS[kind]}
+      <div className="overflow-x-auto rounded-[10px] border border-border">
+        <Table>
+          <caption className="sr-only">Canales por tipo de aviso</caption>
+          <TableHeader className="bg-muted">
+            <TableRow>
+              <TableHead scope="col" className={TABLE_HEAD_CLASS}>
+                Evento
               </TableHead>
               {CHANNELS.map((channel) => (
-                <TableCell key={channel} className="text-center">
-                  <Checkbox
-                    aria-label={`${NOTIFICATION_KIND_LABELS[kind]} por ${NOTIFICATION_CHANNEL_LABELS[channel]}`}
-                    checked={matrix[kind][channel]}
-                    disabled={pending}
-                    onCheckedChange={(checked) => setChannel(kind, channel, checked === true)}
-                  />
-                </TableCell>
+                <TableHead key={channel} scope="col" className={`${TABLE_HEAD_CLASS} text-center`}>
+                  {NOTIFICATION_CHANNEL_LABELS[channel]}
+                </TableHead>
               ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {KINDS.map((kind) => (
+              <TableRow key={kind} className="border-accent">
+                <TableHead scope="row" className="px-3.5 py-2.5 align-top font-normal whitespace-normal">
+                  <span className="block text-[13.5px] font-medium text-foreground">{NOTIFICATION_KIND_LABELS[kind]}</span>
+                  <span className="block text-xs text-muted-foreground">{NOTIFICATION_KIND_DESCRIPTIONS[kind]}</span>
+                </TableHead>
+                {CHANNELS.map((channel) => (
+                  <TableCell key={channel} className="px-3.5 py-2.5 text-center">
+                    <Switch
+                      aria-label={channelSwitchLabel(kind, channel)}
+                      checked={matrix[kind][channel]}
+                      disabled={pending}
+                      onCheckedChange={(checked) => setChannel(kind, channel, checked === true)}
+                    />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </SettingsSection>
   );
 }
 
-/** Section "Horario silencioso" plus the fixed daily digest note. Renders inside `NotificacionesClient`. */
+/** Table header cells: Geist Mono 11 px / 500, tracking .08em, uppercase, `--muted-foreground`. */
+const TABLE_HEAD_CLASS = "px-3.5 py-2.5 font-mono text-[11px] font-medium tracking-[.08em] text-muted-foreground uppercase";
+
+/** Section "Horario silencioso": the switch and the two times. Renders inside `NotificacionesClient`. */
 export function NotificacionesHorasSilencio() {
   const form = {
     quietEnabled: useNotificacionesForm((s) => s.quietEnabled),
@@ -218,57 +279,78 @@ export function NotificacionesHorasSilencio() {
       title="Horario silencioso"
       description="En este horario no te enviamos correos; los avisos llegan al terminar."
     >
-      <SettingsRow
-        label="No enviar avisos fuera de horario"
-        htmlFor={switchId}
-        control={
-          <Switch
-            id={switchId}
-            aria-label="No enviar avisos fuera de horario"
-            checked={form.quietEnabled}
-            disabled={form.pending}
-            onCheckedChange={(checked) => form.setQuietEnabled(checked === true)}
-          />
-        }
-      />
-      <SettingsRow
-        label="Desde"
-        htmlFor={fromId}
-        control={
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Label htmlFor={switchId} className="text-[13px] font-medium text-foreground">
+          No enviar avisos fuera de horario
+        </Label>
+        <Switch
+          id={switchId}
+          aria-label="No enviar avisos fuera de horario"
+          checked={form.quietEnabled}
+          disabled={form.pending}
+          onCheckedChange={(checked) => form.setQuietEnabled(checked === true)}
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={fromId} className="text-[13px] font-medium text-foreground">
+            Desde
+          </Label>
           <Input
             id={fromId}
             type="time"
-            aria-label="Desde"
+            className="font-mono"
             value={form.quietFrom}
             disabled={timesDisabled}
             aria-invalid={invalid}
             aria-describedby={describedBy}
             onChange={(event) => form.setQuietFrom(event.target.value)}
           />
-        }
-      />
-      <SettingsRow
-        label="Hasta"
-        htmlFor={toId}
-        control={
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={toId} className="text-[13px] font-medium text-foreground">
+            Hasta
+          </Label>
           <Input
             id={toId}
             type="time"
-            aria-label="Hasta"
+            className="font-mono"
             value={form.quietTo}
             disabled={timesDisabled}
             aria-invalid={invalid}
             aria-describedby={describedBy}
             onChange={(event) => form.setQuietTo(event.target.value)}
           />
-        }
-      />
+        </div>
+      </div>
       {form.timeError ? (
         <p id={errorId} role="alert" className="text-sm text-destructive">
           {form.timeError}
         </p>
       ) : null}
-      <p className="text-sm text-muted-foreground">{DIGEST_NOTE}</p>
     </SettingsSection>
+  );
+}
+
+/** Info section "Resumen diario": the fixed 07:30 digest (R3-1). */
+export function NotificacionesResumenDiario() {
+  return (
+    <SettingsSection
+      title="Resumen diario"
+      description={DIGEST_NOTE}
+      icon={
+        <span
+          aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-secondary text-secondary-foreground"
+        >
+          <MailIcon className="size-5" />
+        </span>
+      }
+      actions={
+        <Badge variant="outline" className="font-mono">
+          {DIGEST_BADGE}
+        </Badge>
+      }
+    />
   );
 }

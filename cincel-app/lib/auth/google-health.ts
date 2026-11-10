@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import { DIRECTORY_ERROR_EVENT_KINDS } from "@/lib/auth/directory-error-log";
 import { db } from "@/lib/db/client";
@@ -10,8 +10,9 @@ import type { DirectoryErrorSource, GoogleHealth } from "@/lib/types/workspace-a
 
 /**
  * Data for Configuración → Google → Estado (BE §A.7, FE §5): which settings
- * are present, the last Directory and Drive errors, and how many active staff
- * already signed in with Google. Only reports whether secrets are set, never
+ * are present, the last Directory and Drive errors, how many active staff
+ * already signed in with Google and who is still missing, and how many
+ * projects have their Drive folders. Only reports whether secrets are set, never
  * their values.
  */
 
@@ -47,7 +48,7 @@ export function directoryErrorMessage(kind: string, status: number | null): stri
 }
 
 export async function loadGoogleHealth(env: Env = process.env): Promise<GoogleHealth> {
-  const [mappingRows, [directoryEvent], [driveError], [staffCounts]] = await Promise.all([
+  const [mappingRows, [directoryEvent], [driveError], [staffCounts], pendingRows, folderRows] = await Promise.all([
     db
       .select({ kind: workspaceGroupMappings.kind, n: count() })
       .from(workspaceGroupMappings)
@@ -68,6 +69,16 @@ export async function loadGoogleHealth(env: Env = process.env): Promise<GoogleHe
       .select({ active: count(), googleLinked: count(staff.googleSub) })
       .from(staff)
       .where(and(eq(staff.active, true), isNull(staff.deletedAt))),
+    db
+      .select({ id: staff.id, name: staff.name, lastName: staff.lastName })
+      .from(staff)
+      .where(and(eq(staff.active, true), isNull(staff.deletedAt), isNull(staff.googleSub)))
+      .orderBy(asc(staff.name), asc(staff.lastName)),
+    db
+      .select({ status: projects.driveFolderStatus, n: count() })
+      .from(projects)
+      .where(isNull(projects.deletedAt))
+      .groupBy(projects.driveFolderStatus),
   ]);
 
   const groupMappingCount = mappingRows.reduce((sum, row) => sum + Number(row.n), 0);
@@ -97,5 +108,13 @@ export async function loadGoogleHealth(env: Env = process.env): Promise<GoogleHe
     lastDriveError: driveError?.message ? { at: driveError.at.toISOString(), message: driveError.message } : null,
     googleLinkedStaff: Number(staffCounts?.googleLinked ?? 0),
     activeStaff: Number(staffCounts?.active ?? 0),
+    pendingGoogleStaff: pendingRows.map((row) => ({
+      id: row.id,
+      name: [row.name, row.lastName].filter((part) => part && part.trim()).join(" "),
+    })),
+    projectsWithoutFolder: folderRows
+      .filter((row) => row.status === "pending" || row.status === "failed")
+      .reduce((sum, row) => sum + Number(row.n), 0),
+    projectsWithFolder: Number(folderRows.find((row) => row.status === "ready")?.n ?? 0),
   };
 }

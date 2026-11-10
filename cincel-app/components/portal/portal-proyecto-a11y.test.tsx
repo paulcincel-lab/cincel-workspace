@@ -10,6 +10,10 @@ import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS, TOKEN_NAMES } from "@/lib/ui/themes";
 
+import { PortalAnalitico } from "@/components/widgets/portal/PortalAnalitico";
+import { PortalEsencial } from "@/components/widgets/portal/PortalEsencial";
+import { PortalVisual } from "@/components/widgets/portal/PortalVisual";
+
 import PortalProjectOverview from "./PortalProjectOverview";
 
 const MODES = ["light", "dark"] as const;
@@ -44,9 +48,9 @@ const schedule: PortalScheduleDTO = {
   ],
 };
 const tramos: PortalTramoDTO[] = [
-  { key: "presale", name: "Presale", state: "completado" },
-  { key: "diseno", name: "Diseño", state: "en_curso" },
-  { key: "construccion", name: "Construcción", state: "por_iniciar" },
+  { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
+  { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 62, startMonth: "2026-06" },
+  { key: "construccion", name: "Construcción", state: "por_iniciar", progressPct: 0, startMonth: null },
 ];
 const files: PortalFileDTO[] = [
   { id: "f1", name: "Contrato.pdf", mimeType: "application/pdf", sizeBytes: 120_000, modifiedAt: "2026-09-15T00:00:00Z", kind: "file", deliveredAs: "original" },
@@ -121,5 +125,78 @@ describe("portal project page colors", () => {
         expect(failing).toEqual([]);
       });
     }
+  }
+});
+
+describe("portal Esencial accessibility", () => {
+  afterEach(() => {
+    cleanup();
+    resetTheme();
+  });
+
+  for (const mode of MODES) {
+    it(`Esencial has no serious axe violations (${mode})`, async () => {
+      applyTheme("azul", mode);
+      const { container } = render(
+        <main>
+          <PortalEsencial project={project} data={data} />
+        </main>,
+      );
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+});
+
+describe("portal Analítico accessibility", () => {
+  afterEach(() => {
+    cleanup();
+    resetTheme();
+  });
+
+  for (const mode of MODES) {
+    it(`Analítico has no serious axe violations (${mode})`, async () => {
+      applyTheme("azul", mode);
+      const { container } = render(
+        <main>
+          <PortalAnalitico project={project} data={data} />
+        </main>,
+      );
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+});
+
+describe("portal Visual accessibility", () => {
+  afterEach(() => {
+    cleanup();
+    resetTheme();
+  });
+
+  const visualData = buildPortalOverview({
+    project,
+    schedule,
+    tramos,
+    files,
+    folders: [
+      { folderId: "root", name: "General", files },
+      { folderId: "d1", name: "Planos", files: [{ ...files[1], id: "f3", name: "Corte.pdf" }] },
+    ],
+    team: [
+      { name: "Laura Pérez", role: "Responsable del proyecto", email: "laura@cincel.mx" },
+      { name: "Ana Ruiz", role: "Diseñadora líder", email: null },
+    ],
+    today: "2026-11-07",
+  });
+
+  for (const mode of MODES) {
+    it(`Visual has no serious axe violations (${mode})`, async () => {
+      applyTheme("azul", mode);
+      const { container } = render(
+        <main>
+          <PortalVisual project={project} data={visualData} />
+        </main>,
+      );
+      expect(await seriousViolations(container)).toEqual([]);
+    });
   }
 });

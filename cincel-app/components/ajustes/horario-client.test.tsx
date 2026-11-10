@@ -43,13 +43,13 @@ vi.mock("sonner", () => sonner);
 
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/horario"));
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/horario"));
-vi.mock("@/components/widgets/RecordTable", () => import("@/tests/unit/fixtures/horario"));
+vi.mock("@/components/ajustes/SettingsSaveBar", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
-import { HorarioClient } from "./HorarioClient";
+import { HORARIO_SAVE_NOTE, HorarioClient } from "./HorarioClient";
 import { horarioExportHref } from "./HorarioSections";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { actionErrorText } from "@/lib/errors";
-import { clockInPromptCopy, minRequiredFrom } from "@/lib/time-tracking/horario-copy";
+import { loginPromptPreview, minRequiredFrom } from "@/lib/time-tracking/horario-copy";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { localDate } from "@/lib/time-tracking/local-time";
@@ -92,6 +92,12 @@ function section(name: string | RegExp) {
   return screen.getByRole("region", { name });
 }
 
+function modeRadio(name: "Desactivado" | "En prueba" | "Obligatorio") {
+  return within(screen.getByRole("radiogroup", { name: "Control de horario" })).getByRole("radio", { name: new RegExp(`^${name}`) });
+}
+
+const saveButton = () => screen.getByRole("button", { name: "Guardar cambios" });
+
 beforeEach(() => {
   for (const fn of Object.values(actions)) fn.mockReset();
   pageData.getAjustesHorarioPageData.mockReset();
@@ -105,41 +111,81 @@ afterEach(() => {
 });
 
 describe("HorarioClient (Administrador)", () => {
-  it("renders the switch, the required date, the timeline, the rules, the preview and the report", () => {
+  it("renders the admin heading, the mode cards, the rules, the preview, the report and the save bar", () => {
     renderClient();
-    const control = section("Control de horario");
-    expect(within(control).getByRole("switch", { name: "Activar control de horario" })).toBeTruthy();
-    expect(within(control).getByText("Control de horario activado")).toBeTruthy();
-    expect(within(control).getByText("Obligatorio desde el 4 ene 2027")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^Control de horario/ })).toBeTruthy();
+    const control = section("Activar control de horario");
+    expect(within(control).getByText("Activado · obligatorio")).toBeTruthy();
+    expect(modeRadio("Obligatorio").getAttribute("aria-checked")).toBe("true");
     expect(section("Reglas de la jornada")).toBeTruthy();
     expect(section("Lo que ve el equipo al iniciar sesión")).toBeTruthy();
-    expect(section("Horas del equipo · semana del 2 nov")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeTruthy();
+    expect(section("Horas del equipo")).toBeTruthy();
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
   });
 
-  it("sets requiredFrom with a min of tomorrow", () => {
-    renderClient();
+  it("obligatorio shows the date field", () => {
+    renderClient({ settings: { ...SETTINGS, requiredFrom: null } });
+    expect(modeRadio("En prueba").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Activado · en prueba")).toBeTruthy();
+    expect(screen.queryByLabelText("Obligatorio a partir de")).toBeNull();
+
+    fireEvent.click(modeRadio("Obligatorio"));
+
     const date = screen.getByLabelText("Obligatorio a partir de") as HTMLInputElement;
-    expect(date.min).toBe(minRequiredFrom(localDate(new Date())));
-    expect(date.value).toBe("2027-01-04");
+    const tomorrow = minRequiredFrom(localDate(new Date()));
+    expect(date.min).toBe(tomorrow);
+    expect(date.value).toBe(tomorrow);
+    expect(screen.getByText("Activado · obligatorio")).toBeTruthy();
   });
 
-  it("toggles the feature, edits rules and saves the draft", async () => {
-    const saved = { ...SETTINGS, enabled: false, hoursPerDay: 7, workDays: [1, 2, 3, 4, 5, 6] };
+  it("desactivado hides rules and report", () => {
+    renderClient();
+    fireEvent.click(modeRadio("Desactivado"));
+
+    expect(within(section("Activar control de horario")).getByText("Desactivado", { selector: "[data-slot=tone-pill]" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Reglas de la jornada" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Lo que ve el equipo al iniciar sesión" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Horas del equipo" })).toBeNull();
+    expect(screen.queryByLabelText("Obligatorio a partir de")).toBeNull();
+  });
+
+  it("day pills toggle aria-pressed", () => {
+    renderClient();
+    const saturday = screen.getByRole("button", { name: "Sáb" });
+    expect(saturday.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Lun" }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(saturday);
+    expect(screen.getByRole("button", { name: "Sáb" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Lun" }));
+    expect(screen.getByRole("button", { name: "Lun" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("edits rules and saves the draft; the save bar says when they apply", async () => {
+    const saved = { ...SETTINGS, hoursPerDay: 7, workDays: [1, 2, 3, 4, 5, 6] };
     actions.saveTimeTrackingSettingsAction.mockResolvedValue(saved);
     renderClient();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Activar control de horario" }));
-    expect(screen.getByText("Control de horario desactivado")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Horas esperadas por día"), { target: { value: "7" } });
-    fireEvent.click(screen.getByRole("button", { name: "Sábado" }));
-    expect(screen.getByRole("button", { name: "Sábado" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Sáb" }));
+    expect(screen.getByRole("status").textContent).toBe(HORARIO_SAVE_NOTE);
 
-    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(saveButton());
     await waitFor(() => expect(actions.saveTimeTrackingSettingsAction).toHaveBeenCalledTimes(1));
     expect(actions.saveTimeTrackingSettingsAction).toHaveBeenCalledWith(saved);
     await waitFor(() => expect(sonner.toast.success).toHaveBeenCalledWith("Cambios guardados"));
     expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("Descartar returns to the saved settings", () => {
+    renderClient();
+    fireEvent.change(screen.getByLabelText("Horas esperadas por día"), { target: { value: "6" } });
+    fireEvent.click(modeRadio("Desactivado"));
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+
+    expect(modeRadio("Obligatorio").getAttribute("aria-checked")).toBe("true");
+    expect((screen.getByLabelText("Horas esperadas por día") as HTMLInputElement).value).toBe("8");
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
   });
 
   it("saving invalidates every week of ajustes.page('horario') and me.today, with no router.refresh", async () => {
@@ -157,7 +203,7 @@ describe("HorarioClient (Administrador)", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries");
 
     fireEvent.change(screen.getByLabelText("Horas esperadas por día"), { target: { value: "7" } });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(saveButton());
 
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.ajustes.page("horario") }));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.me.today() });
@@ -166,9 +212,7 @@ describe("HorarioClient (Administrador)", () => {
         .hoursPerDay,
     ).toBe(7);
     // Saved: the draft equals the saved settings again.
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Guardar cambios" }).hasAttribute("disabled")).toBe(true),
-    );
+    await waitFor(() => expect(saveButton().hasAttribute("disabled")).toBe(true));
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
@@ -176,7 +220,7 @@ describe("HorarioClient (Administrador)", () => {
     actions.saveTimeTrackingSettingsAction.mockImplementation(async (input: TimeTrackingSettings) => input);
     renderClient();
     fireEvent.change(screen.getByLabelText("Obligatorio a partir de"), { target: { value: "2027-02-01" } });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(saveButton());
     await waitFor(() =>
       expect(actions.saveTimeTrackingSettingsAction).toHaveBeenCalledWith({ ...SETTINGS, requiredFrom: "2027-02-01" }),
     );
@@ -186,7 +230,7 @@ describe("HorarioClient (Administrador)", () => {
     actions.saveTimeTrackingSettingsAction.mockRejectedValue(new Error("INVALID: requiredFrom"));
     renderClient();
     fireEvent.change(screen.getByLabelText("Salida"), { target: { value: "08:00" } });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(saveButton());
     expect(await screen.findByText(INVALID_COPY)).toBeTruthy();
     expect(actionErrorText(new Error("INVALID: requiredFrom"))).toBe(INVALID_COPY);
     expect((screen.getByLabelText("Salida") as HTMLInputElement).value).toBe("08:00");
@@ -196,43 +240,41 @@ describe("HorarioClient (Administrador)", () => {
   it("shows FORBIDDEN copy", async () => {
     actions.saveTimeTrackingSettingsAction.mockRejectedValue(new Error("FORBIDDEN"));
     renderClient();
-    fireEvent.click(screen.getByRole("checkbox", { name: /Pedir registro de entrada/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Pedir registro de entrada al iniciar sesión" }));
+    fireEvent.click(saveButton());
     expect(await screen.findByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
   });
 
   it("turns auto-close and lunch off as null and 0", async () => {
     actions.saveTimeTrackingSettingsAction.mockImplementation(async (input: TimeTrackingSettings) => input);
     renderClient();
-    fireEvent.click(screen.getByRole("checkbox", { name: /Cerrar la jornada automáticamente a las 20:00/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Descontar 60 min de comida/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Dirección" }));
-    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect((screen.getByLabelText("Hora de cierre") as HTMLInputElement).value).toBe("20:00");
+    expect((screen.getByLabelText("Minutos de comida") as HTMLInputElement).value).toBe("60");
+    fireEvent.click(screen.getByRole("switch", { name: "Cerrar la jornada automáticamente" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Descontar tiempo de comida" }));
+    expect(screen.queryByLabelText("Hora de cierre")).toBeNull();
+    expect(screen.queryByLabelText("Minutos de comida")).toBeNull();
+    fireEvent.click(saveButton());
     await waitFor(() =>
-      expect(actions.saveTimeTrackingSettingsAction).toHaveBeenCalledWith({
-        ...SETTINGS,
-        autoCloseAt: null,
-        lunchMinutes: 0,
-        exemptRoles: ["Dirección"],
-      }),
+      expect(actions.saveTimeTrackingSettingsAction).toHaveBeenCalledWith({ ...SETTINGS, autoCloseAt: null, lunchMinutes: 0 }),
     );
   });
 
-  it("previews the ClockInPrompt copy for the draft", () => {
+  it("previews the login prompt for the draft", () => {
     renderClient();
-    const preview = section("Lo que ve el equipo al iniciar sesión");
-    const copy = clockInPromptCopy("Ana", "2027-01-04", localDate(new Date()));
-    expect(within(preview).getByText(copy.title)).toBeTruthy();
-    expect(within(preview).getByText("Registra tu entrada para empezar el día. Opcional hasta el 4 ene 2027.")).toBeTruthy();
+    const preview = screen.getByRole("img", { name: "Vista previa de la ventana de registro" });
+    const copy = loginPromptPreview("Ana", "09:00", "2027-01-04", localDate(new Date()));
+    expect(within(preview).getByText("Buenos días, Ana")).toBeTruthy();
+    expect(copy.body).toBe("Son las 09:00. ¿Registramos tu entrada?");
+    expect(within(preview).getByText(copy.body)).toBeTruthy();
     expect(within(preview).getByText("Registrar entrada")).toBeTruthy();
-    expect(within(preview).getByText("Ahora no")).toBeTruthy();
+    expect(within(preview).getByText("Más tarde")).toBeTruthy();
   });
 
-  it("drops 'Ahora no' from the preview once registering is mandatory", () => {
+  it("drops 'Más tarde' from the preview once registering is mandatory", () => {
     renderClient({ settings: { ...SETTINGS, requiredFrom: "2026-01-05" } });
-    const preview = section("Lo que ve el equipo al iniciar sesión");
-    expect(within(preview).getByText("Registra tu entrada para empezar el día.")).toBeTruthy();
-    expect(within(preview).queryByText("Ahora no")).toBeNull();
+    const preview = screen.getByRole("img", { name: "Vista previa de la ventana de registro" });
+    expect(within(preview).queryByText("Más tarde")).toBeNull();
   });
 
   it("links Exportar CSV to the week's file", () => {
@@ -243,18 +285,30 @@ describe("HorarioClient (Administrador)", () => {
     expect(link.getAttribute("download")).toBe("horario-2026-11-02.csv");
   });
 
-  it("renders the report in the current style", () => {
+  it("shows the trial hint only while the week is a trial week", () => {
+    renderClient();
+    const note = "Durante la prueba estos datos son informativos y no salen en reportes de nómina.";
+    expect(within(section("Horas del equipo")).getByText(note)).toBeTruthy();
+    cleanup();
+    renderClient({ settings: { ...SETTINGS, requiredFrom: "2026-01-05" } });
+    expect(within(section("Horas del equipo")).queryByText(note)).toBeNull();
+  });
+
+  it("renders the report widget in the current style", () => {
     renderClient({ style: "analitico" });
-    const report = section("Horas del equipo · semana del 2 nov");
-    expect(within(report).getByRole("table").getAttribute("data-style")).toBe("analitico");
-    expect(within(report).getByText("% cumplimiento")).toBeTruthy();
+    expect(within(section("Horas del equipo")).getByRole("columnheader", { name: "Diferencia" })).toBeTruthy();
+    cleanup();
+    renderClient({ style: "esencial" });
+    const report = section("Horas del equipo");
+    expect(within(report).getByRole("columnheader", { name: "Total / meta" })).toBeTruthy();
+    expect(within(report).queryByRole("columnheader", { name: "Lun" })).toBeNull();
   });
 });
 
 describe("HorarioClient week navigation", () => {
   it("makes no page-data call on mount: the week is hydrated", () => {
     renderClient();
-    expect(section("Horas del equipo · semana del 2 nov")).toBeTruthy();
+    expect(within(section("Horas del equipo")).getByText("2 – 6 nov")).toBeTruthy();
     expect(pageData.getAjustesHorarioPageData).not.toHaveBeenCalled();
     expect(actions.fetchTeamHoursAction).not.toHaveBeenCalled();
     expect(actions.fetchTimeTrackingSettingsAction).not.toHaveBeenCalled();
@@ -264,7 +318,7 @@ describe("HorarioClient week navigation", () => {
     renderClient();
     fireEvent.click(screen.getByRole("button", { name: "Semana anterior" }));
 
-    expect(await screen.findByRole("region", { name: "Horas del equipo · semana del 26 oct" })).toBeTruthy();
+    expect(await within(section("Horas del equipo")).findByText("26 – 30 oct")).toBeTruthy();
     await waitFor(() => expect(pageData.getAjustesHorarioPageData).toHaveBeenCalledTimes(1));
     expect(pageData.getAjustesHorarioPageData).toHaveBeenCalledWith({ weekStart: "2026-10-26" });
     expect(client.getQueryData(qk.ajustes.page("horario", { weekStart: "2026-10-26" }))).toBeTruthy();
@@ -274,7 +328,7 @@ describe("HorarioClient week navigation", () => {
 
     // Back to the hydrated week: cached, no second call.
     fireEvent.click(screen.getByRole("button", { name: "Semana siguiente" }));
-    expect(await screen.findByRole("region", { name: "Horas del equipo · semana del 2 nov" })).toBeTruthy();
+    expect(await within(section("Horas del equipo")).findByText("2 – 6 nov")).toBeTruthy();
     expect(pageData.getAjustesHorarioPageData).toHaveBeenCalledTimes(1);
     expect(router.refresh).not.toHaveBeenCalled();
   });
@@ -283,7 +337,7 @@ describe("HorarioClient week navigation", () => {
     renderClient();
     fireEvent.change(screen.getByLabelText("Horas esperadas por día"), { target: { value: "6" } });
     fireEvent.click(screen.getByRole("button", { name: "Semana anterior" }));
-    expect(await screen.findByRole("region", { name: "Horas del equipo · semana del 26 oct" })).toBeTruthy();
+    expect(await within(section("Horas del equipo")).findByText("26 – 30 oct")).toBeTruthy();
     expect((screen.getByLabelText("Horas esperadas por día") as HTMLInputElement).value).toBe("6");
   });
 });
@@ -293,14 +347,14 @@ describe("HorarioClient (Dirección: report only)", () => {
     renderClient({ canManage: false, canViewReport: true });
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.queryByRole("button", { name: "Guardar cambios" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "Control de horario" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Activar control de horario" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Lo que ve el equipo al iniciar sesión" })).toBeNull();
     const rules = section("Reglas de la jornada");
     expect(within(rules).queryAllByRole("textbox")).toEqual([]);
-    expect(within(rules).queryAllByRole("checkbox")).toEqual([]);
+    expect(within(rules).queryAllByRole("button")).toEqual([]);
     expect(within(rules).getByText("09:00")).toBeTruthy();
     expect(within(rules).getByText("lun, mar, mié, jue, vie")).toBeTruthy();
-    expect(section("Horas del equipo · semana del 2 nov")).toBeTruthy();
+    expect(section("Horas del equipo")).toBeTruthy();
   });
 });
 
@@ -310,7 +364,8 @@ describe("HorarioClient entry points follow IMPLEMENTED", () => {
     renderClient();
     expect(screen.queryByRole("button", { name: "Guardar cambios" })).toBeNull();
     expect((screen.getByLabelText("Entrada") as HTMLInputElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("switch", { name: "Activar control de horario" }));
+    fireEvent.click(modeRadio("Desactivado"));
+    expect(modeRadio("Obligatorio").getAttribute("aria-checked")).toBe("true");
     expect(actions.saveTimeTrackingSettingsAction).not.toHaveBeenCalled();
   });
 
@@ -324,6 +379,6 @@ describe("HorarioClient entry points follow IMPLEMENTED", () => {
   it("an administrator without the report capability gets no report", () => {
     renderClient({ canManage: true, canViewReport: false });
     expect(screen.queryByRole("region", { name: /Horas del equipo/ })).toBeNull();
-    expect(section("Control de horario")).toBeTruthy();
+    expect(section("Activar control de horario")).toBeTruthy();
   });
 });

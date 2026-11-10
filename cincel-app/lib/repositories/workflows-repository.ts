@@ -1,12 +1,13 @@
 import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
+import { projects, tasks, workflowPhases, workflowTaskTemplates, workflows } from "@/lib/db/schema";
 import { READINESS } from "@/lib/project-flow/catalog";
 import type { FlowExecutor } from "@/lib/project-flow/db";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import { recordChanges } from "@/lib/repositories/history-repository";
 import { assertPhaseInWorkflow, listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
+import { TRAMO_COLOR_SLOTS, type TramoColorSlot } from "@/lib/tramos/tramo-color";
 import type {
   TramoReadiness,
   Workflow,
@@ -23,6 +24,13 @@ const clean = (v: string | null | undefined): string | null => {
   return t ? t : null;
 };
 
+/** A stored `color_slot` as a slot; anything outside 1–5 reads as null (derived color). */
+export function toColorSlot(value: number | null | undefined): TramoColorSlot | null {
+  return typeof value === "number" && (TRAMO_COLOR_SLOTS as readonly number[]).includes(value)
+    ? (value as TramoColorSlot)
+    : null;
+}
+
 function toWorkflow(row: typeof workflows.$inferSelect): Workflow {
   return {
     id: row.id,
@@ -32,6 +40,7 @@ function toWorkflow(row: typeof workflows.$inferSelect): Workflow {
     active: row.active,
     sortOrder: row.sortOrder,
     autoStart: row.autoStart,
+    colorSlot: toColorSlot(row.colorSlot),
   };
 }
 
@@ -69,11 +78,13 @@ async function phaseNamesOf(phaseIds: Array<string | null>): Promise<Map<string,
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
-const toRef = (w: { id: string; key: string; name: string; sortOrder: number }): WorkflowRef => ({
+const toRef = (w: { id: string; key: string; name: string; sortOrder: number; colorSlot?: number | null }): WorkflowRef => ({
   id: w.id,
   key: w.key,
   name: w.name,
   sortOrder: w.sortOrder,
+  // Only reads that select `color_slot` carry it.
+  ...(w.colorSlot !== undefined ? { colorSlot: toColorSlot(w.colorSlot) } : {}),
 });
 
 /**
@@ -196,6 +207,14 @@ export async function getWorkflowByKey(key: string): Promise<WorkflowDetail | nu
   return all.find((w) => w.key === key) ?? null;
 }
 
+/** INVALID for a color slot outside 1–5 (`workflows_color_slot_check`). */
+function cleanColorSlot(value: number | null | undefined): TramoColorSlot | null {
+  if (value === null || value === undefined) return null;
+  const slot = toColorSlot(value);
+  if (slot === null) throw new Error("INVALID: colorSlot");
+  return slot;
+}
+
 function toValues(input: WorkflowInput) {
   return {
     key: input.key.trim().toLowerCase(),
@@ -203,6 +222,7 @@ function toValues(input: WorkflowInput) {
     description: clean(input.description),
     active: input.active ?? true,
     sortOrder: input.sortOrder ?? 0,
+    colorSlot: cleanColorSlot(input.colorSlot),
   };
 }
 
@@ -236,6 +256,7 @@ export async function updateWorkflow(
     description: patch.description === undefined ? before.description : patch.description,
     active: patch.active ?? before.active,
     sortOrder: patch.sortOrder ?? before.sortOrder,
+    colorSlot: patch.colorSlot === undefined ? toColorSlot(before.colorSlot) : patch.colorSlot,
   });
   const [after] = await db.update(workflows).set(merged).where(eq(workflows.id, id)).returning();
   await recordChanges({
@@ -244,7 +265,7 @@ export async function updateWorkflow(
     actorId,
     before,
     after,
-    fields: ["key", "name", "description", "active", "sortOrder"],
+    fields: ["key", "name", "description", "active", "sortOrder", "colorSlot"],
   });
   return toWorkflow(after);
 }
@@ -473,10 +494,52 @@ export async function reorderTemplates(workflowId: string, orderedIds: string[])
   });
 }
 
+/** One transaction, `sort_order` = index, live tramos only (Ajustes › Tramos y fases). */
+export async function reorderWorkflows(orderedIds: string[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const [i, id] of orderedIds.entries()) {
+      await tx
+        .update(workflows)
+        .set({ sortOrder: i })
+        .where(and(eq(workflows.id, id), isNull(workflows.deletedAt)));
+    }
+  });
+}
+
+/** Per tramo id: the live active projects whose current tramo it is ("Proyectos activos"). */
+export async function countActiveProjectsByWorkflow(): Promise<Record<string, number>> {
+  const rows = await db
+    .select({ workflowId: projects.currentWorkflowId, n: count() })
+    .from(projects)
+    .where(and(isNull(projects.deletedAt), eq(projects.status, "activo"), sql`${projects.currentWorkflowId} is not null`))
+    .groupBy(projects.currentWorkflowId);
+  const out: Record<string, number> = {};
+  for (const row of rows) if (row.workflowId) out[row.workflowId] = Number(row.n);
+  return out;
+}
+
+/** Per fase id: its live tasks ("{n} tareas" in the tramo editor). */
+export async function countTasksByPhase(): Promise<Record<string, number>> {
+  const rows = await db
+    .select({ phaseId: tasks.phaseId, n: count() })
+    .from(tasks)
+    .where(and(isNull(tasks.deletedAt), sql`${tasks.phaseId} is not null`))
+    .groupBy(tasks.phaseId);
+  const out: Record<string, number> = {};
+  for (const row of rows) if (row.phaseId) out[row.phaseId] = Number(row.n);
+  return out;
+}
+
 /** Active tramos for the sidebar and tabs, by `sortOrder` (BE §8.2). */
 export async function listTramosNav(): Promise<WorkflowRef[]> {
   const rows = await db
-    .select({ id: workflows.id, key: workflows.key, name: workflows.name, sortOrder: workflows.sortOrder })
+    .select({
+      id: workflows.id,
+      key: workflows.key,
+      name: workflows.name,
+      sortOrder: workflows.sortOrder,
+      colorSlot: workflows.colorSlot,
+    })
     .from(workflows)
     .where(and(eq(workflows.active, true), isNull(workflows.deletedAt)))
     .orderBy(asc(workflows.sortOrder), asc(workflows.name));

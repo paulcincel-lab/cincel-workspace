@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { AssistantMessageMeta } from "../../types/asistente";
 import type { AssistantContext } from "../../types/redesign";
 import { assistantActionStatus, assistantRole, core, soft, stamps } from "./_schema";
@@ -21,6 +21,8 @@ export const assistantThreads = core.table(
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     /** When the owner last read the thread: an assistant message after it is "Nueva respuesta". */
     lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+    /** Non-widget tool calls in the thread's assistant messages, kept by `saveThreadMessages` (Asistente Analítico rail). */
+    toolCallCount: integer("tool_call_count").notNull().default(0),
     ...stamps,
     ...soft,
   },

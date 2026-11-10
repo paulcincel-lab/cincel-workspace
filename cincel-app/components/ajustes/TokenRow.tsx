@@ -1,9 +1,10 @@
 "use client";
 
-import { SettingsRow } from "@/components/patterns/SettingsRow";
-import { Badge } from "@/components/ui/shadcn/badge";
-import { Input } from "@/components/ui/shadcn/input";
+import { useState } from "react";
+
+import { TokenContrastBadge } from "@/components/ajustes/ContrastBadge";
 import type { TokenName } from "@/lib/types/redesign";
+import type { TokenContrast } from "@/lib/ui/theme-editor";
 
 export type TokenRowProps = {
   name: TokenName;
@@ -12,6 +13,8 @@ export type TokenRowProps = {
   onChange(hex: string): void;
   /** Contrast message when the token takes part in a failing pair (the row is marked). */
   invalid?: string;
+  /** The row's contrast badge (`tokenContrast`); none when the token is in no `CONTRAST_PAIRS` entry. */
+  contrast?: TokenContrast | null;
 };
 
 type ParsedColor = { hex: string; alpha: number | null };
@@ -45,45 +48,66 @@ export function withTokenAlpha(hex: string, alpha: number | null): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
+/** A value the hex chip accepts: `#rgb`, `#rrggbb` or `rgb(a)(…)`. */
+export function isTokenColor(value: string): boolean {
+  const v = value.trim();
+  return HEX6.test(v) || HEX3.test(v) || RGB.test(v);
+}
+
 /**
- * One token row of the theme editor (redesign FE §4.8): color input + label +
- * `--name` + value chip, as a `SettingsRow`: one swatch control per token.
+ * One token row of the theme editor (canvas `Ajustes-Tema`, `.tok`): a 22 px
+ * swatch that opens the color picker, the Spanish name, the contrast badge
+ * and the editable hex chip (Geist Mono). The chip commits a value once it is
+ * a full color (`#rrggbb` or `rgb(a)`); on blur `#rgb` is expanded and an
+ * invalid text goes back to the token value.
  */
-export function TokenRow({ name, label, value, onChange, invalid }: TokenRowProps) {
+export function TokenRow({ name, label, value, onChange, invalid, contrast }: TokenRowProps) {
   const id = `token-${name}`;
   const messageId = `${id}-contrast`;
   const parsed = parseTokenColor(value);
+  /** What is typed in the chip while it is being edited; null shows the token value. */
+  const [text, setText] = useState<string | null>(null);
 
   return (
-    <div data-token={name} data-invalid={invalid ? "true" : undefined}>
-      <SettingsRow
-        label={label}
-        description={`--${name}`}
-        htmlFor={id}
-        control={
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2">
-              <Badge variant={invalid ? "destructive" : "outline"} className="font-mono">
-                {value}
-              </Badge>
-              <Input
-                id={id}
-                type="color"
-                value={parsed.hex}
-                aria-invalid={invalid ? true : undefined}
-                aria-describedby={invalid ? messageId : undefined}
-                onChange={(e) => onChange(withTokenAlpha(e.target.value, parsed.alpha))}
-                className="h-8 w-12 cursor-pointer p-1"
-              />
-            </div>
-            {invalid ? (
-              <p id={messageId} className="text-xs text-destructive">
-                {invalid}
-              </p>
-            ) : null}
-          </div>
-        }
+    <div
+      data-token={name}
+      data-invalid={invalid ? "true" : undefined}
+      className="flex flex-wrap items-center gap-2.5 border-b border-muted py-[7px] text-[13px] last:border-b-0"
+    >
+      <input
+        id={id}
+        type="color"
+        value={parsed.hex}
+        aria-label={`Color de ${label}`}
+        aria-invalid={invalid ? true : undefined}
+        aria-describedby={invalid ? messageId : undefined}
+        onChange={(e) => onChange(withTokenAlpha(e.target.value, parsed.alpha))}
+        className="size-[22px] shrink-0 cursor-pointer appearance-none rounded-md border border-input bg-transparent p-0 [&::-moz-color-swatch]:rounded-[5px] [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch]:rounded-[5px] [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0"
       />
+      <span className="min-w-0 flex-1 text-foreground">{label}</span>
+      {contrast ? <TokenContrastBadge contrast={contrast} /> : null}
+      <input
+        type="text"
+        spellCheck={false}
+        aria-label={`Valor de ${label}`}
+        value={text ?? value}
+        onChange={(e) => {
+          setText(e.target.value);
+          const next = e.target.value.trim();
+          if (HEX6.test(next) || RGB.test(next)) onChange(next.toLowerCase());
+        }}
+        onBlur={() => {
+          const next = (text ?? "").trim();
+          if (HEX3.test(next)) onChange(parseTokenColor(next).hex);
+          setText(null);
+        }}
+        className="w-[7.5rem] shrink-0 rounded-lg border border-border bg-transparent px-2 py-[3px] font-mono text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+      />
+      {invalid ? (
+        <p id={messageId} className="sr-only">
+          {invalid}
+        </p>
+      ) : null}
     </div>
   );
 }

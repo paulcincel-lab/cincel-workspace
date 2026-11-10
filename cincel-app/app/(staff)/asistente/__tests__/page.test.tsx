@@ -97,7 +97,7 @@ const T_LUNES = "aaaaaaaa-0000-4000-8000-000000000003";
 const T_ANTES = "aaaaaaaa-0000-4000-8000-000000000004";
 const T_BORRADO = "aaaaaaaa-0000-4000-8000-0000000000ff";
 
-const STATUS = { pinnedAt: null, pendingApprovals: 0, unread: false };
+const STATUS = { pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0 };
 const THREADS: AssistantThreadSummary[] = [
   { ...STATUS, id: T_HOY, title: "Avance de Local Espinopapa", updatedAt: at(2026, 10, 5, 10, 42), pendingApprovals: 1 },
   { ...STATUS, id: T_SEMANA, title: "Minuta junta Platzi → tareas", updatedAt: at(2026, 10, 3, 9, 15), unread: true },

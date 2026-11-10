@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { updateNotificationPreferencesAction, toastSuccess } = vi.hoisted(() => ({
@@ -23,29 +22,16 @@ vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: vi.fn() } }));
 
-// Contract-shaped stand-ins for the shared settings patterns (FE §4.11), so this
-// test covers the page content on its own.
-vi.mock("@/components/patterns/SettingsSection", () => ({
-  SettingsSection: ({ title, description, children }: { title: string; description?: string; children: ReactNode }) => (
-    <section aria-label={title}>
-      <h2>{title}</h2>
-      {description ? <p>{description}</p> : null}
-      {children}
-    </section>
-  ),
-}));
-vi.mock("@/components/patterns/SettingsRow", () => ({
-  SettingsRow: ({ label, htmlFor, control }: { label: string; htmlFor?: string; control: ReactNode }) => (
-    <div>
-      <label htmlFor={htmlFor}>{label}</label>
-      {control}
-    </div>
-  ),
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/ajustes/notificaciones",
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
 }));
 
 import {
+  DIGEST_BADGE,
   DIGEST_NOTE,
   NOTIFICATION_CHANNEL_LABELS,
+  NOTIFICATION_KIND_DESCRIPTIONS,
   NOTIFICATION_KIND_LABELS,
   NotificacionesClient,
 } from "@/components/ajustes/NotificacionesClient";
@@ -79,8 +65,19 @@ async function savedResult(input: NotificationPreferences) {
   return { ok: true, data: withNotificationDefaults(input) };
 }
 
+const CHANNEL_SUFFIX: Record<string, string> = {
+  "En la app": "en la app",
+  Correo: "por correo",
+  "Resumen diario": "en el resumen diario",
+};
+
+/** The matrix switch of one event and channel (column label). */
 function box(kind: string, channel: string) {
-  return screen.getByRole("checkbox", { name: `${kind} por ${channel}` });
+  return screen.getByRole("switch", { name: `${kind} ${CHANNEL_SUFFIX[channel]}` });
+}
+
+function matrixSwitches() {
+  return within(screen.getByRole("table")).getAllByRole("switch");
 }
 
 function isChecked(el: HTMLElement) {
@@ -132,9 +129,10 @@ describe("NotificacionesClient", () => {
   it("loads the 7 kinds × 3 channels with saved values and defaults", () => {
     renderClient();
 
-    expect(screen.getAllByRole("checkbox")).toHaveLength(21);
-    for (const kind of Object.values(NOTIFICATION_KIND_LABELS)) {
-      expect(screen.getByRole("rowheader", { name: kind })).toBeTruthy();
+    expect(matrixSwitches()).toHaveLength(21);
+    for (const [key, kind] of Object.entries(NOTIFICATION_KIND_LABELS)) {
+      const header = screen.getByRole("rowheader", { name: new RegExp(`^${kind}`) });
+      expect(header.textContent).toContain(NOTIFICATION_KIND_DESCRIPTIONS[key as keyof typeof NOTIFICATION_KIND_DESCRIPTIONS]);
     }
     // Saved row.
     expect(isChecked(box("Comentario", "En la app"))).toBe(false);
@@ -147,6 +145,62 @@ describe("NotificacionesClient", () => {
     expect((screen.getByLabelText("Desde") as HTMLInputElement).value).toBe("21:00");
     expect((screen.getByLabelText("Hasta") as HTMLInputElement).value).toBe("07:00");
     expect(screen.getByText(DIGEST_NOTE)).toBeTruthy();
+    expect(screen.getByText(DIGEST_BADGE)).toBeTruthy();
+  });
+
+  it("switch labels name event and channel", () => {
+    renderClient();
+    const names = matrixSwitches().map((el) => el.getAttribute("aria-label"));
+    expect(names.slice(0, 3)).toEqual(["Asignación en la app", "Asignación por correo", "Asignación en el resumen diario"]);
+    expect(names).toContain("Aprobación del cliente en el resumen diario");
+    expect(new Set(names).size).toBe(21);
+  });
+
+  it("quiet hours disabled when off", () => {
+    renderClient(prefs({ quietHours: null }));
+    const toggle = screen.getByRole("switch", { name: "No enviar avisos fuera de horario" });
+    expect(isChecked(toggle)).toBe(false);
+    expect((screen.getByLabelText("Desde") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Hasta") as HTMLInputElement).disabled).toBe(true);
+
+    fireEvent.click(toggle);
+    expect((screen.getByLabelText("Desde") as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText("Hasta") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("discard restores saved rows", () => {
+    renderClient();
+    const save = screen.getByRole("button", { name: "Guardar" });
+    expect(save.getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.click(box("Mención", "Resumen diario"));
+    fireEvent.click(box("Comentario", "Correo"));
+    expect(screen.getByText("2 cambios sin guardar")).toBeTruthy();
+    expect(save.hasAttribute("aria-disabled")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+
+    expect(isChecked(box("Mención", "Resumen diario"))).toBe(false);
+    expect(isChecked(box("Comentario", "Correo"))).toBe(true);
+    expect(screen.queryByText(/sin guardar/)).toBeNull();
+    expect(updateNotificationPreferencesAction).not.toHaveBeenCalled();
+  });
+
+  it("asks before leaving with unsaved changes", async () => {
+    renderClient();
+    fireEvent.click(box("Mención", "Resumen diario"));
+    const link = document.createElement("a");
+    link.href = "/ajustes/perfil";
+    link.textContent = "Perfil";
+    document.body.appendChild(link);
+
+    await act(async () => {
+      fireEvent.click(link);
+    });
+
+    expect(await screen.findByText("¿Salir sin guardar?")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Seguir editando" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Salir" })).toBeTruthy();
   });
 
   it("has no Cutto column", () => {
@@ -154,7 +208,7 @@ describe("NotificacionesClient", () => {
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
     expect(headers).toEqual(["Evento", ...Object.values(NOTIFICATION_CHANNEL_LABELS)]);
     expect(screen.queryByText(/cutto/i)).toBeNull();
-    expect(screen.queryByRole("checkbox", { name: /cutto/i })).toBeNull();
+    expect(screen.queryByRole("switch", { name: /cutto/i })).toBeNull();
   });
 
   it("saves the edited matrix and quiet hours and shows a toast", async () => {
@@ -183,7 +237,7 @@ describe("NotificacionesClient", () => {
       digest: false,
     });
     expect(input.quietHours).toEqual({ from: "22:30", to: "07:00" });
-    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Notificaciones guardadas"));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Cambios guardados"));
     expect(isChecked(box("Mención", "Resumen diario"))).toBe(true);
   });
 
@@ -215,6 +269,7 @@ describe("NotificacionesClient", () => {
     updateNotificationPreferencesAction.mockResolvedValue({ ok: false, error: "INVALID: rows" });
     renderClient();
 
+    fireEvent.click(box("Mención", "Resumen diario"));
     await submit();
 
     await waitFor(() => expect(screen.getByText(INVALID_COPY)).toBeTruthy());
@@ -225,6 +280,7 @@ describe("NotificacionesClient", () => {
     updateNotificationPreferencesAction.mockResolvedValue({ ok: false, error: "INVALID: quietHours" });
     renderClient();
 
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "23:00" } });
     await submit();
 
     const hasta = screen.getByLabelText("Hasta");
@@ -236,6 +292,7 @@ describe("NotificacionesClient", () => {
     updateNotificationPreferencesAction.mockRejectedValue(new Error("INVALID: rows"));
     renderClient();
 
+    fireEvent.click(box("Mención", "Resumen diario"));
     await submit();
 
     await waitFor(() => expect(screen.getByText(INVALID_COPY)).toBeTruthy());
@@ -277,10 +334,9 @@ describe("NotificacionesClient", () => {
 
   it("is keyboard-operable: every control is focusable and labelled", () => {
     renderClient();
-    const matrix = screen.getByRole("table");
-    for (const checkbox of within(matrix).getAllByRole("checkbox")) {
-      expect(checkbox.getAttribute("aria-label")).toMatch(/ por /);
-      expect(checkbox.tabIndex).toBeGreaterThanOrEqual(0);
+    for (const control of matrixSwitches()) {
+      expect(control.getAttribute("aria-label")).toMatch(/ (en la app|por correo|en el resumen diario)$/);
+      expect(control.tabIndex).toBeGreaterThanOrEqual(0);
     }
     const toggle = screen.getByRole("switch", { name: "No enviar avisos fuera de horario" });
     toggle.focus();

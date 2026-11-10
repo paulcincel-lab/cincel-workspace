@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-import type { ReactNode } from "react";
 import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -21,25 +20,6 @@ vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
   getAjustesNotificacionesPageData: vi.fn(),
   getAjustesPerfilPageData: vi.fn(),
   getAjustesIntegracionesPageData: vi.fn(),
-}));
-
-vi.mock("@/components/patterns/SettingsSection", () => ({
-  SettingsSection: ({ title, description, children }: { title: string; description?: string; children: ReactNode }) => (
-    <section aria-label={title}>
-      <h2>{title}</h2>
-      {description ? <p>{description}</p> : null}
-      {children}
-    </section>
-  ),
-}));
-vi.mock("@/components/patterns/SettingsRow", () => ({
-  SettingsRow: ({ label, description, control, htmlFor }: { label: string; description?: string; control: ReactNode; htmlFor?: string }) => (
-    <div>
-      <label htmlFor={htmlFor}>{label}</label>
-      {description ? <p>{description}</p> : null}
-      {control}
-    </div>
-  ),
 }));
 
 import { AparienciaClient } from "./AparienciaClient";
@@ -111,9 +91,11 @@ describe("Ajustes › Apariencia accessibility", () => {
       { preferences: PREFS, org: { ...THEME_PRESETS.azul, allowUserOverride: true }, isAdmin: false },
       false,
     );
-    for (const name of ["Tema", "Estilo de presentación", "Modo", "Densidad"]) {
+    for (const name of ["Tema", "Modo", "Estilo", "Tamaño de texto", "Densidad"]) {
       expect(getByRole("radiogroup", { name })).toBeTruthy();
     }
-    expect(getByRole("slider", { name: "Tamaño de texto" })).toBeTruthy();
+    for (const name of ["Tema", "Modo", "Estilo", "Tamaño de texto", "Densidad"]) {
+      expect(getByRole("region", { name })).toBeTruthy();
+    }
   });
 });

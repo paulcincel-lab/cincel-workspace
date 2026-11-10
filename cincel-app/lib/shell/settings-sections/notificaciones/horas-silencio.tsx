@@ -1,5 +1,5 @@
 /**
- * Settings section "Horas de silencio y resumen diario a las 07:30" of /ajustes/notificaciones (redesign FE §3.8, §21.1; Phase 5).
+ * Settings section "Horario silencioso" of /ajustes/notificaciones (redesign FE §3.8, §21.1; Phase 5).
  *
  * Visible once the notification preference actions are implemented; renders
  * inside `NotificacionesClient`, whose page-scoped store holds the draft.

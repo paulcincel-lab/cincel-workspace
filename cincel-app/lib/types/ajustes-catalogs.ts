@@ -5,9 +5,15 @@
  */
 import type { PermissionsState } from "@/lib/auth/permissionsState";
 import type { SystemAccessRole } from "@/lib/data/roles";
-import type { Position, Staff, TaskStatusOption, WorkflowDetail } from "@/lib/types/core";
+import type { Position, Staff, TaskStatus, TaskStatusOption, WorkflowDetail } from "@/lib/types/core";
 
-export type AjustesEstatusPageData = { statuses: TaskStatusOption[] };
+export type AjustesEstatusPageData = {
+  statuses: TaskStatusOption[];
+  /** Live tasks per `tasks.status` (every base present). */
+  baseCounts: Record<TaskStatus, number>;
+  /** Per custom status id: its live tasks and the distinct projects they sit in. */
+  customUsage: Record<string, { tasks: number; projects: number }>;
+};
 
 /**
  * `workflows`: the active tramos with their active fases, for the candidate
@@ -16,7 +22,13 @@ export type AjustesEstatusPageData = { statuses: TaskStatusOption[] };
  */
 export type AjustesPuestosPageData = { positions: Position[]; workflows: WorkflowDetail[] };
 
-export type AjustesTramosPageData = { workflows: WorkflowDetail[] };
+export type AjustesTramosPageData = {
+  workflows: WorkflowDetail[];
+  /** workflowId → live active projects whose current tramo it is. */
+  activeProjects: Record<string, number>;
+  /** phaseId → live tasks in that fase. */
+  phaseTaskCounts: Record<string, number>;
+};
 
 /**
  * One person on Ajustes › Permisos: the name and the access the server

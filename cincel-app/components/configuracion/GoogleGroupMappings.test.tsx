@@ -34,6 +34,8 @@ const roleMapping: GroupMapping = {
   positionId: null,
   positionName: null,
   rank: 70,
+  memberCount: 8,
+  exists: true,
 };
 const positionMapping: GroupMapping = {
   id: "00000000-0000-4000-8000-0000000000a2",
@@ -43,6 +45,8 @@ const positionMapping: GroupMapping = {
   positionId: POSITION_ID,
   positionName: "Diseñador",
   rank: 0,
+  memberCount: null,
+  exists: false,
 };
 
 let invalidate: ReturnType<typeof vi.fn>;
@@ -66,10 +70,14 @@ function expectMappingInvalidations() {
   expect(router.refresh).not.toHaveBeenCalled();
 }
 
-async function openRowMenu(groupEmail: string, label: string) {
-  const row = screen.getByText(groupEmail).closest("tr") as HTMLElement;
-  fireEvent.click(within(row).getByLabelText("Acciones"));
-  fireEvent.click(await screen.findByText(label));
+/** "Editar {correo}" opens the sheet; "Eliminar" is "Eliminar grupo" in that sheet, then the confirmation. */
+async function openRowMenu(groupEmail: string, label: "Editar" | "Eliminar") {
+  fireEvent.click(screen.getByRole("button", { name: `Editar ${groupEmail}` }));
+  if (label === "Eliminar") fireEvent.click(await screen.findByRole("button", { name: "Eliminar grupo" }));
+}
+
+function addButton() {
+  return screen.getAllByRole("button", { name: "Agregar grupo" })[0]!;
 }
 
 describe("GoogleGroupMappings", () => {
@@ -79,22 +87,38 @@ describe("GoogleGroupMappings", () => {
   });
   afterEach(cleanup);
 
-  it("lists mappings with grupo, tipo, valor and rango", () => {
+  it("lists mappings with correo, tipo, rango, puesto and miembros", () => {
     renderMappings();
+    expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Correo del grupo",
+      "Tipo",
+      "Rango",
+      "Puesto",
+      "Miembros",
+      "Acciones",
+    ]);
     const roleRow = screen.getByText(roleMapping.groupEmail).closest("tr") as HTMLElement;
     expect(within(roleRow).getByText("Rol")).toBeTruthy();
     expect(within(roleRow).getByText("Dirección")).toBeTruthy();
-    expect(within(roleRow).getByText("70")).toBeTruthy();
+    expect(within(roleRow).getByText("8")).toBeTruthy();
     const positionRow = screen.getByText(positionMapping.groupEmail).closest("tr") as HTMLElement;
     expect(within(positionRow).getByText("Puesto")).toBeTruthy();
     expect(within(positionRow).getByText("Diseñador")).toBeTruthy();
+    expect(within(positionRow).getByText("El grupo no existe")).toBeTruthy();
+  });
+
+  it("shows the empty state with Agregar grupo", () => {
+    renderMappings([]);
+    expect(screen.getByText("Aún no hay grupos.")).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Agregar grupo" }).length).toBeGreaterThan(0);
   });
 
   it("adds a role group from the Agregar grupo sheet", async () => {
     actions.createGroupMappingAction.mockResolvedValue({ ok: true, mapping: roleMapping });
     renderMappings([]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar grupo" }));
+    fireEvent.click(addButton());
     fireEvent.change(await screen.findByLabelText("Correo del grupo"), {
       target: { value: "cincel-admins@example.test" },
     });
@@ -116,7 +140,7 @@ describe("GoogleGroupMappings", () => {
 
   it('shows "El grupo no existe" when Google does not find the group', async () => {
     actions.updateGroupMappingAction.mockResolvedValue({ ok: false, error: "group_not_found" });
-    renderMappings();
+    renderMappings([roleMapping]);
 
     await openRowMenu(roleMapping.groupEmail, "Editar");
     const email = await screen.findByLabelText("Correo del grupo");
@@ -155,7 +179,7 @@ describe("GoogleGroupMappings", () => {
   it("offers Rol and Puesto as the kinds", async () => {
     renderMappings([]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar grupo" }));
+    fireEvent.click(addButton());
     fireEvent.click(await screen.findByLabelText("Tipo"));
     expect(await screen.findByRole("option", { name: "Puesto" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Rol" })).toBeTruthy();
@@ -199,7 +223,7 @@ describe("GoogleGroupMappings", () => {
     expect(await screen.findByText("¿Eliminar este grupo?")).toBeTruthy();
     expect(actions.deleteGroupMappingAction).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Eliminar" }));
     await waitFor(() => expect(actions.deleteGroupMappingAction).toHaveBeenCalledWith(roleMapping.id));
     await waitFor(() => expectMappingInvalidations());
   });
@@ -208,7 +232,7 @@ describe("GoogleGroupMappings", () => {
     renderMappings();
 
     await openRowMenu(roleMapping.groupEmail, "Eliminar");
-    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
 
     await waitFor(() => expect(screen.queryByText("¿Eliminar este grupo?")).toBeNull());
     expect(actions.deleteGroupMappingAction).not.toHaveBeenCalled();

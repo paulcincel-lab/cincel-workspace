@@ -86,7 +86,7 @@ export function prependNewThread(client: QueryClient, thread: { id: string; titl
   client.setQueryData<AssistantThreadSummary[]>(qk.asistente.threads(), (prev) => {
     if (!prev || prev.some((t) => t.id === thread.id)) return prev;
     return [
-      { id: thread.id, title: thread.title, updatedAt: new Date().toISOString(), pinnedAt: null, pendingApprovals: 0, unread: false },
+      { id: thread.id, title: thread.title, updatedAt: new Date().toISOString(), pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0 },
       ...prev,
     ];
   });

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
-import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }) }));
@@ -18,27 +17,6 @@ vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
   getAjustesIntegracionesPageData: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: vi.fn() }));
-
-// Contract-shaped stand-ins for the shared patterns (FE §4.11).
-vi.mock("@/components/patterns/SettingsSection", () => ({
-  SettingsSection: ({ title, description, actions, children }: { title: string; description?: string; actions?: ReactNode; children: ReactNode }) => (
-    <section aria-label={title}>
-      <h2>{title}</h2>
-      {description ? <p>{description}</p> : null}
-      {actions}
-      {children}
-    </section>
-  ),
-}));
-vi.mock("@/components/patterns/SettingsRow", () => ({
-  SettingsRow: ({ label, description, control, htmlFor }: { label: string; description?: string; control: ReactNode; htmlFor?: string }) => (
-    <div>
-      <label htmlFor={htmlFor}>{label}</label>
-      {description ? <p>{description}</p> : null}
-      {control}
-    </div>
-  ),
-}));
 
 import { qk } from "@/lib/query/keys";
 import type { AjustesPerfilPageData } from "@/lib/query/options/ajustes";
@@ -125,9 +103,9 @@ describe("Ajustes › Perfil accessibility", () => {
       const id = input.getAttribute("id");
       expect(id ? labelTargets.has(id) : false).toBe(true);
     }
-    const current = getByLabelText("Contraseña actual");
-    const help = document.getElementById(current.getAttribute("aria-describedby") ?? "");
-    expect(help?.textContent).toContain("Necesaria para confirmar");
+    const puesto = getByLabelText("Puesto");
+    const help = document.getElementById(puesto.getAttribute("aria-describedby") ?? "");
+    expect(help?.textContent).toContain("Lo asigna un administrador");
     expect(getByLabelText("Elegir una foto").getAttribute("aria-describedby")).toBeTruthy();
   });
 });

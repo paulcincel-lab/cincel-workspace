@@ -83,7 +83,9 @@ test.describe("Accesibilidad — Ajustes › Estatus y Permisos (catálogos)", (
         if (request.method() === "POST" && request.headers()["next-action"]) actionPosts += 1;
       });
       await page.goto(`${BASE_URL}${ESTATUS}`, { waitUntil: "load" });
-      await expect(page.getByRole("heading", { name: "Estatus" })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("heading", { name: "Estatus personalizados", exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
       await page.waitForLoadState("networkidle");
       expect(actionPosts, "page-data POSTs on load").toBe(0);
       await expectAxeClean(page, ESTATUS);
@@ -136,8 +138,8 @@ test.describe("Accesibilidad — Ajustes › Organización (General, Tema, Horar
   const SEGMENTS = [
     { path: "/ajustes/general", ready: { role: "button", name: "Guardar cambios" } },
     { path: "/ajustes/tema", ready: { role: "button", name: "Publicar para todos" } },
-    { path: "/ajustes/horario", ready: { role: "switch", name: "Activar control de horario" } },
-    { path: "/ajustes/google", ready: { role: "button", name: "Agregar grupo" } },
+    { path: "/ajustes/horario", ready: { role: "radiogroup", name: "Control de horario" } },
+    { path: "/ajustes/google", ready: { role: "heading", name: "Grupos de Google" } },
   ] as const;
 
   for (const { path, ready } of SEGMENTS) {

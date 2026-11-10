@@ -140,7 +140,11 @@ describe("Ajustes catalog hydration", () => {
 
     renderWithQueryClient(<TramosClient />, { client, hydrate: state });
 
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Viejo", "Diseño"]);
+    // One row per tramo, in flow order.
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent?.startsWith("Viejo")).toBe(true);
+    expect(rows[1].textContent?.startsWith("Diseño")).toBe(true);
     expect(client.getQueryData(qk.catalog.workflows())).toEqual([
       { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 },
     ]);

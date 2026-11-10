@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Link2Off } from "lucide-react";
 
+import { PortalPageColumn } from "@/components/portal/PortalShell";
 import { buttonVariants } from "@/components/ui/shadcn/button";
 import {
   Card,
@@ -24,25 +25,27 @@ export const PORTAL_NOT_FOUND_HELP = "¿Necesitas ayuda? Escríbele a tu contact
  */
 export default function PortalNotFoundView() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center py-6">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader className="justify-items-center gap-3">
-          <span className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <Link2Off aria-hidden="true" className="size-6" />
-          </span>
-          <p className="font-mono text-xs text-muted-foreground">Error 404</p>
-          <CardTitle>
-            <h1 className="text-xl font-semibold tracking-tight">{PORTAL_NOT_FOUND_TITLE}</h1>
-          </CardTitle>
-          <CardDescription>{PORTAL_NOT_FOUND_DESCRIPTION}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Link href={PORTAL_ROUTE} className={cn(buttonVariants({ size: "lg" }), "min-h-11 w-full")}>
-            {PORTAL_NOT_FOUND_BACK_LABEL}
-          </Link>
-          <p className="text-sm text-muted-foreground">{PORTAL_NOT_FOUND_HELP}</p>
-        </CardContent>
-      </Card>
-    </div>
+    <PortalPageColumn>
+      <div className="flex flex-1 flex-col items-center justify-center py-6">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader className="justify-items-center gap-3">
+            <span className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Link2Off aria-hidden="true" className="size-6" />
+            </span>
+            <p className="font-mono text-xs text-muted-foreground">Error 404</p>
+            <CardTitle>
+              <h1 className="text-xl font-semibold tracking-tight">{PORTAL_NOT_FOUND_TITLE}</h1>
+            </CardTitle>
+            <CardDescription>{PORTAL_NOT_FOUND_DESCRIPTION}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Link href={PORTAL_ROUTE} className={cn(buttonVariants({ size: "lg" }), "min-h-11 w-full")}>
+              {PORTAL_NOT_FOUND_BACK_LABEL}
+            </Link>
+            <p className="text-sm text-muted-foreground">{PORTAL_NOT_FOUND_HELP}</p>
+          </CardContent>
+        </Card>
+      </div>
+    </PortalPageColumn>
   );
 }

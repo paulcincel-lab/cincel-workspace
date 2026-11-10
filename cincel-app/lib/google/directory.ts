@@ -34,7 +34,14 @@ export type DirectoryClient = {
   hasMember(groupId: string, email: string): Promise<boolean>;
   /** groups.get by group email; null when the group doesn't exist. */
   getGroup(email: string): Promise<DirectoryGroup | null>;
+  /** members.list of a group (direct members, every page), count only. */
+  countMembers(groupId: string): Promise<number>;
 };
+
+/** Page size of `members.list` (the API maximum). */
+export const MEMBERS_PAGE_SIZE = 200;
+/** Stops counting a huge group after this many pages (200 × 50 = 10 000 members). */
+const MEMBERS_MAX_PAGES = 50;
 
 export type DirectoryErrorKind = "timeout" | "network" | "http";
 
@@ -130,6 +137,23 @@ export function createDirectoryClient(options: DirectoryClientOptions): Director
       );
       if (!group?.id) return null;
       return { id: group.id, email: group.email ?? email, name: group.name ?? "" };
+    },
+
+    async countMembers(groupId) {
+      let total = 0;
+      let pageToken: string | undefined;
+      for (let page = 0; page < MEMBERS_MAX_PAGES; page += 1) {
+        const query = new URLSearchParams({ maxResults: String(MEMBERS_PAGE_SIZE), fields: "members(id),nextPageToken" });
+        if (pageToken) query.set("pageToken", pageToken);
+        const result = await get<{ members?: unknown[]; nextPageToken?: string }>(
+          `/groups/${encodeURIComponent(groupId)}/members?${query.toString()}`,
+        );
+        if (!result) throw new DirectoryError(`El grupo ${groupId} no existe`, "http", 404);
+        total += result.members?.length ?? 0;
+        if (!result.nextPageToken) break;
+        pageToken = result.nextPageToken;
+      }
+      return total;
     },
   };
 }

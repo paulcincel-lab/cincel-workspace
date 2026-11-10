@@ -1,6 +1,7 @@
 "use server";
 
 import { toActionResult } from "@/lib/actions/action-result";
+import { OrderedIdsSchema, parseInput } from "@/lib/validation/project-flow";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveTaskStatusesCapabilities } from "@/lib/auth/permissions";
 import * as taskStatusesRepository from "@/lib/repositories/task-statuses-repository";
@@ -69,4 +70,22 @@ async function deleteTaskStatusActionImpl(id: string): Promise<void> {
     throw new Error("FORBIDDEN: task statuses delete");
   }
   await taskStatusesRepository.softDeleteTaskStatus(id);
+}
+
+/**
+ * Writes `sort_order` 0..n in the given order, in one transaction (mirrors
+ * `reorderPositionsAction`). `canManageTaskStatuses`. Errors: FORBIDDEN, INVALID.
+ */
+export async function reorderTaskStatusesAction(
+  ...args: Parameters<typeof reorderTaskStatusesActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderTaskStatusesActionImpl>>>> {
+  return toActionResult(() => reorderTaskStatusesActionImpl(...args));
+}
+
+async function reorderTaskStatusesActionImpl(orderedIds: string[]): Promise<void> {
+  const user = await requireCapabilityUser();
+  if (!resolveTaskStatusesCapabilities(user).canManageTaskStatuses) {
+    throw new Error("FORBIDDEN: task statuses reorder");
+  }
+  await taskStatusesRepository.reorderTaskStatuses(parseInput(OrderedIdsSchema, orderedIds));
 }

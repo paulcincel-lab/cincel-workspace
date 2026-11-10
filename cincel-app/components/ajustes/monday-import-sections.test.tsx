@@ -288,7 +288,7 @@ describe("MondayImportWizard: start / continue button", () => {
     expect(mondayActions.openMondayImportRunAction).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Iniciar importación" }));
-    expect(await screen.findByRole("list", { name: "Pasos" })).toBeTruthy();
+    expect(await screen.findByRole("list", { name: "Pasos de la importación" })).toBeTruthy();
     expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledTimes(1);
     expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledWith(true);
   });
@@ -302,7 +302,7 @@ describe("MondayImportWizard: start / continue button", () => {
     expect(screen.getByText("Tableros")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Continuar importación" }));
-    expect(await screen.findByRole("list", { name: "Pasos" })).toBeTruthy();
+    expect(await screen.findByRole("list", { name: "Pasos de la importación" })).toBeTruthy();
     expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledTimes(1);
     // Resuming never starts a fresh run.
     expect(mondayActions.openMondayImportRunAction).toHaveBeenCalledWith(false);
@@ -319,7 +319,7 @@ describe("MondayImportWizard: run poll", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Continuar importación" }));
     await flush();
-    expect(screen.getByRole("list", { name: "Pasos" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Pasos de la importación" })).toBeTruthy();
     const poll = mondayActions.getMondayImportRunAction;
     expect(poll).not.toHaveBeenCalled();
 
@@ -337,5 +337,80 @@ describe("MondayImportWizard: run poll", () => {
     // Done: no more polls.
     await flush(30_000);
     expect(poll).toHaveBeenCalledTimes(2);
+  });
+});
+
+// --- #1016: header, stepper and the Equivalencias footer -----------------------------------------------------------
+
+describe("MondayImportWizard: header and footer (#1016)", () => {
+  const BOARD = "301";
+  const mapping = {
+    version: 1,
+    boards: [
+      { mondayBoardId: BOARD, name: "Casa Lomas", strategy: "board_as_project", workflowId: null, columns: { estado: "status" } },
+    ],
+    people: {},
+    options: { includeUpdates: true, includeFiles: true },
+  } as unknown as NonNullable<MondayImportRunState["mapping"]>;
+  const source = {
+    boards: [
+      {
+        id: BOARD,
+        name: "Casa Lomas",
+        columns: [{ id: "estado", title: "Estado", type: "status" }],
+        subitemColumns: [],
+        groups: [],
+        statusLabels: { estado: [{ id: "1", name: "Raro", isDone: false, items: 2 }] },
+        itemCount: 0,
+        items: [],
+      },
+    ],
+    users: [],
+    hasFiles: false,
+    hasUpdates: false,
+  };
+
+  async function openAtEquivalencias() {
+    const run = runState({ exported: true, mapping, boardIds: [BOARD], step: "equivalencias" });
+    resetServer(run);
+    mondayActions.openMondayImportRunAction.mockImplementation(async () => ({ ok: true, run }) as never);
+    const { testChoices } = await import("@/components/configuracion/monday-import/test-choices");
+    const client = createTestQueryClient();
+    const data = page(run);
+    client.setQueryData(qk.ajustes.page("monday"), data);
+    seedMondayQueries(client, data);
+    client.setQueryData(qk.monday.choices(), testChoices);
+    client.setQueryData(qk.monday.source(RUN_ID), source);
+    renderWithQueryClient(<AjustesMondayScreen />, { client });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar importación" }));
+    return screen.findByRole("list", { name: "Pasos de la importación" });
+  }
+
+  it("stepper marks the current step", async () => {
+    const list = await openAtEquivalencias();
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(7);
+    expect(items.map((item) => item.dataset.state)).toEqual([
+      "done",
+      "done",
+      "current",
+      "upcoming",
+      "upcoming",
+      "upcoming",
+      "upcoming",
+    ]);
+    expect(items[2].getAttribute("aria-current")).toBe("step");
+    expect(items[2].textContent).toContain("Equivalencias");
+    expect(screen.getByText(/^Paso 3 de 7 · borrador guardado /)).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain("Nada se crea en Cincel hasta que pulses «Iniciar importación»");
+  });
+
+  it("Continuar disabled while statuses need review", async () => {
+    await openAtEquivalencias();
+    expect(await screen.findByText("1 estatus por revisar")).toBeTruthy();
+    expect(screen.getByText("1 por revisar")).toBeTruthy();
+    const next = screen.getByRole("button", { name: "Continuar" }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Siguiente" })).toBeNull();
   });
 });

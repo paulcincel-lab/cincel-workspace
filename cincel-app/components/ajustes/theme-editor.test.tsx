@@ -6,7 +6,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import type { OrgAppearance, ThemeId } from "@/lib/types/redesign";
 import { THEME_IDS, THEME_LABELS, THEME_PRESETS } from "@/lib/ui/themes";
-import { applyPreset } from "@/lib/ui/theme-editor";
+import { applyPreset, failingColorsText, publishLowContrastQuestion } from "@/lib/ui/theme-editor";
 
 const mocks = vi.hoisted(() => ({
   save: vi.fn(),
@@ -28,9 +28,10 @@ vi.mock("@/lib/actions/org-appearance-actions.flags", () => ({ IMPLEMENTED: mock
 
 // Contract-faithful pattern shells, so this file tests the editor and not the shells.
 vi.mock("@/components/patterns/SettingsSection", () => ({
-  SettingsSection: ({ title, children }: { title: string; children: ReactNode }) => (
+  SettingsSection: ({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) => (
     <section aria-label={title}>
-      <h2>{title}</h2>
+      <h3>{title}</h3>
+      {actions}
       {children}
     </section>
   ),
@@ -77,6 +78,7 @@ import type { ResolvedAppearance } from "@/lib/types/redesign";
 import { resolveAppearance } from "@/lib/ui/preferences";
 
 import { ThemeEditor } from "./ThemeEditor";
+import { WEIGHTS } from "./TypeScaleRow";
 
 const initial: OrgAppearance = THEME_PRESETS.azul;
 
@@ -93,12 +95,35 @@ function preview(): HTMLElement {
   return screen.getByTestId("theme-preview");
 }
 
+function previewStatus(): HTMLElement {
+  return within(screen.getByRole("complementary", { name: "Vista previa" })).getByRole("status");
+}
+
+function saveBarStatus(): HTMLElement {
+  return document.querySelector('[data-slot="settings-save-bar"] [role="status"]') as HTMLElement;
+}
+
 function publishButton(): HTMLButtonElement {
   return screen.getByRole("button", { name: "Publicar para todos" }) as HTMLButtonElement;
 }
 
 function tokenInput(name: string): HTMLInputElement {
   return document.getElementById(`token-${name}`) as HTMLInputElement;
+}
+
+function tokenBadge(name: string): HTMLElement | null {
+  return document.querySelector(`[data-token="${name}"] [data-slot="token-contrast"]`);
+}
+
+function presetRadio(id: ThemeId): HTMLElement {
+  return within(screen.getByRole("radiogroup", { name: "Partir de un tema" })).getByRole("radio", {
+    name: new RegExp(THEME_LABELS[id]),
+  });
+}
+
+/** The draft published by the last save (the action's first argument). */
+function savedDraft(): OrgAppearance {
+  return mocks.save.mock.calls.at(-1)?.[0] as OrgAppearance;
 }
 
 beforeEach(() => {
@@ -115,6 +140,33 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("ThemeEditor layout", () => {
+  it("shows the admin heading, the color sections with their counts and the preview aside", () => {
+    renderEditor();
+    expect(screen.getByRole("heading", { name: /Tema de la organización/ })).toBeTruthy();
+    for (const [title, count] of [
+      ["Interfaz", "18 COLORES"],
+      ["Navegación", "8 COLORES"],
+      ["Tramos y estatus", "14 COLORES"],
+    ] as const) {
+      expect(within(screen.getByRole("region", { name: title })).getByText(count)).toBeTruthy();
+    }
+    expect(within(screen.getByRole("complementary", { name: "Vista previa" })).getByText("VISTA PREVIA")).toBeTruthy();
+  });
+
+  it("shows 9 Interfaz colors until 'Ver los 19 colores' expands them", () => {
+    renderEditor();
+    const interfaz = screen.getByRole("region", { name: "Interfaz" });
+    expect(interfaz.querySelectorAll("[data-token]")).toHaveLength(9);
+    const more = within(interfaz).getByRole("button", { name: "Ver los 19 colores" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(more);
+    expect(interfaz.querySelectorAll("[data-token]")).toHaveLength(19);
+    expect(within(interfaz).getByRole("button", { name: "Ver menos colores" }).getAttribute("aria-expanded")).toBe("true");
+  });
+});
+
 describe("ThemeEditor live preview", () => {
   it("paints the preview with the edited token of the edited mode", () => {
     renderEditor();
@@ -123,6 +175,20 @@ describe("ThemeEditor live preview", () => {
     fireEvent.change(tokenInput("primary"), { target: { value: "#1d4ed8" } });
     expect(preview().style.getPropertyValue("--primary")).toBe("#1d4ed8");
     expect(tokenInput("primary").value).toBe("#1d4ed8");
+  });
+
+  it("edits a token through its hex chip, only once the value is a full color", () => {
+    renderEditor();
+    const chip = screen.getByRole("textbox", { name: "Valor de Botón principal" }) as HTMLInputElement;
+
+    fireEvent.change(chip, { target: { value: "#1d4" } });
+    expect(preview().style.getPropertyValue("--primary")).toBe(initial.tokens.primary.light);
+    fireEvent.change(chip, { target: { value: "#1d4ed8" } });
+    expect(preview().style.getPropertyValue("--primary")).toBe("#1d4ed8");
+
+    fireEvent.change(chip, { target: { value: "azul" } });
+    fireEvent.blur(chip);
+    expect(chip.value).toBe("#1d4ed8");
   });
 
   it("edits the dark values after switching to Oscuro", () => {
@@ -138,115 +204,147 @@ describe("ThemeEditor live preview", () => {
     expect(preview().style.getPropertyValue("--background")).toBe(initial.tokens.background.light);
   });
 
-  it("applies type roles and shape values to the preview", async () => {
+  it("applies type roles and the card shadow to the draft", async () => {
     renderEditor();
     const title = within(preview()).getByText("Buenos días");
     expect(title.style.fontSize).toBe(`${initial.typeScale.pageTitle.size}px`);
 
     fireEvent.change(document.getElementById("type-pageTitle") as HTMLInputElement, { target: { value: "30" } });
     expect(within(preview()).getByText("Buenos días").style.fontSize).toBe("30px");
-
-    const radiusBefore = preview().style.getPropertyValue("--radius");
-    fireEvent.change(document.getElementById("shape-radius") as HTMLInputElement, { target: { value: "4" } });
-    expect(preview().style.getPropertyValue("--radius")).not.toBe(radiusBefore);
-
-    fireEvent.change(document.getElementById("shape-card-padding") as HTMLInputElement, { target: { value: "8" } });
-    expect(within(preview()).getByText("Requiere atención").parentElement?.style.padding).toBe("8px");
+    expect(screen.getByText(`${initial.shape.radius} px`)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: "Marcada" }));
     fireEvent.click(publishButton());
-    await waitFor(() =>
-      expect(mocks.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          typeScale: expect.objectContaining({ pageTitle: { ...initial.typeScale.pageTitle, size: 30 } }),
-          shape: { ...initial.shape, radius: 4, cardPadding: 8, shadow: "marcada" },
-        }),
-      ),
-    );
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(savedDraft().typeScale.pageTitle).toEqual({ ...initial.typeScale.pageTitle, size: 30 });
+    expect(savedDraft().shape).toEqual({ ...initial.shape, shadow: "marcada" });
+  });
+
+  it("weights never exceed 600", () => {
+    renderEditor();
+    expect(WEIGHTS.map((w) => [w.value, w.label])).toEqual([
+      [400, "Normal"],
+      [500, "Media"],
+      [600, "Seminegrita"],
+    ]);
+    for (const preset of Object.values(THEME_PRESETS)) {
+      for (const role of Object.values(preset.typeScale)) expect(role.weight).toBeLessThanOrEqual(600);
+    }
+    for (const { label } of [{ label: "Título de página" }, { label: "Números KPI" }]) {
+      expect(screen.getByRole("combobox", { name: `Peso de ${label}` })).toBeTruthy();
+    }
   });
 });
 
-describe("ThemeEditor contrast gate", () => {
-  it("disables publishing and marks the rows while a pair fails", () => {
+describe("ThemeEditor contrast", () => {
+  it("contrast badges follow CONTRAST_PAIRS: a pass shows the ratio", () => {
     renderEditor();
-    expect(publishButton().disabled).toBe(false);
-    expect(screen.getByRole("status").getAttribute("data-ok")).toBe("true");
-    expect(screen.getByRole("status").textContent).toMatch(/Contraste texto \/ fondo: \d+\.\d:1 · cumple 4\.5:1/);
+    const badge = tokenBadge("foreground");
+    expect(badge?.getAttribute("data-ok")).toBe("true");
+    expect(badge?.textContent).toMatch(/^\d+\.\d:1$/);
+    expect(previewStatus().getAttribute("data-ok")).toBe("true");
+    expect(previewStatus().textContent).toMatch(/Contraste texto \/ fondo: \d+\.\d:1 · cumple 4\.5:1/);
+  });
+
+  it("failing contrast shows the badge and the save-bar warning", () => {
+    renderEditor();
+    expect(saveBarStatus().textContent).toBe("");
 
     fireEvent.change(tokenInput("muted-foreground"), { target: { value: "#c0c0c0" } });
 
-    expect(publishButton().disabled).toBe(true);
     const row = document.querySelector('[data-token="muted-foreground"]');
     expect(row?.getAttribute("data-invalid")).toBe("true");
     expect(tokenInput("muted-foreground").getAttribute("aria-invalid")).toBe("true");
-    expect(screen.getByRole("status").getAttribute("data-ok")).toBe("false");
-    expect(screen.getByRole("status").textContent).toContain("no cumple 4.5:1");
-    expect(
-      screen.getByText(/Algunos textos no se leerían bien \(contraste menor a 4\.5:1\)\. Ajusta los colores marcados\./),
-    ).toBeTruthy();
+    expect(tokenBadge("muted-foreground")?.getAttribute("data-ok")).toBe("false");
+    expect(tokenBadge("muted-foreground")?.textContent).toMatch(/^\d+\.\d:1 · no cumple 4\.5:1$/);
+    expect(previewStatus().getAttribute("data-ok")).toBe("false");
+    expect(saveBarStatus().textContent).toBe(`Cambios sin publicar · ${failingColorsText(1)}`);
 
     fireEvent.change(tokenInput("muted-foreground"), { target: { value: initial.tokens["muted-foreground"].light } });
-    expect(publishButton().disabled).toBe(false);
     expect(document.querySelector('[data-token="muted-foreground"]')?.getAttribute("data-invalid")).toBeNull();
+    expect(saveBarStatus().textContent).toBe("");
   });
 
-  it("keeps publishing disabled when only the other mode fails", () => {
+  it("publish with failures asks first", async () => {
     renderEditor();
-    fireEvent.click(screen.getByRole("radio", { name: "Oscuro" }));
-    fireEvent.change(tokenInput("foreground"), { target: { value: initial.tokens.background.dark } });
-    fireEvent.click(screen.getByRole("radio", { name: "Claro" }));
+    fireEvent.change(tokenInput("muted-foreground"), { target: { value: "#c0c0c0" } });
+    fireEvent.click(publishButton());
 
-    expect(publishButton().disabled).toBe(true);
-    expect(screen.getByText(/También hay colores marcados en el modo Oscuro\./)).toBeTruthy();
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(publishLowContrastQuestion(1))).toBeTruthy();
+    expect(mocks.save).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revisar" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(mocks.save).not.toHaveBeenCalled();
+
+    fireEvent.click(publishButton());
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Publicar" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]?.[1]).toEqual({ acceptLowContrast: true });
+  });
+
+  it("publishes a passing theme without asking", async () => {
+    renderEditor();
+    fireEvent.change(tokenInput("primary"), { target: { value: "#1d4ed8" } });
+    fireEvent.click(publishButton());
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]?.[1]).toEqual({ acceptLowContrast: false });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 });
 
 describe("ThemeEditor presets", () => {
-  it.each(THEME_IDS)("'Partir de' %s loads the preset into the draft and it publishes unchanged", async (id: ThemeId) => {
-    renderEditor(THEME_PRESETS[id === "azul" ? "grafito" : "azul"]);
+  it.each(THEME_IDS)("'Partir de' %s loads the preset into a clean draft and it publishes unchanged", async (id: ThemeId) => {
+    const start = THEME_PRESETS[id === "azul" ? "grafito" : "azul"];
+    renderEditor(start);
 
-    const chip = screen.getByRole("button", { name: new RegExp(THEME_LABELS[id]) });
-    fireEvent.click(chip);
-    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(presetRadio(id));
+    expect(presetRadio(id).getAttribute("aria-checked")).toBe("true");
     expect(preview().style.getPropertyValue("--background")).toBe(THEME_PRESETS[id].tokens.background.light);
-    expect(publishButton().disabled).toBe(false);
 
     fireEvent.click(publishButton());
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
-    const start = THEME_PRESETS[id === "azul" ? "grafito" : "azul"];
-    expect(mocks.save).toHaveBeenCalledWith(applyPreset(start, THEME_PRESETS[id]));
+    expect(savedDraft()).toEqual(applyPreset(start, THEME_PRESETS[id]));
     // Published: the cache holds the saved theme, the draft matches it, no route refresh.
     await waitFor(() =>
       expect(client.getQueryData(qk.ajustes.page("tema"))).toEqual({ org: applyPreset(start, THEME_PRESETS[id]) }),
     );
-    await waitFor(() => expect(screen.queryByText("Cambios sin publicar")).toBeNull());
+    await waitFor(() => expect(saveBarStatus().textContent).toBe(""));
     expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("partir de resets the draft after confirm", async () => {
+    renderEditor();
+    fireEvent.change(tokenInput("primary"), { target: { value: "#123456" } });
+
+    fireEvent.click(presetRadio("calido"));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("¿Partir de Cálido?")).toBeTruthy();
+    expect(within(dialog).getByText("Se pierden los cambios sin publicar.")).toBeTruthy();
+    // Nothing changes until it is confirmed.
+    expect(preview().style.getPropertyValue("--primary")).toBe("#123456");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Partir de Cálido" }));
+    await waitFor(() => expect(preview().style.getPropertyValue("--primary")).toBe(THEME_PRESETS.calido.tokens.primary.light));
+    expect(presetRadio("calido").getAttribute("aria-checked")).toBe("true");
   });
 
   it("keeps the organization style settings when a preset is applied", async () => {
     renderEditor({ ...initial, styleDefault: "analitico", allowUserOverride: false });
-    fireEvent.click(screen.getByRole("button", { name: /Grafito/ }));
+    fireEvent.click(presetRadio("grafito"));
     fireEvent.click(publishButton());
-    await waitFor(() =>
-      expect(mocks.save).toHaveBeenCalledWith(
-        expect.objectContaining({ baseTheme: "grafito", styleDefault: "analitico", allowUserOverride: false }),
-      ),
-    );
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(savedDraft()).toMatchObject({ baseTheme: "grafito", styleDefault: "analitico", allowUserOverride: false });
   });
 
-  it("binds the style cards and the organization checkbox", async () => {
+  it("binds the style cards and the organization switch", async () => {
     renderEditor();
     fireEvent.click(screen.getByRole("radio", { name: /Esencial/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Permitir que cada persona elija su estilo y tema" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Permitir que cada persona elija su estilo y tema" }));
     fireEvent.click(publishButton());
-    await waitFor(() =>
-      expect(mocks.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          styleDefault: "esencial",
-          allowUserOverride: !initial.allowUserOverride,
-        }),
-      ),
-    );
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(savedDraft()).toMatchObject({ styleDefault: "esencial", allowUserOverride: !initial.allowUserOverride });
   });
 });
 
@@ -350,13 +448,10 @@ describe("ThemeEditor server errors", () => {
   it.each([
     ["FORBIDDEN: appearance edit", "No tienes permiso para realizar esta acción."],
     ["INVALID: tokens", "Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo."],
-    [
-      "LOW_CONTRAST: foreground/background light 2.10",
-      "Algunos textos no se leerían bien (contraste menor a 4.5:1). Ajusta los colores marcados.",
-    ],
-  ])("shows the copy of %s", async (message, copy) => {
+  ])("shows the copy of %s above the save bar", async (message, copy) => {
     mocks.save.mockRejectedValue(new Error(message));
     renderEditor();
+    fireEvent.change(tokenInput("primary"), { target: { value: "#1d4ed8" } });
     await act(async () => {
       fireEvent.click(publishButton());
     });
@@ -372,5 +467,12 @@ describe("ThemeEditor entry points", () => {
     expect(screen.queryByRole("button", { name: "Publicar para todos" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Restablecer" })).toBeNull();
     expect(screen.getByRole("button", { name: "Exportar CSS" })).toBeTruthy();
+  });
+
+  it("does nothing on Publicar while the draft is clean", () => {
+    renderEditor();
+    expect(publishButton().getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(publishButton());
+    expect(mocks.save).not.toHaveBeenCalled();
   });
 });

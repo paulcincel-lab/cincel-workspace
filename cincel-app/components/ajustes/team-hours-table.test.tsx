@@ -1,135 +1,99 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-vi.mock("@/components/widgets/RecordTable", () => import("@/tests/unit/fixtures/horario"));
-
-import { buildTeamHoursTable, CUMPLIMIENTO_HEAT, TeamHoursTable, TRIAL_NOTE } from "./TeamHoursTable";
-import { TEAM_ROWS, WEEK } from "@/tests/unit/fixtures/horario";
-import type { PresentationStyle } from "@/lib/types/redesign";
+import { TeamHoursTable } from "./TeamHoursTable";
+import { StyleProvider } from "@/components/shell/StyleProvider";
+import { AVERAGE_LABEL, TEAM_HOURS_EMPTY, teamHoursModel } from "@/components/widgets/TeamHoursWidget";
+import { NEEDS_REVIEW_LABEL, reportDays, teamHoursStatus } from "@/lib/time-tracking/horario-copy";
+import type { PresentationStyle, TeamHoursRow } from "@/lib/types/redesign";
+import { SETTINGS, TEAM_ROWS, WEEK } from "@/tests/unit/fixtures/horario";
 
 afterEach(() => {
   cleanup();
 });
+
+function renderTable(style: PresentationStyle, rows: TeamHoursRow[] = TEAM_ROWS) {
+  return render(
+    <StyleProvider style={style} scope="staff">
+      <TeamHoursTable weekStart={WEEK} rows={rows} workDays={SETTINGS.workDays} />
+    </StyleProvider>,
+  );
+}
 
 function headers(): string[] {
   return screen.getAllByRole("columnheader").map((th) => th.textContent ?? "");
 }
 
 function rowOf(name: string): HTMLElement {
-  const cell = screen.getByText(name);
-  const row = cell.closest("tr");
+  const row = screen.getByRole("rowheader", { name }).closest("tr");
   if (!row) throw new Error(`no row for ${name}`);
   return row as HTMLElement;
 }
 
-describe("buildTeamHoursTable", () => {
-  it("builds one row per person with the status labels", () => {
-    const data = buildTeamHoursTable(TEAM_ROWS, "2027-01-04");
-    expect(data.rows.map((row) => row.estado)).toEqual(["Completo", "Incompleto", "Sin registro"]);
-    expect(data.rows.map((row) => row.id)).toEqual(["s-paul", "s-juanma", "s-maria"]);
+describe("teamHoursModel", () => {
+  const dates = reportDays(WEEK, SETTINGS.workDays, TEAM_ROWS);
+
+  it("shows the work days Lun…Vie with one decimal and — without a record", () => {
+    const model = teamHoursModel(TEAM_ROWS, dates);
+    expect(model.dayLabels).toEqual(["Lun", "Mar", "Mié", "Jue", "Vie"]);
+    expect(model.rows[0]?.cells).toEqual(["8.5", "8.2", "9.0", "8.0", "7.8"]);
+    expect(model.rows[2]?.cells).toEqual(["—", "—", "—", "—", "—"]);
   });
 
-  it("formats hours, the difference and % cumplimiento", () => {
-    const [paul, juanma, maria] = buildTeamHoursTable(TEAM_ROWS, "2027-01-04").rows;
-    expect(paul?.horas).toBe("41.5 h de 40 h");
-    expect(paul?.diferencia).toBe("+1.5 h");
-    expect(paul?.cumplimiento).toBe(104);
-    expect(juanma?.diferencia).toBe("−4.8 h");
-    expect(juanma?.cumplimiento).toBe(88);
-    expect(maria?.resumen).toBe("Sin registros esta semana");
-    expect(maria?.["d_2026-11-02"]).toBe("—");
+  it("diferencia sign and color", () => {
+    const [paul, juanma] = teamHoursModel(TEAM_ROWS, dates).rows;
+    expect(paul).toMatchObject({ total: "41.5", target: "40.0", diff: "+1.5", onTarget: true });
+    expect(juanma).toMatchObject({ total: "35.2", target: "40.0", diff: "−4.8", onTarget: false });
+    expect(teamHoursModel([{ ...TEAM_ROWS[0]!, total: 40 }], dates).rows[0]).toMatchObject({ diff: "0.0", onTarget: true });
   });
 
-  it("averages only the people with records and heats % cumplimiento", () => {
-    const data = buildTeamHoursTable(TEAM_ROWS, "2027-01-04");
-    expect(data.heat).toEqual([CUMPLIMIENTO_HEAT]);
-    expect(data.totals).toMatchObject({
-      persona: "Promedio (con registro)",
-      total: 38.4,
-      meta: 40,
-      retardos: 2,
-      cumplimiento: 96,
-    });
+  it("averages only the people with a record", () => {
+    const { average } = teamHoursModel(TEAM_ROWS, dates);
+    expect(average).toMatchObject({ total: "38.4", target: "40.0", diff: "−1.6", onTarget: false, late: "1.0" });
+    expect(teamHoursModel([TEAM_ROWS[2]!], dates).average).toBeNull();
   });
 
-  it("marks the trial days of a week that is only partly trial", () => {
-    const data = buildTeamHoursTable(TEAM_ROWS, "2026-11-05");
-    const dayLabels = data.columns.filter((c) => c.key.startsWith("d_")).map((c) => c.label);
-    expect(dayLabels).toEqual(["lun · prueba", "mar · prueba", "mié · prueba", "jue", "vie"]);
-    expect(data.rows[0]?.resumen).toBe("8.5 h (prueba) · 8.2 h (prueba) · 9 h (prueba) · 8 h · 7.8 h");
-  });
-
-  it("does not mark single days when the whole week is trial or required", () => {
-    for (const requiredFrom of ["2027-01-04", "2026-10-01", null]) {
-      const labels = buildTeamHoursTable(TEAM_ROWS, requiredFrom).columns.map((c) => c.label);
-      expect(labels.some((label) => label.includes("prueba"))).toBe(false);
-    }
-  });
-
-  it("has no totals row without anyone on record", () => {
-    expect(buildTeamHoursTable([TEAM_ROWS[2]!], null).totals).toBeUndefined();
-    expect(buildTeamHoursTable([], null).rows).toEqual([]);
+  it("maps the three status labels, with an auto-closed day first", () => {
+    expect(teamHoursStatus({ status: "completo", needsReview: false })).toEqual({ label: "Al día", tone: "success" });
+    expect(teamHoursStatus({ status: "incompleto", needsReview: false })).toEqual({ label: "Revisar", tone: "warning" });
+    expect(teamHoursStatus({ status: "completo", needsReview: true })).toEqual({ label: NEEDS_REVIEW_LABEL, tone: "destructive" });
+    expect(teamHoursStatus({ status: "sin_registro", needsReview: false })).toEqual({ label: "Sin registro", tone: "neutral" });
   });
 });
 
-describe("TeamHoursTable in three styles", () => {
-  function renderIn(style: PresentationStyle, requiredFrom: string | null = "2027-01-04") {
-    return render(<TeamHoursTable weekStart={WEEK} rows={TEAM_ROWS} style={style} requiredFrom={requiredFrom} />);
-  }
-
-  it("Visual: per-day columns, total of meta and estado", () => {
-    renderIn("visual");
-    expect(screen.getByRole("table").getAttribute("data-style")).toBe("visual");
-    expect(headers()).toEqual(["Persona", "lun", "mar", "mié", "jue", "vie", "Total", "Estado"]);
+describe("TeamHoursTable", () => {
+  it.each(["visual", "analitico"] as const)("%s: days, total, meta, diferencia, retardos and estado", (style) => {
+    renderTable(style);
+    expect(headers()).toEqual(["Persona", "Lun", "Mar", "Mié", "Jue", "Vie", "Total", "Meta", "Diferencia", "Retardos", "Estado"]);
     const paul = within(rowOf("Paul Langarica"));
-    expect(paul.getByText("41.5 h de 40 h")).toBeTruthy();
-    expect(paul.getByText("Completo")).toBeTruthy();
-    expect(within(rowOf("María González")).getByText("Sin registro")).toBeTruthy();
-    expect(screen.queryByTestId("totals")).toBeNull();
-  });
-
-  it("Esencial: one line per person", () => {
-    renderIn("esencial");
-    expect(headers()).toEqual(["Persona", "Horas por día", "Total", "Estado"]);
-    expect(within(rowOf("Paul Langarica")).getByText("8.5 h · 8.2 h · 9 h · 8 h · 7.8 h")).toBeTruthy();
-    expect(within(rowOf("Juanma")).getByText("Incompleto")).toBeTruthy();
-    expect(within(rowOf("María González")).getByText("Sin registros esta semana")).toBeTruthy();
-  });
-
-  it("Analítico: total, meta, diferencia, retardos, % cumplimiento and the averages row", () => {
-    renderIn("analitico");
-    expect(headers()).toEqual([
-      "Persona",
-      "lun",
-      "mar",
-      "mié",
-      "jue",
-      "vie",
-      "Total",
-      "Meta",
-      "Diferencia",
-      "Retardos",
-      "% cumplimiento",
-      "Estado",
-    ]);
+    expect(paul.getByText("+1.5").className).toContain("text-success");
+    expect(paul.getByText("Al día").getAttribute("data-tone")).toBe("success");
     const juanma = within(rowOf("Juanma"));
-    expect(juanma.getByText("−4.8 h")).toBeTruthy();
-    expect(juanma.getByText("88%")).toBeTruthy();
-    expect(within(screen.getByTestId("totals")).getByText("Promedio (con registro)")).toBeTruthy();
+    expect(juanma.getByText("−4.8").className).toContain("text-destructive");
+    expect(juanma.getByText("Revisar").getAttribute("data-tone")).toBe("warning");
+    expect(within(screen.getByTestId("team-hours-average")).getByText(AVERAGE_LABEL)).toBeTruthy();
   });
 
-  it("re-renders when the style prop changes", () => {
-    const { rerender } = renderIn("visual");
-    rerender(<TeamHoursTable weekStart={WEEK} rows={TEAM_ROWS} style="analitico" requiredFrom="2027-01-04" />);
-    expect(screen.getByRole("table").getAttribute("data-style")).toBe("analitico");
+  it("needsReview shows Salida sin registrar", () => {
+    renderTable("visual", [{ ...TEAM_ROWS[0]!, needsReview: true }, TEAM_ROWS[1]!]);
+    const pill = within(rowOf("Paul Langarica")).getByText(NEEDS_REVIEW_LABEL);
+    expect(pill.getAttribute("data-tone")).toBe("destructive");
+    expect(within(rowOf("Juanma")).queryByText(NEEDS_REVIEW_LABEL)).toBeNull();
   });
 
-  it("shows the trial note while any day is a trial day", () => {
-    renderIn("visual", "2027-01-04");
-    expect(screen.getByText(TRIAL_NOTE)).toBeTruthy();
-    cleanup();
-    renderIn("visual", "2026-10-01");
-    expect(screen.queryByText(TRIAL_NOTE)).toBeNull();
+  it("esencial branch shows totals only", () => {
+    renderTable("esencial");
+    expect(headers()).toEqual(["Persona", "Total / meta", "Estado"]);
+    expect(within(rowOf("Paul Langarica")).getByText("41.5 / 40.0 h")).toBeTruthy();
+    expect(within(rowOf("Juanma")).getByText("Revisar")).toBeTruthy();
+    expect(screen.queryByText("+1.5")).toBeNull();
+    expect(screen.queryByTestId("team-hours-average")).toBeNull();
+  });
+
+  it("shows the empty copy without rows", () => {
+    renderTable("visual", []);
+    expect(screen.getByText(TEAM_HOURS_EMPTY)).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 });

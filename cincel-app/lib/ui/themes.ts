@@ -71,12 +71,12 @@ export const TOKEN_NAMES: readonly TokenName[] = [
 
 /** BE §5.4 (= FE §14.3). */
 export const TYPE_SCALE_DEFAULT: OrgAppearance["typeScale"] = {
-  pageTitle: { size: 22, weight: 600 },
-  sectionTitle: { size: 16, weight: 600 },
-  cardTitle: { size: 14, weight: 500 },
-  body: { size: 14, weight: 400 },
+  pageTitle: { size: 32, weight: 600 },
+  sectionTitle: { size: 20, weight: 600 },
+  cardTitle: { size: 15, weight: 600 },
+  body: { size: 13.5, weight: 400 },
   label: { size: 12, weight: 500 },
-  kpi: { size: 28, weight: 500 },
+  kpi: { size: 26, weight: 600 },
 };
 
 /** Bounds enforced by `OrgAppearanceSchema` (BE §5.4). */

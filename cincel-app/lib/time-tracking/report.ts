@@ -1,7 +1,8 @@
 /**
  * Weekly hours report (redesign BE §8.7): hours per day (lunch deducted on
  * days ≥ 5 h without a pause ≥ 30 min), target minus approved vacations,
- * status completo / incompleto / sin_registro, late count. Also the payroll
+ * status completo / incompleto / sin_registro, late count, and whether a day
+ * was closed automatically (`needsReview`). Also the payroll
  * CSV of `/api/horario/export` (BE §7.7): one line per entry, trial days
  * (before `requiredFrom`) left out and counted.
  *
@@ -39,6 +40,8 @@ export type ReportEntry = {
   pauses: TimeEntryPause[];
   source: TimeEntrySource | "auto_close";
   flagged: boolean;
+  /** `'user'` or `'auto_close'`; null while the entry is open. */
+  closedBy?: string | null;
 };
 
 export type ReportAbsence = { staffId: string; from: string; to: string };
@@ -112,7 +115,8 @@ export function buildTeamHoursRows(input: {
     );
     const lateCount = dates.filter((date) => isLate(ofDay(date), date, settings)).length;
     const status: TeamHoursRow["status"] = total === 0 ? "sin_registro" : total >= target ? "completo" : "incompleto";
-    return { staffId: person.id, name: fullName(person), days, total, target, lateCount, status };
+    const needsReview = own.some((entry) => entry.closedBy === "auto_close");
+    return { staffId: person.id, name: fullName(person), days, total, target, lateCount, status, needsReview };
   });
 
   return rows.sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -185,6 +189,7 @@ async function loadWeek(db: OwnerDb, weekStart: string, settings: TimeTrackingSe
             pauses: timeEntries.pauses,
             source: timeEntries.source,
             flagged: timeEntries.flagged,
+            closedBy: timeEntries.closedBy,
           })
           .from(timeEntries)
           .where(

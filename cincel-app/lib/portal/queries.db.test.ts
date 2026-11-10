@@ -19,18 +19,25 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
   const { inArray } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const { getPortalProject, getPortalSchedule, listPortalProjects } = await import("./queries");
+  const { getPortalProject, getPortalProjectTramos, getPortalSchedule, getPortalTeam, listPortalProjects } =
+    await import("./queries");
   const { findPortalProjectAccess } = await import("./session-store");
   const { loadPortalProjectData } = await import("@/lib/loaders/portal");
 
-  const asUser = (id: string) => ({ id, name: "Cliente", email: "x@example.com", contactId: "c" });
+  const asUser = (id: string) => ({ id, name: "Cliente", email: "x@example.com", contactId: "c", companyName: null });
   async function access(portalUserId: string, projectId: string) {
     const row = await findPortalProjectAccess(portalUserId, projectId);
     if (!row) throw new Error("expected access");
     return row;
   }
 
-  const ids = { staff: [] as string[], contacts: [] as string[], projects: [] as string[], users: [] as string[] };
+  const ids = {
+    staff: [] as string[],
+    contacts: [] as string[],
+    projects: [] as string[],
+    users: [] as string[],
+    workflows: [] as string[],
+  };
   let clientUserId = "";
   let otherUserId = "";
   const p: Record<"granted" | "revoked" | "other" | "cancelado" | "deleted", string> = {
@@ -104,13 +111,71 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
     });
     await db.insert(schema.scheduleTasks).values([t(1, "Preliminares", "done"), t(2, "Preliminares", "pending"),
       t(3, "Acabados", "progress")]);
+
+    // Tramo progress: one tramo under way on the granted project, with tasks on it and on another project.
+    const [wf] = await db
+      .insert(schema.workflows)
+      .values({ key: `portal-${run}`, name: `Tramo ${run}`, sortOrder: 900 })
+      .returning({ id: schema.workflows.id });
+    ids.workflows.push(wf.id);
+    await db.insert(schema.projectStages).values({ projectId: p.granted, workflowId: wf.id,
+      startedAt: new Date("2026-06-03T12:00:00Z") });
+    const task = (projectId: string, n: number, extra: Partial<typeof schema.tasks.$inferInsert> = {}) => ({
+      projectId, kind: "usuario" as const, workflowId: wf.id, title: `Tarea secreta ${run} ${n}`, createdById: mgr.id,
+      ...extra,
+    });
+    await db.insert(schema.tasks).values([
+      task(p.granted, 1, { closedAt: new Date(), status: "completado" }),
+      task(p.granted, 2, { closedAt: new Date(), status: "completado" }),
+      task(p.granted, 3),
+      task(p.granted, 4),
+      // Not counted: deleted, archived, or another project's.
+      task(p.granted, 5, { deletedAt: new Date() }),
+      task(p.granted, 6, { archived: true, closedAt: new Date() }),
+      task(p.other, 7, { closedAt: new Date() }),
+      task(p.other, 8, { closedAt: new Date() }),
+    ]);
+
+    // Team: the manager, one member and one soft-deleted member.
+    const [member, gone] = await db
+      .insert(schema.staff)
+      .values([
+        { name: `Ana ${run}`, lastName: "Ruiz", email: `ana-${run}@cincel.example` },
+        { name: `Borrado ${run}`, email: `borrado-${run}@cincel.example`, deletedAt: new Date() },
+      ])
+      .returning({ id: schema.staff.id });
+    ids.staff.push(member.id, gone.id);
+    await db.insert(schema.projectMembers).values([
+      { projectId: p.granted, staffId: member.id, role: "Diseñadora líder" },
+      { projectId: p.granted, staffId: gone.id, role: "Residente" },
+    ]);
   });
 
   afterAll(async () => {
     if (ids.projects.length) await db.delete(schema.projects).where(inArray(schema.projects.id, ids.projects));
     if (ids.users.length) await db.delete(schema.portalUsers).where(inArray(schema.portalUsers.id, ids.users));
     if (ids.contacts.length) await db.delete(schema.contacts).where(inArray(schema.contacts.id, ids.contacts));
+    if (ids.workflows.length) await db.delete(schema.workflows).where(inArray(schema.workflows.id, ids.workflows));
     if (ids.staff.length) await db.delete(schema.staff).where(inArray(schema.staff.id, ids.staff));
+  });
+
+  it("tramo progress counts closed tasks of the project only", async () => {
+    const tramos = await getPortalProjectTramos(await access(clientUserId, p.granted));
+    const mine = tramos.find((x) => x.key === `portal-${run}`);
+    // 2 closed of 4 live tasks; deleted, archived and the other project's tasks are left out.
+    expect(mine).toEqual({ key: `portal-${run}`, name: `Tramo ${run}`, state: "en_curso", progressPct: 50,
+      startMonth: "2026-06" });
+    expect(JSON.stringify(tramos)).not.toContain("Tarea secreta");
+  });
+
+  it("team excludes deleted staff", async () => {
+    const team = await getPortalTeam(await access(clientUserId, p.granted));
+    expect(team).toEqual([
+      { name: `Gerente ${run} Portal`, role: "Responsable del proyecto", email: `gerente-${run}@cincel.example` },
+      { name: `Ana ${run} Ruiz`, role: "Diseñadora líder", email: null },
+    ]);
+    expect(JSON.stringify(team)).not.toContain(`Borrado ${run}`);
+    expect(JSON.stringify(team)).not.toContain(`Coordinador ${run}`);
   });
 
   it("lists only projects with active access, not revoked, cancelado or deleted ones", async () => {

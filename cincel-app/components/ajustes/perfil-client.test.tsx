@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -36,26 +35,6 @@ vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
 vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: mocks.fetchMyProfileAction }));
 
 // Contract-shaped stand-ins for the shared patterns (FE §4.11), so this test covers the page content on its own.
-vi.mock("@/components/patterns/SettingsSection", () => ({
-  SettingsSection: ({ title, description, actions, children }: { title: string; description?: string; actions?: ReactNode; children: ReactNode }) => (
-    <section aria-label={title}>
-      <h2>{title}</h2>
-      {description ? <p>{description}</p> : null}
-      {actions}
-      {children}
-    </section>
-  ),
-}));
-vi.mock("@/components/patterns/SettingsRow", () => ({
-  SettingsRow: ({ label, description, control, htmlFor }: { label: string; description?: string; control: ReactNode; htmlFor?: string }) => (
-    <div>
-      <label htmlFor={htmlFor}>{label}</label>
-      {description ? <p>{description}</p> : null}
-      {control}
-    </div>
-  ),
-}));
-
 import { qk } from "@/lib/query/keys";
 import type { AjustesPerfilPageData } from "@/lib/query/options/ajustes";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
@@ -68,6 +47,7 @@ import {
   PerfilDatos,
   PerfilFoto,
   PerfilHorasSemana,
+  formatDayLine,
   formatWeekHoursLine,
   initialsOf,
   passwordChangeErrorText,
@@ -247,15 +227,35 @@ describe("Mis horas esta semana", () => {
       week: { days: [{ date: "2026-11-02", hours: 8 }], total: 32.5, target: 40 },
     });
     expect(screen.getByText("Mis horas esta semana")).toBeTruthy();
-    expect(screen.getByText("32.5 h de 40 h")).toBeTruthy();
+    expect(screen.getByText("32 h 30 min de 40 h")).toBeTruthy();
+    expect(screen.getByText("LUN 2 · 8 h")).toBeTruthy();
   });
 
   it("formats the line without a target", () => {
     expect(formatWeekHoursLine({ days: [], total: 6, target: 0 })).toBe("6 h");
   });
+
+  it("formats one weekday with hours and minutes, or a dash without a record", () => {
+    expect(formatDayLine({ date: "2026-11-09", hours: 8.5 })).toBe("LUN 9 · 8 h 30");
+    expect(formatDayLine({ date: "2026-11-13", hours: 0 })).toBe("VIE 13 · —");
+  });
 });
 
 describe("Perfil fields", () => {
+  it("read-only puesto and correo", () => {
+    renderPerfil();
+    const puesto = screen.getByLabelText("Puesto") as HTMLInputElement;
+    const correo = screen.getByLabelText("Correo") as HTMLInputElement;
+    expect(puesto.readOnly).toBe(true);
+    expect(correo.readOnly).toBe(true);
+    expect(document.getElementById(puesto.getAttribute("aria-describedby")!)?.textContent).toBe(
+      "Lo asigna un administrador en Equipo.",
+    );
+    expect(document.getElementById(correo.getAttribute("aria-describedby")!)?.textContent).toBe(
+      "Viene de tu cuenta de Google; no se puede cambiar aquí.",
+    );
+  });
+
   it("keeps puesto, correo, idioma and zona horaria read-only", () => {
     renderPerfil();
     for (const label of ["Puesto", "Correo", "Idioma", "Zona horaria"]) {
@@ -281,16 +281,17 @@ describe("Perfil fields", () => {
     renderPerfil();
 
     const save = screen.getByRole("button", { name: "Guardar cambios" }) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
+    expect(save.getAttribute("aria-disabled")).toBe("true");
 
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Ana María Ruiz " } });
     fireEvent.change(screen.getByLabelText("Teléfono"), { target: { value: "5500000000" } });
     fireEvent.change(screen.getByLabelText("Firma de correo"), { target: { value: "Ana María" } });
+    expect(screen.getByText("3 cambios sin guardar")).toBeTruthy();
     await act(async () => {
-      fireEvent.click(save);
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
     });
 
-    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Perfil guardado"));
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("Cambios guardados"));
     expect(mocks.updateStaffAction).toHaveBeenCalledWith(BASE.staffId, { name: "Ana María Ruiz", phone: "5500000000" });
     expect(mocks.upsertStaffProfileAction).toHaveBeenCalledWith(BASE.staffId, { emailSignature: "Ana María" });
     expect(mocks.refresh).not.toHaveBeenCalled();
@@ -320,7 +321,7 @@ describe("Perfil fields", () => {
       await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true));
     }
     // Saved: nothing left to save.
-    expect((screen.getByRole("button", { name: "Guardar cambios" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Guardar cambios" }).getAttribute("aria-disabled")).toBe("true");
   });
 
   it("refuses a Google-managed person's name change with the FORBIDDEN copy", async () => {
@@ -353,6 +354,7 @@ describe("Perfil fields", () => {
     });
     expect(screen.getByText("Escribe tu nombre.")).toBeTruthy();
     expect(screen.getByLabelText("Nombre").getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(screen.getByLabelText("Nombre"));
     expect(mocks.updateStaffAction).not.toHaveBeenCalled();
   });
 
@@ -368,10 +370,10 @@ describe("Perfil fields", () => {
     );
   });
 
-  it("Cancelar restores the saved values", () => {
+  it("Descartar restores the saved values", () => {
     renderPerfil();
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Otra" } });
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
     expect((screen.getByLabelText("Nombre") as HTMLInputElement).value).toBe("Ana Ruiz");
   });
 });
@@ -387,8 +389,31 @@ describe("Cambiar contraseña", () => {
       fireEvent.click(screen.getByRole("button", { name: "Guardar nueva contraseña" }));
     });
     expect(mocks.changePasswordAction).toHaveBeenCalledWith("vieja-123", "nueva-12345", "nueva-12345");
-    expect((await screen.findByRole("status")).textContent).toBe("Contraseña actualizada correctamente.");
+    expect(await screen.findByText("Contraseña actualizada correctamente.")).toBeTruthy();
     expect((screen.getByLabelText("Contraseña actual") as HTMLInputElement).value).toBe("");
+  });
+
+  it("password form saves separately", async () => {
+    mocks.changePasswordAction.mockResolvedValue({ ok: true });
+    renderPerfil();
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Borrador" } });
+    fireEvent.change(screen.getByLabelText("Contraseña actual"), { target: { value: "vieja-123" } });
+    fireEvent.change(screen.getByLabelText("Nueva contraseña"), { target: { value: "nueva-12345" } });
+    fireEvent.change(screen.getByLabelText("Confirmar nueva contraseña"), { target: { value: "nueva-12345" } });
+
+    // The password fields are not part of the save bar's count.
+    expect(screen.getByText("1 cambio sin guardar")).toBeTruthy();
+    const passwordButton = screen.getByRole("button", { name: "Guardar nueva contraseña" });
+    expect(passwordButton.closest('[data-slot="settings-save-bar"]')).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(passwordButton);
+    });
+    expect(mocks.changePasswordAction).toHaveBeenCalledTimes(1);
+    expect(mocks.updateStaffAction).not.toHaveBeenCalled();
+    expect(mocks.upsertStaffProfileAction).not.toHaveBeenCalled();
+    // The datos draft stays unsaved.
+    expect((screen.getByLabelText("Nombre") as HTMLInputElement).value).toBe("Borrador");
   });
 
   it("shows the same copy as /profile for a refused change", async () => {

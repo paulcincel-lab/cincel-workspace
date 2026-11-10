@@ -17,6 +17,7 @@ import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { db } from "@/lib/db/client";
 import { positions, staff, staffPositions, staffProfiles } from "@/lib/db/schema";
 import { loadGmailAccess } from "@/lib/gmail/access";
+import { withGroupStats } from "@/lib/google/group-stats";
 import { getPickerDriveGrant, isPickerDriveConfigured, type PickerDriveStatus } from "@/lib/google/picker-drive";
 import { withNotificationDefaults } from "@/lib/notifications/preferences";
 import { loadNotificationPreferences } from "@/lib/notifications/preferences-server";
@@ -206,6 +207,7 @@ function toTeamHoursRow(row: TeamHoursRow): TeamHoursRow {
     target: row.target,
     lateCount: row.lateCount,
     status: row.status,
+    needsReview: row.needsReview,
   };
 }
 
@@ -258,11 +260,15 @@ function toGoogleHealth(health: GoogleHealth): GoogleHealth {
       : null,
     googleLinkedStaff: health.googleLinkedStaff,
     activeStaff: health.activeStaff,
+    pendingGoogleStaff: health.pendingGoogleStaff.map((person) => ({ id: person.id, name: person.name })),
+    projectsWithoutFolder: health.projectsWithoutFolder,
+    projectsWithFolder: health.projectsWithFolder,
   };
 }
 
 /**
- * Google (and `google/primeros-pasos`): mappings, the puestos a mapping can
+ * Google (and `google/primeros-pasos`): mappings (with their Directory member
+ * count and existence, cached: `withGroupStats`), the puestos a mapping can
  * point at (active or Google-managed) and Estado, in one `Promise.all`.
  * Read-only: the health read writes nothing. FORBIDDEN for anyone but an
  * Administrador (today's rule).
@@ -270,7 +276,7 @@ function toGoogleHealth(health: GoogleHealth): GoogleHealth {
 export async function loadAjustesGoogle(user: Pick<AuthenticatedUser, "access">): Promise<AjustesGooglePageData> {
   if (user.access !== SYSTEM_ADMIN_ROLE) throw new Error("FORBIDDEN: google settings");
   const [mappings, positionRows, health] = await Promise.all([
-    listGroupMappings(),
+    listGroupMappings().then((rows) => withGroupStats(rows)),
     listPositions(),
     loadGoogleHealth().then(toGoogleHealth, (error: unknown) => {
       console.error("[ajustes/google] health", error);

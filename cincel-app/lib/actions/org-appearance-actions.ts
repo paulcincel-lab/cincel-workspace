@@ -29,21 +29,26 @@ export async function fetchOrgAppearanceAction(): Promise<OrgAppearance> {
  * Store the full org appearance (no partial merge) and bump its version `v`.
  * Auth: `canManageAppearance`. Errors: `FORBIDDEN`, `INVALID`,
  * `LOW_CONTRAST: <pair> <mode> <ratio>[, …]`, returned as `{ ok: false, error }`
- * (`ActionResult`) so production keeps the code. Revalidates `/` (layout):
- * the theme `<style>` and `<html>` attributes are server-rendered.
+ * (`ActionResult`) so production keeps the code. `acceptLowContrast` skips
+ * the contrast check: the admin confirmed "¿Publicar de todos modos?" in
+ * Ajustes › Tema y estilo. Revalidates `/` (layout): the theme `<style>` and
+ * `<html>` attributes are server-rendered.
  */
-export async function saveOrgAppearanceAction(input: OrgAppearance): Promise<ActionResult<OrgAppearance>> {
-  return toActionResult(() => saveOrgAppearance(input));
+export async function saveOrgAppearanceAction(
+  input: OrgAppearance,
+  options: { acceptLowContrast?: boolean } = {},
+): Promise<ActionResult<OrgAppearance>> {
+  return toActionResult(() => saveOrgAppearance(input, options.acceptLowContrast === true));
 }
 
-async function saveOrgAppearance(input: OrgAppearance): Promise<OrgAppearance> {
+async function saveOrgAppearance(input: OrgAppearance, acceptLowContrast: boolean): Promise<OrgAppearance> {
   const user = await requireCapabilityUser();
   if (!canManageAppearance(user)) throw new Error("FORBIDDEN: appearance edit");
   const appearance = parseInput(OrgAppearanceSchema, input);
   const failing = (["light", "dark"] as const).flatMap((mode) =>
     checkContrast(appearance.tokens, mode).filter((result) => !result.ok),
   );
-  if (failing.length > 0) {
+  if (failing.length > 0 && !acceptLowContrast) {
     throw new Error(
       `LOW_CONTRAST: ${failing.map((result) => `${result.pair} ${result.mode} ${formatRatio(result.ratio)}`).join(", ")}`,
     );

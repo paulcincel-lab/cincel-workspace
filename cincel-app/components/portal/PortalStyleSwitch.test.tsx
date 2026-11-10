@@ -9,11 +9,14 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.tab ? { tab: nav.tab } : {}),
 }));
 vi.mock("@/components/shell/EstiloSwitch", () => ({
-  EstiloSwitch: ({ scope }: { scope?: string }) => <div data-testid="estilo" data-scope={scope} />,
+  EstiloSwitch: ({ scope, variant }: { scope?: string; variant?: string }) => (
+    <div data-testid="estilo" data-scope={scope} data-variant={variant} />
+  ),
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 
+import PortalShell from "./PortalShell";
 import PortalStyleSwitch, { isPortalStyledPage } from "./PortalStyleSwitch";
 
 describe("PortalStyleSwitch", () => {
@@ -63,5 +66,34 @@ describe("PortalStyleSwitch", () => {
       </StyleProvider>,
     );
     expect(screen.getByTestId("estilo")).toBeTruthy();
+  });
+
+  it("inline in header on Resumen only", () => {
+    nav.pathname = "/portal/proyectos/p1";
+    nav.tab = null;
+    render(
+      <StyleProvider style="visual" scope="portal" fixedByOrg={false}>
+        <PortalShell clientName="Ana López" companyName={null} styleSwitch={<PortalStyleSwitch />}>
+          x
+        </PortalShell>
+      </StyleProvider>,
+    );
+    const header = screen.getByRole("banner");
+    const estilo = screen.getByTestId("estilo");
+    expect(header.contains(estilo)).toBe(true);
+    // One bar: the switch shares the row with the logo instead of a row of its own under it.
+    expect(estilo.closest("header > div")).toBe(header.firstElementChild);
+    expect(estilo.getAttribute("data-variant")).toBe("segmented");
+    cleanup();
+
+    nav.tab = "cronograma";
+    render(
+      <StyleProvider style="visual" scope="portal" fixedByOrg={false}>
+        <PortalShell clientName="Ana López" companyName={null} styleSwitch={<PortalStyleSwitch />}>
+          x
+        </PortalShell>
+      </StyleProvider>,
+    );
+    expect(screen.queryByTestId("estilo")).toBeNull();
   });
 });

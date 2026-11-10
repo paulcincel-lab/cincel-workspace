@@ -1,11 +1,11 @@
 "use client";
 
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
+import { AdminPageHeading } from "@/components/ajustes/AdminFields";
 import { HorarioControl, HorarioHorasEquipo, HorarioReglas, HorarioVistaPrevia } from "@/components/ajustes/HorarioSections";
-import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
-import { Button } from "@/components/ui/shadcn/button";
+import { SettingsSaveBar } from "@/components/ajustes/SettingsSaveBar";
 import { saveTimeTrackingSettingsAction } from "@/lib/actions/time-tracking-actions";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
@@ -25,17 +25,27 @@ export type HorarioClientProps = {
   children?: ReactNode;
 };
 
-function sameSettings(a: TimeTrackingSettings, b: TimeTrackingSettings): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+export const HORARIO_SAVE_NOTE = "Los cambios se aplican desde mañana.";
+
+/** How many settings differ between the saved value and the draft (the save bar's count). */
+export function changedSettingsCount(saved: TimeTrackingSettings, draft: TimeTrackingSettings): number {
+  const keys = new Set([...Object.keys(saved), ...Object.keys(draft)]) as Set<keyof TimeTrackingSettings>;
+  let count = 0;
+  for (const key of keys) {
+    if (JSON.stringify(saved[key] ?? null) !== JSON.stringify(draft[key] ?? null)) count += 1;
+  }
+  return count;
 }
 
 /**
- * Ajustes › Control de horario (redesign FE §3.8): settings sections for
+ * Ajustes › Control de horario (canvas `Ajustes-Horario`): admin heading,
+ * then the sections (Control, Reglas de la jornada, Lo que ve el equipo al
+ * iniciar sesión, Horas del equipo) and the save bar ("Los cambios se aplican
+ * desde mañana." · Descartar · Guardar cambios). Settings sections for
  * `canManageTimeTracking`, the team report for `canViewTeamHours`. Viewers
  * with only the report capability (Dirección) get the report and a read-only
- * summary of the rules: no switch, no save. "Guardar cambios" appears only
- * while `saveTimeTrackingSettingsAction` is implemented. Settings ignore the
- * presentation style; only the report changes with it.
+ * summary of the rules: no switch, no save. Settings ignore the presentation
+ * style; only the report widget changes with it.
  *
  * The saved settings and the report are `qk.ajustes.page('horario', {
  * weekStart })`, hydrated by the page; the draft and the shown week live in a
@@ -55,7 +65,7 @@ function HorarioForm({ children }: { children?: ReactNode }) {
   const { saved, draft, editable } = useHorario();
   const form = useHorarioFormApi();
   const error = useHorarioForm((s) => s.errors.form ?? null);
-  const dirty = !sameSettings(saved, draft);
+  const dirtyCount = editable ? changedSettingsCount(saved, draft) : 0;
 
   // Saving keeps the root layout revalidation (the TimeClock gate is server-rendered).
   const save = useActionMutation(saveTimeTrackingSettingsAction, {
@@ -70,8 +80,7 @@ function HorarioForm({ children }: { children?: ReactNode }) {
     successToast: "Cambios guardados",
   });
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submit() {
     if (!editable || save.isPending) return;
     form.getState().setError("form", null);
     save.mutate(draft);
@@ -87,22 +96,23 @@ function HorarioForm({ children }: { children?: ReactNode }) {
   );
 
   return (
-    <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
+      <AdminPageHeading
+        title="Control de horario"
+        description="Registro de entrada y salida para medir las horas trabajadas del equipo."
+      />
       {sections}
       {editable ? (
-        <div className="flex flex-col gap-3">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          <div className="flex justify-end">
-            <Button type="submit" size="lg" disabled={save.isPending || !dirty}>
-              {save.isPending ? "Guardando…" : "Guardar cambios"}
-            </Button>
-          </div>
-        </div>
+        <SettingsSaveBar
+          dirtyCount={dirtyCount}
+          saving={save.isPending}
+          onDiscard={() => form.getState().replace(saved)}
+          onSave={submit}
+          saveLabel="Guardar cambios"
+          status={HORARIO_SAVE_NOTE}
+          error={error}
+        />
       ) : null}
-    </form>
+    </div>
   );
 }

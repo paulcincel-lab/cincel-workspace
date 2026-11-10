@@ -9,7 +9,7 @@ import {
 } from "@/lib/google/drive-admin";
 import { getServiceAccountTokenSource } from "@/lib/google/service-account";
 import { portalDriveGuard, type DriveGuard, type DriveGuardProject } from "@/lib/portal/drive-guard";
-import type { PortalFileDTO, PortalFolderDTO } from "@/lib/types/portal";
+import type { PortalFileDTO, PortalFolderDTO, PortalFolderGroupDTO } from "@/lib/types/portal";
 
 /**
  * Lists one folder under a project's `02 Cliente` for the client portal
@@ -185,4 +185,38 @@ export const portalFileLister = createPortalFileLister({ getDrive: getServiceAcc
 
 export function listPortalFolder(project: DriveGuardProject, folderId?: string | null): Promise<PortalFolderDTO> {
   return portalFileLister.listFolder(project, folderId);
+}
+
+/** Name of the group holding the files at the top of `02 Cliente`. */
+export const PORTAL_ROOT_FOLDER_GROUP = "General";
+/** Subfolders listed for the Resumen (by name): 1 + up to 10 Drive calls per load, each cached 60 s. */
+export const PORTAL_FOLDER_GROUPS_MAX_SUBFOLDERS = 10;
+
+type ListFolder = (project: DriveGuardProject, folderId?: string | null) => Promise<PortalFolderDTO>;
+
+/**
+ * The client folder one level deep, for the Resumen and Analítico "por carpeta" views: the files at the top
+ * of `02 Cliente` ("General"), then the files of its first 10 subfolders by name, listed in parallel. Every
+ * listing goes through the same guard and fields as the Archivos tab; only `kind === "file"` entries are
+ * kept. Empty subfolders stay, so a folder the team prepared shows as such.
+ */
+export async function listPortalFolderGroupsWith(
+  listFolder: ListFolder,
+  project: DriveGuardProject,
+): Promise<PortalFolderGroupDTO[]> {
+  const root = await listFolder(project);
+  const subfolders = root.items
+    .filter((item) => item.kind === "folder")
+    .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base", numeric: true }))
+    .slice(0, PORTAL_FOLDER_GROUPS_MAX_SUBFOLDERS);
+  const children = await Promise.all(subfolders.map((sub) => listFolder(project, sub.id)));
+  const filesOf = (items: PortalFileDTO[]) => items.filter((item) => item.kind === "file");
+  return [
+    { folderId: root.folderId, name: PORTAL_ROOT_FOLDER_GROUP, files: filesOf(root.items) },
+    ...children.map((child, i) => ({ folderId: child.folderId, name: subfolders[i].name, files: filesOf(child.items) })),
+  ];
+}
+
+export function listPortalFolderGroups(project: DriveGuardProject): Promise<PortalFolderGroupDTO[]> {
+  return listPortalFolderGroupsWith(listPortalFolder, project);
 }

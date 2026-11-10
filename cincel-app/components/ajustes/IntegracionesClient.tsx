@@ -1,10 +1,20 @@
 "use client";
 
 import { useSuspenseQuery } from "@tanstack/react-query";
+import {
+  CalendarDaysIcon,
+  ExternalLinkIcon,
+  HardDriveIcon,
+  LayoutGridIcon,
+  MailIcon,
+  MessagesSquareIcon,
+  RefreshCwIcon,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { GoogleCalendarSyncSection } from "@/components/calendario/CalendarFeedDialog";
+import { CalendarFeedLinkSection, GoogleCalendarSyncSection } from "@/components/calendario/CalendarFeedDialog";
 import { FormDialog } from "@/components/patterns/FormDialog";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
@@ -13,6 +23,7 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { disconnectGmailAction, syncGmailAction } from "@/lib/actions/gmail-actions";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import { actionErrorText } from "@/lib/errors";
+import { CUTTO_LINK_TARGET } from "@/lib/integrations/cutto-links";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
 import { ajustesIntegracionesOptions, type AjustesIntegracionesPageData } from "@/lib/query/options/ajustes";
@@ -40,6 +51,15 @@ export const GMAIL_DISCONNECT_TITLE = "¿Desconectar Gmail de Cincel?";
 export const GMAIL_DISCONNECT_COPY =
   "Cincel dejará de leer tu correo y borrará la copia de tus conversaciones guardada aquí. Tu cuenta de Google sigue conectada para Drive y Calendar; para quitar el permiso de correo por completo, entra a los permisos de tu cuenta de Google.";
 export const CUTTO_COPY = "Cutto es una aplicación aparte. Cincel enlaza a los canales de cada proyecto.";
+export const MONDAY_COPY =
+  "Importa tableros y tarjetas a Cincel. Las importaciones de monday se hacen en Ajustes › monday.";
+export const DRIVE_NOT_CONNECTED_COPY =
+  "Conecta Drive para adjuntar planos y renders a tareas y proyectos sin descargarlos.";
+
+/** The Gmail scopes the app really requests (`GMAIL_CONNECT_URL`, BE §7.6). */
+export const GMAIL_SCOPES = ["gmail.readonly", "gmail.compose"] as const;
+/** The Drive scope the Drive consent asks for. */
+export const DRIVE_SCOPE = "drive.file";
 
 /** `syncGmailAction` allows one run every 30 s per person (BE rate limits). */
 export const GMAIL_SYNC_COOLDOWN_MS = 30_000;
@@ -60,6 +80,22 @@ const syncedAtFormat = new Intl.DateTimeFormat("es-MX", {
 export function formatSyncedAt(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : syncedAtFormat.format(date).toLowerCase();
+}
+
+const mxDayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" });
+const mxTimeFormat = new Intl.DateTimeFormat("es-MX", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "America/Mexico_City",
+});
+
+/** "hoy 09:42" for a sync today (Ciudad de México), else the full date and time. */
+export function formatLastSync(iso: string, now: number = Date.now()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  if (mxDayFormat.format(date) === mxDayFormat.format(new Date(now))) return `hoy ${mxTimeFormat.format(date)}`;
+  return formatSyncedAt(iso);
 }
 
 /** Whether a manual sync now would hit the 30 s limit. */
@@ -124,19 +160,47 @@ function StatusBadge({ connected }: { connected: boolean }) {
   return <Badge variant={connected ? "success" : "outline"}>{connected ? "Conectado" : "No conectado"}</Badge>;
 }
 
-function AccountLine({ email, extra }: { email: string | null; extra?: string | null }) {
-  if (!email && !extra) return null;
+/** 40 px service tile (10 px radius) before the card title. */
+function ServiceIcon({ icon: Icon }: { icon: LucideIcon }) {
   return (
-    <p className="text-sm text-foreground">
-      {email ? (
-        <>
-          Cuenta: <span className="font-mono">{email}</span>
-        </>
-      ) : null}
-      {email && extra ? " · " : null}
-      {extra}
-    </p>
+    <span
+      aria-hidden="true"
+      className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-secondary text-secondary-foreground"
+    >
+      <Icon className="size-5" strokeWidth={1.8} />
+    </span>
   );
+}
+
+/** Scope chips: Geist Mono 11.5 px, pill, `--muted`. */
+function ScopeChips({ scopes, label }: { scopes: readonly string[]; label: string }) {
+  return (
+    <ul aria-label={label} className="flex flex-wrap gap-1.5">
+      {scopes.map((scope) => (
+        <li key={scope} className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11.5px] text-sidebar-foreground">
+          {scope}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Card actions row (h 34 px buttons). */
+function ActionsRow({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap items-center gap-2">{children}</div>;
+}
+
+/** Re-renders when the 30 s sync cooldown of `lastSyncedAt` ends; true while it lasts. */
+function useSyncCooldown(lastSyncedAt: string | null): boolean {
+  const [, setTick] = useState(0);
+  const cooling = isWithinSyncCooldown(lastSyncedAt);
+  useEffect(() => {
+    if (!cooling || !lastSyncedAt) return;
+    const remaining = GMAIL_SYNC_COOLDOWN_MS - (Date.now() - Date.parse(lastSyncedAt));
+    const timer = setTimeout(() => setTick((n) => n + 1), Math.max(0, remaining) + 50);
+    return () => clearTimeout(timer);
+  }, [cooling, lastSyncedAt]);
+  return cooling;
 }
 
 // ── Gmail ───────────────────────────────────────────────────────────────────
@@ -194,51 +258,67 @@ export function IntegracionesGmail() {
     setDialogOpen(false);
   }
 
+  const cooling = useSyncCooldown(gmail.lastSyncedAt);
   const lastSync = gmail.lastSyncedAt
-    ? `Última sincronización: ${formatSyncedAt(gmail.lastSyncedAt)}`
+    ? `Última sincronización: ${formatLastSync(gmail.lastSyncedAt)}`
     : "Aún no se sincroniza";
 
   return (
     <SettingsSection
       title="Gmail"
       description="Correo en Mi espacio y tareas desde correos."
+      icon={<ServiceIcon icon={MailIcon} />}
       actions={
-        <div className="flex flex-wrap gap-2">
-          {showConnect ? (
-            <a
-              href={GMAIL_CONNECT_URL}
-              className={buttonVariants({ variant: state === "not_connected" ? "default" : "outline" })}
-            >
-              {state === "not_connected" ? "Conectar" : "Volver a conectar"}
-            </a>
-          ) : null}
-          {canSync ? (
-            <Button variant="outline" disabled={syncing} onClick={sync}>
-              {syncing ? "Sincronizando…" : "Sincronizar ahora"}
-            </Button>
-          ) : null}
-          {canDisconnect ? (
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDisconnectError(null);
-                setDialogOpen(true);
-              }}
-            >
-              Desconectar
-            </Button>
-          ) : null}
-        </div>
+        state === "connected" ? (
+          <StatusBadge connected />
+        ) : state === "not_connected" ? (
+          <StatusBadge connected={false} />
+        ) : state === "scope_missing" ? (
+          <Badge variant="destructive">Falta permiso</Badge>
+        ) : (
+          <Badge variant="destructive">Error al sincronizar</Badge>
+        )
       }
     >
       <div className="flex flex-col gap-3" data-testid="gmail-card" data-state={state}>
-        <div>
-          {state === "connected" ? <StatusBadge connected /> : null}
-          {state === "not_connected" ? <StatusBadge connected={false} /> : null}
-          {state === "scope_missing" ? <Badge variant="destructive">Falta permiso</Badge> : null}
-          {state === "error" ? <Badge variant="destructive">Error al sincronizar</Badge> : null}
-        </div>
-        {gmail.connected ? <AccountLine email={accountEmail} extra={lastSync} /> : null}
+        {showConnect || canSync || canDisconnect ? (
+          <ActionsRow>
+            {showConnect ? (
+              <a
+                href={GMAIL_CONNECT_URL}
+                className={buttonVariants({ variant: state === "not_connected" ? "default" : "outline" })}
+              >
+                {state === "not_connected" ? "Conectar" : "Volver a conectar"}
+              </a>
+            ) : null}
+            {canSync ? (
+              <Button variant="outline" disabled={syncing || cooling} onClick={sync}>
+                <RefreshCwIcon aria-hidden="true" data-icon="inline-start" className={syncing ? "spin" : undefined} />
+                {syncing ? "Sincronizando…" : "Sincronizar ahora"}
+              </Button>
+            ) : null}
+            {canDisconnect ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDisconnectError(null);
+                  setDialogOpen(true);
+                }}
+              >
+                Desconectar
+              </Button>
+            ) : null}
+          </ActionsRow>
+        ) : null}
+        {gmail.connected ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-sidebar-foreground">
+            {accountEmail ? <span>{accountEmail}</span> : null}
+            <span className="font-mono">{lastSync}</span>
+            <ScopeChips scopes={GMAIL_SCOPES} label="Permisos de Gmail" />
+          </div>
+        ) : (
+          <ScopeChips scopes={GMAIL_SCOPES} label="Permisos de Gmail" />
+        )}
         {state === "scope_missing" ? (
           <Alert variant="destructive">
             <AlertDescription>{actionErrorText(new Error("SCOPE_MISSING"), "gmail")}</AlertDescription>
@@ -289,23 +369,31 @@ export function IntegracionesGmail() {
   );
 }
 
-// ── Google Calendar (existing controls) ─────────────────────────────────────
+// ── Google Calendar ─────────────────────────────────────────────────────────
 
-/** Google Calendar card: the existing direct-sync controls of Calendario, unchanged. */
+/**
+ * Google Calendar card: the direct sync controls of Calendario and the
+ * subscription link (`CalendarFeedLinkSection`), inline instead of in a dialog.
+ */
 export function IntegracionesGoogleCalendar() {
   const googleConfigured = useIntegracionesData().drive.configured;
   return (
-    <SettingsSection title="Google Calendar" description="Eventos en Calendario y en Mi día.">
+    <SettingsSection
+      title="Google Calendar"
+      description="Eventos en Calendario y en Mi día."
+      icon={<ServiceIcon icon={CalendarDaysIcon} />}
+    >
       {googleConfigured ? (
         <GoogleCalendarSyncSection open />
       ) : (
         <p className="text-sm text-muted-foreground">{GOOGLE_UNAVAILABLE_COPY}</p>
       )}
+      <CalendarFeedLinkSection />
     </SettingsSection>
   );
 }
 
-// ── Google Drive (existing status) ──────────────────────────────────────────
+// ── Google Drive ────────────────────────────────────────────────────────────
 
 /** Google Drive card: the person's own Drive grant, read from the DB only (`getPickerDriveGrant`). */
 export function IntegracionesGoogleDrive() {
@@ -316,26 +404,27 @@ export function IntegracionesGoogleDrive() {
     <SettingsSection
       title="Google Drive"
       description="Archivos de proyecto sin duplicarlos."
-      actions={
-        drive.configured && !drive.hasDriveGrant ? (
-          <a href={DRIVE_CONNECT_URL} className={buttonVariants()}>
-            Conectar
-          </a>
-        ) : undefined
-      }
+      icon={<ServiceIcon icon={HardDriveIcon} />}
+      actions={<StatusBadge connected={connected} />}
     >
       <div className="flex flex-col gap-3" data-testid="drive-card">
-        <div>
-          <StatusBadge connected={connected} />
-        </div>
         {!drive.configured ? (
           <p className="text-sm text-muted-foreground">{GOOGLE_UNAVAILABLE_COPY}</p>
         ) : connected ? (
-          <AccountLine email={accountEmail} />
+          accountEmail ? <p className="text-[12.5px] text-sidebar-foreground">{accountEmail}</p> : null
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Conecta Drive para adjuntar planos y renders a tareas y proyectos sin descargarlos.
-          </p>
+          <>
+            <ActionsRow>
+              <a href={DRIVE_CONNECT_URL} className={buttonVariants()}>
+                Conectar
+              </a>
+            </ActionsRow>
+            <p className="text-[12.5px] text-muted-foreground">{DRIVE_NOT_CONNECTED_COPY}</p>
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-sidebar-foreground">
+              <span>Permiso que pedirá:</span>
+              <ScopeChips scopes={[DRIVE_SCOPE]} label="Permisos de Google Drive" />
+            </div>
+          </>
         )}
       </div>
     </SettingsSection>
@@ -344,23 +433,16 @@ export function IntegracionesGoogleDrive() {
 
 // ── Cutto (link only) ───────────────────────────────────────────────────────
 
-/** Cutto card: the link and the copy only; Cutto is a separate app and nothing here talks to it. */
+/** Cutto card: the link and the copy only; Cutto is a separate app and nothing here talks to it (deep link, never embedded). */
 export function IntegracionesCutto() {
   return (
-    <SettingsSection
-      title="Cutto"
-      actions={
-        <a
-          href={CUTTO_BASE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={buttonVariants({ variant: "outline" })}
-        >
+    <SettingsSection title="Cutto" description={CUTTO_COPY} icon={<ServiceIcon icon={MessagesSquareIcon} />}>
+      <ActionsRow>
+        <a href={CUTTO_BASE_URL} {...CUTTO_LINK_TARGET} className={buttonVariants({ variant: "outline" })}>
           Abrir Cutto
+          <ExternalLinkIcon aria-hidden="true" data-icon="inline-end" />
         </a>
-      }
-    >
-      <p className="text-sm text-muted-foreground">{CUTTO_COPY}</p>
+      </ActionsRow>
     </SettingsSection>
   );
 }
@@ -370,16 +452,12 @@ export function IntegracionesCutto() {
 /** monday card: link to Ajustes › monday (administrators only; the page filters it). */
 export function IntegracionesMonday() {
   return (
-    <SettingsSection
-      title="monday"
-      description="Importa tableros y tarjetas a Cincel."
-      actions={
+    <SettingsSection title="monday" description={MONDAY_COPY} icon={<ServiceIcon icon={LayoutGridIcon} />}>
+      <ActionsRow>
         <Link href={MONDAY_SETTINGS_URL} className={buttonVariants({ variant: "outline" })}>
-          Ver importaciones
+          Ir a Importar de monday
         </Link>
-      }
-    >
-      <p className="text-sm text-muted-foreground">Las importaciones de monday se hacen en Ajustes › monday.</p>
+      </ActionsRow>
     </SettingsSection>
   );
 }
