@@ -62,6 +62,7 @@ function shapes() {
     "proyectos.history": qk.proyectos.history("p1"),
     "proyectos.clientesActivity": qk.proyectos.clientesActivity("p1"),
     "proyectos.remap": qk.proyectos.remap("p1"),
+    "proyectos.assigneeSuggestion": qk.proyectos.assigneeSuggestion("p1", "f1", "s1"),
     "personas.equipo": qk.personas.equipo(),
     "personas.counts": qk.personas.counts(),
     "personas.contacts": qk.personas.contacts("clientes", null),
