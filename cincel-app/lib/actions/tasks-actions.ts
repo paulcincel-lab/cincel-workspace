@@ -157,8 +157,11 @@ export async function listSubtasksAction(parentId: string): Promise<TaskRef[]> {
 
 /**
  * `phaseId` within the task's tramo (PHASE_MISMATCH), `spaceId` of its project
- * (SPACE_MISMATCH), neither on an admin task (ADMIN_TASK). `workflowId` only
- * when the task has none (else INVALID).
+ * (SPACE_MISMATCH), neither on an admin task (ADMIN_TASK). `workflowId` sets a
+ * tramo on a task without one; changing an existing tramo is admins only
+ * (`FORBIDDEN: task tramo change`), clears a fase that isn't in the new tramo
+ * and moves the subtasks along (#1022). Admin tasks reject it (ADMIN_TASK);
+ * an unknown tramo is INVALID.
  */
 export async function updateTaskAction(
   ...args: Parameters<typeof updateTaskActionImpl>
@@ -178,8 +181,16 @@ async function updateTaskActionImpl(id: string, patch: TaskPatch): Promise<TaskD
   if (!caps.canCreateActivity) {
     throw new Error("FORBIDDEN: task edit");
   }
-  const row = await tasksRepository.updateTask(id, patch, user.member.id);
-  if (patch.status !== undefined) await scheduleTaskClosingHook(row, user.member.id);
+  const fromTramo = patch.workflowId !== undefined ? await tasksRepository.taskWorkflowId(id) : null;
+  const row = await tasksRepository.updateTask(id, patch, user.member.id, { canMoveTramo: viewer.isAdmin });
+  // A move changes whether both tramos' stages are closed on the project.
+  const moved = fromTramo !== null && fromTramo !== row.workflowId;
+  if (patch.status !== undefined || moved) {
+    await scheduleTaskClosingHook(
+      moved ? [row, { projectId: row.projectId, workflowId: fromTramo }] : row,
+      user.member.id
+    );
+  }
   return scopeTaskDto(row, viewer);
 }
 

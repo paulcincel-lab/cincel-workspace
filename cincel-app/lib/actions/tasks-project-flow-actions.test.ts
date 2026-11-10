@@ -1,5 +1,6 @@
 import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TASK_TRAMO_CHANGE_FORBIDDEN } from "@/lib/project-flow/errors";
 import type { UserTaskInput } from "@/lib/types/core";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
@@ -14,6 +15,8 @@ const SPACE = "77777777-7777-4777-8777-111111111111";
 const OTHER_SPACE = "77777777-7777-4777-8777-222222222222";
 const COLLABORATOR = "88888888-8888-4888-8888-111111111111";
 const STATUS = "99999999-9999-4999-8999-111111111111";
+const OTHER_WORKFLOW = "11111111-1111-4111-8111-222222222222";
+const UNKNOWN_WORKFLOW = "11111111-1111-4111-8111-333333333333";
 
 const session = vi.hoisted(() => ({ access: "Colaborador" }));
 vi.mock("@/lib/auth/session", () => ({
@@ -83,6 +86,7 @@ const repo = vi.hoisted(() => ({
   createUserTask: vi.fn(),
   createSubtask: vi.fn(),
   updateTask: vi.fn(),
+  taskWorkflowId: vi.fn(),
   setTaskStatus: vi.fn(),
   setTaskCustomStatus: vi.fn(),
   assignTask: vi.fn(),
@@ -159,16 +163,18 @@ function checkTaskInput(
     phaseId?: string | null;
     spaceId?: string | null;
     managerId?: string | null;
-  }
+  },
+  opts: { canMoveTramo?: boolean } = {}
 ) {
   if (row?.kind === "admin") {
-    if (input.phaseId !== undefined || input.spaceId !== undefined) throw new Error("ADMIN_TASK");
+    if (input.phaseId !== undefined || input.spaceId !== undefined || input.workflowId) throw new Error("ADMIN_TASK");
     if (input.managerId === COLLABORATOR) throw new Error("ASSIGNEE_NOT_ADMIN");
     return;
   }
   if (row === null && !input.workflowId) throw new Error("INVALID: workflowId");
-  if (row !== null && input.workflowId !== undefined && row.workflowId !== null) {
-    throw new Error("INVALID: workflowId");
+  if (row !== null && input.workflowId !== undefined && input.workflowId !== row.workflowId) {
+    if (!input.workflowId || input.workflowId === UNKNOWN_WORKFLOW) throw new Error("INVALID: workflowId");
+    if (row.workflowId !== null && !opts.canMoveTramo) throw new Error(TASK_TRAMO_CHANGE_FORBIDDEN);
   }
   if (input.phaseId === OTHER_PHASE) throw new Error("PHASE_MISMATCH");
   if (input.spaceId === OTHER_SPACE) throw new Error("SPACE_MISMATCH");
@@ -207,10 +213,13 @@ beforeEach(() => {
       });
     }
   );
-  repo.updateTask.mockImplementation(async (id: string, patch: Parameters<typeof checkTaskInput>[1]) => {
-    checkTaskInput(rowFor(id), patch);
-    return detail({ ...rowFor(id), ...(patch as Partial<Row>) });
-  });
+  repo.updateTask.mockImplementation(
+    async (id: string, patch: Parameters<typeof checkTaskInput>[1], _actor: string, opts?: { canMoveTramo?: boolean }) => {
+      checkTaskInput(rowFor(id), patch, opts);
+      return detail({ ...rowFor(id), ...(patch as Partial<Row>) });
+    }
+  );
+  repo.taskWorkflowId.mockImplementation(async (id: string) => rowFor(id).workflowId);
   repo.setTaskStatus.mockImplementation(async (id: string) => detail(rowFor(id)));
   repo.setTaskCustomStatus.mockImplementation(async (id: string) => detail(rowFor(id)));
   repo.assignTask.mockImplementation(async (id: string, managerId: string | null) => {
@@ -335,9 +344,43 @@ describe("updateTaskAction", () => {
     await expect(updateTaskAction(TASK, { spaceId: OTHER_SPACE })).rejects.toThrow(/^SPACE_MISMATCH/);
   });
 
-  it("throws INVALID when changing the tramo of a task that already has one", async () => {
-    const other = "11111111-1111-4111-8111-222222222222";
-    await expect(updateTaskAction(TASK, { workflowId: other })).rejects.toThrow(/^INVALID/);
+  describe("moving a task to another tramo", () => {
+    it("is FORBIDDEN for a non-admin", async () => {
+      await expect(updateTaskAction(TASK, { workflowId: OTHER_WORKFLOW })).rejects.toThrow(
+        TASK_TRAMO_CHANGE_FORBIDDEN
+      );
+      expect(repo.updateTask).toHaveBeenCalledWith(TASK, { workflowId: OTHER_WORKFLOW }, ACTOR, {
+        canMoveTramo: false,
+      });
+    });
+
+    it("lets an admin move it and refreshes both tramos' closing state", async () => {
+      session.access = "Administrador";
+      await expect(updateTaskAction(TASK, { workflowId: OTHER_WORKFLOW })).resolves.toMatchObject({
+        workflowId: OTHER_WORKFLOW,
+      });
+      expect(repo.updateTask).toHaveBeenCalledWith(TASK, { workflowId: OTHER_WORKFLOW }, ACTOR, {
+        canMoveTramo: true,
+      });
+      await runAfter();
+      const pairs = hooks.onTaskClosingChanged.mock.calls.map((c) => (c as unknown[]).slice(1, 3));
+      expect(pairs).toEqual([
+        [PROJECT, OTHER_WORKFLOW],
+        [PROJECT, WORKFLOW],
+      ]);
+    });
+
+    it("throws INVALID for an unknown tramo, ADMIN_TASK on an admin task", async () => {
+      session.access = "Administrador";
+      await expect(updateTaskAction(TASK, { workflowId: UNKNOWN_WORKFLOW })).rejects.toThrow(/^INVALID/);
+      await expect(updateTaskAction(ADMIN_TASK, { workflowId: OTHER_WORKFLOW })).rejects.toThrow(/^ADMIN_TASK/);
+    });
+
+    it("sending the current tramo again schedules no closing hook", async () => {
+      await updateTaskAction(TASK, { workflowId: WORKFLOW });
+      await runAfter();
+      expect(hooks.onTaskClosingChanged).not.toHaveBeenCalled();
+    });
   });
 
   describe("on an admin task", () => {

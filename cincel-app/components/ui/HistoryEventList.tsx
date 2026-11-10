@@ -14,9 +14,10 @@ type Props = {
 
 /** One-line text for a bitácora entry: the comment, or the field change. */
 export function historyEventText(item: HistoryEvent): string {
-  return item.kind === "comentario"
-    ? (item.comment ?? "")
-    : `Cambió ${item.field ?? "un campo"}: ${item.beforeValue ?? "—"} → ${item.afterValue ?? "—"}`;
+  if (item.kind === "comentario") return item.comment ?? "";
+  // A task's tramo move stores the tramo names (`updateTask`, #1022).
+  if (item.field === "tramo") return `Movió la tarea de ${item.beforeValue ?? "—"} a ${item.afterValue ?? "—"}`;
+  return `Cambió ${item.field ?? "un campo"}: ${item.beforeValue ?? "—"} → ${item.afterValue ?? "—"}`;
 }
 
 /** Bitácora entries (date, author and text), shared by the task, contact and project bitácoras. */
