@@ -140,7 +140,7 @@ describe("TeamGrid styles", () => {
     render(<TeamGrid people={people} emails={emails} />);
     const ana = within(screen.getByText("Ana Ruiz").closest("li") as HTMLElement);
     expect(ana.getByRole("link", { name: /Ver tareas/ }).getAttribute("href")).toBe(
-      `/tareas?vista=lista&responsable=${EQUIPO_STAFF[0].id}`,
+      `/tareas?responsable=${EQUIPO_STAFF[0].id}`,
     );
     expect(ana.getByRole("link", { name: /correo/ }).getAttribute("href")).toBe("mailto:ana@cincel.mx");
     const cutto = ana.getByRole("link", { name: /Abrir chat en Cutto/ });

@@ -58,10 +58,10 @@ function Fixture({ spec, empty }: { spec: ListSpec; empty?: boolean }) {
         }}
         tabs={
           <nav aria-label="Vistas">
-            <a href="?vista=tarjetas" aria-current="page">
+            <a href="?modo=tarjetas" aria-current="page">
               Tarjetas
             </a>{" "}
-            <a href="?vista=tabla">Tabla</a>
+            <a href="?modo=tabla">Tabla</a>
           </nav>
         }
         filters={

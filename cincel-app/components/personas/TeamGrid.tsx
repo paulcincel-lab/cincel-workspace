@@ -24,7 +24,7 @@ export function TeamMemberActions({ person, email }: { person: PersonDatum; emai
   return (
     <div className="flex flex-wrap gap-1">
       <Link
-        href={`/tareas?vista=lista&responsable=${encodeURIComponent(person.id)}`}
+        href={`/tareas?responsable=${encodeURIComponent(person.id)}`}
         className={action}
         aria-label={`Ver tareas de ${person.name}`}
       >

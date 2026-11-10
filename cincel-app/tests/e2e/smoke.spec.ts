@@ -24,7 +24,8 @@ test.describe("Acceso — login e Inicio", () => {
     await loginAsAdmin(page, BASE_URL);
     const cases: [string, string][] = [
       ["/dashboard", "/inicio"],
-      ["/tablero?proyecto=p1", "/tareas?vista=tablero&proyecto=p1"],
+      ["/tablero?proyecto=p1", "/tareas?estilo=visual&proyecto=p1"],
+      ["/tareas?vista=lista&tramo=diseno", "/tareas?estilo=analitico&tramo=diseno"],
       ["/equipo", "/personas"],
       ["/configuracion/general", "/ajustes/general"],
     ];

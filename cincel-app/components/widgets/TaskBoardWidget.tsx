@@ -152,7 +152,7 @@ const DEFAULT_EMPTY: EmptyStateProps = { title: "No hay tareas con estos filtros
 const PRIORITY_LABEL: Record<TaskPriority, string> = { alta: "Alta", media: "Media", baja: "Baja" };
 
 /** Where Esencial's collapsed Completado group links to. */
-const COMPLETED_LIST_HREF = "/tareas?vista=lista&estado=completado";
+const COMPLETED_LIST_HREF = "/tareas?estado=completado";
 
 const NO_CUSTOM_STATUSES: Pick<TaskStatusOption, "id" | "name">[] = [];
 

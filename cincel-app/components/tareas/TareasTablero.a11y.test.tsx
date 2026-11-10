@@ -9,7 +9,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams("vista=tablero"),
+  useSearchParams: () => new URLSearchParams("estilo=visual"),
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   setTaskStatusAction: vi.fn(() => Promise.resolve({})),
@@ -88,7 +88,7 @@ function makeTask(overrides: Partial<TaskListRow>): TaskListRow {
   } as TaskListRow;
 }
 
-const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "tablero" };
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY };
 
 function boardData(): TareasBoardData {
   const columns = emptyBoardColumns([]);

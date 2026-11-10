@@ -6,12 +6,12 @@ describe("legacyRedirectTarget (FE §2.2)", () => {
   it.each([
     ["/", "/inicio"],
     ["/dashboard", "/inicio"],
-    ["/tablero", "/tareas?vista=tablero"],
-    ["/mis-tareas", "/tareas?vista=lista&responsable=yo"],
-    ["/calendario", "/tareas?vista=calendario"],
-    ["/actividades/general", "/tareas?vista=lista"],
-    ["/actividades/presale", "/tareas?vista=lista&tramo=presale"],
-    ["/actividades/diseno", "/tareas?vista=lista&tramo=diseno"],
+    ["/tablero", "/tareas?estilo=visual"],
+    ["/mis-tareas", "/tareas?estilo=analitico&responsable=yo"],
+    ["/calendario", "/tareas"],
+    ["/actividades/general", "/tareas?estilo=analitico"],
+    ["/actividades/presale", "/tareas?estilo=analitico&tramo=presale"],
+    ["/actividades/diseno", "/tareas?estilo=analitico&tramo=diseno"],
     ["/equipo", "/personas"],
     ["/directorio", "/personas/clientes"],
     ["/clientes", "/personas/clientes"],
@@ -51,7 +51,7 @@ describe("legacyRedirectTarget (FE §2.2)", () => {
   it("preserves the query string", () => {
     expect(legacyRedirectTarget("/dashboard", { tab: "kpis" })).toBe("/inicio?tab=kpis");
     expect(legacyRedirectTarget("/tablero", { proyecto: "p1", q: "piso" })).toBe(
-      "/tareas?vista=tablero&proyecto=p1&q=piso",
+      "/tareas?estilo=visual&proyecto=p1&q=piso",
     );
     expect(legacyRedirectTarget("/recursos/formacion", new URLSearchParams("carpeta=abc"))).toBe(
       "/biblioteca/formacion?carpeta=abc",
@@ -66,29 +66,29 @@ describe("legacyRedirectTarget (FE §2.2)", () => {
 
   it("lets the target's own keys win over the old query", () => {
     expect(legacyRedirectTarget("/mis-tareas", { responsable: "otro", estado: "pendiente" })).toBe(
-      "/tareas?vista=lista&responsable=yo&estado=pendiente",
+      "/tareas?estilo=analitico&responsable=yo&estado=pendiente",
     );
   });
 
   it("turns Project Flow's start deep link into the Tareas start sheet", () => {
     expect(legacyRedirectTarget("/actividades/presale", { project: "X" })).toBe(
-      "/tareas?vista=lista&tramo=presale&project=X&iniciar=1",
+      "/tareas?estilo=analitico&tramo=presale&project=X&iniciar=1",
     );
   });
 
   it("adds iniciar only with a project, and never twice", () => {
     expect(legacyRedirectTarget("/actividades/presale", { project: "" })).toBe(
-      "/tareas?vista=lista&tramo=presale&project=",
+      "/tareas?estilo=analitico&tramo=presale&project=",
     );
     expect(legacyRedirectTarget("/actividades/presale", { project: "X", iniciar: "1" })).toBe(
-      "/tareas?vista=lista&tramo=presale&project=X&iniciar=1",
+      "/tareas?estilo=analitico&tramo=presale&project=X&iniciar=1",
     );
-    expect(legacyRedirectTarget("/actividades/general", { project: "X" })).toBe("/tareas?vista=lista&project=X");
+    expect(legacyRedirectTarget("/actividades/general", { project: "X" })).toBe("/tareas?estilo=analitico&project=X");
   });
 
   it("tolerates trailing slashes and a query in the path", () => {
-    expect(legacyRedirectTarget("/tablero/")).toBe("/tareas?vista=tablero");
-    expect(legacyRedirectTarget("/actividades/presale?project=X")).toBe("/tareas?vista=lista&tramo=presale");
+    expect(legacyRedirectTarget("/tablero/")).toBe("/tareas?estilo=visual");
+    expect(legacyRedirectTarget("/actividades/presale?project=X")).toBe("/tareas?estilo=analitico&tramo=presale");
   });
 
   it("returns null for routes that are not legacy", () => {
@@ -109,5 +109,38 @@ describe("legacyRedirectTarget (FE §2.2)", () => {
     ]) {
       expect(legacyRedirectTarget(path)).toBeNull();
     }
+  });
+});
+
+describe("/tareas?vista= (the old view switch)", () => {
+  it.each([
+    ["vista=tablero", "/tareas?estilo=visual"],
+    ["vista=lista", "/tareas?estilo=analitico"],
+    ["vista=calendario", "/tareas"],
+  ])("maps %s to %s", (search, to) => {
+    expect(legacyRedirectTarget("/tareas", new URLSearchParams(search))).toBe(to);
+  });
+
+  it("keeps the filters and the task, in their order, and drops the Calendario params", () => {
+    expect(legacyRedirectTarget("/tareas", { vista: "lista", tramo: "diseno", q: "piso", tarea: "t1" })).toBe(
+      "/tareas?estilo=analitico&tramo=diseno&q=piso&tarea=t1",
+    );
+    expect(legacyRedirectTarget("/tareas", { vista: "calendario", cal: "semana", fecha: "2026-11-06", responsable: "yo" })).toBe(
+      "/tareas?responsable=yo",
+    );
+  });
+
+  it("lets an explicit estilo win and drops an unknown vista", () => {
+    expect(legacyRedirectTarget("/tareas", { estilo: "esencial", vista: "tablero" })).toBe("/tareas?estilo=esencial");
+    expect(legacyRedirectTarget("/tareas", { vista: "kanban", tramo: "diseno" })).toBe("/tareas?tramo=diseno");
+  });
+
+  it("leaves /tareas without vista alone", () => {
+    expect(legacyRedirectTarget("/tareas")).toBeNull();
+    expect(legacyRedirectTarget("/tareas", { estilo: "visual", tramo: "diseno" })).toBeNull();
+  });
+
+  it("drops the Calendario params from /calendario", () => {
+    expect(legacyRedirectTarget("/calendario", { fecha: "2026-11-07", cal: "dia", tramo: "diseno" })).toBe("/tareas?tramo=diseno");
   });
 });

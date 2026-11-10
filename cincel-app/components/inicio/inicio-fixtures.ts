@@ -15,7 +15,7 @@ export const KPI_VALUES = {
 } as const;
 
 /** Destination of the Vencidas KPI (`INICIO_KPI.vencidas.href`). */
-export const VENCIDAS_HREF = "/tareas?vista=lista";
+export const VENCIDAS_HREF = "/tareas";
 
 export const INICIO_NON_ADMIN: InicioData = {
   kpis: [

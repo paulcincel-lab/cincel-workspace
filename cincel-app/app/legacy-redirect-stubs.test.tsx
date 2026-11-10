@@ -35,19 +35,23 @@ type LegacyCase = {
 
 const CASES: LegacyCase[] = [
   { name: "/dashboard", query: { tab: "kpis" }, on: "/inicio?tab=kpis" },
-  { name: "/tablero", query: { proyecto: "p1" }, on: "/tareas?vista=tablero&proyecto=p1" },
-  { name: "/mis-tareas", on: "/tareas?vista=lista&responsable=yo" },
-  { name: "/calendario", query: { fecha: "2026-11-07" }, on: "/tareas?vista=calendario&fecha=2026-11-07" },
-  { name: "/actividades/general", on: "/tareas?vista=lista" },
+  { name: "/tablero", query: { proyecto: "p1" }, on: "/tareas?estilo=visual&proyecto=p1" },
+  { name: "/mis-tareas", on: "/tareas?estilo=analitico&responsable=yo" },
+  { name: "/calendario", query: { fecha: "2026-11-07" }, on: "/tareas" },
+  { name: "/actividades/general", on: "/tareas?estilo=analitico" },
   {
     name: "/actividades/presale",
-    on: "/tareas?vista=lista&tramo=presale",
+    on: "/tareas?estilo=analitico&tramo=presale",
   },
   {
     name: "/actividades/presale?project=X",
     query: { project: "X" },
-    on: "/tareas?vista=lista&tramo=presale&project=X&iniciar=1",
+    on: "/tareas?estilo=analitico&tramo=presale&project=X&iniciar=1",
   },
+  // The old Tareas view switch: Tablero is Visual, Lista Analítico, Calendario the page without the param.
+  { name: "/tareas?vista=tablero", query: { vista: "tablero", tramo: "diseno" }, on: "/tareas?estilo=visual&tramo=diseno" },
+  { name: "/tareas?vista=lista", query: { vista: "lista", responsable: "yo" }, on: "/tareas?estilo=analitico&responsable=yo" },
+  { name: "/tareas?vista=calendario", query: { vista: "calendario", cal: "semana", fecha: "2026-11-07" }, on: "/tareas" },
   { name: "/equipo", on: "/personas" },
   { name: "/directorio", query: { q: "ana" }, on: "/personas/clientes?q=ana" },
   { name: "/clientes", on: "/personas/clientes" },
@@ -128,7 +132,8 @@ describe("old routes redirect in the proxy", () => {
   it("keeps the trailing-slash form and leaves new routes alone", () => {
     expect(location("/dashboard/")).toBe("/inicio");
     expect(location("/inicio")).toBeNull();
-    expect(location("/tareas", { vista: "tablero" })).toBeNull();
+    expect(location("/tareas")).toBeNull();
+    expect(location("/tareas", { estilo: "visual" })).toBeNull();
     expect(location("/ajustes/apariencia")).toBeNull();
   });
 

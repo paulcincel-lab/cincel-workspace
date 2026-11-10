@@ -33,7 +33,7 @@ export type TareasListaProps = {
 const NO_TRAMOS: WorkflowRef[] = [];
 
 /**
- * Tareas · Lista (`/tareas?vista=lista`, FE §3.4, §4.10.2): `ListPage` with
+ * Tareas · Lista (FE §3.4, §4.10.2): `ListPage` with
  * `spec.kind = "table"`, from `useInfiniteQuery(tareas.list(f))` (first page
  * seeded by the page bundle; "Cargar más" loads the next one). `RecordTable`
  * renders the three styles from the one table (Visual grouped by estatus with

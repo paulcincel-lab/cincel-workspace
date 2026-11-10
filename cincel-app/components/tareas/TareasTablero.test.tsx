@@ -8,7 +8,7 @@ import type { TaskListRow } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { DistributionSegment, RecordTableData } from "@/lib/types/widgets";
 
-const nav = vi.hoisted(() => ({ search: "vista=tablero", refresh: vi.fn(), replace: vi.fn() }));
+const nav = vi.hoisted(() => ({ search: "", refresh: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: nav.refresh, replace: nav.replace, push: vi.fn() }),
   usePathname: () => "/tareas",
@@ -154,7 +154,7 @@ function boardData(statuses: TareasBoardData["statuses"] = []): TareasBoardData 
 }
 const TOTAL = 4;
 
-const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "tablero" };
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY };
 const F = tareasListFiltersOf(QUERY);
 const PAGE: TareasPageData = { facets: { total: TOTAL, byTramo: {}, projects: [] }, tramos: [], staff: [] };
 
@@ -195,7 +195,7 @@ function deferred<T>() {
 const okDetail = (id: string, status: string) => ({ ok: true as const, data: { id, projectId: "p1", status } });
 
 beforeEach(() => {
-  nav.search = "vista=tablero";
+  nav.search = "";
   nav.refresh.mockReset();
   nav.replace.mockReset();
   toastError.mockReset();
@@ -218,7 +218,7 @@ describe("TareasTablero · three styles from tareas.board(f)", () => {
   });
 
   it("Visual: one column per estatus, empty column collapsed, card links keep the view and filters", () => {
-    nav.search = "vista=tablero&tramo=diseno&estado=pendiente";
+    nav.search = "tramo=diseno&estado=pendiente";
     const { container } = renderTablero("visual");
 
     expect(container.querySelectorAll("[data-task-id]").length).toBe(TOTAL);
@@ -227,7 +227,7 @@ describe("TareasTablero · three styles from tareas.board(f)", () => {
     expect(screen.getByRole("region", { name: boardColumnLabel("Completado", 1) })).toBeTruthy();
     expect(screen.getByRole("region", { name: boardColumnLabel("Bloqueado", 0) }).getAttribute("data-collapsed")).toBe("true");
     expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe(
-      "/tareas?vista=tablero&tramo=diseno&estado=pendiente&tarea=t2",
+      "/tareas?tramo=diseno&estado=pendiente&tarea=t2",
     );
   });
 

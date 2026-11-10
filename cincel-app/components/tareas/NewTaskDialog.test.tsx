@@ -141,8 +141,8 @@ describe("new-task-form helpers", () => {
   });
 
   it("sets and removes ?nueva keeping the other params", () => {
-    expect(newTaskSearch(new URLSearchParams("vista=lista"), true)).toBe("?vista=lista&nueva=1");
-    expect(newTaskSearch(new URLSearchParams("vista=lista&nueva=1"), false)).toBe("?vista=lista");
+    expect(newTaskSearch(new URLSearchParams("estilo=analitico"), true)).toBe("?estilo=analitico&nueva=1");
+    expect(newTaskSearch(new URLSearchParams("estilo=analitico&nueva=1"), false)).toBe("?estilo=analitico");
     expect(newTaskSearch(new URLSearchParams("nueva=1"), false)).toBe("");
   });
 
@@ -151,7 +151,7 @@ describe("new-task-form helpers", () => {
       projectId: "p-1",
       tramoKey: "diseno",
     });
-    expect(newTaskDefaultsFromSearch(new URLSearchParams("vista=lista"))).toEqual({});
+    expect(newTaskDefaultsFromSearch(new URLSearchParams("estilo=analitico"))).toEqual({});
   });
 });
 

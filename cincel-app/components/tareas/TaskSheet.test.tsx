@@ -169,10 +169,10 @@ afterEach(() => {
 
 describe("task sheet search params", () => {
   it("sets and removes tarea keeping the other params", () => {
-    expect(taskSheetSearch("vista=tablero&tramo=diseno", "t-9")).toBe("?vista=tablero&tramo=diseno&tarea=t-9");
-    expect(taskSheetSearch("vista=tablero&tarea=t-9", null)).toBe("?vista=tablero");
+    expect(taskSheetSearch("estilo=visual&tramo=diseno", "t-9")).toBe("?estilo=visual&tramo=diseno&tarea=t-9");
+    expect(taskSheetSearch("estilo=visual&tarea=t-9", null)).toBe("?estilo=visual");
     expect(taskSheetSearch("tarea=t-9", null)).toBe("");
-    expect(taskSheetHref("/tareas", new URLSearchParams("vista=lista"), "t-2")).toBe("/tareas?vista=lista&tarea=t-2");
+    expect(taskSheetHref("/tareas", new URLSearchParams("estilo=analitico"), "t-2")).toBe("/tareas?estilo=analitico&tarea=t-2");
   });
 
   it("formats a short date with the module formatter", () => {
@@ -183,7 +183,7 @@ describe("task sheet search params", () => {
 
 describe("TaskSheet loading", () => {
   it("opens from the seeded cache without a request", async () => {
-    nav.search = "vista=tablero&tarea=t-1";
+    nav.search = "estilo=visual&tarea=t-1";
     render(<Page />);
     expect(await screen.findByDisplayValue("Planos de conjunto")).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Detalle de tarea" })).toBeTruthy();
@@ -214,7 +214,7 @@ describe("TaskSheet loading", () => {
   });
 
   it("renders nothing without the param", () => {
-    nav.search = "vista=tablero";
+    nav.search = "estilo=visual";
     render(<Page />);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(getTaskSheetData).not.toHaveBeenCalled();
@@ -241,21 +241,21 @@ describe("TaskSheet loading", () => {
 
 describe("TaskSheet shallow navigation", () => {
   it("closing removes tarea with history.replaceState, not the router, and the view keeps its state", async () => {
-    nav.search = "vista=tablero";
+    nav.search = "estilo=visual";
     const view = render(<Page />);
     fireEvent.click(screen.getByRole("button", { name: "Contar" }));
     fireEvent.click(screen.getByRole("button", { name: "Contar" }));
     const output = screen.getByLabelText("Cuenta");
 
-    nav.search = "vista=tablero&tarea=t-1";
+    nav.search = "estilo=visual&tarea=t-1";
     view.rerender(<Page />);
     await screen.findByDisplayValue("Planos de conjunto");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(replaceState.mock.calls).toContainEqual([null, "", "/tareas?vista=tablero"]);
+    expect(replaceState.mock.calls).toContainEqual([null, "", "/tareas?estilo=visual"]);
     expect(pushState.mock.calls).toEqual([]);
 
-    nav.search = "vista=tablero";
+    nav.search = "estilo=visual";
     view.rerender(<Page />);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     // Same node, same state: the view never unmounted.
@@ -264,11 +264,11 @@ describe("TaskSheet shallow navigation", () => {
   });
 
   it("browser back (the param disappears) closes the sheet without another navigation", async () => {
-    nav.search = "vista=lista&tarea=t-1";
+    nav.search = "estilo=analitico&tarea=t-1";
     const view = render(<Page />);
     await screen.findByDisplayValue("Planos de conjunto");
 
-    nav.search = "vista=lista";
+    nav.search = "estilo=analitico";
     view.rerender(<Page />);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(replaceState.mock.calls).toEqual([]);
@@ -277,11 +277,11 @@ describe("TaskSheet shallow navigation", () => {
   });
 
   it("opens a parent task in place with history.pushState, so back returns to this one", async () => {
-    nav.search = "vista=tablero&tarea=t-1";
+    nav.search = "estilo=visual&tarea=t-1";
     const task = makeTask({ parentTaskId: "t-0", parentTitle: "Proyecto ejecutivo" });
     render(<TaskSheet taskId="t-1" onClose={vi.fn()} />, seededClient(makeSheetData(task)));
     fireEvent.click(await screen.findByRole("button", { name: "Proyecto ejecutivo" }));
-    expect(pushState.mock.calls).toContainEqual([null, "", "/tareas?vista=tablero&tarea=t-0"]);
+    expect(pushState.mock.calls).toContainEqual([null, "", "/tareas?estilo=visual&tarea=t-0"]);
     expect(replaceState.mock.calls).toEqual([]);
   });
 });
@@ -346,7 +346,6 @@ describe("TaskSheet properties", () => {
           ["tareas", "page"],
           ["tareas", "list"],
           ["tareas", "board"],
-          ["tareas", "calendar"],
           ["tareas", "facets"],
           qk.proyectos.tab("p-1", "tareas"),
           qk.inicio(),

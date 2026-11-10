@@ -54,8 +54,8 @@ vi.mock("@/lib/query/options/inicio", () => ({
   inicioPageOptions: () => ({ queryKey: ["inicio"], queryFn: state.inicioPage, staleTime: 30_000 }),
 }));
 vi.mock("@/lib/query/options/tareas", () => ({
-  tareasPageKeyInputOf: (query: { vista: string }) => ({ vista: query.vista }),
-  tareasPageOptions: (q: { vista: string }) => ({ queryKey: ["tareas", "page", q], queryFn: state.tareasPage, staleTime: 30_000 }),
+  tareasPageKeyInputOf: (query: { tramo: string | null }, estilo = "visual") => ({ estilo, tramo: query.tramo }),
+  tareasPageOptions: (q: { estilo: string }) => ({ queryKey: ["tareas", "page", q], queryFn: state.tareasPage, staleTime: 30_000 }),
 }));
 vi.mock("@/components/asistente/AssistantButton", () => ({
   AssistantButton: ({ onOpen }: { onOpen(): void }) => (
@@ -398,7 +398,7 @@ describe("Sidebar hover prefetch", () => {
       await vi.advanceTimersByTimeAsync(NAV_PREFETCH_DEBOUNCE_MS);
     });
     expect(state.tareasPage).toHaveBeenCalledTimes(1);
-    expect(client.getQueryData(["tareas", "page", { vista: "tablero" }])).toBeTruthy();
+    expect(client.getQueryData(["tareas", "page", { estilo: "visual", tramo: null }])).toBeTruthy();
   });
 
   it("prefetches nothing for the other links", async () => {

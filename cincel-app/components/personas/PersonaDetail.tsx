@@ -128,7 +128,7 @@ export function PersonaDetail({ detail }: PersonaDetailProps) {
           title="Tareas asignadas"
           items={detail.tasks}
           totalCount={openCount}
-          moreHref={`/tareas?vista=lista&responsable=${encodeURIComponent(staff.id)}`}
+          moreHref={`/tareas?responsable=${encodeURIComponent(staff.id)}`}
         />
         <div className="flex flex-col gap-4">
           <ProgressListWidget title="Proyectos" items={detail.projects} variant="bars" />

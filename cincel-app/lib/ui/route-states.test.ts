@@ -39,7 +39,7 @@ describe("loadingVariantFor", () => {
     ["/dashboard", "kpis"],
     ["/mi-espacio", "cards"],
     ["/tareas", "list"],
-    ["/tareas?vista=tablero", "list"],
+    ["/tareas?estilo=visual", "list"],
     ["/mis-tareas", "list"],
     ["/actividades/diseno", "list"],
     ["/tablero", "board"],

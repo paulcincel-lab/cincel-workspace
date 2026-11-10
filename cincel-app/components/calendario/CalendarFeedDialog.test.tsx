@@ -109,7 +109,7 @@ describe("CalendarFeedDialog", () => {
     expect(await screen.findByText("No se pudo consultar el estado del enlace.")).toBeTruthy();
   });
 
-  it("generates a link, shows it once and invalidates tareas.calendar and Integraciones", async () => {
+  it("generates a link, shows it once and invalidates Integraciones", async () => {
     actions.fetchGoogleCalendarSyncStatusAction.mockResolvedValue(notConnected);
     actions.generateCalendarFeedAction.mockImplementation(async () => {
       actions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: true });
@@ -124,7 +124,6 @@ describe("CalendarFeedDialog", () => {
     const input = (await screen.findByLabelText("Enlace del calendario")) as HTMLInputElement;
     expect(input.value).toBe(`${window.location.origin}/api/calendario/feed/secret-token.ics`);
     await waitFor(() => {
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tareas", "calendar"] });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.ajustes.page("integraciones") });
     });
     expect(await screen.findByRole("button", { name: "Regenerar enlace" })).toBeTruthy();
@@ -155,7 +154,6 @@ describe("CalendarFeedDialog", () => {
 
     expect(await screen.findByRole("button", { name: "Crear enlace" })).toBeTruthy();
     expect(actions.disableCalendarFeedAction).toHaveBeenCalledTimes(1);
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tareas", "calendar"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.ajustes.page("integraciones") });
     expect(confirm).toHaveBeenCalledTimes(1);
   });
@@ -172,7 +170,6 @@ describe("CalendarFeedDialog", () => {
 
     expect(await screen.findByText("Calendario actualizado.")).toBeTruthy();
     expect(actions.syncGoogleCalendarAction).toHaveBeenCalledTimes(1);
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tareas", "calendar"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.ajustes.page("integraciones") });
     expect(actions.fetchGoogleCalendarSyncStatusAction).toHaveBeenCalledTimes(2);
   });

@@ -404,19 +404,6 @@ exports[`qk > builds every key shape 1`] = `
       "tramo": "diseno",
     },
   ],
-  "tareas.calendar": [
-    "tareas",
-    "calendar",
-    {
-      "estado": "pendiente",
-      "proyecto": null,
-      "q": null,
-      "responsable": "yo",
-      "tramo": "diseno",
-    },
-    "2026-11-01",
-    "2026-11-30",
-  ],
   "tareas.facets": [
     "tareas",
     "facets",
@@ -443,7 +430,6 @@ exports[`qk > builds every key shape 1`] = `
     "tareas",
     "page",
     {
-      "cal": "mes",
       "estado": "pendiente",
       "estilo": "visual",
       "proyecto": null,
@@ -549,7 +535,6 @@ exports[`qk > covers every key of the factory 1`] = `
   "tareas.facets",
   "tareas.summary",
   "tareas.board",
-  "tareas.calendar",
   "tareas.trend",
   "tareas.byProject",
   "tareas.startSlot",

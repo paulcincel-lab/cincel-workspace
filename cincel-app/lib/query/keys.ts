@@ -15,11 +15,11 @@
 import type { AjustesAdminSegment } from "@/lib/auth/ajustes-segments";
 import type { PersonasContactsTab } from "@/lib/personas/contacts";
 import type { ImportDataEntity } from "@/lib/repositories/import-repository";
-import type { TareasMostrar, TareasQuery } from "@/lib/tareas/query";
+import type { TareasMostrar } from "@/lib/tareas/query";
 import type { TaskStatus } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-/** The filters every Tareas view shares (the URL filters, without the view and calendar mode). */
+/** The filters every Tareas view shares (the URL filters). */
 export type TareasListFilters = {
   tramo: string | null;
   proyecto: string | null;
@@ -36,8 +36,6 @@ export type TareasListFilters = {
 export type TareasPageKeyInput = TareasListFilters & {
   /** The resolved presentation style: it picks what the bundle seeds (Visual: the board). */
   estilo: PresentationStyle;
-  cal: TareasQuery["cal"];
-  range?: { from: string; to: string };
 };
 
 /** Every Ajustes segment: the personal ones and the organization ones. */
@@ -82,7 +80,6 @@ export const qk = {
     summary: (f: TareasListFilters) => ["tareas", "summary", f] as const,
     board: (f: TareasListFilters, columnId?: string) =>
       (columnId ? ["tareas", "board", f, columnId] : ["tareas", "board", f]) as readonly unknown[],
-    calendar: (f: TareasListFilters, from: string, to: string) => ["tareas", "calendar", f, from, to] as const,
     /** Visual summary: the KPI 7-day series and deltas, people at work and the tasks due per day this week. */
     trend: (f: TareasListFilters) => ["tareas", "trend", f] as const,
     /** Esencial: the cards per project (counts and open rows, cap 200); `f` comes resolved (null responsable = everyone). */
