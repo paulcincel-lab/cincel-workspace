@@ -1,0 +1,49 @@
+/**
+ * Row checkboxes and row actions of the record tables (#1040, #1041): the
+ * props `GroupedTable` and `DataTable` share for a leading checkbox column
+ * and a trailing `⋯` actions column, and their copy. Pure and client-safe.
+ *
+ * Selection is controlled: the page owns the selected ids (see
+ * `useTaskSelection`) and the table only renders the checkboxes and reports
+ * changes. Both columns are their own grid columns, outside the editable
+ * cells.
+ */
+
+/** One entry of a row's `⋯` menu. */
+export type TableRowAction = {
+  id: string;
+  label: string;
+  /** Shown in the destructive tone, after a separator. */
+  destructive?: boolean;
+  onSelect(): void;
+};
+
+/** A leading checkbox column (#1040). Without `selectable` nothing changes. */
+export type TableSelectionProps<Row> = {
+  selectable?: boolean;
+  /** The selected row ids (`getRowId`), controlled. */
+  selectedIds?: ReadonlySet<string>;
+  /** Every change: a click, shift-click range, header checkbox, Space or Esc. */
+  onSelectionChange?(ids: ReadonlySet<string>): void;
+  /** The row's name for its checkbox and actions menu labels ("Seleccionar «…»"). */
+  getRowLabel?(row: Row): string;
+};
+
+/** A trailing `⋯` actions column (#1041). Without `rowActions` nothing changes. */
+export type TableRowActionsProps<Row> = {
+  /** The row's menu entries; an empty list hides the menu on that row. */
+  rowActions?(row: Row): TableRowAction[];
+  /** Supr on a focused row (outside a cell editor). */
+  onRowDelete?(row: Row): void;
+};
+
+// Copy (Spanish, sentence case).
+export const SELECT_ROW_LABEL = (label: string): string => `Seleccionar «${label}»`;
+export const SELECT_ALL_LABEL = "Seleccionar todas";
+export const ROW_ACTIONS_LABEL = (label: string): string => `Acciones de «${label}»`;
+export const SELECTED_COUNT = (n: number): string => (n === 1 ? "1 seleccionada" : `${n} seleccionadas`);
+export const CLEAR_SELECTION_LABEL = "Quitar selección";
+export const DELETE_LABEL = "Eliminar";
+export const OPEN_LABEL = "Abrir";
+export const DUPLICATE_LABEL = "Duplicar";
+export const CANCEL_LABEL = "Cancelar";

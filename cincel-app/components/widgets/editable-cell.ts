@@ -32,13 +32,44 @@ export type CellEdit<Row> =
 
 export type CellEditKind = CellEdit<unknown>["kind"];
 
+/**
+ * Multi-select of people (#1038, e.g. a task's equipo de apoyo): a searchable
+ * list with checkboxes and avatars; Enter or closing saves. Its value is a
+ * list of ids, so it sits beside the single-value kinds of `CellEdit`.
+ */
+export type PeopleCellEdit<Row> = {
+  kind: "people";
+  /** The ids currently picked. */
+  value(row: Row): string[];
+  /** Saves the whole list (`[]` clears). Undo calls it again with the previous list. */
+  commit(row: Row, ids: string[]): Promise<ActionResult<unknown>>;
+  options(row: Row): CellOption[];
+  /** Ids that can't be picked for this row (e.g. its Responsable). */
+  exclude?(row: Row): string[];
+};
+
+/** What a column's `edit` takes: a single-value kind or the people multi-select. */
+export type AnyCellEdit<Row> = CellEdit<Row> | PeopleCellEdit<Row>;
+export type AnyCellEditKind = AnyCellEdit<unknown>["kind"];
+
+export function isPeopleEdit<Row>(edit: AnyCellEdit<Row> | undefined): edit is PeopleCellEdit<Row> {
+  return edit?.kind === "people";
+}
+
+/** Avatars a people cell shows at rest before "+n". */
+export const PEOPLE_MAX_AVATARS = 3;
+/** The overflow after `PEOPLE_MAX_AVATARS` avatars ("+2"). */
+export const PEOPLE_OVERFLOW = (n: number): string => `+${n}`;
+/** A people cell with nobody picked. */
+export const PEOPLE_EMPTY = "—";
+
 /** true, or the reason shown when the viewer clicks a locked cell */
 export type CanEdit<Row> = (row: Row) => true | string;
 
 /** How a cell behaves: calculated (no edit), locked with a reason, or editable. */
 export type CellEditState = { state: "inert" } | { state: "locked"; reason: string } | { state: "editable" };
 
-export function cellEditState<Row>(row: Row, edit?: CellEdit<Row>, canEdit?: CanEdit<Row>): CellEditState {
+export function cellEditState<Row>(row: Row, edit?: AnyCellEdit<Row>, canEdit?: CanEdit<Row>): CellEditState {
   if (!edit) return { state: "inert" };
   const allowed = canEdit ? canEdit(row) : true;
   return allowed === true ? { state: "editable" } : { state: "locked", reason: allowed };

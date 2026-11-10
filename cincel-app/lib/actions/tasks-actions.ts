@@ -19,6 +19,8 @@ import type {
   AdminTaskInput,
   HistoryEvent,
   TaskAttachment,
+  TaskBulkPatch,
+  TaskBulkResult,
   TaskChecklistItem,
   TaskDetail,
   TaskFilters,
@@ -266,7 +268,45 @@ export async function mergeTasksAction(keepId: string, duplicateIds: string[]): 
   return scopeTaskDto(row, viewer);
 }
 
-export async function setTaskSupportAction(taskId: string, staffIds: string[]) {
+export async function restoreTaskAction(
+  ...args: Parameters<typeof restoreTaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof restoreTaskActionImpl>>>> {
+  return toActionResult(() => restoreTaskActionImpl(...args));
+}
+
+/**
+ * Undoes `deleteTaskAction` (#1041): the task and the subtasks deleted with it
+ * come back. Admins or the person who deleted it, within 30 days.
+ */
+async function restoreTaskActionImpl(id: string): Promise<void> {
+  void id;
+  throw new Error("not implemented: restoreTaskAction");
+}
+
+export async function bulkUpdateTasksAction(
+  ...args: Parameters<typeof bulkUpdateTasksActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof bulkUpdateTasksActionImpl>>>> {
+  return toActionResult(() => bulkUpdateTasksActionImpl(...args));
+}
+
+/**
+ * One field on many tasks (#1040). Each task keeps its own permission (the
+ * same checks as the single-task action for that field): tasks the viewer
+ * can't change are skipped with the error code, the rest are updated.
+ */
+async function bulkUpdateTasksActionImpl(ids: string[], patch: TaskBulkPatch): Promise<TaskBulkResult> {
+  void ids;
+  void patch;
+  throw new Error("not implemented: bulkUpdateTasksAction");
+}
+
+export async function setTaskSupportAction(
+  ...args: Parameters<typeof setTaskSupportActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setTaskSupportActionImpl>>>> {
+  return toActionResult(() => setTaskSupportActionImpl(...args));
+}
+
+async function setTaskSupportActionImpl(taskId: string, staffIds: string[]) {
   const { user } = await requireTaskWriter(taskId);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task support edit");

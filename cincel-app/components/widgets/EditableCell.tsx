@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { Lock } from "lucide-react";
 
 import { CellEditor } from "@/components/widgets/CellEditor";
-import type { CanEdit, CellEdit } from "@/components/widgets/editable-cell";
+import type { AnyCellEdit, CanEdit, CellEdit, PeopleCellEdit } from "@/components/widgets/editable-cell";
 import { useCellCommit, useCellCommitContext } from "@/components/widgets/use-cell-commit";
 import { useCellGridContext, type CellHandle } from "@/components/widgets/use-cell-grid";
 
@@ -23,7 +23,7 @@ export type EditableCellProps<Row> = {
   row: Row;
   rowId: string;
   columnKey: string;
-  edit?: CellEdit<Row>;
+  edit?: AnyCellEdit<Row>;
   canEdit?: CanEdit<Row>;
   /** Column label, for the toast ("Fase guardado.") and the search placeholder. */
   label?: string;
@@ -35,7 +35,16 @@ const REOPEN_GUARD_MS = 250;
 
 export function EditableCell<Row>(props: EditableCellProps<Row>): ReactNode {
   if (!props.edit) return props.children;
+  if (props.edit.kind === "people") return <PeopleEditable {...props} edit={props.edit} />;
   return <Editable {...props} edit={props.edit} />;
+}
+
+/**
+ * A people cell (#1038). Contract stub: renders the content untouched until
+ * the multi-select editor lands.
+ */
+function PeopleEditable<Row>({ children }: EditableCellProps<Row> & { edit: PeopleCellEdit<Row> }): ReactNode {
+  return children;
 }
 
 function isClearable<Row>(edit: CellEdit<Row>): boolean {

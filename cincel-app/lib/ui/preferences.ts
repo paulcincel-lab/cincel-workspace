@@ -22,6 +22,11 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   quietHours: null,
 };
 
+/** Preference key of "Ocultar completadas" in the task tables (#1039). */
+export const HIDE_COMPLETED_PREFERENCE_KEY = "hideCompletedTasks" satisfies keyof UserPreferences;
+/** Completed tasks are shown until the user hides them. */
+export const DEFAULT_HIDE_COMPLETED_TASKS = false;
+
 /** Lifetime of the appearance cookie (BE §8.2). */
 const APPEARANCE_COOKIE_MAX_AGE_DAYS = 365;
 

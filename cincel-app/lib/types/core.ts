@@ -607,6 +607,27 @@ export type TaskPatch = Partial<
 // with the parent (#1022). Admin tasks reject it (ADMIN_TASK); an unknown
 // tramo or one of another project is INVALID.
 
+/**
+ * One bulk change of the task tables' selection bar (#1040), one field per
+ * call. `customStatusId` sets a custom status (its base status follows);
+ * `supportIds` replaces the equipo de apoyo; `dueDate` ("Vence") is written to
+ * the date the column shows (`dueDateField`: the commitment date when set,
+ * else the delivery date). `null` clears.
+ */
+export type TaskBulkPatch =
+  | { status: TaskStatus }
+  | { customStatusId: string }
+  | { managerId: string | null }
+  | { supportIds: string[] }
+  | { phaseId: string | null }
+  | { dueDate: string | null };
+
+/** What `bulkUpdateTasksAction` did: the ids changed and the ones skipped, with why (an error code). */
+export type TaskBulkResult = {
+  updated: string[];
+  skipped: { id: string; reason: string }[];
+};
+
 export type TaskFilters = {
   projectId?: string;
   workflowId?: string;

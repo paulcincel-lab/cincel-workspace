@@ -17,7 +17,8 @@ import { GripVertical } from "lucide-react";
 import { Input } from "@/components/ui/shadcn/input";
 import { useKeyboardReorder } from "@/components/ui/use-keyboard-reorder";
 import { EditableCell } from "@/components/widgets/EditableCell";
-import { cellEditState, type CanEdit, type CellEdit } from "@/components/widgets/editable-cell";
+import { cellEditState, type AnyCellEdit, type CanEdit } from "@/components/widgets/editable-cell";
+import type { TableRowActionsProps, TableSelectionProps } from "@/components/widgets/table-rows";
 import {
   CellGridContext,
   GRID_CELL_CLASS,
@@ -39,7 +40,7 @@ declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TValue must match the original declaration
   interface ColumnMeta<TData extends RowData, TValue> {
     /** Editable cell (#1024); without it the column is calculated and inert. */
-    edit?: CellEdit<TData>;
+    edit?: AnyCellEdit<TData>;
     /** true, or the reason shown when the viewer clicks a locked cell */
     canEdit?(row: TData): ReturnType<CanEdit<TData>>;
     /** Field name of an editable column for its toast and search ("Responsable"); defaults to the column id. */
@@ -104,7 +105,8 @@ type DataTableProps<T> = {
    */
   groupBy?: (row: T) => string;
   renderGroupHeader?: (group: string, rows: T[]) => ReactNode;
-};
+} & TableSelectionProps<T> &
+  TableRowActionsProps<T>;
 
 function groupRows<R>(rows: R[], keyOf: (row: R) => string): { key: string; rows: R[] }[] {
   const groups = new Map<string, R[]>();

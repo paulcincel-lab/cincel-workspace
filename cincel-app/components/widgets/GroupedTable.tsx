@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { EditableCell } from "@/components/widgets/EditableCell";
 import { OPEN_TASK_LABEL, cellEditState } from "@/components/widgets/editable-cell";
+import type { TableRowActionsProps, TableSelectionProps } from "@/components/widgets/table-rows";
 import {
   HEAT_CELL_CLASS,
   columnAlign,
@@ -114,7 +115,8 @@ export type GroupedTableProps<Row extends Record<string, unknown>> = {
   sortable?: string[];
   sort?: { key: string; direction: "asc" | "desc" } | null;
   onSortChange?(key: string): void;
-};
+} & TableSelectionProps<Row> &
+  TableRowActionsProps<Row>;
 
 /** `aria-sort` of a header under the current sort. */
 export function ariaSortOf(

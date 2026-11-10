@@ -21,10 +21,18 @@ export type TareasQuery = {
   q: string | null;
   /** `?mostrar=`; default "todas" (left out of the URL). */
   mostrar: TareasMostrar;
+  /**
+   * `?completadas=0` hides the completed tasks ("Ocultar completadas", #1039);
+   * default true (shown, left out of the URL). "Abiertas" in Mostrar implies hidden.
+   */
+  completadas?: boolean;
   nueva?: boolean;
 };
 
 export const TAREAS_ESTADOS: readonly TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
+
+/** The "Ocultar completadas" search param: `?completadas=0` hides them. */
+export const TAREAS_COMPLETADAS_PARAM = "completadas";
 
 /** Longest `q` kept from the URL. */
 export const TAREAS_SEARCH_MAX = 200;
@@ -36,6 +44,7 @@ export const DEFAULT_TAREAS_QUERY: TareasQuery = {
   estado: null,
   q: null,
   mostrar: "todas",
+  completadas: true,
   nueva: false,
 };
 
@@ -73,6 +82,7 @@ export function parseTareasQuery(sp: URLSearchParams): TareasQuery {
     estado: estado !== null && (TAREAS_ESTADOS as readonly string[]).includes(estado) ? estado : null,
     q: searchText(sp.get("q")),
     mostrar: pick(sp.get("mostrar"), TAREAS_MOSTRAR, DEFAULT_TAREAS_QUERY.mostrar),
+    completadas: sp.get(TAREAS_COMPLETADAS_PARAM) !== "0",
     nueva: sp.get("nueva") === "1",
   };
 }
@@ -87,6 +97,7 @@ export function toTareasSearch(q: Partial<TareasQuery>): string {
   const text = q.q?.trim();
   if (text) sp.set("q", text);
   if (q.mostrar && q.mostrar !== DEFAULT_TAREAS_QUERY.mostrar) sp.set("mostrar", q.mostrar);
+  if (q.completadas === false) sp.set(TAREAS_COMPLETADAS_PARAM, "0");
   if (q.nueva) sp.set("nueva", "1");
   const out = sp.toString();
   return out === "" ? "" : `?${out}`;

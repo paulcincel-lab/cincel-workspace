@@ -52,6 +52,7 @@ function randomQuery(r: Rand): TareasQuery {
     estado: maybe(r, () => oneOf(r, TAREAS_ESTADOS)),
     q: maybe(r, () => oneOf(r, SEARCHES)),
     mostrar: oneOf(r, TAREAS_MOSTRAR),
+    completadas: r() < 0.5,
     nueva: r() < 0.5,
   };
 }
@@ -62,6 +63,13 @@ function roundTrip(q: Partial<TareasQuery>): TareasQuery {
 }
 
 describe("parseTareasQuery / toTareasSearch", () => {
+  it("?completadas=0 hides the completed tasks; shown by default and left out of the URL", () => {
+    expect(parseTareasQuery(new URLSearchParams("completadas=0")).completadas).toBe(false);
+    expect(parseTareasQuery(new URLSearchParams("")).completadas).toBe(true);
+    expect(toTareasSearch({ completadas: false })).toBe("?completadas=0");
+    expect(toTareasSearch({ completadas: true })).toBe("");
+  });
+
   it("round trips every field (500 random queries)", () => {
     const r = rng(20261107);
     for (let i = 0; i < 500; i++) {
