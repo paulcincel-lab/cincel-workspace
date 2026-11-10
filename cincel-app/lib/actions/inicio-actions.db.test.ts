@@ -229,14 +229,19 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       [
         "attention",
         "kpis",
+        "hero",
+        "myAttention",
         "myDay",
+        "myWeek",
+        "openShifts",
+        "paceScope",
         "projectsProgress",
+        "sections",
         "tasksByTramo",
+        "tasksByTramoAssignee",
+        "todayAgenda",
         "weeklyPace",
         "workload",
-        "hero",
-        "openShifts",
-        "todayAgenda",
       ].sort()
     );
   });
@@ -251,6 +256,7 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       "completadas_semana",
       "abiertas",
       "horas_semana",
+      "retraso_promedio",
     ]);
     const value = Object.fromEntries(kpis.map((k) => [k.key, k.value]));
     expect(value).toEqual({
@@ -261,6 +267,7 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       completadas_semana: 1,
       abiertas: 4,
       horas_semana: 0,
+      retraso_promedio: 3,
     });
     for (const kpi of kpis) {
       expect(kpi.series7).toHaveLength(7);
@@ -270,7 +277,7 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       expect(kpi.delta?.label).toMatch(/^(sin cambio|[+−]\d.* (vs\. semana|este mes))$/);
       expect(["good", "bad", "neutral"]).toContain(kpi.delta?.tone);
       expect(kpi.caption).toBeTruthy();
-      if (kpi.key === "completadas_semana") expect(kpi.visibleIn).toEqual(["analitico"]);
+      if (kpi.key === "completadas_semana" || kpi.key === "retraso_promedio") expect(kpi.visibleIn).toEqual(["analitico"]);
       else if (kpi.key === "abiertas") expect(kpi.visibleIn).toEqual(["visual", "analitico"]);
       else if (kpi.key === "horas_semana") expect(kpi.visibleIn).toEqual(["visual"]);
       else expect(kpi.visibleIn).toBeUndefined();
@@ -390,15 +397,14 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       const user = await requireCapabilityUser();
       const before = await legacyFetchInicio(user);
       const loaded = (await loadInicioPage(user)).inicio;
-      // Inicio Visual (#989) adds fields and two KPIs; everything the pre-migration action returned is unchanged.
+      // Only the fields the frozen reference has: Inicio Visual (#989), Esencial (#990) and Analítico (#991)
+      // added fields and KPIs later (the reference shares the widget builders, so their new fields are on both sides).
       const legacyKeys = new Set(before.kpis.map((k) => k.key));
       const after = {
         ...Object.fromEntries(Object.keys(before).map((key) => [key, loaded[key as keyof typeof loaded]])),
         kpis: loaded.kpis.filter((k) => legacyKeys.has(k.key)),
         attention: loaded.attention.map(({ subtasks: _s, progressPct: _p, ...item }) => item),
-        projectsProgress: loaded.projectsProgress.map(
-          ({ open: _o, overdue: _v, deliveryDate: _d, team: _t, ...item }) => item,
-        ),
+        projectsProgress: loaded.projectsProgress.map(({ deliveryDate: _d, team: _t, atRisk: _r, ...item }) => item),
       } as typeof before;
       expect(after).toEqual(before);
       // The parts #917 lost: delta chips, context lines and sparklines.

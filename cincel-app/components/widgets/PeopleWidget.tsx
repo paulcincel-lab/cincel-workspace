@@ -15,6 +15,12 @@ import type { WorkflowRef } from "@/lib/types/core";
 import type { Availability, PersonDatum, RecordTableData } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
+/** Personas · Equipo Esencial layout (pills, light cards, expandable tasks, quick assign). */
+export {
+  PeopleEsencialTeam,
+  type PeopleEsencialTeamProps,
+} from "@/components/widgets/PeopleEsencialTeam";
+
 /**
  * People in three styles (redesign FE §4.10.1, §15.3 "Personas"):
  * - Visual: availability grid + avatar cards (tramo chip, projects, load bar),

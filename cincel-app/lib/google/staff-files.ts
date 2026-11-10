@@ -19,7 +19,7 @@ export const STAFF_ANCESTRY_MAX_DEPTH = 10;
 export const STAFF_ANCESTRY_CACHE_MAX_ENTRIES = 5_000;
 
 const PARENT_FIELDS = "id,name,parents,trashed";
-const LIST_FIELDS = "id,name,mimeType,modifiedTime,size,iconLink,webViewLink";
+const LIST_FIELDS = "id,name,mimeType,modifiedTime,size,iconLink,webViewLink,thumbnailLink";
 
 /** The folder is unknown, trashed or outside the project: the route answers 404. */
 export class StaffFolderNotFoundError extends Error {
@@ -139,6 +139,7 @@ export function toStaffFileItem(file: DriveFile): StaffFileItem {
     modifiedAt: file.modifiedTime ?? "",
     iconLink: file.iconLink ?? null,
     webViewLink: file.webViewLink ?? null,
+    thumbnailLink: file.thumbnailLink ?? null,
     kind: file.mimeType === FOLDER_MIME_TYPE ? "folder" : "file",
   };
 }

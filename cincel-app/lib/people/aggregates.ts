@@ -4,6 +4,7 @@
  * No I/O; `lib/actions/people-actions.ts` feeds it rows.
  */
 import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
+import type { WeekLoad } from "@/lib/types/redesign";
 import type { Availability, AttentionItem, Tone } from "@/lib/types/widgets";
 
 /** ISO date (`YYYY-MM-DD`) of `now` in `timeZone`. */
@@ -36,6 +37,39 @@ export function workWeek(today: string): string[] {
   const weekday = parseIso(today).getUTCDay(); // 0 = Sunday
   const monday = addIsoDays(today, weekday === 0 ? -6 : 1 - weekday);
   return [0, 1, 2, 3, 4].map((offset) => addIsoDays(monday, offset));
+}
+
+/** The 4 ISO Mondays from the week that contains `today`, this week first. */
+export function fourWeeks(today: string): string[] {
+  const monday = workWeek(today)[0]!;
+  return [0, 7, 14, 21].map((offset) => addIsoDays(monday, offset));
+}
+
+/**
+ * Load of the 4 weeks of `fourWeeks(today)`. Week 1 counts overdue, undated
+ * and due this week (through Sunday); weeks 2–4 count the tasks due in that
+ * week (Monday–Sunday). `absentDays` are the Mon–Fri days inside an absence;
+ * they lower that week's capacity: `capacity × (5 − absentDays) ÷ 5`, and a
+ * week with no capacity left (or capacity 0) is 0 %.
+ */
+export function weekLoads(input: {
+  today: string;
+  capacity: number;
+  dueDates: (string | null)[];
+  absences: { from: string; to: string }[];
+}): WeekLoad[] {
+  const mondays = fourWeeks(input.today);
+  return mondays.map((monday, index) => {
+    const sunday = addIsoDays(monday, 6);
+    const open = input.dueDates.filter((due) =>
+      index === 0 ? due === null || due <= sunday : due !== null && due >= monday && due <= sunday,
+    ).length;
+    const absentDays = [0, 1, 2, 3, 4]
+      .map((offset) => addIsoDays(monday, offset))
+      .filter((day) => input.absences.some((a) => a.from <= day && day <= a.to)).length;
+    const effective = (input.capacity * (5 - absentDays)) / 5;
+    return { weekStart: monday, open, occupancyPct: occupancyPct(open, effective), absentDays };
+  });
 }
 
 /**

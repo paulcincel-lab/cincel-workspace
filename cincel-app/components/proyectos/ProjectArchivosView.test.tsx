@@ -81,8 +81,8 @@ const root: StaffFilesResult = {
   folderId: "root",
   breadcrumbs: [{ id: "root", name: "Casa Lomas" }],
   items: [
-    { id: "cli", name: "02 Cliente", mimeType: FOLDER, sizeBytes: null, modifiedAt: "", iconLink: null, webViewLink: null, kind: "folder" },
-    { id: "f", name: "Planta.pdf", mimeType: "application/pdf", sizeBytes: 10, modifiedAt: "", iconLink: null, webViewLink: "https://drive.example/f", kind: "file" },
+    { id: "cli", name: "02 Cliente", mimeType: FOLDER, sizeBytes: null, modifiedAt: "", iconLink: null, thumbnailLink: null, webViewLink: null, kind: "folder" },
+    { id: "f", name: "Planta.pdf", mimeType: "application/pdf", sizeBytes: 10, modifiedAt: "", iconLink: null, thumbnailLink: null, webViewLink: "https://drive.example/f", kind: "file" },
   ],
 };
 const sub: StaffFilesResult = {
@@ -93,7 +93,7 @@ const sub: StaffFilesResult = {
     { id: "cli", name: "02 Cliente" },
   ],
   items: [
-    { id: "r", name: "Render.png", mimeType: "image/png", sizeBytes: 5, modifiedAt: "", iconLink: null, webViewLink: "https://drive.example/r", kind: "file" },
+    { id: "r", name: "Render.png", mimeType: "image/png", sizeBytes: 5, modifiedAt: "", iconLink: null, thumbnailLink: null, webViewLink: "https://drive.example/r", kind: "file" },
   ],
 };
 

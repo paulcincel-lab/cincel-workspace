@@ -129,7 +129,7 @@ describe("Personas · Equipo accessibility", () => {
           const { container } = render(
             <main>
               <StyleProvider style={style} scope="staff">
-                <EquipoView people={people} emails={emails} counts={counts} canCreate />
+                <EquipoView people={people} emails={emails} counts={counts} canCreate canAssign canCreateTask />
               </StyleProvider>
             </main>,
           );
@@ -141,7 +141,7 @@ describe("Personas · Equipo accessibility", () => {
         applyTheme(theme, mode);
         const { container } = render(
           <main>
-            <EquipoView people={[]} emails={{}} counts={countPersonasTabs([], [])} canCreate={false} />
+            <EquipoView people={[]} emails={{}} counts={countPersonasTabs([], [])} canCreate={false} canAssign={false} canCreateTask={false} />
           </main>,
         );
         expect(await seriousViolations(container)).toEqual([]);
@@ -154,15 +154,15 @@ describe("Personas · Equipo dashboard controls accessibility", () => {
   const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
   const counts = countPersonasTabs(EQUIPO_STAFF, []);
 
-  for (const style of STYLES) {
-    it(`legend toggles, view switches and the collapse button have no serious or critical axe violations (${style})`, async () => {
+  // Only Analítico keeps the availability legend: Esencial has light person cards and Visual the load board.
+  for (const style of STYLES.filter((s) => s === "analitico")) {
+    it(`legend toggles and the collapse button have no serious or critical axe violations (${style})`, async () => {
       const state = usePersonasDashboard.getState();
       state.toggleKpi("saturado");
-      state.setWidgetView(style, "team", style === "analitico" ? "chart" : "table");
       const { container, getByRole } = render(
         <main>
           <StyleProvider style={style} scope="staff">
-            <EquipoView people={people} emails={emails} counts={counts} canCreate />
+            <EquipoView people={people} emails={emails} counts={counts} canCreate canAssign canCreateTask />
           </StyleProvider>
         </main>,
       );
@@ -173,6 +173,82 @@ describe("Personas · Equipo dashboard controls accessibility", () => {
 
       act(() => usePersonasDashboard.getState().setCollapsed("availability", true));
       expect(container.querySelector('[aria-expanded="false"]')).toBeTruthy();
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+});
+
+describe("Personas · Equipo Esencial accessibility", () => {
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const counts = countPersonasTabs(EQUIPO_STAFF, []);
+
+  for (const mode of MODES) {
+    it(`pills, cards and meters have no serious or critical axe violations (${mode})`, async () => {
+      applyTheme("azul" as ThemeId, mode);
+      const { container, getByRole, getAllByRole } = render(
+        <main>
+          <StyleProvider style="esencial" scope="staff">
+            <EquipoView people={people} emails={emails} counts={counts} canCreate canAssign canCreateTask />
+          </StyleProvider>
+        </main>,
+      );
+      expect(getByRole("group", { name: "Filtrar por carga" }).querySelectorAll("button[aria-pressed]")).toHaveLength(5);
+      const meters = getAllByRole("meter");
+      expect(meters).toHaveLength(people.length);
+      for (const [i, meter] of meters.entries()) {
+        expect(meter.getAttribute("aria-label")).toBe(`Carga ${people[i].occupancyPct ?? 0} %`);
+      }
+      for (const person of people) {
+        const toggle = getByRole("button", { name: `Tareas de ${person.name}` });
+        expect(toggle.getAttribute("aria-expanded")).toBe("false");
+        expect(toggle.getAttribute("aria-controls")).toBeTruthy();
+      }
+      expect(container.querySelector("table")).toBeNull();
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+});
+
+describe("Personas · Equipo Visual accessibility", () => {
+  const { emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const counts = countPersonasTabs(EQUIPO_STAFF, []);
+  const week = (weekStart: string, occupancyPct: number, absentDays = 0) => ({
+    weekStart,
+    open: Math.round(occupancyPct / 10),
+    occupancyPct,
+    absentDays,
+  });
+  const MONDAYS = ["2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"];
+  const base = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS).people;
+  // Ana over capacity (banner), Bruno leaving next week, Carla free.
+  const people = [
+    { ...base[0]!, occupancyPct: 120, overdue: 2, weeks: MONDAYS.map((m, i) => week(m, [120, 90, 40, 0][i]!)) },
+    {
+      ...base[1]!,
+      occupancyPct: 85,
+      weeks: MONDAYS.map((m, i) => week(m, [85, 0, 30, 20][i]!, [0, 5, 2, 0][i])),
+      absences: [{ from: "2026-11-16", to: "2026-11-25", kind: "ausencia" as const }],
+    },
+    { ...base[2]!, occupancyPct: 10, weeks: MONDAYS.map((m) => week(m, 10)) },
+  ];
+
+  for (const mode of MODES) {
+    it(`banner, cards, board and heatmap have no serious or critical axe violations (${mode})`, async () => {
+      applyTheme("azul" as ThemeId, mode);
+      const { container, getByRole } = render(
+        <main>
+          <StyleProvider style="visual" scope="staff">
+            <EquipoView people={people} emails={emails} counts={counts} canCreate canAssign canCreateTask />
+          </StyleProvider>
+        </main>,
+      );
+      expect(getByRole("region", { name: "Quién está saturado" })).toBeTruthy();
+      expect(getByRole("region", { name: "Equipo" })).toBeTruthy();
+      const table = getByRole("table", { name: "Carga por persona y semana" });
+      const columns = Array.from(table.querySelectorAll('thead th[scope="col"]')).map((th) => th.textContent);
+      expect(columns).toEqual(["Persona", "9–15 nov", "16–22 nov", "23–29 nov", "30 nov–6 dic"]);
+      const rows = Array.from(table.querySelectorAll('tbody th[scope="row"]')).map((th) => th.textContent);
+      expect(rows).toEqual(people.map((p) => p.name));
       expect(await seriousViolations(container)).toEqual([]);
     });
   }

@@ -84,6 +84,8 @@ const DATA: InicioData = {
   weeklyPace: [],
   attention: [],
   myDay: [],
+  myWeek: { today: [], week: [], total: 0 },
+  myAttention: 0,
   projectsProgress: [],
   workload: [],
   hero: { dueToday: 0, overdue: 0, overdueProjects: 0, focusProject: null },

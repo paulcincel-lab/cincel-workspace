@@ -26,6 +26,9 @@ function pageData(user: { access?: string }): ProyectosPageData {
     presaleAutoStart: true,
     canSeeAdminData: user.access === "Administrador",
     canCreateProject: true,
+    canChangeProjectStage: true,
+    viewerStaffId: "s1",
+    today: "2026-11-10",
   };
 }
 const loaders = vi.hoisted(() => ({ loadProyectosPage: vi.fn() }));

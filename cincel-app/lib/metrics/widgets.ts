@@ -8,7 +8,7 @@
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
 import { NO_TRAMO_LABEL } from "@/lib/dashboard/donut-groups";
 import { localIsoDate, TASK_TREND_TIME_ZONE } from "@/lib/dashboard/task-trend";
-import { isTaskClosed } from "@/lib/tasks/status-options";
+import { isTaskClosed, taskStatusLabel } from "@/lib/tasks/status-options";
 import { tramoColorVar } from "@/lib/tramos/tramo-color";
 import type { CalendarEvent } from "@/lib/types/calendar";
 import type { ProjectListItem, Staff, TaskListItem } from "@/lib/types/core";
@@ -131,6 +131,7 @@ export function toProgressItems(projects: ProjectListItem[], portfolio?: Portfol
       colorVar: tramoColorVar(project.currentWorkflow),
       href: projectHref(project.id),
       next: row?.nextDelivery ?? null,
+      ...(row ? { open: row.open, overdue: row.overdue } : {}),
     };
   });
 }
@@ -186,6 +187,8 @@ export function toAttentionItems(tasks: Omit<TaskListItem, "notes">[], now: Date
         : null,
       due,
       daysLate,
+      projectId: task.projectId,
+      status: { value: task.status, label: taskStatusLabel(task) },
     });
   }
 
@@ -276,7 +279,10 @@ export function toAgendaItems(
  * Staff + overview row → person. Puesto is the first Project Flow position
  * (never the access role); counts are zero without an overview row.
  */
-export function toPersonDatum(staff: Staff, overviewRow: PeopleOverviewRow | null): PersonDatum {
+export function toPersonDatum(
+  staff: Staff,
+  overviewRow: (PeopleOverviewRow & { inProgress?: number; avgDaysLate?: number | null }) | null,
+): PersonDatum {
   const name = [staff.name, staff.lastName].filter((part) => part && part.trim()).join(" ").trim() || staff.name;
   return {
     id: staff.id,
@@ -291,6 +297,8 @@ export function toPersonDatum(staff: Staff, overviewRow: PeopleOverviewRow | nul
     weekHours: overviewRow?.weekHours ?? null,
     availability: overviewRow?.availability ?? [],
     href: personHref(staff.id),
+    ...(overviewRow?.inProgress !== undefined ? { inProgress: overviewRow.inProgress } : {}),
+    ...(overviewRow?.avgDaysLate !== undefined ? { avgDaysLate: overviewRow.avgDaysLate } : {}),
   };
 }
 

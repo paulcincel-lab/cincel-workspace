@@ -80,6 +80,8 @@ export function buildTeamPeople(staff: Staff[], overview: PeopleOverviewRow[], t
       person.activeProjects = row.activeProjects;
       person.occupancyPct = row.occupancyPct;
       if (row.availability.length > 0) person.availability = row.availability;
+      if (row.weeks) person.weeks = row.weeks;
+      if (row.absences) person.absences = row.absences;
     }
     people.push(person);
     emails[member.id] = member.email?.trim() || null;
@@ -137,4 +139,200 @@ export function countPersonasTabs(staff: Staff[], contacts: ContactListItem[]): 
 export function personasTabHref(tab: PersonasTab, estilo: PresentationStyle | null): string {
   const path = tab === "equipo" ? "/personas" : `/personas/${tab}`;
   return estilo ? `${path}?estilo=${estilo}` : path;
+}
+
+// ── Load buckets, status and filters (Estilos Phase 5) ─────────────────────
+
+/** Load bucket of a person: open tasks ÷ weekly capacity (`occupancyPct`). */
+export type LoadBucket = "libre" | "ocupado" | "cargado" | "saturado";
+
+export const LOAD_BUCKET_LABEL: Record<LoadBucket, string> = {
+  libre: "Libre",
+  ocupado: "Ocupado",
+  cargado: "Cargado",
+  saturado: "Saturado",
+};
+
+/**
+ * The only place with the load thresholds: < 60 libre · 60–79 ocupado ·
+ * 80–100 cargado · > 100 saturado.
+ */
+export function loadBucket(pct: number): LoadBucket {
+  if (pct > 100) return "saturado";
+  if (pct >= 80) return "cargado";
+  if (pct >= 60) return "ocupado";
+  return "libre";
+}
+
+export type PersonStatus =
+  | { kind: "bucket"; bucket: LoadBucket }
+  /** Absent today, until `until` (inclusive). */
+  | { kind: "ausente"; until: string }
+  /** An absence starts within the next 7 days. */
+  | { kind: "sale"; from: string; to: string };
+
+/** Approved absence range (ISO dates, inclusive), when the overview sends them. */
+type AbsenceLike = { from: string; to: string };
+
+/** `PersonDatum.absences` when present (Personas Visual adds the field). */
+export function absencesOf(p: PersonDatum): AbsenceLike[] | null {
+  const list = (p as PersonDatum & { absences?: AbsenceLike[] }).absences;
+  return Array.isArray(list) ? list : null;
+}
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 0 = Monday … 6 = Sunday. */
+function weekdayIndex(iso: string): number {
+  return (new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7;
+}
+
+/**
+ * Absence-based status from `absences` when present, else from this week's
+ * Mon–Fri `availability` ("vacaciones" days).
+ */
+function absenceStatus(p: PersonDatum, today: string): PersonStatus | null {
+  const ranges = absencesOf(p);
+  if (ranges) {
+    const sorted = [...ranges].sort((a, b) => a.from.localeCompare(b.from));
+    const current = sorted.find((r) => r.from <= today && r.to >= today);
+    if (current) return { kind: "ausente", until: current.to };
+    const horizon = addDays(today, 7);
+    const next = sorted.find((r) => r.from > today && r.from <= horizon);
+    return next ? { kind: "sale", from: next.from, to: next.to } : null;
+  }
+  const days = p.availability ?? [];
+  if (days.length === 0) return null;
+  const todayIdx = weekdayIndex(today);
+  const monday = addDays(today, -todayIdx);
+  const runEnd = (start: number) => {
+    let end = start;
+    while (end + 1 < days.length && days[end + 1] === "vacaciones") end += 1;
+    return addDays(monday, end);
+  };
+  if (todayIdx < days.length && days[todayIdx] === "vacaciones") return { kind: "ausente", until: runEnd(todayIdx) };
+  for (let d = todayIdx + 1; d < days.length; d++) {
+    if (days[d] === "vacaciones") return { kind: "sale", from: addDays(monday, d), to: runEnd(d) };
+  }
+  return null;
+}
+
+/** Status of a person today: absent, leaving within 7 days, or their load bucket. */
+export function personStatus(p: PersonDatum, today: string): PersonStatus {
+  return absenceStatus(p, today) ?? { kind: "bucket", bucket: loadBucket(p.occupancyPct ?? 0) };
+}
+
+/** Whether the person is absent today. */
+export function isAbsentToday(p: PersonDatum, today: string): boolean {
+  return personStatus(p, today).kind === "ausente";
+}
+
+/**
+ * Someone to take a task instead of `from`: same tramo, not absent today,
+ * libre or ocupado, lowest `occupancyPct`; a tie goes to the name (es).
+ */
+export function suggestAssignee(people: PersonDatum[], from: PersonDatum, today: string): PersonDatum | null {
+  if (!from.tramo) return null;
+  const candidates = people.filter((p) => {
+    if (p.id === from.id || p.tramo !== from.tramo) return false;
+    const status = personStatus(p, today);
+    if (status.kind === "ausente") return false;
+    const bucket = loadBucket(p.occupancyPct ?? 0);
+    return bucket === "libre" || bucket === "ocupado";
+  });
+  candidates.sort(
+    (a, b) => (a.occupancyPct ?? 0) - (b.occupancyPct ?? 0) || a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+  );
+  return candidates[0] ?? null;
+}
+
+export type TeamEstado = "libre" | "cargado" | "saturado" | "vacaciones";
+export type TeamPill = "todos" | TeamEstado;
+
+export const TEAM_ESTADOS: readonly TeamEstado[] = ["libre", "cargado", "saturado", "vacaciones"];
+
+/** Lowercase, accents stripped, trimmed. */
+export function normalizeSearch(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es-MX")
+    .trim();
+}
+
+/** The pill a person counts in (besides "todos"); null for ocupado. Absent or leaving → vacaciones. */
+function pillOf(p: PersonDatum, today: string): TeamEstado | null {
+  const status = personStatus(p, today);
+  if (status.kind !== "bucket") return "vacaciones";
+  return status.bucket === "ocupado" ? null : status.bucket;
+}
+
+/** Counts of the Esencial pills. Absent people count only in vacaciones. */
+export function teamPillCounts(people: PersonDatum[], today: string): Record<TeamPill, number> {
+  const counts: Record<TeamPill, number> = { todos: people.length, libre: 0, cargado: 0, saturado: 0, vacaciones: 0 };
+  for (const p of people) {
+    const pill = pillOf(p, today);
+    if (pill) counts[pill] += 1;
+  }
+  return counts;
+}
+
+/** People of one pill (none → all) whose name, puesto or tramo contains `q` (accent- and case-insensitive). */
+export function filterTeam(
+  people: PersonDatum[],
+  { estado, q }: { estado: TeamEstado | null; q: string | null },
+  today: string,
+): PersonDatum[] {
+  const needle = normalizeSearch(q ?? "");
+  return people.filter((p) => {
+    if (estado && pillOf(p, today) !== estado) return false;
+    if (!needle) return true;
+    // Tramo keys are the normalized tramo names ("diseno" ↔ "Diseño"), so the key itself is searched.
+    const tramo = (p.tramo ?? "").replace(/[-_]+/g, " ");
+    const haystack = [p.name, p.puesto ?? "", tramo].map(normalizeSearch).join(" ");
+    return haystack.includes(needle);
+  });
+}
+
+// ── Saturation (Personas Visual) ────────────────────────────────────────────
+
+export type SaturationSummary = {
+  /** The most loaded person over 100 % who is not absent today. */
+  top: PersonDatum;
+  /** People in `cargado` (not absent today), most loaded first, at most 3. */
+  nearLimit: PersonDatum[];
+  /** `suggestAssignee` for `top`. */
+  candidate: PersonDatum | null;
+};
+
+const byLoadThenName = (a: PersonDatum, b: PersonDatum): number =>
+  (b.occupancyPct ?? 0) - (a.occupancyPct ?? 0) || a.name.localeCompare(b.name, "es", { sensitivity: "base" });
+
+/**
+ * "Quién está saturado": the person with the highest `occupancyPct` > 100
+ * who is not absent today (ties → most overdue, then name), the people near
+ * the limit and who could take one of their tasks. Null when nobody is over
+ * 100 %.
+ */
+export function saturationSummary(people: PersonDatum[], today: string): SaturationSummary | null {
+  const present = people.filter((p) => !isAbsentToday(p, today));
+  const over = present
+    .filter((p) => (p.occupancyPct ?? 0) > 100)
+    .sort(
+      (a, b) =>
+        (b.occupancyPct ?? 0) - (a.occupancyPct ?? 0) ||
+        b.overdue - a.overdue ||
+        a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+    );
+  const top = over[0];
+  if (!top) return null;
+  const nearLimit = present
+    .filter((p) => loadBucket(p.occupancyPct ?? 0) === "cargado")
+    .sort(byLoadThenName)
+    .slice(0, 3);
+  return { top, nearLimit, candidate: suggestAssignee(people, top, today) };
 }

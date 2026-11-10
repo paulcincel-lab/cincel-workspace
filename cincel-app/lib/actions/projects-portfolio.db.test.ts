@@ -319,6 +319,95 @@ describe.skipIf(!url)("fetchProjectsPortfolioAction (test DB)", async () => {
     for (const row of asAdmin.all) expect(row.series7).toHaveLength(7);
   });
 
+  describe("mean delay and overdue a week ago (#994)", () => {
+    let delayedProjectId = "";
+    let onTimeProjectId = "";
+
+    beforeAll(async () => {
+      const created = await db
+        .insert(schema.projects)
+        .values([{ name: `Portafolio retraso ${run}` }, { name: `Portafolio al día ${run}` }])
+        .returning({ id: schema.projects.id });
+      delayedProjectId = created[0]!.id;
+      onTimeProjectId = created[1]!.id;
+      const base = { projectId: delayedProjectId, createdById: admin.id };
+      await db.insert(schema.tasks).values([
+        // Open and 3 days late; not yet due a week ago.
+        { ...base, kind: "usuario", title: `Tarde 3 ${run}`, commitmentDate: addDaysIso(todayIso, -3), createdAt: ago(20) },
+        // Open and 10 days late; 3 days late a week ago.
+        { ...base, kind: "usuario", title: `Tarde 10 ${run}`, commitmentDate: addDaysIso(todayIso, -10), createdAt: ago(20) },
+        // Created 3 days ago, 9 days late: did not exist a week ago.
+        { ...base, kind: "usuario", title: `Nueva tarde ${run}`, commitmentDate: addDaysIso(todayIso, -9), createdAt: ago(3) },
+        // Completed 2 days ago: not open today, open and 5 days late a week ago.
+        {
+          ...base,
+          kind: "usuario",
+          title: `Cerrada ${run}`,
+          status: "completado",
+          closedAt: ago(2),
+          commitmentDate: addDaysIso(todayIso, -12),
+          createdAt: ago(30),
+        },
+        // Admin task, 20 days late (13 a week ago).
+        { ...base, kind: "admin", title: `Admin tarde ${run}`, commitmentDate: addDaysIso(todayIso, -20), createdAt: ago(30) },
+        // Deleted and archived tasks never count.
+        { ...base, kind: "usuario", title: `Borrada tarde ${run}`, commitmentDate: addDaysIso(todayIso, -30), createdAt: ago(40), deletedAt: now },
+        { ...base, kind: "usuario", title: `Archivada tarde ${run}`, commitmentDate: addDaysIso(todayIso, -30), createdAt: ago(40), archived: true },
+        // The other project: only a future commitment.
+        {
+          projectId: onTimeProjectId,
+          createdById: admin.id,
+          kind: "usuario",
+          title: `A tiempo ${run}`,
+          commitmentDate: addDaysIso(todayIso, 4),
+          createdAt: ago(20),
+        },
+      ]);
+    });
+
+    afterAll(async () => {
+      const ids = [delayedProjectId, onTimeProjectId].filter(Boolean);
+      if (ids.length === 0) return;
+      await db.delete(schema.tasks).where(inArray(schema.tasks.projectId, ids));
+      await db.delete(schema.projects).where(inArray(schema.projects.id, ids));
+    });
+
+    async function delayed(includeAdminData: boolean) {
+      const { listPortfolioRows } = await import("@/lib/repositories/projects-portfolio-repository");
+      const rows = await listPortfolioRows({ includeAdminData, now, projectIds: [delayedProjectId, onTimeProjectId] });
+      return { delayedRow: rows.find((r) => r.projectId === delayedProjectId), onTimeRow: rows.find((r) => r.projectId === onTimeProjectId) };
+    }
+
+    it("avgDelayDays averages days late of open overdue tasks", async () => {
+      const { delayedRow } = await delayed(false);
+      // (3 + 10 + 9) / 3, one decimal.
+      expect(delayedRow?.overdue).toBe(3);
+      expect(delayedRow?.avgDelayDays).toBe(7.3);
+    });
+
+    it("overdueWeekAgo counts tasks open and overdue a week ago", async () => {
+      const { delayedRow } = await delayed(false);
+      // Tarde 10 (3 days late then) and Cerrada (5 days late then); Nueva tarde did not exist.
+      expect(delayedRow?.overdueWeekAgo).toBe(2);
+      expect(delayedRow?.avgDelayWeekAgo).toBe(4);
+    });
+
+    it("admin tasks are excluded for non-admins", async () => {
+      const asAdmin = (await delayed(true)).delayedRow;
+      // (3 + 10 + 9 + 20) / 4 today; (3 + 5 + 13) / 3 a week ago.
+      expect(asAdmin).toMatchObject({ overdue: 4, avgDelayDays: 10.5, overdueWeekAgo: 3, avgDelayWeekAgo: 7 });
+      const asColaborador = (await delayed(false)).delayedRow;
+      expect(asColaborador).toMatchObject({ overdue: 3, avgDelayDays: 7.3, overdueWeekAgo: 2, avgDelayWeekAgo: 4 });
+    });
+
+    it("null delay when nothing is overdue", async () => {
+      for (const includeAdminData of [false, true]) {
+        const { onTimeRow } = await delayed(includeAdminData);
+        expect(onTimeRow).toMatchObject({ overdue: 0, avgDelayDays: null, overdueWeekAgo: 0, avgDelayWeekAgo: null });
+      }
+    });
+  });
+
   it("ignores the deleted project's tasks", async () => {
     const rows = await db.select({ id: schema.projects.id }).from(schema.projects).where(eq(schema.projects.id, deletedProjectId));
     expect(rows).toHaveLength(1);

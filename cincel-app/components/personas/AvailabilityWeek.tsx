@@ -1,12 +1,10 @@
 "use client";
 
-import { PersonasViewToggle } from "@/components/personas/PersonasViewToggle";
 import { Button } from "@/components/ui/shadcn/button";
 import { PeopleWidget } from "@/components/widgets/PeopleWidget";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { initialsOf } from "@/lib/personas/team";
-import { useWidgetView } from "@/lib/stores/dashboard-store";
-import { PERSONAS_VIEW_FALLBACK, usePersonasDashboard } from "@/lib/stores/personas-dashboard-store";
+import { usePersonasDashboard } from "@/lib/stores/personas-dashboard-store";
 import type { Availability, PersonDatum } from "@/lib/types/widgets";
 
 export type AvailabilityWeekProps = { rows: { staffId: string; name: string; days: Availability[] }[] };
@@ -51,14 +49,12 @@ export function AvailabilityLegendFilter() {
  * "Disponibilidad esta semana" (redesign FE §3.6, §4.7): an instance of
  * `PeopleWidget` (Mon–Fri availability per person; the widget draws the grid,
  * the sentence or the table per style) with the libre / ocupado / saturado /
- * vacaciones legend as team filter, a grid/table switch per style and a
- * collapse toggle (both persisted in `usePersonasDashboard`). Renders nothing
- * without rows.
+ * vacaciones legend as team filter and a collapse toggle (persisted in
+ * `usePersonasDashboard`). Renders nothing without rows.
  */
 export function AvailabilityWeek({ rows }: AvailabilityWeekProps) {
   const collapsed = usePersonasDashboard((s) => s.collapsed.availability ?? false);
   const toggleCollapsed = usePersonasDashboard((s) => s.toggleCollapsed);
-  const view = useWidgetView(usePersonasDashboard, "availability", PERSONAS_VIEW_FALLBACK);
   if (rows.length === 0) return null;
   const people: PersonDatum[] = rows.map((row) => ({
     id: row.staffId,
@@ -73,21 +69,9 @@ export function AvailabilityWeek({ rows }: AvailabilityWeekProps) {
     <WidgetCard
       title="Disponibilidad esta semana"
       collapsible={{ collapsed, onToggle: () => toggleCollapsed("availability") }}
-      actions={
-        <div className="flex flex-wrap items-center gap-3">
-          <AvailabilityLegendFilter />
-          {collapsed ? null : (
-            <PersonasViewToggle
-              widget="availability"
-              view={view}
-              label="Vista de disponibilidad"
-              chartLabel="Cuadrícula"
-            />
-          )}
-        </div>
-      }
+      actions={<AvailabilityLegendFilter />}
     >
-      <PeopleWidget people={people} show={["availability"]} layout="rows" view={view} />
+      <PeopleWidget people={people} show={["availability"]} layout="rows" />
     </WidgetCard>
   );
 }

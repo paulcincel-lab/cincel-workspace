@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { useStyle } from "@/components/shell/StyleProvider";
+import { INICIO_FILTER_KEYS } from "@/lib/inicio/analitico-filters";
 import { createDashboardStore, useWidgetView, type WidgetView } from "@/lib/stores/dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
@@ -10,7 +11,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
  * `useInicioDashboard` (zustand.md §2.5): the Inicio dashboard's UI choices.
  * Pure UI state over the `qk.inicio()` data; nothing here causes a server
  * call. Persisted under `cincel.ui.dashboard.inicio.v1` (`range`,
- * `collapsed`, `views`, `hiddenSeries`); `selectedKpi` lives for the session
+ * `collapsed`, `views`, `hiddenSeries`, `filters`); `selectedKpi` lives for the session
  * only. The active style is never stored: `views` keeps the user's overrides
  * per style and each widget keeps its own per-style fallback.
  */
@@ -31,7 +32,8 @@ export type InicioKpiKey =
   | "revisiones_7d"
   | "completadas_semana"
   | "abiertas"
-  | "horas_semana";
+  | "horas_semana"
+  | "retraso_promedio";
 
 /** Every Inicio widget id; stored keys of other ids are dropped on rehydrate. */
 export const INICIO_WIDGETS: readonly InicioWidget[] = [
@@ -50,9 +52,13 @@ export const INICIO_WIDGETS: readonly InicioWidget[] = [
 export type WeeklyPaceSeries = "completed" | "created";
 export const WEEKLY_PACE_SERIES: readonly WeeklyPaceSeries[] = ["completed", "created"];
 
-export const useInicioDashboard = createDashboardStore<InicioWidget, InicioKpiKey>("inicio", {
+/** Analítico table filters (`lib/inicio/analitico-filters.ts`): Responsable and Tramo, persisted like `range`. */
+export type InicioFilterKey = (typeof INICIO_FILTER_KEYS)[number];
+
+export const useInicioDashboard = createDashboardStore<InicioWidget, InicioKpiKey, InicioFilterKey>("inicio", {
   range: "8w",
   widgets: INICIO_WIDGETS,
+  filters: INICIO_FILTER_KEYS,
   // The last visible series of "Ritmo semanal" cannot be hidden.
   series: { weeklyPace: WEEKLY_PACE_SERIES },
 });
@@ -66,6 +72,7 @@ export const INICIO_KPI_KEYS: readonly InicioKpiKey[] = [
   "completadas_semana",
   "abiertas",
   "horas_semana",
+  "retraso_promedio",
 ];
 
 const KPI_KEY_SET: ReadonlySet<string> = new Set(INICIO_KPI_KEYS);

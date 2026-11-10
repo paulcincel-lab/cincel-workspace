@@ -258,7 +258,7 @@ describe("Personas dashboard: availability filter", () => {
   });
 });
 
-describe("Personas dashboard: collapse and views", () => {
+describe("Personas dashboard: collapse", () => {
   const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
 
   it("collapses Disponibilidad esta semana and persists the choice", () => {
@@ -273,60 +273,17 @@ describe("Personas dashboard: collapse and views", () => {
     expect(screen.getByRole("button", { name: "Saturado" })).toBeTruthy();
   });
 
-  it.each(STYLES)("without overrides hands the widgets today's view in %s", (style) => {
+  it.each(STYLES)("renders no Tarjetas / Tabla switch and lets the style pick the layout in %s", (style) => {
     render(
       <StyleProvider style={style} scope="staff">
         <AvailabilityWeek rows={availabilityRows(people)} />
         <TeamGrid people={people} emails={emails} />
       </StyleProvider>,
     );
-    const expected = style === "analitico" ? "table" : "chart";
-    for (const props of calls.widget) expect(props.view).toBe(expected);
-  });
-
-  it("a Tabla pick in Visual does not change Esencial or Analítico", () => {
-    const visual = render(
-      <StyleProvider style="visual" scope="staff">
-        <TeamGrid people={people} emails={emails} />
-      </StyleProvider>,
-    );
-    const group = screen.getByRole("group", { name: "Vista del equipo" });
-    const tabla = within(group).getByRole("button", { name: "Tabla" });
-    expect(tabla.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(tabla);
-    expect(tabla.getAttribute("aria-pressed")).toBe("true");
-    expect(calls.widget.at(-1)!.view).toBe("table");
-    expect(usePersonasDashboard.getState().views).toEqual({ visual: { team: "table" } });
-    visual.unmount();
-
-    calls.widget = [];
-    const esencial = render(
-      <StyleProvider style="esencial" scope="staff">
-        <TeamGrid people={people} emails={emails} />
-      </StyleProvider>,
-    );
-    expect(calls.widget.at(-1)!.view).toBe("chart");
-    esencial.unmount();
-
-    calls.widget = [];
-    render(
-      <StyleProvider style="analitico" scope="staff">
-        <TeamGrid people={people} emails={emails} />
-      </StyleProvider>,
-    );
-    expect(calls.widget.at(-1)!.view).toBe("table");
-  });
-
-  it("keeps the availability and team views apart", () => {
-    usePersonasDashboard.getState().setWidgetView("visual", "availability", "table");
-    render(
-      <StyleProvider style="visual" scope="staff">
-        <AvailabilityWeek rows={availabilityRows(people)} />
-        <TeamGrid people={people} emails={emails} />
-      </StyleProvider>,
-    );
-    expect(calls.widget.find((props) => props.layout === "rows")!.view).toBe("table");
-    expect(calls.widget.find((props) => props.layout === "cards")!.view).toBe("chart");
+    expect(screen.queryByRole("group", { name: "Vista del equipo" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Vista de disponibilidad" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Tabla" })).toBeNull();
+    for (const props of calls.widget) expect(props.view).toBeUndefined();
   });
 
   it("first render equals the server render with a persisted value present; it applies after rehydration", async () => {
@@ -340,18 +297,17 @@ describe("Personas dashboard: collapse and views", () => {
     localStorage.setItem(
       PERSIST_KEY,
       JSON.stringify({
-        state: { range: "8w", collapsed: { availability: true }, views: { visual: { team: "table" } }, hiddenSeries: {} },
+        state: { range: "8w", collapsed: { availability: true }, views: {}, hiddenSeries: {} },
         version: 1,
       }),
     );
     expect(renderToString(tree)).toBe(defaults);
 
-    const { container } = render(tree);
-    expect(container.querySelector('[data-layout="cards"]')!.getAttribute("data-view")).toBe("chart");
+    render(tree);
+    expect(screen.getByRole("button", { name: "Contraer" })).toBeTruthy();
     await act(async () => {
       await usePersonasDashboard.persist.rehydrate();
     });
-    expect(container.querySelector('[data-layout="cards"]')!.getAttribute("data-view")).toBe("table");
     expect(screen.getByRole("button", { name: "Expandir" })).toBeTruthy();
   });
 });

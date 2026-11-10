@@ -58,7 +58,58 @@ export type LineSeriesWidgetProps = {
   actions?: ReactNode;
   /** Collapse control of the card (`WidgetCard` `collapsible`). */
   collapsible?: WidgetCardProps["collapsible"];
+  /**
+   * A small inline line in place of the card, in every style: no card, axes,
+   * legend or motion, `aria-hidden` (the caller states the meaning in text),
+   * `height` px tall (default 72). Inicio Esencial's "Ritmo semanal".
+   */
+  compact?: boolean | { height?: number };
 };
+
+/** Default height of the `compact` line. */
+export const LINE_SERIES_COMPACT_HEIGHT = 72;
+
+/** The `compact` line: one polyline per series over a 100 × height box, scaled to the largest value. */
+function CompactLines({
+  points,
+  series,
+  height,
+}: {
+  points: LineSeriesWidgetProps["points"];
+  series: LineSeries[];
+  height: number;
+}) {
+  const max = Math.max(1, ...points.flatMap((p) => series.map((s) => p.values[s.key] ?? 0)));
+  const pad = 3;
+  const x = (i: number) => (points.length <= 1 ? 50 : (i / (points.length - 1)) * 100);
+  const y = (v: number) => pad + (1 - v / max) * (height - pad * 2);
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      data-slot="line-series-compact"
+      className="block w-full"
+      style={{ height }}
+      viewBox={`0 0 100 ${height}`}
+      preserveAspectRatio="none"
+    >
+      {series.map((s) => (
+        <polyline
+          key={s.key}
+          data-series={s.key}
+          fill="none"
+          stroke={s.colorVar}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={s.dashed ? "5 4" : undefined}
+          vectorEffect="non-scaling-stroke"
+          points={points.map((p, i) => `${x(i)},${y(p.values[s.key] ?? 0)}`).join(" ")}
+        />
+      ))}
+    </svg>
+  );
+}
 
 function EmptyLine({ text }: { text: string }) {
   return <p className="text-sm text-muted-foreground">{text}</p>;
@@ -116,6 +167,7 @@ export function LineSeriesWidget({
   onToggleSeries,
   actions,
   collapsible,
+  compact,
 }: LineSeriesWidgetProps) {
   const { style } = useStyle();
   if (visibleIn && !visibleIn.includes(style)) return null;
@@ -127,6 +179,11 @@ export function LineSeriesWidget({
   const hiddenKeys: ReadonlySet<string> = unhidden.length > 0 ? hidden : new Set<string>();
 
   const empty = points.length === 0 || points.every((p) => series.every((s) => !p.values[s.key]));
+  if (compact) {
+    if (empty) return <EmptyLine text={emptyText} />;
+    const height = (typeof compact === "object" ? compact.height : undefined) ?? LINE_SERIES_COMPACT_HEIGHT;
+    return <CompactLines points={points} series={shown} height={height} />;
+  }
   const card = (children: ReactNode) => (
     <WidgetCard title={title} icon={icon} actions={actions} collapsible={collapsible}>
       {children}

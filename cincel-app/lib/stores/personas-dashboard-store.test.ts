@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { PERSONAS_VIEW_FALLBACK, usePersonasDashboard } from "./personas-dashboard-store";
+import * as personasStore from "./personas-dashboard-store";
+
+const { usePersonasDashboard } = personasStore;
 
 const KEY = "cincel.ui.dashboard.personas.v1";
 
@@ -23,7 +25,7 @@ describe("usePersonasDashboard", () => {
     expect(options.skipHydration).toBe(true);
   });
 
-  it("starts with no selection, nothing collapsed and no view overrides", () => {
+  it("starts with no selection and nothing collapsed", () => {
     const state = usePersonasDashboard.getState();
     expect(state.selectedKpi).toBeNull();
     expect(state.collapsed).toEqual({});
@@ -40,40 +42,29 @@ describe("usePersonasDashboard", () => {
     expect(usePersonasDashboard.getState().selectedKpi).toBeNull();
   });
 
-  it("keeps view overrides per style", () => {
-    usePersonasDashboard.getState().setWidgetView("visual", "team", "table");
-    const { views } = usePersonasDashboard.getState();
-    expect(views.visual?.team).toBe("table");
-    expect(views.esencial?.team).toBeUndefined();
-    expect(views.analitico?.team).toBeUndefined();
-  });
-
-  it("persists only widget ids, view names and the unused range/series; never the selection", () => {
+  it("persists only widget ids and the unused views/range/series; never the selection", () => {
     const state = usePersonasDashboard.getState();
     state.toggleKpi("saturado");
     state.toggleCollapsed("availability");
-    state.setWidgetView("esencial", "availability", "table");
     const stored = persisted();
     expect(stored).not.toBeNull();
     expect(Object.keys(stored!).sort()).toEqual(["collapsed", "hiddenSeries", "range", "views"]);
     expect(stored!.collapsed).toEqual({ availability: true });
-    expect(stored!.views).toEqual({ esencial: { availability: "table" } });
+    expect(stored!.views).toEqual({});
     expect(JSON.stringify(stored)).not.toContain("saturado");
   });
 
-  it("reset() clears the selection, the collapse and the overrides", () => {
+  it("reset() clears the selection and the collapse", () => {
     const state = usePersonasDashboard.getState();
     state.toggleKpi("vacaciones");
     state.setCollapsed("availability", true);
-    state.setWidgetView("visual", "team", "table");
     usePersonasDashboard.getState().reset();
     const after = usePersonasDashboard.getState();
     expect(after.selectedKpi).toBeNull();
     expect(after.collapsed).toEqual({});
-    expect(after.views).toEqual({});
   });
 
-  it("falls back to today's render: Visual and Esencial charts, Analítico tables", () => {
-    expect(PERSONAS_VIEW_FALLBACK).toEqual({ visual: "chart", esencial: "chart", analitico: "table" });
+  it("has no per-style view fallback: the Estilo is the only layout choice", () => {
+    expect(personasStore).not.toHaveProperty("PERSONAS_VIEW_FALLBACK");
   });
 });

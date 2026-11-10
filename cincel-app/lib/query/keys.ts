@@ -104,6 +104,9 @@ export const qk = {
     clientesActivity: (id: string) => ["proyectos", id, "clientes", "activity"] as const,
     /** The ficha's "Reacomodar importación" state (5b), under `detail(id)`. */
     remap: (id: string) => ["proyectos", id, "remap"] as const,
+    /** Resumen Analítico quick-add hint: who could take a task instead of `staffId` in `phaseId`. */
+    assigneeSuggestion: (id: string, phaseId: string, staffId: string) =>
+      ["proyectos", id, "assignee-suggestion", phaseId, staffId] as const,
   },
   personas: {
     equipo: () => ["personas", "equipo"] as const,

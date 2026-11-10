@@ -70,8 +70,8 @@ const OK: StaffFilesResult = {
   folderId: "root",
   breadcrumbs: [{ id: "root", name: "Casa Lomas" }],
   items: [
-    { id: "f1", name: "02 Cliente", mimeType: FOLDER, sizeBytes: null, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, webViewLink: null, kind: "folder" },
-    { id: "a", name: "Planta.pdf", mimeType: "application/pdf", sizeBytes: 2_516_582, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, webViewLink: "https://drive.example/a", kind: "file" },
+    { id: "f1", name: "02 Cliente", mimeType: FOLDER, sizeBytes: null, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, thumbnailLink: null, webViewLink: null, kind: "folder" },
+    { id: "a", name: "Planta.pdf", mimeType: "application/pdf", sizeBytes: 2_516_582, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, thumbnailLink: null, webViewLink: "https://drive.example/a", kind: "file" },
   ],
 };
 

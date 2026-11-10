@@ -310,14 +310,29 @@ export type InicioData = {
   attention: AttentionItem[];
   /** Events, tasks due today, the caller's reminders. */
   myDay: AgendaItem[];
+  /**
+   * The caller's week (Inicio Esencial): `today` is `myDay`; `week` holds the
+   * caller's agenda items from tomorrow to the week's Sunday (Mexico City),
+   * by date then time; `total` counts the distinct tasks of both (events and
+   * reminders left out).
+   */
+  myWeek: { today: AgendaItem[]; week: AgendaItem[]; total: number };
+  /** Attention items that involve the caller (responsable or support), today. */
+  myAttention: number;
+  /** Whose tasks `weeklyPace` counts: "mine" for `dataScope` `assigned_tasks`, else "team" (omitted = "team"). */
+  paceScope?: "mine" | "team";
   projectsProgress: ProgressItem[];
   workload: PersonDatum[];
   /** Inicio Visual greeting hero (#989). */
   hero: InicioHero;
   /** Staff of the dashboard scope with an open time entry today; null without `showTeamWorkload`. */
   openShifts: InicioOpenShifts | null;
-  /** Today's scoped task events plus the open tasks due today (`entrega`), by time. */
+  /** Today's scoped events plus the open tasks due today (`entrega`), by time (Inicio Visual and Analítico). */
   todayAgenda: InicioAgendaItem[];
+  /** Open tasks per tramo and responsable (Inicio Analítico filters on Tramos and Carga). */
+  tasksByTramoAssignee?: InicioTramoAssigneeRow[];
+  /** The caller's Inicio sections (`resolveDashboardCapabilities(user).sections`). */
+  sections?: { showTeamWorkload: boolean; showProjectRisk: boolean };
 };
 
 /** Hero counts: open tasks due today, overdue tasks, their distinct projects, the project with most overdue. */
@@ -333,9 +348,19 @@ export type InicioOpenShifts = {
   people: { id: string; initials: string; tramo: TramoKey | null }[];
 };
 
+/** One "Agenda de hoy" row: an event or a delivery (open task due today) with its responsable. */
 export type InicioAgendaItem = AgendaItem & {
   kind: "evento" | "entrega";
   assignee: { id: string; name: string; initials: string } | null;
+};
+
+/** Open tasks of one tramo and one responsable (null = sin responsable); `ageDays` sums creation → today. */
+export type InicioTramoAssigneeRow = {
+  tramo: TramoKey;
+  assigneeId: string | null;
+  open: number;
+  overdue: number;
+  ageDays: number;
 };
 
 export type PersonaDetail = {
@@ -371,7 +396,41 @@ export type PersonaActivityItem = {
   href: string;
 };
 
+/** One week of a person's load (Personas, Estilos Phase 5). */
+export type WeekLoad = {
+  /** ISO Monday, org time zone. */
+  weekStart: string;
+  /** Open tasks counted in that week (week 1: overdue + undated + due this week). */
+  open: number;
+  /** round(open ÷ effectiveCapacity × 100), effectiveCapacity = capacity × (5 − absentDays) ÷ 5; 0 when that is 0. */
+  occupancyPct: number;
+  /** Approved absence days Mon–Fri, 0–5. */
+  absentDays: number;
+};
+
+/**
+ * An approved absence (ISO dates, inclusive). `kind` is the stored kind only
+ * for the person themself and `canDecideVacations`; everyone else gets
+ * "ausencia" (BE §8.8).
+ */
+export type AbsenceRange = { from: string; to: string; kind: VacationKind | "ausencia" };
+
+/** A person's open tasks in one project (Personas Analítico). */
+export type PersonProjectLoad = {
+  projectId: string;
+  name: string;
+  tramo: TramoKey | null;
+  open: number;
+  overdue: number;
+  /** Open tasks per week, same weeks as `weeks`. */
+  weeks: [number, number, number, number];
+};
+
 export type PeopleOverviewRow = {
+  /** Length 4, this Monday first (Personas). Inicio's workload rows leave it out. */
+  weeks?: WeekLoad[];
+  /** Approved absences overlapping the 4 weeks (Personas). Inicio's workload rows leave it out. */
+  absences?: AbsenceRange[];
   staffId: string;
   open: number;
   overdue: number;
@@ -397,6 +456,12 @@ export type PortfolioRow = {
   /** Admin tasks excluded unless canSeeAdminData. */
   open: number;
   overdue: number;
+  /** Mean days late of open overdue tasks today (1 decimal); null when none. */
+  avgDelayDays: number | null;
+  /** Overdue open tasks as of today − 7 (current commitment dates). */
+  overdueWeekAgo: number;
+  /** avgDelayDays as of today − 7; null when none. */
+  avgDelayWeekAgo: number | null;
   /** To projects.end_date. */
   daysToDelivery: number | null;
   /** Next open non-admin task by commitment date. */

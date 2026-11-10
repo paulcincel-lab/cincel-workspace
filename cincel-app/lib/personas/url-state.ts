@@ -6,6 +6,25 @@
  */
 export const CONTACT_PARAM = "contacto";
 export const SEARCH_PARAM = "q";
+/** Personas · Equipo pill filter: `?estado=libre|cargado|saturado|vacaciones`. */
+export const ESTADO_PARAM = "estado";
+/** Personas · Equipo expanded person card: `?persona=<staff uuid>`. */
+export const PERSONA_PARAM = "persona";
+
+export type EstadoParam = "libre" | "cargado" | "saturado" | "vacaciones";
+
+const ESTADO_VALUES: readonly EstadoParam[] = ["libre", "cargado", "saturado", "vacaciones"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The `?estado=` value, or null when absent or unknown. */
+export function parseEstadoParam(value: string | null | undefined): EstadoParam | null {
+  return ESTADO_VALUES.includes(value as EstadoParam) ? (value as EstadoParam) : null;
+}
+
+/** The `?persona=` id when it is a uuid, else null. */
+export function parsePersonaParam(value: string | null | undefined): string | null {
+  return value && UUID_RE.test(value) ? value : null;
+}
 
 /** `pathname` with `key` set to `value` (or removed when null or empty), keeping the other params. */
 export function withSearchParam(pathname: string, current: URLSearchParams | null, key: string, value: string | null): string {

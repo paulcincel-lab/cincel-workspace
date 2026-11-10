@@ -321,6 +321,8 @@ export type ProjectListItem = Project & {
   stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
+  /** Active staff in `project_members`, by name (the full team avatars; "Solo míos"). */
+  members: StaffRef[];
   taskCounts: { total: number; open: number; blocked: number };
 };
 

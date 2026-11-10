@@ -5,11 +5,16 @@ import { ProjectSummary } from "@/components/proyectos/ProjectSummary";
 import { buttonVariants } from "@/components/ui/shadcn/button";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { loadProyectoResumen } from "@/lib/loaders/proyectos";
+import { loadProyectoHistory, loadProyectoResumen, loadProyectoTareas } from "@/lib/loaders/proyectos";
 import { loadProyectoShell } from "@/lib/loaders/proyectos-shell";
 import { Hydrate } from "@/lib/query/hydrate";
 import { qk } from "@/lib/query/keys";
-import { proyectoResumenOptions, seedResumenArchivosCount } from "@/lib/query/options/proyectos";
+import {
+  proyectoHistoryOptions,
+  proyectoResumenOptions,
+  proyectoTareasOptions,
+  seedResumenArchivosCount,
+} from "@/lib/query/options/proyectos";
 import { proyectoShellOptions } from "@/lib/query/options/proyectos-shell";
 import { getQueryClient, prefetch } from "@/lib/query/server";
 import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
@@ -44,11 +49,14 @@ const NOT_FOUND = { title: "Proyecto no encontrado", message: "El proyecto no ex
 
 /**
  * `/proyectos/<id>` (redesign FE §3.5): the project header + tabs and the
- * Resumen tab, inside the `AppShell` the staff layout mounts. Two reads,
- * prefetched here through their loaders and hydrated: the shell
- * (`qk.proyectos.shell(id)`, shared with every project tab) and the Resumen
- * (`qk.proyectos.resumen(id)`), whose root Drive listing also fills the
- * shell's Archivos count.
+ * Resumen tab, inside the `AppShell` the staff layout mounts. Four reads,
+ * prefetched here through their loaders and hydrated, so the first render
+ * makes no client call: the shell (`qk.proyectos.shell(id)`, shared with
+ * every project tab), the Resumen (`qk.proyectos.resumen(id)`, whose root
+ * Drive listing also fills the shell's Archivos count), the task list
+ * (`qk.proyectos.tab(id, "tareas")`, shared with the Tareas tab; the Visual
+ * counts, tramo bars and "Lo que sigue" derive from it) and the first page
+ * of the bitácora (`qk.proyectos.history(id)`, "Actividad reciente").
  */
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -61,6 +69,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   await Promise.all([
     prefetch(qc, proyectoShellOptions(id), () => loadProyectoShell(user, { id })),
     prefetch(qc, proyectoResumenOptions(id), () => loadProyectoResumen(user, { id })),
+    prefetch(qc, proyectoTareasOptions(id), () => loadProyectoTareas(user, { id })),
+    qc.prefetchInfiniteQuery({
+      ...proyectoHistoryOptions(id),
+      queryFn: () => loadProyectoHistory(user, { id, cursor: null }),
+    }),
   ]);
   const shell = qc.getQueryData<ProjectTabShell | null>(qk.proyectos.shell(id));
   const resumen = qc.getQueryData<ProjectSummaryInput | null>(qk.proyectos.resumen(id));

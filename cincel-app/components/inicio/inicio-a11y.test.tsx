@@ -125,9 +125,7 @@ describe("Inicio dashboard controls accessibility", () => {
 
     const tramo = within(screen.getByRole("region", { name: "Tareas abiertas por tramo" }));
     expect(tramo.getByRole("group", { name: "Vista" })).toBeTruthy();
-    expect(tramo.getByRole("button", { name: "Ver como tabla" }).getAttribute("aria-pressed")).toBe(
-      style === "analitico" ? "true" : "false",
-    );
+    expect(tramo.getByRole("button", { name: "Ver como tabla" }).getAttribute("aria-pressed")).toBe("false");
 
     if (style !== "esencial") {
       const pace = within(screen.getByRole("region", { name: "Ritmo semanal" }));

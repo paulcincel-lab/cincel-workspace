@@ -80,7 +80,20 @@ export type GroupedTableProps<Row extends Record<string, unknown>> = {
   loading?: boolean;
   error?: { title?: string; onRetry?(): void };
   emptyState?: EmptyStateProps;
+  /** Column keys whose header is a sort button (`aria-sort`); the caller sorts the rows. */
+  sortable?: string[];
+  sort?: { key: string; direction: "asc" | "desc" } | null;
+  onSortChange?(key: string): void;
 };
+
+/** `aria-sort` of a header under the current sort. */
+export function ariaSortOf(
+  key: string,
+  sort: GroupedTableProps<Record<string, unknown>>["sort"],
+): "ascending" | "descending" | "none" {
+  if (!sort || sort.key !== key) return "none";
+  return sort.direction === "asc" ? "ascending" : "descending";
+}
 
 /** Heat level of a cell under its rule. */
 export type { HeatLevel };
@@ -130,7 +143,8 @@ function domId(prefix: string, id: string): string {
 
 /** Section id of a top group (the "Ir a" anchor target). */
 export function groupAnchorId(groupId: string): string {
-  return domId("grupo", groupId);
+  // The group id itself (made DOM-safe): pages link to their groups by id.
+  return groupId.replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
 function prefersReducedMotion(): boolean {
@@ -450,8 +464,19 @@ function TopGroup<Row extends Record<string, unknown>>({
                         index === 0 && "pl-10",
                         columnAlign(column) === "right" ? "text-right" : "text-left",
                       )}
+                      aria-sort={ctx.props.sortable?.includes(column.key) ? ariaSortOf(column.key, ctx.props.sort) : undefined}
                     >
-                      {column.label}
+                      {ctx.props.sortable?.includes(column.key) ? (
+                        <button
+                          type="button"
+                          onClick={() => ctx.props.onSortChange?.(column.key)}
+                          className="inline-flex items-center gap-1 uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {column.label}
+                        </button>
+                      ) : (
+                        column.label
+                      )}
                     </th>
                   ))}
                 </tr>

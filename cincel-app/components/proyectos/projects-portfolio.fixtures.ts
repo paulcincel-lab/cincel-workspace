@@ -7,6 +7,9 @@ import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import type { ProjectListItem, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
+/** The fixtures' "today" (project timezone): Casa Lomas delivers two days later. */
+export const FIXTURE_TODAY = "2026-11-10";
+
 export const TRAMOS: WorkflowRef[] = [
   { id: "w1", key: "presale", name: "Presale", sortOrder: 1 },
   { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
@@ -41,6 +44,7 @@ function project(patch: Partial<ProjectListItem> & Pick<ProjectListItem, "id" | 
     stages: [],
     manager: null,
     coordinator: null,
+    members: [],
     taskCounts: { total: 0, open: 0, blocked: 0 },
     ...patch,
   };
@@ -61,6 +65,11 @@ export const PROJECTS: ProjectListItem[] = [
     ],
     manager: { id: "s1", name: "Ana López" },
     coordinator: { id: "s2", name: "Luis Paz" },
+    members: [
+      { id: "s1", name: "Ana López" },
+      { id: "s3", name: "Marta Ruiz" },
+      { id: "s4", name: "Pedro Sola" },
+    ],
     taskCounts: { total: 12, open: 5, blocked: 0 },
   }),
   project({
@@ -87,6 +96,9 @@ export const PORTFOLIO: PortfolioRow[] = [
     budgetSpentPct: 55,
     open: 4,
     overdue: 2,
+    avgDelayDays: 4.5,
+    overdueWeekAgo: 1,
+    avgDelayWeekAgo: 3,
     daysToDelivery: 45,
     nextDelivery: { title: "Plano de acabados", date: "2026-11-12" },
     series7: [3, 4, 4, 5, 6, 5, 4],
@@ -99,6 +111,9 @@ export const PORTFOLIO: PortfolioRow[] = [
     budgetSpentPct: null,
     open: 8,
     overdue: 0,
+    avgDelayDays: null,
+    overdueWeekAgo: 0,
+    avgDelayWeekAgo: null,
     daysToDelivery: 120,
     nextDelivery: null,
     series7: [8, 8, 8, 8, 8, 8, 8],
@@ -121,6 +136,9 @@ export function portfolioPageData(patch: Partial<ProyectosPageData> = {}): Proye
     presaleAutoStart: false,
     canSeeAdminData: false,
     canCreateProject: true,
+    canChangeProjectStage: true,
+    viewerStaffId: "s1",
+    today: FIXTURE_TODAY,
     ...patch,
   };
 }

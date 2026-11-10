@@ -16,6 +16,7 @@ const FILES = [
   "components/proyectos/NewProjectDialog.tsx",
   "components/proyectos/projects-portfolio-data.ts",
   "app/(staff)/proyectos/page.tsx",
+  "app/(staff)/proyectos/loading.tsx",
 ].map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") }));
 
 /** Widgets the list composes (FE §4.10.2: `EntityCardGrid` and `DistributionWidget` through these and `ListPage`). */
@@ -31,6 +32,12 @@ const ALLOWED_WIDGETS = new Set([
   "EsencialCard",
   "EsencialItemRow",
   "QuickAddRow",
+  // Esencial branch of the list (#993).
+  "ProjectsEsencialLayout",
+  // Analítico branch of the list (#994).
+  "ProjectsAnaliticoLayout",
+  // Visual branch of the list (#992).
+  "ProjectsVisualLayout",
 ]);
 
 describe("Proyectos list composition guard", () => {

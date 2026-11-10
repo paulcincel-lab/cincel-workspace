@@ -1,16 +1,14 @@
 /**
  * Inicio Visual data (#989): pure helpers `loadInicio` composes for the
- * greeting hero, the open shifts, today's agenda, the project teams, the
+ * greeting hero, the open shifts, the project teams, the
  * "Horas esta semana" KPI and the attention progress. Dates are calendar
  * dates in the app's time zone, as `YYYY-MM-DD` strings.
  */
-import { agendaSortKey, isoDaysBetween, shiftIsoDate } from "@/lib/dashboard/inicio";
-import { TASK_TREND_TIME_ZONE } from "@/lib/dashboard/task-trend";
+import { isoDaysBetween, shiftIsoDate } from "@/lib/dashboard/inicio";
 import { deltaTone, DELTA_CAPTION, DELTA_UNCHANGED } from "@/lib/metrics/series";
-import { toAgendaItems } from "@/lib/metrics/widgets";
 import { initialsOf } from "@/lib/inicio/header";
-import { isTaskClosed, isTaskCompleted } from "@/lib/tasks/status-options";
-import type { DayHours, InicioAgendaItem, InicioHero, InicioOpenShifts } from "@/lib/types/redesign";
+import { isTaskCompleted } from "@/lib/tasks/status-options";
+import type { DayHours, InicioHero, InicioOpenShifts } from "@/lib/types/redesign";
 import type { TaskListItem } from "@/lib/types/core";
 import type { KpiDatum, TramoKey } from "@/lib/types/widgets";
 
@@ -118,36 +116,6 @@ export function openShiftsOf(
     .sort((a, b) => a.name.localeCompare(b.name, "es"))
     .map(({ id, initials, tramo }) => ({ id, initials, tramo }));
   return { count: people.length, people };
-}
-
-/**
- * Today's agenda for the team: every scoped open task's calendar events of
- * today (`toAgendaItems`), the commitment-date ones as `entrega` and the rest
- * as `evento`, each with the task's responsible, sorted by local time.
- */
-export function todayAgendaItems(
-  tasks: Omit<TaskListItem, "notes">[],
-  today: string,
-  tz: string = TASK_TREND_TIME_ZONE,
-): InicioAgendaItem[] {
-  const items: InicioAgendaItem[] = [];
-  const seen = new Set<string>();
-  for (const task of tasks) {
-    if (isTaskClosed(task)) continue;
-    const assignee = task.manager
-      ? { id: task.manager.id, name: task.manager.name, initials: initialsOf(task.manager.name) }
-      : null;
-    for (const item of toAgendaItems({ kind: "tasks", items: [task] })) {
-      if (seen.has(item.id) || agendaSortKey(item.start, tz).slice(0, 10) !== today) continue;
-      seen.add(item.id);
-      // Calendar event ids start with their type suffix: "c-" is the commitment date.
-      const kind = item.id.startsWith("c-") ? "entrega" : "evento";
-      items.push({ ...item, kind, assignee });
-    }
-  }
-  return items.sort(
-    (a, b) => agendaSortKey(a.start, tz).localeCompare(agendaSortKey(b.start, tz)) || a.title.localeCompare(b.title, "es"),
-  );
 }
 
 /** A project's team: manager, coordinator, then the task assignees, deduplicated. */

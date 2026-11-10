@@ -111,6 +111,8 @@ export type StaffFileItem = {
   modifiedAt: string;
   iconLink: string | null;
   webViewLink: string | null;
+  /** Drive's preview image (short-lived link); null for folders and files without one. */
+  thumbnailLink: string | null;
   kind: "file" | "folder";
 };
 

@@ -170,19 +170,13 @@ describe("InicioClient KPIs across styles", () => {
   });
 
   it("shows Completadas · semana only in Analítico", () => {
-    for (const style of STYLES) {
-      renderInicio(style);
-      const label = screen.queryAllByText("Completadas · semana");
-      const value = screen.queryAllByText(String(KPI_VALUES.completadas_semana));
-      if (style === "analitico") {
-        expect(label.length).toBeGreaterThan(0);
-        expect(value.length).toBeGreaterThan(0);
-      } else {
-        expect(label).toHaveLength(0);
-        expect(value).toHaveLength(0);
-      }
-      cleanup();
-    }
+    renderInicio("visual");
+    expect(screen.queryAllByText("Completadas · semana")).toHaveLength(0);
+    expect(screen.queryAllByText(String(KPI_VALUES.completadas_semana))).toHaveLength(0);
+    cleanup();
+    renderInicio("analitico");
+    expect(screen.getAllByText("Completadas (sem.)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(String(KPI_VALUES.completadas_semana)).length).toBeGreaterThan(0);
   });
 });
 
@@ -202,8 +196,9 @@ describe("InicioClient sections", () => {
     expect(screen.getAllByText("Ritmo semanal").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("columnheader", { name: "Neto" }).length).toBeGreaterThan(0);
     cleanup();
+    // Esencial's Ritmo semanal is a soft card: a sentence and a small line, no table.
     renderInicio("esencial");
-    expect(screen.queryAllByText("Ritmo semanal")).toHaveLength(0);
+    expect(screen.queryAllByRole("columnheader", { name: "Neto" })).toHaveLength(0);
   });
 });
 
@@ -262,7 +257,7 @@ const PACE = INICIO_NON_ADMIN.weeklyPace;
 
 describe("InicioClient KPI selection", () => {
   it("makes the KPIs toggle buttons; the same KPI again clears the selection", () => {
-    renderInicio("esencial");
+    renderInicio("visual");
     const tile = screen.getByRole("button", { name: "Vencidas" });
     expect(tile.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(tile);
@@ -274,7 +269,7 @@ describe("InicioClient KPI selection", () => {
   });
 
   it("keeps the selected KPI's destination reachable as a link", () => {
-    renderInicio("esencial");
+    renderInicio("visual");
     expect(screen.queryByRole("link", { name: /^Ver vencidas/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
     expect(screen.getByRole("link", { name: /^Ver vencidas/ }).getAttribute("href")).toBe(VENCIDAS_HREF);
@@ -282,14 +277,18 @@ describe("InicioClient KPI selection", () => {
 
   it("shows no selection for a KPI that is not in the data", () => {
     useInicioDashboard.setState({ selectedKpi: "vencidas" });
-    renderInicio("esencial", INICIO_EMPTY);
+    renderInicio("visual", INICIO_EMPTY);
     expect(screen.queryByRole("link", { name: /^Ver / })).toBeNull();
   });
 });
 
+/** The classic pace card's table (Visual with the table picked). */
+const seedPaceTable = () => useInicioDashboard.setState({ views: { visual: { weeklyPace: "table" } } });
+
 describe("InicioClient range (Ritmo semanal)", () => {
   it("offers 4 / 8 / 12 semanas with 8 pressed by default", () => {
-    renderInicio("analitico");
+    seedPaceTable();
+    renderInicio("visual");
     const group = within(region("Ritmo semanal")).getByRole("group", { name: "Rango" });
     const pressed = within(group)
       .getAllByRole("button")
@@ -302,9 +301,10 @@ describe("InicioClient range (Ritmo semanal)", () => {
     expect(dataRows("Ritmo semanal")).toHaveLength(8);
   });
 
-  it("shows exactly the selected weeks in the Analítico table (seeded 4 weeks)", () => {
+  it("shows exactly the selected weeks in the pace table (seeded 4 weeks)", () => {
+    seedPaceTable();
     useInicioDashboard.setState({ range: "4w" });
-    renderInicio("analitico");
+    renderInicio("visual");
     const rows = dataRows("Ritmo semanal");
     expect(rows).toHaveLength(4);
     expect(rows[0].textContent).toContain(weekLabel(PACE[PACE.length - 4].weekStart));
@@ -312,7 +312,8 @@ describe("InicioClient range (Ritmo semanal)", () => {
   });
 
   it("switches to 12 weeks from the control", () => {
-    renderInicio("analitico");
+    seedPaceTable();
+    renderInicio("visual");
     fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: "12 semanas" }));
     expect(useInicioDashboard.getState().range).toBe("12w");
     expect(dataRows("Ritmo semanal")).toHaveLength(12);
@@ -321,15 +322,16 @@ describe("InicioClient range (Ritmo semanal)", () => {
 
 describe("InicioClient series toggles (Ritmo semanal)", () => {
   it("drops a hidden series from the table and keeps the other", () => {
+    seedPaceTable();
     useInicioDashboard.setState({ hiddenSeries: { weeklyPace: ["created"] } });
-    renderInicio("analitico");
+    renderInicio("visual");
     const card = within(region("Ritmo semanal"));
     expect(card.queryByRole("columnheader", { name: "Creadas" })).toBeNull();
     expect(card.getByRole("columnheader", { name: "Completadas" })).toBeTruthy();
   });
 
   it("toggles a series from the legend and never hides the last one", () => {
-    renderInicio("analitico");
+    renderInicio("visual");
     const series = within(region("Ritmo semanal")).getByRole("group", { name: "Series" });
     fireEvent.click(within(series).getByRole("button", { name: /Creadas/ }));
     expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
@@ -374,9 +376,6 @@ describe("InicioClient chart / table per style", () => {
   it("renders each style's default without a pick", () => {
     renderInicio("esencial");
     expect(within(region(TRAMO)).queryAllByRole("columnheader")).toHaveLength(0);
-    cleanup();
-    renderInicio("analitico");
-    expect(within(region(TRAMO)).getAllByRole("columnheader").length).toBeGreaterThan(0);
   });
 
   it("keeps a table pick in Esencial out of Analítico", () => {
@@ -401,7 +400,7 @@ describe("InicioClient chart / table per style", () => {
 
 describe("InicioClient dashboard state stays on the client", () => {
   it("calls no server action when the controls change", () => {
-    renderInicio("analitico");
+    renderInicio("visual");
     fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
     fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: "4 semanas" }));
     fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: /Creadas/ }));
@@ -431,7 +430,7 @@ describe("InicioClient SSR and persisted choices", () => {
     const client = createTestQueryClient();
     client.setQueryData(qk.inicio(), pageData(INICIO_NON_ADMIN));
     client.setQueryData(qk.me.profile(), PROFILE);
-    const tree = <QueryClientProvider client={client}>{ui("analitico")}</QueryClientProvider>;
+    const tree = <QueryClientProvider client={client}>{ui("visual")}</QueryClientProvider>;
 
     const html = renderToString(tree);
     const container = document.createElement("div");
@@ -449,12 +448,7 @@ describe("InicioClient SSR and persisted choices", () => {
 
     // First client render = server render = defaults.
     expect(container.textContent).toContain(ATTENTION_TITLE);
-    const scope = within(container);
-    const paceRows = () =>
-      within(scope.getByRole("region", { name: "Ritmo semanal" }))
-        .getAllByRole("row")
-        .filter((row) => within(row).queryAllByRole("cell").length > 0);
-    expect(paceRows()).toHaveLength(8);
+    expect(useInicioDashboard.getState().range).toBe("8w");
 
     // What `<UiStoresHydrator/>` does after mount.
     await act(async () => {
@@ -462,9 +456,6 @@ describe("InicioClient SSR and persisted choices", () => {
     });
     expect(useInicioDashboard.getState().range).toBe("4w");
     expect(container.textContent).not.toContain(ATTENTION_TITLE);
-    expect(paceRows()).toHaveLength(4);
-    expect(
-      within(scope.getByRole("region", { name: "Ritmo semanal" })).queryByRole("columnheader", { name: "Creadas" }),
-    ).toBeNull();
+    expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
   });
 });

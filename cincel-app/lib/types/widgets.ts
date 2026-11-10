@@ -4,7 +4,8 @@
  * `components/widgets/*` renders them. The shapes are serializable; UI-only
  * inputs (`actions`, `footer`, `renderCell`) are component props, not fields.
  */
-import type { PresentationStyle } from "@/lib/types/redesign";
+import type { TaskStatus } from "@/lib/types/core";
+import type { AbsenceRange, PersonProjectLoad, PresentationStyle, WeekLoad } from "@/lib/types/redesign";
 
 /** 7 points, oldest → newest. */
 export type Series7 = number[];
@@ -60,14 +61,16 @@ export type ProgressItem = {
   colorVar?: string;
   href?: string;
   next?: { title: string; date: string } | null;
-  /** Open tasks of the project (Inicio, `inicioPortfolioRows`). */
+  /** Open tasks of the project (`PortfolioRow.open`, Inicio `inicioPortfolioRows`). */
   open?: number;
-  /** Open tasks past their commitment date (Inicio, `inicioPortfolioRows`). */
+  /** Open tasks past their commitment date (`PortfolioRow.overdue`). */
   overdue?: number;
   /** The project's delivery date (`endDate`, `YYYY-MM-DD`), null without one. */
   deliveryDate?: string | null;
   /** Manager, coordinator and task assignees, deduplicated (Inicio Visual avatars). */
   team?: { id: string; initials: string; tramo: TramoKey | null }[];
+  /** Overdue share ≥ 45 % of open tasks (`projectAtRisk`); only with `sections.showProjectRisk`. */
+  atRisk?: boolean;
 };
 
 export type AttentionItem = {
@@ -85,6 +88,10 @@ export type AttentionItem = {
   subtasks?: { done: number; total: number } | null;
   /** 0–100: 100 when completed, else the share of done subtareas (`taskProgressPct`). */
   progressPct?: number;
+  /** The task's project (`toAttentionItems`; Inicio Analítico groups by it). */
+  projectId?: string;
+  /** Base status and its label (custom status name when set). */
+  status?: { value: TaskStatus; label: string };
 };
 
 export type AgendaItem = {
@@ -119,6 +126,18 @@ export type PersonDatum = {
   weekHours?: number | null;
   availability?: Availability[];
   href?: string;
+  /** Open tasks en proceso (`inicioWorkloadRows`). */
+  inProgress?: number;
+  /** Mean days late of the overdue tasks (1 decimal), null without any (`inicioWorkloadRows`). */
+  avgDaysLate?: number | null;
+  /** 4 weeks, this Monday first (`PeopleOverviewRow.weeks`). */
+  weeks?: WeekLoad[];
+  /** Approved absences overlapping the 4 weeks. */
+  absences?: AbsenceRange[];
+  /** Open tasks per project, overdue desc then open desc (Personas Analítico). */
+  projects?: PersonProjectLoad[];
+  /** Shares an active project with the viewer (Personas Analítico). */
+  sharesProjectWithViewer?: boolean;
 };
 
 export type EntityCard = {

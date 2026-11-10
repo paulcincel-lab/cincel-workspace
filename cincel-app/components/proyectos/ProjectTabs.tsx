@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, Ellipsis, FolderKanban } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, Ellipsis, Plus } from "lucide-react";
 
 import {
   MOBILE_PROJECT_SECTIONS,
@@ -9,44 +10,39 @@ import {
   projectSectionLinks,
 } from "@/components/proyectos/ProjectSectionNav";
 import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/shadcn/breadcrumb";
-import { buttonVariants } from "@/components/ui/shadcn/button";
+import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/shadcn/dropdown-menu";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
-import { projectMetaLine } from "@/lib/proyectos/project-summary";
+import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import type { StaffRef, WorkflowRef } from "@/lib/types/core";
 import type { ProjectRef } from "@/lib/types/redesign";
 import { cn } from "@/lib/utils";
 
 export type ProjectTabsProps = {
   /**
-   * The project; the optional `projectType`, `addressCity` and `manager` feed
-   * the meta line "{tipo} · {ciudad} · Responsable: {name}" (each part is left
-   * out when absent).
+   * The project; the optional `clientName`, `addressCity` and `endDate` feed
+   * the description "{client} · {place} · entrega final {endDate}" (each part
+   * is left out when absent).
    */
   project: ProjectRef & {
     tramo: WorkflowRef | null;
     projectType?: string | null;
     addressCity?: string | null;
     manager?: StaffRef | null;
+    clientName?: string | null;
+    endDate?: string | null;
   };
   active: "resumen" | "tareas" | "cronograma" | "archivos" | "clientes" | "ficha";
   counts: { tareas: number; archivos: number; clientes: number };
   /** `portal.manageAccess`, resolved on the server: shows the Clientes tab. */
   canManagePortal: boolean;
-  /** Renders `EstiloSwitch` right-aligned under the tabs (data tabs: Resumen, Tareas, Cronograma, Archivos). */
+  /** Renders `EstiloSwitch` as the last header action (data tabs: Resumen, Tareas, Cronograma, Archivos). */
   showEstilo?: boolean;
 };
 
@@ -60,21 +56,50 @@ export function reportHref(projectId: string): string {
   return `/proyectos/${encodeURIComponent(projectId)}/cronograma/reporte`;
 }
 
+const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/** "30 abr 2027" */
+function deliveryDate(iso: string): string {
+  return `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+}
+
+/** "{client} · {place} · entrega final {endDate}", leaving out what the project lacks. */
+export function projectDescription(
+  project: Pick<ProjectTabsProps["project"], "clientName" | "addressCity" | "endDate">,
+): Array<{ key: string; text: string; date?: string }> {
+  const parts: Array<{ key: string; text: string; date?: string }> = [];
+  const client = project.clientName?.trim();
+  const place = project.addressCity?.trim();
+  if (client) parts.push({ key: "client", text: client });
+  if (place) parts.push({ key: "place", text: place });
+  if (project.endDate && /^\d{4}-\d{2}-\d{2}/.test(project.endDate)) {
+    parts.push({ key: "end", text: "entrega final", date: deliveryDate(project.endDate) });
+  }
+  return parts;
+}
+
 /**
- * Project header + tabs (redesign FE §3.5, §4.6), shared by every project tab:
- * breadcrumb "Proyectos / {name}", 48 px icon tile, name, tramo chip, meta
- * line, actions "Reporte" and "Nueva tarea", and the tabs (extends
- * `ProjectSectionNav`): Resumen, Tareas, Cronograma, Archivos, Clientes (only
- * with `portal.manageAccess`) and Ficha. On phones (frame `MovilProyecto`) the
- * breadcrumb becomes a back link, the tabs keep Resumen · Tareas · Archivos and
- * the rest move to "Más opciones".
+ * Project header + tabs (Estilos header, redesign FE §3.5), shared by every
+ * project tab: back link "← Proyectos" (keeps `?estilo=`), the name, the
+ * description "{client} · {place} · entrega final {endDate}", actions "Nueva
+ * tarea" (opens the new-task sheet with the project, only with
+ * `activities.canCreateActivity`) and the Estilo switch, then the tabs
+ * (extends `ProjectSectionNav`): Resumen, Tareas, Cronograma, Archivos,
+ * Clientes (only with `portal.manageAccess`) and Ficha. On phones (frame
+ * `MovilProyecto`) the back link is an icon, the tabs keep Resumen · Tareas ·
+ * Archivos and the rest (plus "Reporte") move to "Más opciones".
  */
 export function ProjectTabs({ project, active, counts, canManagePortal, showEstilo = false }: ProjectTabsProps) {
-  const meta = projectMetaLine({
-    projectType: project.projectType ?? null,
-    addressCity: project.addressCity ?? null,
-    manager: project.manager ?? null,
-  });
+  const description = projectDescription(project);
+  const user = useSessionStore(selectAuthenticatedUser);
+  const canCreate = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
+  const openCreate = () => useNewTaskUi.getState().openNewTask({ projectId: project.id }, "proyecto");
+  // "← Proyectos" keeps the `?estilo=` override of the current URL (read after mount).
+  const [backHref, setBackHref] = useState("/proyectos");
+  useEffect(() => {
+    const estilo = new URLSearchParams(window.location.search).get("estilo");
+    if (estilo) setBackHref(`/proyectos?${new URLSearchParams({ estilo }).toString()}`);
+  }, []);
   const moreLinks = projectSectionLinks(project.id, { showClientes: canManagePortal }).filter(
     (link) => !MOBILE_PROJECT_SECTIONS.includes(link.section)
   );
@@ -82,46 +107,45 @@ export function ProjectTabs({ project, active, counts, canManagePortal, showEsti
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-3">
-        <Breadcrumb className="hidden md:block">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink render={<Link href="/proyectos" />}>Proyectos</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator>/</BreadcrumbSeparator>
-            <BreadcrumbItem>
-              <BreadcrumbPage>{project.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+        <Link
+          href={backHref}
+          className="hidden self-start text-[12.5px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:inline"
+        >
+          ← Proyectos
+        </Link>
 
         <div className="flex flex-wrap items-center gap-3 md:gap-4">
           <Link
-            href="/proyectos"
+            href={backHref}
             aria-label="Volver a proyectos"
             className={cn(buttonVariants({ variant: "ghost", size: "icon-lg" }), "md:hidden")}
           >
             <ChevronLeft aria-hidden="true" />
           </Link>
-          <span
-            aria-hidden="true"
-            className="hidden size-12 flex-none items-center justify-center rounded-xl bg-muted text-muted-foreground md:inline-flex"
-          >
-            <FolderKanban className="size-6" />
-          </span>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h1 className="truncate text-[17px] font-semibold text-foreground md:text-[22px]">{project.name}</h1>
-              {project.tramo ? <TramoBadge tramo={project.tramo} variant="chip" /> : null}
-            </div>
-            {meta ? <p className="text-sm text-muted-foreground">{meta}</p> : null}
+            <h1 className="truncate text-[22px] font-semibold tracking-[-0.02em] text-foreground md:text-[32px]">
+              {project.name}
+            </h1>
+            {description.length > 0 ? (
+              <p className="text-[15px] text-muted-foreground">
+                {description.map((part, index) => (
+                  <span key={part.key}>
+                    {index > 0 ? " · " : null}
+                    {part.text}
+                    {part.date ? <span className="font-mono tabular-nums"> {part.date}</span> : null}
+                  </span>
+                ))}
+              </p>
+            ) : null}
           </div>
-          <div className="hidden items-center gap-2 md:flex">
-            <Link href={reportHref(project.id)} className={buttonVariants({ variant: "outline" })}>
-              Reporte
-            </Link>
-            <Link href={newTaskHref(project.id)} className={buttonVariants()}>
-              Nueva tarea
-            </Link>
+          <div className="flex items-center gap-2">
+            {canCreate ? (
+              <Button type="button" onClick={openCreate} className="hidden md:inline-flex">
+                <Plus data-icon="inline-start" aria-hidden="true" />
+                Nueva tarea
+              </Button>
+            ) : null}
+            {showEstilo ? <EstiloSwitch /> : null}
           </div>
           <div className="md:hidden">
             <DropdownMenu>
@@ -129,7 +153,7 @@ export function ProjectTabs({ project, active, counts, canManagePortal, showEsti
                 <Ellipsis aria-hidden="true" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem render={<Link href={newTaskHref(project.id)} />}>Nueva tarea</DropdownMenuItem>
+                {canCreate ? <DropdownMenuItem onClick={openCreate}>Nueva tarea</DropdownMenuItem> : null}
                 {moreLinks.map((link) => (
                   <DropdownMenuItem key={link.section} render={<Link href={link.href} />}>
                     {link.label}
@@ -148,12 +172,6 @@ export function ProjectTabs({ project, active, counts, canManagePortal, showEsti
         counts={counts}
         showClientes={canManagePortal}
       />
-
-      {showEstilo ? (
-        <div className="flex justify-end">
-          <EstiloSwitch />
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -6,17 +6,35 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
 import type { ExportFormat } from "@/lib/utils/export-service";
 
-type ExportMenuProps = {
-  disabled?: boolean;
-  onExport: (format: ExportFormat) => void | Promise<void>;
-  scaleClassName?: string;
+/** What the menu can offer: the export service's formats plus a CSV the caller builds. */
+export type ExportMenuFormat = ExportFormat | "csv";
+
+const FORMAT_LABELS: Record<ExportMenuFormat, string> = {
+  xlsx: "Exportar a Excel (.xlsx)",
+  pdf: "Exportar a PDF",
+  csv: "Exportar a CSV (.csv)",
 };
 
-export default function ExportMenu({ disabled = false, onExport, scaleClassName = "scale-[0.84]" }: ExportMenuProps) {
+const DEFAULT_FORMATS: readonly ExportFormat[] = ["xlsx", "pdf"];
+
+type ExportMenuProps<F extends ExportMenuFormat = ExportFormat> = {
+  disabled?: boolean;
+  onExport: (format: F) => void | Promise<void>;
+  scaleClassName?: string;
+  /** Menu entries, in order; default Excel and PDF. */
+  formats?: readonly F[];
+};
+
+export default function ExportMenu<F extends ExportMenuFormat = ExportFormat>({
+  disabled = false,
+  onExport,
+  scaleClassName = "scale-[0.84]",
+  formats = DEFAULT_FORMATS as readonly F[],
+}: ExportMenuProps<F>) {
   const [open, setOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleExport = async (format: ExportFormat) => {
+  const handleExport = async (format: F) => {
     try {
       setIsExporting(true);
       await onExport(format);
@@ -36,24 +54,18 @@ export default function ExportMenu({ disabled = false, onExport, scaleClassName 
       </PopoverTrigger>
 
       <PopoverContent align="end" className="w-56 overflow-hidden p-0">
-        <Button
-          variant="ghost"
-          onClick={() => {
-            void handleExport("xlsx");
-          }}
-          className="block h-auto w-full rounded-none px-4 py-2 text-left text-sm font-normal"
-        >
-          Exportar a Excel (.xlsx)
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            void handleExport("pdf");
-          }}
-          className="block h-auto w-full rounded-none border-t border-border px-4 py-2 text-left text-sm font-normal"
-        >
-          Exportar a PDF
-        </Button>
+        {formats.map((format, index) => (
+          <Button
+            key={format}
+            variant="ghost"
+            onClick={() => {
+              void handleExport(format);
+            }}
+            className={`block h-auto w-full rounded-none px-4 py-2 text-left text-sm font-normal${index > 0 ? " border-t border-border" : ""}`}
+          >
+            {FORMAT_LABELS[format]}
+          </Button>
+        ))}
       </PopoverContent>
     </Popover>
   );

@@ -60,8 +60,48 @@ vi.mock("@/components/widgets/RecordTable", () => ({
   ),
 }));
 
-// The page prefetches `qk.proyectos.resumen(id)`; a client call here would be a bug.
-const actions = vi.hoisted(() => ({ getProyectoResumenData: vi.fn() }));
+// Analítico has its own layout (#997); here it only marks that it rendered.
+vi.mock("@/components/widgets/ResumenAnaliticoLayout", () => ({
+  ResumenAnaliticoLayout: ({ data }: { data: { project: { name: string } } }) => (
+    <section aria-label="Resumen analítico" data-layout="analitico">
+      {data.project.name}
+    </section>
+  ),
+}));
+
+// Visual has its own layout (#995); here it prints what the Resumen passes it.
+vi.mock("@/components/widgets/ResumenVisualLayout", () => ({
+  ResumenVisualLayout: (props: {
+    data: { project: { name: string } };
+    tasks: { id: string }[];
+    history: { events: { id: string }[]; status: string };
+    canCreate: boolean;
+  }) => (
+    <section
+      aria-label="Resumen visual"
+      data-layout="visual"
+      data-tasks={props.tasks.map((t) => t.id).join(",")}
+      data-events={props.history.events.map((e) => e.id).join(",")}
+      data-history={props.history.status}
+      data-can-create={String(props.canCreate)}
+    >
+      {props.data.project.name}
+    </section>
+  ),
+}));
+vi.mock("@/components/tareas/quick-add-create", () => ({
+  useQuickAddCreate: () => ({ create: vi.fn(async () => ({ id: "new", title: "Nueva" })), undo: vi.fn() }),
+}));
+vi.mock("@/lib/stores/quick-add-store", () => ({
+  useQuickAddRecent: (select: (state: { recent: string[] }) => unknown) => select({ recent: [] }),
+}));
+
+// The page prefetches the Resumen, the task list and the history; a client call here would be a bug.
+const actions = vi.hoisted(() => ({
+  getProyectoResumenData: vi.fn(),
+  getProyectoTareasData: vi.fn(),
+  getProyectoHistoryPage: vi.fn(),
+}));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
 const summaryLib = vi.hoisted(() => ({ builds: 0 }));
 vi.mock("@/lib/proyectos/project-summary", async (importOriginal) => {
@@ -77,17 +117,18 @@ vi.mock("@/lib/proyectos/project-summary", async (importOriginal) => {
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
-import { proyectoResumenOptions } from "@/lib/query/options/proyectos";
+import { proyectoHistoryOptions, proyectoResumenOptions, proyectoTareasOptions } from "@/lib/query/options/proyectos";
 import { prefetch } from "@/lib/query/server";
 import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle } from "@/lib/types/redesign";
-import { fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { fixtureSummaryInput, HISTORY_EVENTS, TASK_ROWS } from "@/tests/unit/fixtures/project-summary";
 
 import { ProjectSummary, ProjectSummaryContent, RESUMEN_NOT_FOUND_TITLE } from "./ProjectSummary";
 
 afterEach(cleanup);
 
-function renderSummary(overrides: Parameters<typeof fixtureSummaryInput>[0] = {}, style: PresentationStyle = "visual") {
+// The shared widget composition (Esencial until its own layout lands); Visual and Analítico have layouts.
+function renderSummary(overrides: Parameters<typeof fixtureSummaryInput>[0] = {}, style: PresentationStyle = "esencial") {
   return render(
     <StyleProvider style={style} scope="staff">
       <ProjectSummaryContent data={fixtureSummaryInput(overrides)} />
@@ -153,18 +194,44 @@ describe("ProjectSummary · visibility (B8)", () => {
 });
 
 describe("ProjectSummary · styles", () => {
-  it("renders the same widgets with the same data in Visual, Esencial and Analítico", () => {
-    const snapshots = (["visual", "esencial", "analitico"] as const).map((style) => {
-      const { container } = renderSummary({}, style);
-      const widgets = Array.from(container.querySelectorAll("[data-widget]")).map(
-        (el) => `${el.getAttribute("data-widget")}:${el.getAttribute("aria-label") ?? ""}:${el.textContent}`
-      );
-      cleanup();
-      return widgets;
+  it("renders the shared widgets in Esencial", () => {
+    const { container } = renderSummary({}, "esencial");
+    expect(container.querySelectorAll("[data-widget]").length).toBeGreaterThan(0);
+  });
+
+  it("renders the Visual layout with the hydrated task list and history, 0 client action calls", async () => {
+    const input = fixtureSummaryInput();
+    const { client, state } = await hydrationRoundtrip(async (server) => {
+      await Promise.all([
+        prefetch(server, proyectoResumenOptions("p1"), async () => input),
+        prefetch(server, proyectoTareasOptions("p1"), async () => ({ tasks: TASK_ROWS, includeAdmin: true })),
+        server.prefetchInfiniteQuery({
+          ...proyectoHistoryOptions("p1"),
+          queryFn: async () => ({ events: HISTORY_EVENTS, nextCursor: null }),
+        }),
+      ]);
     });
-    expect(snapshots[0].length).toBeGreaterThan(0);
-    expect(snapshots[1]).toEqual(snapshots[0]);
-    expect(snapshots[2]).toEqual(snapshots[0]);
+    const { container } = renderWithQueryClient(
+      <StyleProvider style="visual" scope="staff">
+        <ProjectSummary projectId="p1" />
+      </StyleProvider>,
+      { client, hydrate: state },
+    );
+    const layout = screen.getByRole("region", { name: "Resumen visual" });
+    expect(layout.getAttribute("data-tasks")).toBe(TASK_ROWS.map((t) => t.id).join(","));
+    expect(layout.getAttribute("data-events")).toBe("h1,h2");
+    expect(layout.getAttribute("data-history")).toBe("success");
+    expect(layout.getAttribute("data-can-create")).toBe("false");
+    expect(container.querySelector("[data-widget]")).toBeNull();
+    expect(actions.getProyectoResumenData).not.toHaveBeenCalled();
+    expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+    expect(actions.getProyectoHistoryPage).not.toHaveBeenCalled();
+  });
+
+  it("renders the Analítico layout instead of the shared widgets in Analítico", () => {
+    const { container } = renderSummary({}, "analitico");
+    expect(screen.getByRole("region", { name: "Resumen analítico" }).textContent).toBe("Local Espinopapa");
+    expect(container.querySelector("[data-widget]")).toBeNull();
   });
 
   it("passes the avance ring the portfolio numbers and the task caption", () => {
@@ -183,7 +250,7 @@ describe("ProjectSummary · query", () => {
       prefetch(server, proyectoResumenOptions("p1"), async () => input),
     );
     renderWithQueryClient(
-      <StyleProvider style="visual" scope="staff">
+      <StyleProvider style="esencial" scope="staff">
         <ProjectSummary projectId="p1" />
       </StyleProvider>,
       { client, hydrate: state },
@@ -208,7 +275,7 @@ describe("ProjectSummary · memo", () => {
     client.setQueryData(qk.proyectos.resumen("p1"), fixtureSummaryInput());
     summaryLib.builds = 0;
     const ui = (
-      <StyleProvider style="visual" scope="staff">
+      <StyleProvider style="esencial" scope="staff">
         <ProjectSummary projectId="p1" />
       </StyleProvider>
     );

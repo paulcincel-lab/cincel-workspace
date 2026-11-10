@@ -86,6 +86,20 @@ vi.mock("@/components/patterns/FiltersBar", () => ({
       />
     ) : null,
 }));
+// The Visual and Esencial layouts have their own tests; here they only show which one the Estilo picked.
+const layouts = vi.hoisted(() => ({ onNewProject: null as (() => void) | null }));
+vi.mock("@/components/widgets/ProjectsVisualLayout", () => ({
+  ProjectsVisualLayout: (props: { onNewProject?(): void }) => {
+    layouts.onNewProject = props.onNewProject ?? null;
+    return <div data-testid="layout-visual" />;
+  },
+}));
+vi.mock("@/components/widgets/ProjectsEsencialLayout", () => ({
+  ProjectsEsencialLayout: (props: { onNewProject?(): void }) => {
+    layouts.onNewProject = props.onNewProject ?? null;
+    return <div data-testid="layout-esencial" />;
+  },
+}));
 vi.mock("./NewProjectDialog", () => ({
   NewProjectDialog: (props: NewProjectDialogProps) => {
     captured.dialog = props;
@@ -106,10 +120,8 @@ import {
   CLEAR_TRAMO_LABEL,
   COLLAPSE_STRIP_LABEL,
   EXPAND_STRIP_LABEL,
-  PORTFOLIO_VIEW_LABEL,
   ProjectsPortfolio,
   SEARCH_DEBOUNCE_MS,
-  STRIP_VIEW_LABEL,
 } from "./ProjectsPortfolio";
 import { PORTFOLIO, PROJECTS, TRAMOS, portfolioPageData } from "./projects-portfolio.fixtures";
 import {
@@ -123,8 +135,11 @@ import {
   tramoSteps,
 } from "./projects-portfolio-data";
 
-/** Renders the portfolio over a seeded `qk.proyectos.list()`, as the page's hydration leaves it. */
-function renderPortfolio(patch: Partial<ProyectosPageData> = {}, style: PresentationStyle = "visual") {
+/**
+ * Renders the portfolio over a seeded `qk.proyectos.list()`, as the page's
+ * hydration leaves it. Analítico by default: the `ListPage` branch.
+ */
+function renderPortfolio(patch: Partial<ProyectosPageData> = {}, style: PresentationStyle = "analitico") {
   const client = createTestQueryClient();
   client.setQueryData(qk.proyectos.list(), portfolioPageData(patch));
   return renderWithQueryClient(
@@ -158,6 +173,8 @@ beforeEach(() => {
   catalog.fetchCatalogStaff.mockClear();
   captured.list = null;
   captured.dialog = null;
+  layouts.onNewProject = null;
+  useProyectosDashboard.getState().reset();
   window.history.replaceState(null, "", "/proyectos");
 });
 
@@ -180,7 +197,12 @@ describe("ProjectsPortfolio", () => {
     const { client, state } = await hydrationRoundtrip((server) =>
       prefetch(server, proyectosPageOptions(), async () => portfolioPageData()),
     );
-    renderWithQueryClient(<ProjectsPortfolio />, { client, hydrate: state });
+    renderWithQueryClient(
+      <StyleProvider style="analitico" scope="staff">
+        <ProjectsPortfolio />
+      </StyleProvider>,
+      { client, hydrate: state },
+    );
     expect(cardsSpec().items.map((i) => i.title)).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
     expect(pageData.getProyectosPageData).not.toHaveBeenCalled();
     expect(submitProjectCreateAction).not.toHaveBeenCalled();
@@ -188,16 +210,30 @@ describe("ProjectsPortfolio", () => {
     expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
   });
 
-  it("hands the same data to every style (the widgets decide the look)", () => {
-    const snapshots = (["visual", "esencial", "analitico"] as const).map((style) => {
-      renderPortfolio({}, style);
-      const spec = cardsSpec();
-      const snapshot = JSON.stringify({ items: spec.items, table: spec.table, header: captured.list?.header.description });
-      cleanup();
-      return snapshot;
-    });
-    expect(snapshots[1]).toBe(snapshots[0]);
-    expect(snapshots[2]).toBe(snapshots[0]);
+  it("renders the layout of the active Estilo (PageStyleLayout)", () => {
+    renderPortfolio({}, "visual");
+    expect(screen.getByTestId("layout-visual")).toBeTruthy();
+    expect(captured.list).toBeNull();
+    cleanup();
+    renderPortfolio({}, "esencial");
+    expect(screen.getByTestId("layout-esencial")).toBeTruthy();
+    expect(captured.list).toBeNull();
+    cleanup();
+    renderPortfolio({}, "analitico");
+    expect(screen.queryByTestId("layout-visual")).toBeNull();
+    expect(cardsSpec().items).toHaveLength(3);
+  });
+
+  it("the Visual layout's Nuevo proyecto opens the create dialog", () => {
+    renderPortfolio({}, "visual");
+    act(() => layouts.onNewProject?.());
+    expect(screen.getByRole("dialog", { name: "Nuevo proyecto" })).toBeTruthy();
+  });
+
+  it("shows no chart/table view toggle (the Estilo picks the layout)", () => {
+    renderPortfolio();
+    expect(screen.queryByRole("group", { name: "Vista de proyectos" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Vista de Proyectos por tramo" })).toBeNull();
   });
 
   it("leaves the Presup. ejercido column out for non-admins", () => {
@@ -402,32 +438,31 @@ describe("ProjectsPortfolio dashboard interactions", () => {
   const dashboard = () => useProyectosDashboard.getState();
   const titles = () => cardsSpec().items.map((i) => i.title);
   const tableIds = () => cardsSpec().table.rows.map((r) => r.id);
-  const stripRegion = () => screen.queryByRole("region", { name: "Proyectos por tramo" });
+  const stripRegion = () => document.querySelector("[data-slot=distribution-strip-toggles]");
+  const segment = (name: RegExp) =>
+    within(screen.getByRole("group", { name: "Filtrar: Proyectos por tramo" })).getByRole("button", { name });
 
   it("without any choice: no view handed to the widgets, the strip expanded, every project listed", () => {
-    for (const style of ["visual", "esencial", "analitico"] as const) {
-      renderPortfolio({}, style);
-      expect(cardsSpec().view).toBeUndefined();
-      expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
-      expect(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }).getAttribute("aria-expanded")).toBe("true");
-      cleanup();
-    }
+    renderPortfolio();
+    expect(cardsSpec().view).toBeUndefined();
+    expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+    expect(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }).getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("Visual: a tramo segment is a toggle; it filters the cards, the table and the header count, and clears on a second press", () => {
+  it("a tramo segment is a toggle; it filters the cards, the table and the header count, and clears on a second press", () => {
     renderPortfolio();
-    const diseno = screen.getByRole("button", { name: /Diseño/ });
+    const diseno = segment(/Diseño/);
     expect(diseno.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(diseno);
-    expect(screen.getByRole("button", { name: /Diseño/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(segment(/Diseño/).getAttribute("aria-pressed")).toBe("true");
     expect(titles()).toEqual(["Casa Lomas"]);
     expect(tableIds()).toEqual(["p-lomas"]);
     expect(cardsSpec().table.totals).toMatchObject({ name: "Total (1)" });
     expect(screen.getByTestId("description").textContent).toBe("1 activo · avance, fase y entregas de cada obra.");
     // The strip keeps every tramo, so another one can be picked.
-    expect(screen.getByRole("button", { name: /Presale/ })).toBeTruthy();
+    expect(segment(/Presale/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Diseño/ }));
+    fireEvent.click(segment(/Diseño/));
     expect(dashboard().selectedKpi).toBeNull();
     expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
     expect(screen.getByTestId("description").textContent).toBe("3 activos · avance, fase y entregas de cada obra.");
@@ -443,7 +478,7 @@ describe("ProjectsPortfolio dashboard interactions", () => {
 
   it("selects Sin tramo for the projects without a tramo", () => {
     renderPortfolio();
-    fireEvent.click(screen.getByRole("button", { name: /Sin tramo/ }));
+    fireEvent.click(segment(/Sin tramo/));
     expect(dashboard().selectedKpi).toBe(NO_TRAMO_KEY);
     expect(titles()).toEqual(["Oficina Centro"]);
   });
@@ -494,45 +529,6 @@ describe("ProjectsPortfolio dashboard interactions", () => {
     expect(screen.getByRole("button", { name: EXPAND_STRIP_LABEL })).toBeTruthy();
   });
 
-  it("a cards/table pick in Visual does not change Esencial or Analítico", () => {
-    renderPortfolio({}, "visual");
-    const group = screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL });
-    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
-    expect(dashboard().views.visual?.portfolio).toBe("table");
-    expect(cardsSpec().view).toBe("table");
-    expect(within(group).getByRole("button", { name: "Tabla" }).getAttribute("aria-pressed")).toBe("true");
-    cleanup();
-
-    renderPortfolio({}, "esencial");
-    expect(cardsSpec().view).toBeUndefined();
-    cleanup();
-    renderPortfolio({}, "analitico");
-    expect(cardsSpec().view).toBeUndefined();
-  });
-
-  it("Analítico can pick the cards; picking its default again hands no view down", () => {
-    dashboard().setWidgetView("analitico", "portfolio", "chart");
-    renderPortfolio({}, "analitico");
-    expect(cardsSpec().view).toBe("chart");
-    const group = screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL });
-    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
-    expect(cardsSpec().view).toBeUndefined();
-  });
-
-  it("the strip view override is per style too", () => {
-    renderPortfolio({}, "visual");
-    const group = screen.getByRole("group", { name: STRIP_VIEW_LABEL });
-    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
-    expect(dashboard().views.visual?.tramoStrip).toBe("table");
-    // Visual now shows the table, not the strip.
-    expect(document.querySelector("[data-slot=distribution-strip]")).toBeNull();
-    cleanup();
-
-    renderPortfolio({}, "esencial");
-    expect(dashboard().views.esencial).toBeUndefined();
-    expect(document.querySelector("[data-slot=distribution-esencial]")).toBeTruthy();
-  });
-
   it("shows no range or series control", () => {
     renderPortfolio();
     expect(screen.queryByText(/\b(4|8|12) ?(sem|w)\b/i)).toBeNull();
@@ -541,9 +537,8 @@ describe("ProjectsPortfolio dashboard interactions", () => {
 
   it("store changes cause no server call", () => {
     renderPortfolio();
-    fireEvent.click(screen.getByRole("button", { name: /Diseño/ }));
+    fireEvent.click(segment(/Diseño/));
     fireEvent.click(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }));
-    fireEvent.click(within(screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL })).getByRole("button", { name: "Tabla" }));
     expect(pageData.getProyectosPageData).not.toHaveBeenCalled();
     expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
     expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
@@ -557,7 +552,7 @@ describe("ProjectsPortfolio dashboard interactions", () => {
       client.setQueryData(qk.proyectos.list(), portfolioPageData());
       return renderToString(
         <QueryClientProvider client={client}>
-          <StyleProvider style="visual" scope="staff">
+          <StyleProvider style="analitico" scope="staff">
             <ProjectsPortfolio />
           </StyleProvider>
         </QueryClientProvider>,
@@ -565,9 +560,9 @@ describe("ProjectsPortfolio dashboard interactions", () => {
     };
     const withoutValue = html();
     localStorage.setItem(
-      "cincel.ui.dashboard.proyectos.v1",
+      "cincel.ui.dashboard.proyectos.v2",
       JSON.stringify({
-        state: { range: "8w", collapsed: { tramoStrip: true }, views: { visual: { portfolio: "table" } }, hiddenSeries: {} },
+        state: { range: "8w", collapsed: { tramoStrip: true }, views: {}, hiddenSeries: {} },
         version: 1,
       }),
     );
@@ -580,7 +575,7 @@ describe("ProjectsPortfolio dashboard interactions", () => {
     });
     renderPortfolio();
     expect(stripRegion()).toBeNull();
-    expect(cardsSpec().view).toBe("table");
+    expect(cardsSpec().view).toBeUndefined();
   });
 });
 

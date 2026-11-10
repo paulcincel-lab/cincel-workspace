@@ -29,6 +29,7 @@ function item(overrides: Partial<StaffFileItem>): StaffFileItem {
     sizeBytes: 2048,
     modifiedAt: "2026-10-01T12:00:00.000Z",
     iconLink: null,
+    thumbnailLink: null,
     webViewLink: "https://drive.google.com/file/d/f1/view",
     kind: "file",
     ...overrides,

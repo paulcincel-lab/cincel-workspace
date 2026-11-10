@@ -4,7 +4,7 @@
  * three-person team, a cronograma and a few Drive files.
  */
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
-import type { ProjectDetail, WorkflowRef } from "@/lib/types/core";
+import type { HistoryEvent, ProjectDetail, TaskListRow, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
 export const TRAMOS: WorkflowRef[] = [
@@ -13,6 +13,21 @@ export const TRAMOS: WorkflowRef[] = [
   { id: "w-construccion", key: "construccion", name: "Construcción", sortOrder: 3 },
   { id: "w-decoracion", key: "decoracion", name: "Decoración", sortOrder: 4 },
 ];
+
+/** Active catalog fases per tramo, in order (the Esencial "fase i de n"). */
+export const PHASES_BY_TRAMO: Record<string, WorkflowPhaseRef[]> = {
+  "w-presale": [{ id: "f-levantamiento", name: "Levantamiento", sortOrder: 1 }],
+  "w-diseno": [
+    { id: "f-anteproyecto", name: "Anteproyecto", sortOrder: 1 },
+    { id: "f-ejecutivo", name: "Proyecto ejecutivo", sortOrder: 2 },
+  ],
+  "w-construccion": [
+    { id: "f-preliminares", name: "Preliminares", sortOrder: 1 },
+    { id: "f-obra-negra", name: "Obra negra", sortOrder: 2 },
+    { id: "f-acabados", name: "Acabados", sortOrder: 3 },
+  ],
+  "w-decoracion": [],
+};
 
 export function fixtureProject(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
   return {
@@ -67,6 +82,9 @@ export const PORTFOLIO: PortfolioRow = {
   budgetSpentPct: 64,
   open: 9,
   overdue: 4,
+  avgDelayDays: null,
+  overdueWeekAgo: 0,
+  avgDelayWeekAgo: null,
   daysToDelivery: 84,
   nextDelivery: { title: "Entrega de acabados", date: "2026-11-20" },
   series7: [7, 8, 8, 9, 9, 10, 9],
@@ -77,7 +95,7 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
     project: fixtureProject(),
     portfolio: PORTFOLIO,
     tramoCatalog: TRAMOS,
-    taskStats: { total: 39, done: 32, open: 7, overdue: 4, currentPhase: "Obra negra" },
+    taskStats: { total: 39, done: 32, open: 7, overdue: 4, currentPhase: "Obra negra", currentPhaseId: "f-obra-negra" },
     schedule: {
       tasks: [
         {
@@ -133,6 +151,7 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
         sizeBytes: null,
         modifiedAt: "2026-11-03T10:00:00.000Z",
         iconLink: null,
+        thumbnailLink: null,
         webViewLink: null,
         kind: "folder",
       },
@@ -143,6 +162,7 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
         sizeBytes: 1000,
         modifiedAt: "2026-11-03T09:00:00.000Z",
         iconLink: null,
+        thumbnailLink: null,
         webViewLink: "https://drive.google.com/file/d/f1/view",
         kind: "file",
       },
@@ -153,6 +173,7 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
         sizeBytes: 2000,
         modifiedAt: "2026-11-02T09:00:00.000Z",
         iconLink: null,
+        thumbnailLink: "https://lh3.googleusercontent.com/thumb-f2",
         webViewLink: "https://drive.google.com/file/d/f2/view",
         kind: "file",
       },
@@ -167,6 +188,134 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
     showBudget: true,
     showClientContacts: true,
     today: "2026-11-06",
+    phasesByTramo: PHASES_BY_TRAMO,
+    driveFolderUrl: "https://drive.google.com/drive/folders/drive-p1",
+    // Open tasks across all projects against capacity (Personas occupancy).
+    teamLoad: {
+      s1: { loadPct: 92, openTotal: 11, capacity: 12 },
+      s2: { loadPct: 60, openTotal: 6, capacity: 10 },
+      s3: { loadPct: 40, openTotal: 4, capacity: 10 },
+    },
     ...overrides,
   };
 }
+
+// ── Task list and history (`qk.proyectos.tab(id, "tareas")`, `qk.proyectos.history(id)`) ──
+
+/** A slim task row of "Local Espinopapa" (Construcción, Paul as responsable unless overridden). */
+export function fixtureTaskRow(id: string, overrides: Partial<TaskListRow> = {}): TaskListRow {
+  return {
+    id,
+    projectId: "p1",
+    kind: "workflow",
+    templateId: null,
+    workflowId: TRAMOS[2]!.id,
+    phaseId: null,
+    spaceId: null,
+    closedAt: null,
+    title: `Tarea ${id}`,
+    createdById: "s1",
+    managerId: "s1",
+    status: "pendiente",
+    customStatusId: null,
+    priority: "media",
+    sortOrder: null,
+    commitmentDate: null,
+    reviewDate: null,
+    deliveryDate: null,
+    archived: false,
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-11-01T00:00:00.000Z",
+    customStatus: null,
+    project: { id: "p1", name: "Local Espinopapa", clientName: null },
+    workflow: TRAMOS[2]!,
+    phase: null,
+    space: null,
+    manager: { id: "s1", name: "Paul Langarica" },
+    support: [],
+    checklist: { total: 0, completed: 0 },
+    parentTaskId: null,
+    parentTitle: null,
+    subtaskCount: 0,
+    subtaskDoneCount: 0,
+    subtaskDone: 0,
+    commentCount: 0,
+    attachmentCount: 0,
+    checklistTotal: 0,
+    checklistDone: 0,
+    waitingOn: 0,
+    ...overrides,
+  };
+}
+
+const ALEJANDRO = { id: "s2", name: "Alejandro Riofrio" };
+const ANA = { id: "s3", name: "Ana López" };
+
+/**
+ * Seven top-level tasks and one subtask: Presale and Diseño closed (one
+ * Diseño task still open), Construcción in course with an overdue, a blocked
+ * and two open tasks, Decoración not started with one dated task.
+ */
+export const TASK_ROWS: TaskListRow[] = [
+  fixtureTaskRow("t-presale", { workflowId: TRAMOS[0]!.id, workflow: TRAMOS[0]!, status: "completado", title: "Levantamiento topográfico" }),
+  fixtureTaskRow("t-diseno-1", { workflowId: TRAMOS[1]!.id, workflow: TRAMOS[1]!, status: "completado", title: "Planos ejecutivos" }),
+  fixtureTaskRow("t-diseno-2", {
+    workflowId: TRAMOS[1]!.id,
+    workflow: TRAMOS[1]!,
+    status: "pendiente",
+    title: "Detalle de cancelería",
+    managerId: ANA.id,
+    manager: ANA,
+    commitmentDate: "2026-11-20",
+  }),
+  fixtureTaskRow("t-obra-1", {
+    status: "en_proceso",
+    title: "Instalación eléctrica",
+    commitmentDate: "2026-10-27",
+    subtaskCount: 4,
+    subtaskDone: 2,
+    subtaskDoneCount: 2,
+  }),
+  fixtureTaskRow("t-obra-2", { status: "bloqueado", title: "Permiso de obra ante alcaldía", managerId: ALEJANDRO.id, manager: ALEJANDRO }),
+  fixtureTaskRow("t-obra-3", { status: "pendiente", title: "Pintura de muros", commitmentDate: "2026-11-12" }),
+  fixtureTaskRow("t-obra-4", { status: "completado", title: "Demoliciones" }),
+  fixtureTaskRow("t-deco-1", {
+    workflowId: TRAMOS[3]!.id,
+    workflow: TRAMOS[3]!,
+    status: "pendiente",
+    title: "Selección de mobiliario",
+    managerId: ANA.id,
+    manager: ANA,
+    commitmentDate: "2027-01-08",
+  }),
+  // A subtask: counted on its parent, never on its own.
+  fixtureTaskRow("t-obra-1-a", { parentTaskId: "t-obra-1", status: "completado", title: "Tablero" }),
+];
+
+/** Project history, newest first ("now" = 2026-11-06T18:00Z). */
+export const HISTORY_EVENTS: HistoryEvent[] = [
+  {
+    id: "h1",
+    entity: "project",
+    entityId: "p1",
+    kind: "comentario",
+    actor: { id: "s1", name: "Paul Langarica" },
+    field: null,
+    beforeValue: null,
+    afterValue: null,
+    comment: "Revisar el permiso",
+    eventAt: "2026-11-06T16:00:00.000Z",
+  },
+  {
+    id: "h2",
+    entity: "project",
+    entityId: "p1",
+    kind: "cambio",
+    actor: { id: "s2", name: "Alejandro Riofrio" },
+    field: "currentWorkflowId",
+    beforeValue: TRAMOS[1]!.id,
+    afterValue: TRAMOS[2]!.id,
+    comment: null,
+    eventAt: "2026-07-01T15:00:00.000Z",
+  },
+];

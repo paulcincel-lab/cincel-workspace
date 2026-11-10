@@ -1,20 +1,25 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
 import { AvailabilityWeek } from "@/components/personas/AvailabilityWeek";
 import { PersonasTabs, type PersonasTab } from "@/components/personas/PersonasTabs";
-import { TeamGrid } from "@/components/personas/TeamGrid";
+import { TeamGrid, TeamMemberActions } from "@/components/personas/TeamGrid";
 import { EmptyState } from "@/components/shell/EmptyState";
-import { PageHeader } from "@/components/shell/PageHeader";
 import { Button } from "@/components/ui/shadcn/button";
+import { PageHeader } from "@/components/widgets/PageHeader";
+import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
+import { PeopleLoadBoard } from "@/components/widgets/PeopleLoadBoard";
+import { PeopleEsencialTeam } from "@/components/widgets/PeopleWidget";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { MEMBER_AVAILABILITY_OPTIONS } from "@/lib/equipo/availability-options";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
 import { availabilityRows } from "@/lib/personas/team";
 import { personasCountsOptions, personasEquipoOptions, personasPositionsOptions } from "@/lib/query/options/personas";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
+import type { WorkflowRef } from "@/lib/types/core";
 import type { PersonDatum } from "@/lib/types/widgets";
 
 export type EquipoViewProps = {
@@ -24,10 +29,17 @@ export type EquipoViewProps = {
   counts: Record<PersonasTab, number> | undefined;
   /** `team.canCreateCollaborator`, resolved on the server (the save re-checks it). */
   canCreate: boolean;
+  /** `activities.canChangeResponsible`, resolved on the server. */
+  canAssign: boolean;
+  /** `activities.canCreateActivity`, resolved on the server (the create re-checks it). */
+  canCreateTask: boolean;
+  /** Active tramos in order ("Personas por tramo" in Visual). */
+  tramos?: WorkflowRef[];
 };
 
 export const PERSONAS_TITLE = "Personas";
-export const PERSONAS_DESCRIPTION = "Equipo interno y directorio externo en un solo lugar.";
+export const PERSONAS_DESCRIPTION = "Quién está libre, quién va cargado y quién sale de vacaciones.";
+export const PERSONAS_VISUAL_DESCRIPTION = "El equipo de un vistazo: carga, tramos y quién sale de vacaciones.";
 
 /**
  * `/personas` on the client (Query Migration 6): `personas.equipo()` and
@@ -37,18 +49,28 @@ export const PERSONAS_DESCRIPTION = "Equipo interno y directorio externo en un s
 export function PersonasEquipoScreen() {
   const { data } = useQuery(personasEquipoOptions());
   const { data: counts } = useQuery(personasCountsOptions());
-  if (!data) return null;
+  if (!data) {
+    return (
+      <PageStyleLayout
+        visual={() => <PeopleLoadBoard people={[]} canAssign={false} loading />}
+        esencial={() => null}
+        analitico={() => null}
+      />
+    );
+  }
   return <EquipoView {...data} counts={counts} />;
 }
 
 /**
- * Personas · Equipo (redesign FE §3.6): header (with the Estilo switch) + tabs, the
- * "Disponibilidad esta semana" widget and the team cards. Every style
- * difference lives in the people widgets; this view only composes them.
+ * Personas · Equipo (redesign FE §3.6): header (with the Estilo switch) + tabs and
+ * one body per style through `PageStyleLayout`: Visual the load board
+ * (`PeopleLoadBoard`), Esencial the person cards, Analítico the
+ * availability widget and the team table. Every style difference lives in
+ * the widgets; this view only composes them.
  * "Agregar persona" opens the existing collaborator editor, which saves with
  * one mutation and reads the puestos catalog only while it is open.
  */
-export function EquipoView({ people, emails, counts, canCreate }: EquipoViewProps) {
+export function EquipoView({ people, emails, counts, canCreate, canAssign, canCreateTask, tramos }: EquipoViewProps) {
   const authenticatedUser = useSessionStore(selectCurrentUser);
   const editor = useMemberEditor({ authenticatedUser });
   const isAdministrator = authenticatedUser?.access === SYSTEM_ADMIN_ROLE;
@@ -57,26 +79,53 @@ export function EquipoView({ people, emails, counts, canCreate }: EquipoViewProp
     enabled: canCreate && editor.showEditor,
   });
 
-  return (
-    <div className="flex flex-col gap-4">
+  // Header, tabs and the empty team are the same in every style; only the description and the body change.
+  const page = (description: string, body: () => ReactNode) => (
+    <>
       <PageHeader
         title={PERSONAS_TITLE}
-        description={PERSONAS_DESCRIPTION}
+        description={description}
         actions={canCreate ? <Button onClick={editor.openAddEditor}>Agregar persona</Button> : null}
       />
       <PersonasTabs active="equipo" counts={counts} />
-
       {people.length === 0 ? (
         <EmptyState
           title="Aún no hay personas en el equipo"
           action={canCreate ? { label: "Agregar", onClick: editor.openAddEditor } : undefined}
         />
       ) : (
-        <>
-          <AvailabilityWeek rows={availabilityRows(people)} />
-          <TeamGrid people={people} emails={emails} />
-        </>
+        body()
       )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PageStyleLayout
+        visual={() =>
+          page(PERSONAS_VISUAL_DESCRIPTION, () => (
+            <PeopleLoadBoard
+              people={people}
+              tramos={tramos}
+              canAssign={canAssign}
+              actions={(person) => <TeamMemberActions person={person} email={emails[person.id] ?? null} />}
+            />
+          ))
+        }
+        esencial={() =>
+          page(PERSONAS_DESCRIPTION, () => (
+            <PeopleEsencialTeam people={people} canCreateTask={canCreateTask} canAssign={canAssign} />
+          ))
+        }
+        analitico={() =>
+          page(PERSONAS_DESCRIPTION, () => (
+            <>
+              <AvailabilityWeek rows={availabilityRows(people)} />
+              <TeamGrid people={people} emails={emails} />
+            </>
+          ))
+        }
+      />
 
       {canCreate ? (
         <MemberEditorDrawer

@@ -2,18 +2,26 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { FileText, ListChecks, Users, Wallet } from "lucide-react";
 
 import { EntityCardGrid } from "@/components/widgets/EntityCardGrid";
 import { KpiWidget } from "@/components/widgets/KpiWidget";
+import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
 import { ProgressListWidget } from "@/components/widgets/ProgressListWidget";
 import { RecordTable } from "@/components/widgets/RecordTable";
+import { ResumenAnaliticoLayout } from "@/components/widgets/ResumenAnaliticoLayout";
+import { ResumenVisualLayout } from "@/components/widgets/ResumenVisualLayout";
 import { TramoStepperWidget } from "@/components/widgets/TramoStepperWidget";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { ErrorState } from "@/components/shell/ErrorState";
+import { useQuickAddCreate } from "@/components/tareas/quick-add-create";
+import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { buildProjectSummary, type ProjectSummaryInput } from "@/lib/proyectos/project-summary";
-import { proyectoResumenOptions } from "@/lib/query/options/proyectos";
+import { proyectoHistoryOptions, proyectoResumenOptions, proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { useQuickAddRecent } from "@/lib/stores/quick-add-store";
+import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 
 /** The Resumen tab of one project, read from `qk.proyectos.resumen(id)`. */
 export type ProjectSummaryProps = { projectId: string };
@@ -70,7 +78,53 @@ export function ProjectSummary({ projectId }: ProjectSummaryProps) {
  * absent without `showBudget`; "Cliente y contactos" is absent without
  * `showClientContacts` (the team alone shows under "Equipo").
  */
-export function ProjectSummaryContent({ data: input }: ProjectSummaryContentProps) {
+export function ProjectSummaryContent({ data }: ProjectSummaryContentProps) {
+  return (
+    <PageStyleLayout
+      visual={() => <ResumenVisual data={data} />}
+      esencial={() => <ProjectSummaryWidgets data={data} />}
+      analitico={() => <ResumenAnaliticoLayout data={data} />}
+    />
+  );
+}
+
+/**
+ * Visual Resumen (`ResumenVisualLayout`): also reads the project's task list
+ * (`qk.proyectos.tab(id, "tareas")`) and the first bitácora page
+ * (`qk.proyectos.history(id)`), both prefetched by the page. A failed
+ * history read only affects "Actividad reciente". The quick-add creates the
+ * task in this project; its invalidations refresh the task list, the
+ * Resumen, the shell counts and the portfolio list.
+ */
+function ResumenVisual({ data }: ProjectSummaryContentProps) {
+  const projectId = data.project.id;
+  const { data: tareas } = useSuspenseQuery(proyectoTareasOptions(projectId));
+  const history = useInfiniteQuery(proyectoHistoryOptions(projectId));
+  const user = useSessionStore(selectAuthenticatedUser);
+  const canCreate = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
+  const { create } = useQuickAddCreate();
+  const recentIds = useQuickAddRecent((state) => state.recent);
+  const openNewTask = useNewTaskUi((state) => state.openNewTask);
+
+  return (
+    <ResumenVisualLayout
+      data={data}
+      tasks={tareas?.tasks ?? []}
+      history={{
+        events: history.data?.pages[0]?.events ?? [],
+        status: history.isPending ? "pending" : history.isError && !history.data ? "error" : "success",
+        onRetry: () => void history.refetch(),
+      }}
+      canCreate={canCreate}
+      onQuickAdd={create}
+      onNewTask={() => openNewTask({ projectId }, "proyecto")}
+      recentIds={recentIds}
+    />
+  );
+}
+
+/** The shared widget composition, until a style gets its own layout. */
+function ProjectSummaryWidgets({ data: input }: ProjectSummaryContentProps) {
   // Keyed on the query data: a re-render with the same cached object reuses the build.
   const data = useMemo(() => buildProjectSummary(input), [input]);
   const archivosHref = `/proyectos/${encodeURIComponent(input.project.id)}/archivos`;
