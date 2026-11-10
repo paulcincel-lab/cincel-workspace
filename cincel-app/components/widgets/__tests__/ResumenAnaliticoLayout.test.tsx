@@ -7,7 +7,8 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos/p1",
   useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const toasts = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
 vi.mock("@/lib/repositories/browser-state-repository", () => ({
   readStorage: vi.fn().mockReturnValue(null),
@@ -27,7 +28,11 @@ vi.mock("@/lib/tramos/compat", () => {
   };
 });
 
-const caps = vi.hoisted(() => ({ canCreateActivity: true, canChangeResponsible: true }));
+const caps = vi.hoisted(() => ({
+  canCreateActivity: true,
+  canChangeResponsible: true,
+  statusScope: "all" as "all" | "own" | "none",
+}));
 vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveActivitiesCapabilities: () => ({ canViewActivities: true, ...caps }),
@@ -37,12 +42,25 @@ const actions = vi.hoisted(() => ({
   getProyectoTareasData: vi.fn(),
   getProyectoAssigneeSuggestion: vi.fn(),
   createUserTaskAction: vi.fn(),
+  updateTaskAction: vi.fn(),
+  assignTaskAction: vi.fn(),
+  setTaskStatusAction: vi.fn(),
+  setTaskCustomStatusAction: vi.fn(),
+  fetchCatalogTaskStatuses: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
   getProyectoTareasData: actions.getProyectoTareasData,
   getProyectoAssigneeSuggestion: actions.getProyectoAssigneeSuggestion,
 }));
-vi.mock("@/lib/actions/tasks-actions", () => ({ createUserTaskAction: actions.createUserTaskAction }));
+vi.mock("@/lib/actions/tasks-actions", () => ({
+  createUserTaskAction: actions.createUserTaskAction,
+  updateTaskAction: actions.updateTaskAction,
+  assignTaskAction: actions.assignTaskAction,
+  setTaskStatusAction: actions.setTaskStatusAction,
+  setTaskCustomStatusAction: actions.setTaskCustomStatusAction,
+}));
+vi.mock("@/lib/actions/projects-actions", () => ({}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({ fetchCatalogTaskStatuses: actions.fetchCatalogTaskStatuses }));
 
 // A deterministic stand-in for the quick-add parser: `@paul`, `viernes`, `!alta`.
 vi.mock("@/lib/quick-add/parse", () => ({
@@ -91,6 +109,10 @@ beforeAll(() => {
 beforeEach(() => {
   caps.canCreateActivity = true;
   caps.canChangeResponsible = true;
+  caps.statusScope = "all";
+  // A refetch after a save (invalidation) stays in flight, so the cache keeps what the test wrote.
+  actions.getProyectoTareasData.mockReturnValue(new Promise(() => {}));
+  actions.fetchCatalogTaskStatuses.mockResolvedValue([]);
   actions.createUserTaskAction.mockResolvedValue({ ok: true, data: { id: "nueva", title: "Revisar plafones" } });
   actions.getProyectoAssigneeSuggestion.mockResolvedValue({
     staffId: "s3",
@@ -238,5 +260,73 @@ describe("ResumenAnaliticoLayout", () => {
     caps.canCreateActivity = false;
     renderLayout();
     expect(screen.queryByLabelText("Nueva tarea en Construcción")).toBeNull();
+  });
+
+  describe("editable cells", () => {
+    const taskCell = (rowId: string, column: string) =>
+      document.querySelector<HTMLElement>(`#s-tareas td[data-cell-row="${rowId}"][data-cell-column="${column}"]`)!;
+
+    it("Tarea, Fase, Responsable, Estatus and Vence edit; Días de retraso and Tramos y fases stay inert", () => {
+      renderLayout();
+      for (const column of ["title", "phase", "responsable", "status", "due"]) {
+        expect(taskCell("t-obra-1", column).dataset.cellState).toBe("editable");
+      }
+      expect(taskCell("t-obra-1", "daysLate").dataset.cellState).toBe("inert");
+      // "Tramos y fases": every number and date is calculated, so the table is no grid at all.
+      expect(document.querySelector("#s-tramos [data-grid-cell]")).toBeNull();
+    });
+
+    it("keeps the task link: the open icon opens the task", () => {
+      renderLayout();
+      const open = taskCell("t-obra-1", "title").querySelector<HTMLAnchorElement>("a[data-cell-open]");
+      expect(open?.getAttribute("href")).toBe("/tareas?tarea=t-obra-1");
+      expect(taskCell("t-obra-1", "title").textContent).toContain("Instalación eléctrica");
+    });
+
+    it("locks with the Tareas rules: Responsable and Estatus by capability, the rest without canCreateActivity", () => {
+      caps.canChangeResponsible = false;
+      caps.statusScope = "none";
+      const { unmount } = renderLayout();
+      expect(taskCell("t-obra-1", "responsable").dataset.cellState).toBe("locked");
+      expect(taskCell("t-obra-1", "status").dataset.cellState).toBe("locked");
+      expect(taskCell("t-obra-1", "title").dataset.cellState).toBe("editable");
+      unmount();
+
+      caps.canCreateActivity = false;
+      renderLayout();
+      for (const column of ["title", "phase", "due"]) expect(taskCell("t-obra-1", column).dataset.cellState).toBe("locked");
+    });
+
+    it("Fase lists the fases of the task's tramo and saves through updateTaskAction", async () => {
+      actions.updateTaskAction.mockResolvedValue({ ok: true, data: {} });
+      renderLayout();
+      fireEvent.click(taskCell("t-obra-3", "phase"));
+      await waitFor(() =>
+        expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Preliminares", "Obra negra", "Acabados", "Sin fase"]),
+      );
+      fireEvent.click(screen.getByRole("option", { name: "Acabados" }));
+      await waitFor(() => expect(actions.updateTaskAction).toHaveBeenCalledWith("t-obra-3", { phaseId: "f-acabados" }));
+      await waitFor(() => expect(taskCell("t-obra-3", "phase").textContent).toBe("Acabados"));
+      expect(toasts).toHaveBeenCalledWith("Fase guardado.", expect.anything());
+    });
+
+    it("Responsable lists the project's team and saves through assignTaskAction", async () => {
+      actions.assignTaskAction.mockResolvedValue({ ok: true, data: {} });
+      renderLayout();
+      fireEvent.click(taskCell("t-obra-3", "responsable"));
+      fireEvent.click(await screen.findByRole("option", { name: /Ana López/ }));
+      await waitFor(() => expect(actions.assignTaskAction).toHaveBeenCalledWith("t-obra-3", "s3"));
+      await waitFor(() => expect(taskCell("t-obra-3", "responsable").textContent).toBe("Ana López"));
+    });
+
+    it("a refused save puts the cell back", async () => {
+      actions.setTaskStatusAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
+      renderLayout();
+      fireEvent.click(taskCell("t-obra-3", "status"));
+      fireEvent.click(await screen.findByRole("option", { name: "En proceso" }));
+      await waitFor(() => expect(actions.setTaskStatusAction).toHaveBeenCalledWith("t-obra-3", "en_proceso"));
+      await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+      expect(taskCell("t-obra-3", "status").textContent).toContain("Pendiente");
+    });
   });
 });

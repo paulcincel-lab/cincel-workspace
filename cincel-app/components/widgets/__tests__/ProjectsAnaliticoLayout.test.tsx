@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 const nav = vi.hoisted(() => ({ params: new URLSearchParams(), replace: vi.fn() }));
 
@@ -9,7 +9,21 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos",
   useSearchParams: () => nav.params,
 }));
-vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn() }));
+// A refetch after a save (invalidation) stays in flight, so the cache keeps what the test wrote.
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn(() => new Promise(() => {})) }));
+const actions = vi.hoisted(() => ({
+  setProjectCurrentTramoAction: vi.fn(),
+  updateProjectAction: vi.fn(),
+  fetchCatalogStaff: vi.fn(),
+}));
+vi.mock("@/lib/actions/projects-actions", () => ({
+  setProjectCurrentTramoAction: actions.setProjectCurrentTramoAction,
+  updateProjectAction: actions.updateProjectAction,
+}));
+vi.mock("@/lib/actions/tasks-actions", () => ({}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({ fetchCatalogStaff: actions.fetchCatalogStaff }));
+const toasts = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
 vi.mock("@/lib/tramos/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
@@ -60,9 +74,18 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
 });
 
+beforeAll(() => {
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+});
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.clearAllMocks();
   nav.params = new URLSearchParams();
   nav.replace.mockReset();
 });
@@ -193,5 +216,80 @@ describe("ProjectsAnaliticoLayout", () => {
     const buttons = screen.getAllByRole("button", { name: /Nuevo proyecto/ });
     fireEvent.click(buttons[buttons.length - 1]!);
     expect(onNew).toHaveBeenCalled();
+  });
+
+  describe("editable cells", () => {
+    /** The cell of `column` in the row of project `id`. */
+    function cell(id: string, column: string): HTMLElement {
+      return document.querySelector<HTMLElement>(`td[data-cell-row="${id}"][data-cell-column="${column}"]`)!;
+    }
+
+    /** The tramo group (its section) a project's row sits in. */
+    function groupOf(id: string): string | undefined {
+      return cell(id, "tramo")?.closest("section")?.id;
+    }
+
+    it("shows Tramo actual and Responsable after Proyecto; calculated columns stay inert", () => {
+      renderLayout();
+      const headers = screen.getAllByRole("columnheader").map((th) => th.textContent ?? "");
+      expect(headers.slice(0, 3).map((h) => h.trim())).toEqual(["Proyecto", "Tramo actual", "Responsable"]);
+      expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
+      expect(cell("p-lomas", "manager").textContent).toBe("Ana López");
+      expect(cell("p-lomas", "tramo").dataset.cellState).toBe("editable");
+      for (const column of ["real", "deviation", "open", "overdue", "overduePct", "avgDelayDays", "nextDelivery"]) {
+        expect(cell("p-lomas", column).dataset.cellState).toBe("inert");
+      }
+    });
+
+    it("locks the project cells for a viewer who can't change them", () => {
+      renderLayout({ canChangeProjectStage: false, canEditProjectGeneral: false });
+      expect(cell("p-lomas", "tramo").dataset.cellState).toBe("locked");
+      expect(cell("p-lomas", "manager").dataset.cellState).toBe("locked");
+      // Rest state is the same text.
+      expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
+    });
+
+    it("changing Tramo actual regroups the project at once and saves through setProjectCurrentTramoAction", async () => {
+      let resolve!: (value: unknown) => void;
+      actions.setProjectCurrentTramoAction.mockReturnValue(new Promise((r) => (resolve = r)));
+      renderLayout();
+      expect(groupOf("p-lomas")).toBe("t-diseno");
+
+      fireEvent.click(cell("p-lomas", "tramo"));
+      // The project's started tramos.
+      await waitFor(() => expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Presale", "Diseño"]));
+      fireEvent.click(screen.getByRole("option", { name: "Presale" }));
+
+      await waitFor(() => expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p-lomas", "w1"));
+      // Optimistic: the row moves to Presale before the server answers.
+      await waitFor(() => expect(groupOf("p-lomas")).toBe("t-presale"));
+      expect(cell("p-lomas", "tramo").textContent).toBe("Presale");
+      await act(async () => resolve({ ok: true, data: {} }));
+      expect(toasts).toHaveBeenCalledWith("Tramo actual guardado.", expect.anything());
+    });
+
+    it("a refused tramo change puts the row back", async () => {
+      actions.setProjectCurrentTramoAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
+      renderLayout();
+      fireEvent.click(cell("p-lomas", "tramo"));
+      fireEvent.click(await screen.findByRole("option", { name: "Presale" }));
+      await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+      expect(groupOf("p-lomas")).toBe("t-diseno");
+      expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
+    });
+
+    it("Responsable saves the manager through updateProjectAction", async () => {
+      actions.updateProjectAction.mockResolvedValue({ ok: true, data: {} });
+      actions.fetchCatalogStaff.mockResolvedValue([
+        { id: "s1", name: "Ana López" },
+        { id: "s9", name: "Bruno Díaz" },
+      ]);
+      renderLayout({ canEditProjectGeneral: true });
+      await waitFor(() => expect(actions.fetchCatalogStaff).toHaveBeenCalled());
+      fireEvent.click(cell("p-andares", "manager"));
+      fireEvent.click(await screen.findByRole("option", { name: /Bruno Díaz/ }));
+      await waitFor(() => expect(actions.updateProjectAction).toHaveBeenCalledWith("p-andares", { managerId: "s9" }));
+      await waitFor(() => expect(cell("p-andares", "manager").textContent).toBe("Bruno Díaz"));
+    });
   });
 });
