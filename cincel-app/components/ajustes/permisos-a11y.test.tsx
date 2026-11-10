@@ -123,10 +123,20 @@ describe("Ajustes › Permisos (#950, #971)", () => {
   });
 
   it("saves the draft through the action and stores nothing in the browser", async () => {
-    writes.savePermissionsMatrixAction.mockImplementation(async ({ permissions }) => ({
-      ok: true,
-      data: { permissions, hasCustom: true, changed: 1 },
-    }));
+    let saved: AjustesPermisosPageData["permissions"] = DEFAULTS;
+    writes.savePermissionsMatrixAction.mockImplementation(async ({ permissions }) => {
+      saved = permissions;
+      return { ok: true, data: { permissions, hasCustom: true, changed: 1 } };
+    });
+    // The save refreshes the page data, which then holds the saved matrix.
+    pageData.getAjustesPermisosPageData.mockImplementation(
+      async (): Promise<AjustesPermisosPageData> => ({
+        staff: STAFF,
+        defaultPermissions: DEFAULTS,
+        permissions: saved,
+        hasCustom: true,
+      }),
+    );
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /^Proyectos/ }));
