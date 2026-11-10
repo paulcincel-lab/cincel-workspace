@@ -87,7 +87,9 @@ test.describe("Proyectos · cliente desde la ficha", () => {
   });
 
   test("a name-only project waits for its client; setting it in the ficha closes «Asignar cliente y origen»", async ({ page }) => {
-    const name = `Proyecto cliente E2E ${RUN_ID}`;
+    // Not "… cliente E2E …": getByText(CLIENT_NAME) is a case-insensitive substring match, and
+    // the next describe checks that a Colaborador sees no text containing the client's name.
+    const name = `Proyecto solo nombre E2E ${RUN_ID}`;
     const projectId = await createProjectByName(page, name);
     await expect(page.getByRole("heading", { level: 1, name })).toBeVisible({ timeout: 30_000 });
 
