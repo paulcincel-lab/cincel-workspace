@@ -37,6 +37,8 @@ describe("Mi espacio nav item", () => {
   it("returns the item with no badge and no badge read once the actions are implemented", async () => {
     const item = await miEspacioNavItem.resolve(SESSION);
     expect(item).toMatchObject({ key: "mi-espacio", label: "Mi espacio", href: "/mi-espacio" });
+    // Canvas order: after Personas (50), before Biblioteca (60).
+    expect(miEspacioNavItem.order).toBe(55);
     expect(item?.badge).toBeUndefined();
     expect(actions.fetchNotificationsAction).not.toHaveBeenCalled();
     expect(mySpace.fetchRemindersAction).not.toHaveBeenCalled();

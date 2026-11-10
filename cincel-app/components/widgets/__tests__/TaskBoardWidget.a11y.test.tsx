@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
-import { TaskBoardWidget } from "@/components/widgets/TaskBoardWidget";
+import { TaskBoardWidget, boardColumnLabel } from "@/components/widgets/TaskBoardWidget";
 import { taskBoardFixture, taskBoardTableFixture } from "@/components/widgets/fixtures/task-board";
 import { CONTRAST_PAIRS } from "@/lib/ui/contrast";
 import { THEME_IDS } from "@/lib/ui/themes";
@@ -15,10 +15,17 @@ const MODES = ["light", "dark"] as const;
 
 /**
  * Text color / background pairs the board draws (cards on `card`, overdue
- * dates in `destructive`). Each must be a pair the contrast checker enforces
+ * dates in `destructive`, the responsable in `foreground-soft`, the
+ * "Suelta aquí" hint on the `tint-primary` drop column). Each must be a pair the contrast checker enforces
  * for every theme, so the board is legible wherever the checker passes.
  */
-const BOARD_PAIRS = ["foreground/card", "muted-foreground/card", "destructive/card"];
+const BOARD_PAIRS = [
+  "foreground/card",
+  "muted-foreground/card",
+  "destructive/card",
+  "foreground-soft/card",
+  "secondary-foreground/tint-primary",
+];
 
 function applyTheme(themeId: string, mode: (typeof MODES)[number]) {
   const root = document.documentElement;
@@ -63,6 +70,19 @@ describe("TaskBoardWidget accessibility", () => {
           expect(await seriousViolations(container)).toEqual([]);
         });
       }
+
+      it(`Visual while dragging has no serious or critical axe violations · ${themeId} ${mode}`, async () => {
+        applyTheme(themeId, mode);
+        const { container } = render(
+          <StyleProvider style="visual" scope="staff">
+            <TaskBoardWidget board={taskBoardFixture} table={taskBoardTableFixture} onMove={() => Promise.resolve()} />
+          </StyleProvider>,
+        );
+        fireEvent.dragStart(container.querySelector('[data-task-id="t2"]')!);
+        fireEvent.dragOver(screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) }));
+        expect(container.querySelector('[data-testid="board-drop-placeholder"]')).toBeTruthy();
+        expect(await seriousViolations(container)).toEqual([]);
+      });
     }
   }
 });

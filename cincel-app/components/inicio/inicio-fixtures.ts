@@ -82,6 +82,32 @@ export const INICIO_NON_ADMIN: InicioData = {
     { id: "s-2", name: "Luis Pérez", initials: "LP", open: 8, overdue: 2 },
     { id: "s-3", name: "Marta Ruiz", initials: "MR", open: 5, overdue: 0 },
   ],
+  hero: {
+    dueToday: 2,
+    overdue: 26,
+    overdueProjects: 3,
+    focusProject: { id: "p-1", name: "Casa Lomas", href: "/proyectos/p-1" },
+  },
+  openShifts: {
+    count: 2,
+    people: [
+      { id: "s-2", initials: "LP", tramo: "diseno" },
+      { id: "s-3", initials: "MR", tramo: "construccion" },
+    ],
+  },
+  todayAgenda: [
+    {
+      id: "c-diseno-t-9-2026-11-06",
+      title: "Entrega de fachada",
+      start: "2026-11-06T09:00",
+      estimated: true,
+      project: "Casa Lomas",
+      tramo: "diseno",
+      href: "/tareas?tarea=t-9",
+      kind: "entrega",
+      assignee: { id: "s-2", name: "Luis Pérez", initials: "LP" },
+    },
+  ],
 };
 
 /** The same day for an admin: one admin task needs attention (only `canSeeAdminData` viewers get it). */
@@ -114,4 +140,7 @@ export const INICIO_EMPTY: InicioData = {
   myDay: [],
   projectsProgress: [],
   workload: [],
+  hero: { dueToday: 0, overdue: 0, overdueProjects: 0, focusProject: null },
+  openShifts: null,
+  todayAgenda: [],
 };

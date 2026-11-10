@@ -126,10 +126,10 @@ describe("RecordTable, same fixture in every style", () => {
 
   it("analitico: heat cells above warnAt (warning) and critAt (destructive)", () => {
     renderTable("analitico");
-    expect(cellFor("Diseño", "pctVencidas", "analitico").className).toContain("--destructive");
-    expect(cellFor("Construcción", "pctVencidas", "analitico").className).toContain("--warning");
-    expect(cellFor("Decoración", "pctVencidas", "analitico").className).not.toMatch(/--warning|--destructive/);
-    expect(cellFor("Diseño", "abiertas", "analitico").className).not.toMatch(/--warning|--destructive/);
+    expect(cellFor("Diseño", "pctVencidas", "analitico").className).toContain("bg-tint-destructive text-destructive-ink");
+    expect(cellFor("Construcción", "pctVencidas", "analitico").className).toContain("bg-tint-warning text-warning-ink");
+    expect(cellFor("Decoración", "pctVencidas", "analitico").className).not.toMatch(/tint-warning|tint-destructive/);
+    expect(cellFor("Diseño", "abiertas", "analitico").className).not.toMatch(/tint-warning|tint-destructive/);
   });
 });
 

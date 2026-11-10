@@ -373,6 +373,17 @@ exports[`qk > builds every key shape 1`] = `
     },
     "en_proceso",
   ],
+  "tareas.byProject": [
+    "tareas",
+    "by-project",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
+  ],
   "tareas.calendar": [
     "tareas",
     "calendar",
@@ -414,11 +425,11 @@ exports[`qk > builds every key shape 1`] = `
     {
       "cal": "mes",
       "estado": "pendiente",
+      "estilo": "visual",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
       "tramo": "diseno",
-      "vista": "tablero",
     },
   ],
   "tareas.startPreview": [
@@ -431,6 +442,28 @@ exports[`qk > builds every key shape 1`] = `
     "tareas",
     "start-slot",
     null,
+  ],
+  "tareas.summary": [
+    "tareas",
+    "summary",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
+  ],
+  "tareas.trend": [
+    "tareas",
+    "trend",
+    {
+      "estado": "pendiente",
+      "proyecto": null,
+      "q": null,
+      "responsable": "yo",
+      "tramo": "diseno",
+    },
   ],
   "tasks.dependencies": [
     "tasks",
@@ -492,8 +525,11 @@ exports[`qk > covers every key of the factory 1`] = `
   "tareas.page",
   "tareas.list",
   "tareas.facets",
+  "tareas.summary",
   "tareas.board",
   "tareas.calendar",
+  "tareas.trend",
+  "tareas.byProject",
   "tareas.startSlot",
   "tareas.startPreview",
   "tasks.detail",

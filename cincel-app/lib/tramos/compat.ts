@@ -27,8 +27,8 @@ const administratorRoleGate: AdminGate = (user) => isAdministratorRole(user?.mem
 export const canSeeAdminData: AdminGate =
   (permissions as { canSeeAdminData?: AdminGate }).canSeeAdminData ?? administratorRoleGate;
 
-/** Chart slot of the three tramos (Presale, Diseño, Construcción → `chart-1..3`). */
-export type TramoColorSlot = 1 | 2 | 3;
+/** Chart slot of the known tramos (Presale, Diseño, Construcción, Decoración → `chart-1..4`). */
+export type TramoColorSlot = 1 | 2 | 3 | 4;
 
 /** Display names of the firm's known tramos, by workflow key. */
 const TRAMO_LABELS: Record<string, string> = {
@@ -69,17 +69,17 @@ export function tramoLabel(key: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
 }
 
-/** 1–3 for the known tramos, null otherwise. */
+/** 1–4 for the known tramos (`decoracion` → 4), null otherwise. */
 export function tramoColorSlot(key: string): TramoColorSlot | null {
-  // sortOrder 0 is outside every slot, so only the fixed key slots (1–3) match.
+  // sortOrder 0 is outside every slot, so only the fixed key slots (1–4) match.
   const slot = projectFlowColorSlot({ key, sortOrder: 0 });
-  return slot === 1 || slot === 2 || slot === 3 ? slot : null;
+  return slot === 1 || slot === 2 || slot === 3 || slot === 4 ? slot : null;
 }
 
 /**
  * `var(--chart-N)` for a tramo key (neutral when unknown). With the row's
- * `sortOrder`, a tramo outside the three known keys takes Project Flow's slot
- * for it (e.g. Decoración, sortOrder 4 → `chart-4`), as everywhere else.
+ * `sortOrder`, a tramo outside the four known keys takes Project Flow's slot
+ * for it (sortOrder 1–5 → `chart-N`), as everywhere else.
  */
 export function tramoColorVar(key: string, sortOrder?: number): string {
   if (tramoColorSlot(key)) return projectFlowColorVar({ key, sortOrder: 0 });

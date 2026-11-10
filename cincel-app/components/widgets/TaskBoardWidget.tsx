@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
+import { Ban, CircleCheck, GripVertical } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import {
   DropdownMenu,
@@ -15,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/shadcn/dropdown-menu";
-import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
+import { getPersonInitials } from "@/components/ui/TeamMultiSelect";
 import {
   boardColumns,
   customStatusesOf,
@@ -25,20 +27,23 @@ import {
 } from "@/components/tablero/board-model";
 import { useBoardDrag, type BoardCardDragProps } from "@/components/tablero/useBoardDrag";
 import { DistributionWidget } from "@/components/widgets/DistributionWidget";
+import { LIFT_CLASS } from "@/components/widgets/lift";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { areaTintClass } from "@/lib/areas/area-color";
 import { actionErrorText } from "@/lib/errors";
 import { qk, type TareasListFilters } from "@/lib/query/keys";
 import { tareasBoardColumnOptions, type TareasBoardColumnPages } from "@/lib/query/options/tareas";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { useQuickAddRecent } from "@/lib/stores/quick-add-store";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import { listItemOfRow } from "@/lib/tareas/page-data";
+import { tramoColorSlot, tramoColorVar } from "@/lib/tramos/compat";
 import {
   BASE_STATUS_COLOR,
   isTaskClosed,
-  statusBorderClass,
   statusColorToken,
   statusColorVar,
   statusSelectValue,
@@ -56,16 +61,25 @@ import { formatDateDMY } from "@/lib/utils/date";
  * `components/tablero` (shared with `TableroClient`).
  *
  * - Visual: kanban columns with drag-and-drop, empty columns collapsed to
- *   strips, and a keyboard "Mover a…" menu on every card. A drop calls
+ *   strips, and a keyboard "Mover a…" menu on every card (frame
+ *   `Tareas-Visual`). Cards fade in 40 ms per column + 60 ms per card, lift
+ *   on hover, tilt while dragged (`drag-lift`); the column under the card
+ *   shows "Suelta aquí" and a dashed placeholder, and a move is announced
+ *   ("Movida a …", polite). A drop calls
  *   `onMove`; the move shows through the `board` the page hands back (the
  *   Tareas query cache, patched optimistically and rolled back on error), so
  *   the widget keeps no copy of its own. The columns always render, even
  *   when the filters leave no task: every column then shows its 0 count and a
  *   small "Sin tareas" drop zone, so a card can still be dropped or added.
  *   "+ Agregar" opens the shell's new-task dialog in that column's estatus
- *   (`useNewTaskUi`) for viewers who can create tasks. With `columnPages`,
- *   each column counts every matching task and loads the rest with
- *   "Cargar más" (`tareas.board(f, columnId)`).
+ *   (`useNewTaskUi`) for viewers who can create tasks; `renderColumnFooter`
+ *   replaces it. With `columnPages`, each column counts every matching task
+ *   and loads the rest with "Ver N más" (`tareas.board(f, columnId)`);
+ *   with `visibleCards` it first reveals the loaded cards past that many.
+ *   `compactCompleted` draws Completado as one line, a blocked card reads
+ *   "Bloqueada" with "espera N tareas" (`waitingOn`), `canMove` drops the
+ *   drag handle and disables "Mover a…" per card, and a card just created
+ *   from a quick-add enters with `row-new`.
  * - Esencial: `RecordTable` per estatus ("Pendiente · 4"); Completado
  *   collapsed with a link to the list view.
  * - Analítico: estatus summary (`DistributionWidget`) + dense `RecordTable`.
@@ -95,6 +109,23 @@ export type TaskBoardWidgetProps = {
   emptyState?: EmptyStateProps;
   /** Renders the style's loading skeleton instead of the board. */
   loading?: boolean;
+  /**
+   * Visual: the footer of an open column (e.g. a `QuickAddRow variant="column"`),
+   * in place of the "+ Agregar" dialog button.
+   */
+  renderColumnFooter?(columnKey: string): ReactNode;
+  /**
+   * Visual: cards an open column shows; "Ver N más" first reveals the rest of
+   * the loaded ones, then pages (`columnPages`). Default: every loaded card.
+   */
+  visibleCards?: number;
+  /** Visual: Completado cards as one compact line (check, title, "proyecto · tramo · responsable"). */
+  compactCompleted?: boolean;
+  /**
+   * Visual: whether the viewer may move a task. A card it can't move has no
+   * drag handle, can't be dragged and its "Mover a…" is disabled. Default: every card.
+   */
+  canMove?(task: TaskListItem): boolean;
 };
 
 export type BoardColumnPages = {
@@ -102,7 +133,7 @@ export type BoardColumnPages = {
   columns: Record<string, { total: number; nextCursor: string | null }>;
 };
 
-/** "Cargar más" of a board column. */
+/** Label of a column's load-more button when the remaining count is not known ("Ver N más" otherwise). */
 export const BOARD_COLUMN_MORE = "Cargar más";
 
 /**
@@ -186,6 +217,10 @@ export function TaskBoardWidget({
   customStatuses = NO_CUSTOM_STATUSES,
   emptyState,
   loading,
+  renderColumnFooter,
+  visibleCards,
+  compactCompleted = false,
+  canMove,
 }: TaskBoardWidgetProps) {
   const tasks = useMemo(() => flattenBoard(board), [board]);
   const columns = useMemo(
@@ -210,7 +245,16 @@ export function TaskBoardWidget({
   return (
     <StyleView
       visual={() => (
-        <BoardVisual tasks={tasks} columns={columns} onMove={onMove} columnPages={columnPages} />
+        <BoardVisual
+          tasks={tasks}
+          columns={columns}
+          onMove={onMove}
+          columnPages={columnPages}
+          renderColumnFooter={renderColumnFooter}
+          visibleCards={visibleCards}
+          compactCompleted={compactCompleted}
+          canMove={canMove}
+        />
       )}
       esencial={() => empty ?? <BoardEsencial tasks={tasks} columns={columns} table={table} />}
       analitico={() => empty ?? <BoardAnalitico board={board} table={table} />}
@@ -220,8 +264,49 @@ export function TaskBoardWidget({
 
 // ── Visual ─────────────────────────────────────────────────────────────────
 
-function StatusRing({ token }: { token: StatusColorToken }) {
-  return <span aria-hidden className={cn("inline-block size-[18px] shrink-0 rounded-full border-2", statusBorderClass(token))} />;
+/** Accessible name of a board column: "Pendiente, 3 tareas" ("1 tarea"). */
+export function boardColumnLabel(label: string, count: number): string {
+  return `${label}, ${count} ${count === 1 ? "tarea" : "tareas"}`;
+}
+
+/** Live-region text after a move. */
+export function boardMovedText(columnLabel: string): string {
+  return `Movida a ${columnLabel}`;
+}
+
+/** Header hint of the column a card is dragged over. */
+export const BOARD_DROP_HINT = "Suelta aquí";
+
+/** Most cards per column that get their own entrance delay. */
+const CARD_STAGGER_CAP = 10;
+
+/** Entrance delay of a card: 40 ms per column + 60 ms per card (capped at 10 cards). */
+export function boardCardDelay(columnIndex: number, cardIndex: number): string {
+  return `${40 * Math.max(0, columnIndex) + 60 * Math.max(0, Math.min(cardIndex, CARD_STAGGER_CAP))}ms`;
+}
+
+const DUE_FORMAT = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" });
+
+function isoDay(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00Z`);
+}
+
+/**
+ * Due chip text: "20 nov"; overdue adds the days late, "31 oct · 9 d".
+ * Dates are calendar days (`YYYY-MM-DD`), compared in UTC.
+ */
+export function boardDueText(due: string, overdue: boolean, today: string = todayIso()): string {
+  const date = isoDay(due);
+  if (Number.isNaN(date.getTime())) return due;
+  const text = DUE_FORMAT.format(date).replace(/\./g, "").toLowerCase();
+  if (!overdue) return text;
+  const days = Math.max(1, Math.round((isoDay(today).getTime() - date.getTime()) / 86_400_000));
+  return `${text} · ${days} d`;
+}
+
+/** Color of a task's tramo (top strip, subtask fill), neutral without one. */
+function tramoColorOf(task: TaskListItem): string {
+  return task.workflow ? tramoColorVar(task.workflow.key, task.workflow.sortOrder) : "var(--muted-foreground)";
 }
 
 function BoardVisual({
@@ -229,11 +314,19 @@ function BoardVisual({
   columns,
   onMove,
   columnPages,
+  renderColumnFooter,
+  visibleCards,
+  compactCompleted,
+  canMove,
 }: {
   tasks: TaskListItem[];
   columns: BoardColumn[];
   onMove: TaskBoardWidgetProps["onMove"];
   columnPages?: BoardColumnPages;
+  renderColumnFooter?: TaskBoardWidgetProps["renderColumnFooter"];
+  visibleCards?: number;
+  compactCompleted?: boolean;
+  canMove?: TaskBoardWidgetProps["canMove"];
 }) {
   const grouped = groupTasksByColumn(tasks, columns);
   const today = todayIso();
@@ -242,7 +335,9 @@ function BoardVisual({
   const user = useSessionStore(selectAuthenticatedUser);
   const canCreate = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
   const openNewTask = useNewTaskUi((s) => s.openNewTask);
+  const [announcement, setAnnouncement] = useState("");
   const countOf = (key: string) => columnPages?.columns[key]?.total ?? (grouped[key] ?? []).length;
+  const totalCount = columns.reduce((sum, c) => sum + countOf(c.key), 0);
   // With no task at all every column stays open (count 0 and a drop zone) so
   // the board keeps its shape; otherwise empty columns collapse to strips.
   const boardEmpty = tasks.length === 0 && columns.every((c) => countOf(c.key) === 0);
@@ -250,7 +345,10 @@ function BoardVisual({
   function move(taskId: string, columnKey: string) {
     const task = tasks.find((t) => t.id === taskId);
     if (task && statusSelectValue(task) === columnKey) return;
+    if (task && canMove && !canMove(task)) return;
     const showError = (err: unknown) => toast.error(actionErrorText(err));
+    const target = columns.find((c) => c.key === columnKey);
+    if (target) setAnnouncement(boardMovedText(target.label));
     try {
       const pending = onMove(taskId, columnKey);
       if (pending) pending.catch(showError);
@@ -260,112 +358,173 @@ function BoardVisual({
   }
 
   const { draggingTaskId, dragOverKey, cardProps, columnProps } = useBoardDrag<TaskListItem>({
-    canDrag: () => true,
+    canDrag: (task) => canMove?.(task) ?? true,
     onDrop: move,
   });
+  const draggingTask = draggingTaskId ? tasks.find((t) => t.id === draggingTaskId) : undefined;
+  // Columns whose loaded cards are all shown ("Ver N más" pressed once); kept while the board is mounted.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  // Cards just created from a column's quick-add enter with `row-new`.
+  const recent = useQuickAddRecent((s) => s.recent);
 
-  const renderCard = (task: TaskListItem) => (
+  const renderCard = (task: TaskListItem, columnIndex: number, cardIndex: number) => (
     <BoardCard
       key={task.id}
       task={task}
       href={boardCardHref(pathname, search, task.id)}
       today={today}
+      delay={boardCardDelay(columnIndex, cardIndex)}
       dragging={draggingTaskId === task.id}
       dragProps={cardProps(task)}
       targets={columns.filter((c) => c.key !== statusSelectValue(task))}
       onMoveTo={(key) => move(task.id, key)}
+      movable={canMove?.(task) ?? true}
+      compact={compactCompleted && statusSelectValue(task) === "completado"}
+      isNew={recent.includes(task.id)}
     />
   );
 
   return (
-    <div data-testid="task-board" className="flex w-full min-w-0 items-start gap-3.5 overflow-x-auto pb-2">
-      {columns.map((column) => {
-        const inColumn = grouped[column.key] ?? [];
-        const count = countOf(column.key);
-        const token = columnColor(column, inColumn);
-        const isDragOver = dragOverKey === column.key;
-        const dropTarget = columnProps(column.key);
-        const nextCursor = columnPages?.columns[column.key]?.nextCursor ?? null;
+    <div data-testid="task-board" className="w-full min-w-0 overflow-x-auto pb-2">
+      <p aria-live="polite" data-testid="board-announcement" className="sr-only">
+        {announcement}
+      </p>
+      <div className="flex w-full items-start gap-4">
+        {columns.map((column, columnIndex) => {
+          const inColumn = grouped[column.key] ?? [];
+          const count = countOf(column.key);
+          const token = columnColor(column, inColumn);
+          const colorVar = statusColorVar(token);
+          const isDragOver = dragOverKey === column.key;
+          const dropTarget = columnProps(column.key);
+          const nextCursor = columnPages?.columns[column.key]?.nextCursor ?? null;
+          // The dashed placeholder shows where a card from another column lands.
+          const landing = isDragOver && !!draggingTask && statusSelectValue(draggingTask) !== column.key;
+          const dropClass = isDragOver ? "bg-tint-primary ring-2 ring-ring ring-inset" : "bg-accent";
 
-        if (inColumn.length === 0 && count === 0 && !boardEmpty) {
-          return (
-            <div
-              key={column.key}
-              role="group"
-              aria-label={`${column.label} · 0`}
-              data-collapsed="true"
-              {...dropTarget}
-              className={cn(
-                "flex min-h-[360px] w-[52px] shrink-0 flex-col items-center gap-2.5 rounded-[14px] border bg-muted py-3 text-foreground transition-colors",
-                isDragOver ? "border-primary" : "border-transparent",
-              )}
-            >
-              <StatusRing token={token} />
-              <span className="font-mono text-xs text-muted-foreground">0</span>
-              <span className="text-[13px] font-medium [writing-mode:vertical-rl]">{column.label}</span>
-            </div>
-          );
-        }
-
-        return (
-          <div
-            key={column.key}
-            role="group"
-            aria-label={`${column.label} · ${count}`}
-            {...dropTarget}
-            className={cn(
-              "flex w-[290px] shrink-0 flex-col gap-2 rounded-[14px] border bg-muted p-2.5 text-foreground transition-colors",
-              isDragOver ? "border-primary" : "border-transparent",
-            )}
-          >
-            <div className="flex items-center gap-2 px-1.5 py-1">
-              <StatusRing token={token} />
-              <h3 className="flex-1 text-[13.5px] font-semibold">{column.label}</h3>
-              <span className="font-mono text-xs text-muted-foreground">{count}</span>
-            </div>
-            {inColumn.length === 0 && !nextCursor ? (
-              <p
-                data-testid="board-column-empty"
+          if (inColumn.length === 0 && count === 0 && !boardEmpty) {
+            return (
+              <section
+                key={column.key}
+                aria-label={boardColumnLabel(column.label, 0)}
+                data-collapsed="true"
+                data-drop-target={isDragOver || undefined}
+                {...dropTarget}
                 className={cn(
-                  "rounded-xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground transition-colors",
-                  isDragOver ? "border-primary" : "border-border",
+                  "flex min-h-[360px] w-[52px] shrink-0 flex-col items-center gap-2.5 rounded-lg py-3 text-foreground transition-colors",
+                  dropClass,
                 )}
               >
-                {BOARD_COLUMN_EMPTY}
-              </p>
-            ) : null}
-            <ul className="flex flex-col gap-2">{inColumn.map(renderCard)}</ul>
-            {columnPages && nextCursor ? (
-              <BoardColumnMore
-                key={nextCursor}
-                filters={columnPages.filters}
-                column={column}
-                firstCursor={nextCursor}
-                loadedIds={inColumn.map((t) => t.id)}
-                renderCard={renderCard}
-              />
-            ) : null}
-            {canCreate ? (
-              <Button
-                type="button"
-                variant="ghost"
-                className="justify-start px-2 text-[13px] font-normal text-muted-foreground"
-                aria-label={`Agregar tarea en ${column.label}`}
-                onClick={() => openNewTask({ status: column.key }, "tablero-quick-add")}
-              >
-                + Agregar
-              </Button>
-            ) : null}
-          </div>
-        );
-      })}
+                <StatusDot colorVar={colorVar} />
+                <span className="font-mono text-xs text-muted-foreground">0</span>
+                <span className="text-[13px] font-medium [writing-mode:vertical-rl]">{column.label}</span>
+              </section>
+            );
+          }
+
+          const share = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+          const limit = visibleCards && !expanded.has(column.key) ? visibleCards : inColumn.length;
+          const shown = inColumn.slice(0, limit);
+          const hiddenLoaded = inColumn.length - shown.length;
+          return (
+            <section
+              key={column.key}
+              aria-label={boardColumnLabel(column.label, count)}
+              data-drop-target={isDragOver || undefined}
+              {...dropTarget}
+              className={cn(
+                "flex min-w-[250px] flex-1 basis-0 flex-col gap-2.5 rounded-lg p-3 text-foreground transition-colors",
+                dropClass,
+              )}
+            >
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <StatusDot colorVar={colorVar} />
+                  <h3 className="min-w-0 truncate text-sm font-semibold">{column.label}</h3>
+                  <Badge variant="outline" className="bg-card font-mono text-xs">
+                    {count}
+                  </Badge>
+                  {isDragOver ? (
+                    <span data-testid="board-drop-hint" className="ml-auto text-[11.5px] text-secondary-foreground">
+                      {BOARD_DROP_HINT}
+                    </span>
+                  ) : null}
+                </div>
+                <div aria-hidden="true" data-slot="board-column-bar" className="h-1 overflow-hidden rounded-full bg-input">
+                  <div className="grow-x h-full rounded-full" style={{ width: `${share}%`, backgroundColor: colorVar }} />
+                </div>
+              </div>
+              {inColumn.length === 0 && !nextCursor && !landing ? (
+                <p
+                  data-testid="board-column-empty"
+                  className={cn(
+                    "rounded-[10px] border-2 border-dashed px-3 py-6 text-center text-xs text-muted-foreground transition-colors",
+                    isDragOver ? "border-primary" : "border-input",
+                  )}
+                >
+                  {BOARD_COLUMN_EMPTY}
+                </p>
+              ) : null}
+              <ul className="flex flex-col gap-2.5">
+                {shown.map((task, i) => renderCard(task, columnIndex, i))}
+                {landing ? (
+                  <li
+                    aria-hidden="true"
+                    data-testid="board-drop-placeholder"
+                    className="h-16 rounded-[10px] border-2 border-dashed border-primary bg-tint-primary/60"
+                  />
+                ) : null}
+              </ul>
+              {hiddenLoaded > 0 ? (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="self-start text-[12.5px] font-medium"
+                  aria-label={`${boardColumnMoreText(count - shown.length)} en ${column.label}`}
+                  onClick={() => setExpanded((prev) => new Set(prev).add(column.key))}
+                >
+                  {boardColumnMoreText(count - shown.length)}
+                </Button>
+              ) : columnPages && nextCursor ? (
+                <BoardColumnMore
+                  key={nextCursor}
+                  filters={columnPages.filters}
+                  column={column}
+                  total={count}
+                  firstCursor={nextCursor}
+                  loadedIds={inColumn.map((t) => t.id)}
+                  renderCard={(task, i) => renderCard(task, columnIndex, inColumn.length + i)}
+                />
+              ) : null}
+              {renderColumnFooter ? (
+                renderColumnFooter(column.key)
+              ) : canCreate ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="justify-start px-2 text-[13px] font-normal text-muted-foreground"
+                  aria-label={`Agregar tarea en ${column.label}`}
+                  onClick={() => openNewTask({ status: column.key }, "tablero-quick-add")}
+                >
+                  + Agregar
+                </Button>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
+function StatusDot({ colorVar }: { colorVar: string }) {
+  return <span aria-hidden="true" className="inline-block size-2.5 shrink-0 rounded-full" style={{ backgroundColor: colorVar }} />;
+}
+
 /**
  * The rest of one column, page by page (`tareas.board(f, columnId)`), from
- * the board's cursor. Nothing loads or shows until the first "Cargar más";
+ * the board's cursor. Nothing loads or shows until the first "Ver N más";
  * pages cached from an older cursor (the board reloaded since) are dropped
  * then. A card the board already shows, or one moved to another column, is
  * left out.
@@ -373,15 +532,18 @@ function BoardVisual({
 function BoardColumnMore({
   filters,
   column,
+  total,
   firstCursor,
   loadedIds,
   renderCard,
 }: {
   filters: TareasListFilters;
   column: BoardColumn;
+  /** Every matching task of the column. */
+  total: number;
   firstCursor: string;
   loadedIds: string[];
-  renderCard(task: TaskListItem): ReactNode;
+  renderCard(task: TaskListItem, index: number): ReactNode;
 }) {
   const qc = useQueryClient();
   const [requested, setRequested] = useState(false);
@@ -396,17 +558,20 @@ function BoardColumnMore({
     .map(listItemOfRow);
   const hasMore = !requested || pages.hasNextPage;
   const busy = pages.isFetching;
+  const remaining = total - loadedIds.length - extra.length;
+  const label = remaining > 0 ? boardColumnMoreText(remaining) : BOARD_COLUMN_MORE;
 
   return (
     <>
-      {extra.length > 0 ? <ul className="flex flex-col gap-2">{extra.map(renderCard)}</ul> : null}
+      {extra.length > 0 ? <ul className="flex flex-col gap-2.5">{extra.map((task, i) => renderCard(task, i))}</ul> : null}
       {hasMore ? (
         <Button
           type="button"
-          variant="outline"
+          variant="link"
           size="sm"
+          className="self-start"
           disabled={busy}
-          aria-label={`${BOARD_COLUMN_MORE} en ${column.label}`}
+          aria-label={`${label} en ${column.label}`}
           onClick={() => {
             if (requested) {
               void pages.fetchNextPage();
@@ -418,106 +583,209 @@ function BoardColumnMore({
             setRequested(true);
           }}
         >
-          {busy ? "Cargando…" : BOARD_COLUMN_MORE}
+          {busy ? "Cargando…" : label}
         </Button>
       ) : null}
     </>
   );
 }
 
+/** "Ver 27 más" of a column with more tasks than it shows. */
+export function boardColumnMoreText(remaining: number): string {
+  return `Ver ${remaining} más`;
+}
+
 function BoardCard({
   task,
   href,
   today,
+  delay,
   dragging,
   dragProps,
   targets,
   onMoveTo,
+  movable = true,
+  compact = false,
+  isNew = false,
 }: {
   task: TaskListItem;
   href: string;
   today: string;
+  /** Entrance delay (`--anim-delay`). */
+  delay: string;
   dragging: boolean;
   dragProps: BoardCardDragProps;
   targets: BoardColumn[];
   onMoveTo(columnKey: string): void;
+  /** False: no drag handle and a disabled "Mover a…". */
+  movable?: boolean;
+  /** Completado as one compact line. */
+  compact?: boolean;
+  /** Just created from a quick-add: enters with `row-new`. */
+  isNew?: boolean;
 }) {
+  const titleLink = (className: string) => (
+    <Link
+      href={href}
+      scroll={false}
+      onNavigate={(e) => {
+        // Shallow: the sheet opens from `?tarea=` and the board under it stays as it is.
+        e.preventDefault();
+        window.history.pushState(null, "", href);
+      }}
+      className={className}
+    >
+      {task.title}
+    </Link>
+  );
+  const moveMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={!movable}
+        className="self-start rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        aria-label={`Mover a… ${task.title}`}
+      >
+        Mover a…
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {targets.map((c) => (
+          <DropdownMenuItem key={c.key} onClick={() => onMoveTo(c.key)}>
+            {c.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  if (compact) {
+    const meta = [task.project.name, task.workflow?.name, task.manager?.name].filter(Boolean).join(" · ");
+    return (
+      <li
+        {...dragProps}
+        data-testid="task-card"
+        data-task-id={task.id}
+        data-compact=""
+        data-dragging={dragging || undefined}
+        style={{ "--anim-delay": delay } as CSSProperties}
+        className={cn(
+          "anim-in flex cursor-grab flex-col gap-1.5 rounded-md border bg-card px-3.5 py-3 text-card-foreground shadow-[var(--shadow-card)] active:cursor-grabbing",
+          dragging ? "drag-lift border-primary" : LIFT_CLASS,
+          isNew && "row-new",
+        )}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <CircleCheck aria-hidden="true" className="mt-px size-4 shrink-0 text-success" />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {titleLink("line-clamp-2 text-[13.5px] leading-[1.35] font-medium hover:underline")}
+            <p className="truncate text-xs text-muted-foreground">{meta}</p>
+          </div>
+        </div>
+        {moveMenu}
+      </li>
+    );
+  }
+
   const due = dueDate(task);
   const overdue = isTaskOverdue(task, today);
   const subtasks = task.subtaskCount;
   const subtasksPct = subtasks > 0 ? Math.round((task.subtaskDoneCount / subtasks) * 100) : 0;
+  const tramoColor = tramoColorOf(task);
+  const tramoSlot = task.workflow ? tramoColorSlot(task.workflow.key) : null;
+  const blocked = task.status === "bloqueado";
+  const projectLine =
+    blocked && task.waitingOn > 0
+      ? `${task.project.name} · espera ${task.waitingOn} ${task.waitingOn === 1 ? "tarea" : "tareas"}`
+      : task.project.name;
 
   return (
     <li
       {...dragProps}
       data-testid="task-card"
       data-task-id={task.id}
+      data-dragging={dragging || undefined}
+      style={{ "--anim-delay": delay } as CSSProperties}
       className={cn(
-        "flex cursor-grab flex-col gap-2 rounded-xl border border-border bg-card p-3 text-sm text-card-foreground shadow-sm transition-opacity active:cursor-grabbing",
-        dragging && "opacity-50",
+        "anim-in flex cursor-grab flex-col gap-2.5 overflow-hidden rounded-md border bg-card text-sm text-card-foreground shadow-[var(--shadow-card)] active:cursor-grabbing",
+        blocked && "border-tint-destructive",
+        dragging ? "drag-lift border-primary" : LIFT_CLASS,
+        isNew && "row-new",
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        {task.workflow ? <TramoBadge tramo={task.workflow} variant="chip" /> : <span />}
-        <span className="text-xs text-muted-foreground">{PRIORITY_LABEL[task.priority]}</span>
-      </div>
+      <span aria-hidden="true" data-slot="board-card-strip" className="h-1 shrink-0" style={{ backgroundColor: tramoColor }} />
 
-      <div className="min-w-0">
-        <Link
-          href={href}
-          scroll={false}
-          onNavigate={(e) => {
-            // Shallow: the sheet opens from `?tarea=` and the board under it stays as it is.
-            e.preventDefault();
-            window.history.pushState(null, "", href);
-          }}
-          className="font-medium hover:underline"
-        >
-          {task.title}
-        </Link>
-        <p className="truncate text-xs text-muted-foreground">{task.project.name}</p>
-      </div>
-
-      {subtasks > 0 ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <div aria-hidden className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${subtasksPct}%` }} />
-          </div>
-          <span className="font-mono">
-            <span className="sr-only">Subtareas </span>
-            {task.subtaskDoneCount}/{subtasks}
-          </span>
+      <div className="flex flex-col gap-2 px-3.5 pb-3">
+        <div className="flex items-center gap-2">
+          {task.workflow ? <TramoBadge tramo={task.workflow} variant="chip" /> : null}
+          {blocked ? (
+            <span data-slot="board-card-blocked" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-destructive">
+              <Ban aria-hidden="true" className="size-3" />
+              Bloqueada
+            </span>
+          ) : task.priority === "alta" ? (
+            <span className="text-[11.5px] font-semibold text-destructive">{PRIORITY_LABEL.alta}</span>
+          ) : null}
+          {movable ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={`Arrastrar ${task.title}`}
+              className="ml-auto inline-flex cursor-grab items-center rounded-sm text-muted-foreground active:cursor-grabbing"
+            >
+              <GripVertical aria-hidden="true" className="size-3.5" />
+            </button>
+          ) : null}
         </div>
-      ) : null}
 
-      <div className="flex items-center justify-between gap-2">
-        {task.manager ? (
-          <PersonAvatar name={task.manager.name} size="sm" className="min-w-0 text-xs" />
-        ) : (
-          <span className="text-xs text-muted-foreground">Sin responsable</span>
-        )}
-        {due ? (
-          <span className={cn("font-mono text-xs", overdue ? "text-destructive" : "text-muted-foreground")}>
-            {formatDateDMY(due)}
-          </span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          {titleLink("line-clamp-3 text-sm leading-[1.35] font-semibold hover:underline")}
+          <p className="truncate text-[12.5px] text-muted-foreground">{projectLine}</p>
+        </div>
+
+        {subtasks > 0 ? (
+          <div data-slot="board-card-subtasks" className="flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2 text-[11.5px] text-muted-foreground">
+              <span>Subtareas</span>
+              <span className="font-mono">
+                {task.subtaskDoneCount}/{subtasks}
+              </span>
+            </div>
+            <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="grow-x h-full rounded-full" style={{ width: `${subtasksPct}%`, backgroundColor: tramoColor }} />
+            </div>
+          </div>
         ) : null}
-      </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          className="self-start rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label={`Mover a… ${task.title}`}
-        >
-          Mover a…
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {targets.map((c) => (
-            <DropdownMenuItem key={c.key} onClick={() => onMoveTo(c.key)}>
-              {c.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        <div className="flex items-center justify-between gap-2">
+          {task.manager ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold",
+                  areaTintClass(tramoSlot),
+                )}
+              >
+                {getPersonInitials(task.manager.name)}
+              </span>
+              <span className="truncate text-[12.5px] text-foreground-soft">{task.manager.name}</span>
+            </span>
+          ) : (
+            <span className="text-[12.5px] text-muted-foreground">Sin responsable</span>
+          )}
+          {due ? (
+            <Badge
+              data-slot="board-card-due"
+              variant={overdue ? "destructive" : "outline"}
+              className="shrink-0 font-mono text-[11.5px]"
+              title={formatDateDMY(due)}
+            >
+              {boardDueText(due, overdue, today)}
+            </Badge>
+          ) : null}
+        </div>
+
+        {moveMenu}
+      </div>
     </li>
   );
 }

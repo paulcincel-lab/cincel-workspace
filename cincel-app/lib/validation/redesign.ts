@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 
-import { SHAPE_BOUNDS, TYPE_SCALE_BOUNDS } from "@/lib/ui/themes";
+import { presetFilledTokens, SHAPE_BOUNDS, TYPE_SCALE_BOUNDS } from "@/lib/ui/themes";
 import type {
   AppearanceCookie,
   OrgAppearance,
@@ -78,15 +78,43 @@ const TOKEN_NAME_LIST = [
   "border", "border-strong", "input", "ring",
   "chart-1", "chart-2", "chart-3", "chart-4", "chart-5",
   "chart-1-ink", "chart-2-ink", "chart-3-ink", "chart-4-ink", "chart-5-ink",
+  "tint-primary", "tint-violet", "tint-warning", "tint-cyan", "tint-destructive", "tint-success",
+  "destructive-ink", "foreground-soft",
   "sidebar", "sidebar-foreground", "sidebar-primary", "sidebar-primary-foreground",
   "sidebar-accent", "sidebar-accent-foreground", "sidebar-border", "sidebar-ring",
 ] as const satisfies readonly TokenName[];
 
 const tokenPair = z.object({ light: TokenColorSchema, dark: TokenColorSchema }).strict();
 
+/**
+ * Tokens added after org appearances were first saved (tints, `destructive-ink`,
+ * `foreground-soft`): optional on input and filled from the org's preset, so a
+ * saved appearance without them still parses and needs no data migration.
+ */
+const LATER_TOKEN_NAMES = [
+  "tint-primary", "tint-violet", "tint-warning", "tint-cyan", "tint-destructive", "tint-success",
+  "destructive-ink", "foreground-soft",
+] as const satisfies readonly TokenName[];
+type LaterTokenName = (typeof LATER_TOKEN_NAMES)[number];
+
+const isLaterToken = (name: TokenName): name is LaterTokenName => (LATER_TOKEN_NAMES as readonly TokenName[]).includes(name);
+
 const TokensSchema = z
-  .object(Object.fromEntries(TOKEN_NAME_LIST.map((name) => [name, tokenPair])) as Record<TokenName, typeof tokenPair>)
+  .object(
+    Object.fromEntries(TOKEN_NAME_LIST.map((name) => [name, isLaterToken(name) ? tokenPair.optional() : tokenPair])) as Record<
+      Exclude<TokenName, LaterTokenName>,
+      typeof tokenPair
+    > &
+      Record<LaterTokenName, z.ZodOptional<typeof tokenPair>>,
+  )
   .strict();
+
+/** Fills the tokens a saved appearance predates from its base preset. */
+function withPresetTokens<T extends { baseTheme: OrgAppearance["baseTheme"]; tokens: Partial<OrgAppearance["tokens"]> }>(
+  value: T,
+): Omit<T, "tokens"> & { tokens: OrgAppearance["tokens"] } {
+  return { ...value, tokens: presetFilledTokens(value.baseTheme, value.tokens) };
+}
 
 const weight = z.union([z.literal(400), z.literal(500), z.literal(600)]);
 
@@ -116,7 +144,7 @@ const ShapeSchema = z
   .strict();
 
 /** `saveOrgAppearanceAction` input (BE §7.1). Contrast is checked separately (`lib/ui/contrast.ts`). */
-export const OrgAppearanceSchema = z
+const OrgAppearanceObjectSchema = z
   .object({
     baseTheme: ThemeIdSchema,
     tokens: TokensSchema,
@@ -126,7 +154,9 @@ export const OrgAppearanceSchema = z
     styleDefault: PresentationStyleSchema,
     allowUserOverride: z.boolean(),
   })
-  .strict() satisfies z.ZodType<OrgAppearance>;
+  .strict();
+
+export const OrgAppearanceSchema = OrgAppearanceObjectSchema.transform(withPresetTokens) satisfies z.ZodType<OrgAppearance>;
 
 /**
  * Keys an `appearance.theme` value saved before the cleanup phase may still
@@ -144,9 +174,11 @@ export function withoutRetiredOrgAppearanceKeys(data: unknown): unknown {
 }
 
 /** `app_settings('appearance.theme').data`: the org appearance plus its version `v` (BE §3.12). */
-export const StoredOrgAppearanceSchema = OrgAppearanceSchema.extend({
+export const StoredOrgAppearanceSchema = OrgAppearanceObjectSchema.extend({
   v: z.number().int().min(1),
-}).strict() satisfies z.ZodType<StoredOrgAppearance>;
+})
+  .strict()
+  .transform(withPresetTokens) satisfies z.ZodType<StoredOrgAppearance>;
 
 /** `updateMyPreferencesAction(patch)` (BE §7.1). */
 export const UserPreferencesPatchSchema = z

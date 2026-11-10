@@ -42,7 +42,7 @@ function Slider({
       <SliderPrimitive.Control className="relative flex w-full touch-none items-center py-2 select-none data-[disabled]:opacity-50">
         <SliderPrimitive.Track
           data-slot="slider-track"
-          className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-muted select-none"
+          className="relative h-1.5 w-full flex-1 overflow-hidden rounded-full bg-muted select-none"
         >
           <SliderPrimitive.Indicator
             data-slot="slider-range"

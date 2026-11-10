@@ -39,6 +39,8 @@ import { ADMIN_TASK_TITLE, INICIO_ADMIN, INICIO_EMPTY, INICIO_NON_ADMIN, KPI_VAL
 import { weekLabel } from "./WeeklyPaceChart";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
+/** The styles that render the shared widget layout (Visual is `InicioVisual`, tested in InicioVisual.test.tsx). */
+const SHARED_STYLES: PresentationStyle[] = ["esencial", "analitico"];
 // 09:00 on Friday 6 November 2026 in Mexico City.
 const NOW = "2026-11-06T15:00:00Z";
 
@@ -111,7 +113,7 @@ describe("InicioClient query", () => {
   });
 
   it("reads the photo from me.profile and follows its updates", async () => {
-    const { client } = renderInicio("visual", INICIO_NON_ADMIN, {
+    const { client } = renderInicio("analitico", INICIO_NON_ADMIN, {
       profile: { ...PROFILE, photoUrl: "/api/staff/s-1/photo?v=1" },
     });
     expect(screen.getByRole("button", { name: "Cambiar foto de perfil" })).toBeTruthy();
@@ -125,7 +127,7 @@ describe("InicioClient query", () => {
 
 describe("InicioClient header block", () => {
   it("greets by hour and shows the role and the lowercase es-MX date line", () => {
-    renderInicio("visual");
+    renderInicio("analitico");
     expect(screen.getByRole("heading", { level: 1, name: "Buenos días, Ana" })).toBeTruthy();
     expect(screen.getByText("Arquitecta de proyecto")).toBeTruthy();
     expect(screen.getByText(`viernes, 6 de noviembre · 2 eventos hoy · ${KPI_VALUES.vencidas} tareas vencidas`)).toBeTruthy();
@@ -137,7 +139,7 @@ describe("InicioClient header block", () => {
   });
 
   it("shows the initials when there is no photo", () => {
-    renderInicio("visual");
+    renderInicio("analitico");
     expect(screen.getByText("AL")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Subir foto de perfil" })).toBeTruthy();
   });
@@ -157,7 +159,7 @@ describe("InicioClient header block", () => {
 describe("InicioClient KPIs across styles", () => {
   const shared = [KPI_VALUES.proyectos_activos, KPI_VALUES.vencidas, KPI_VALUES.bloqueadas, KPI_VALUES.revisiones_7d];
 
-  it.each(STYLES)("renders the same KPI numbers in %s", (style) => {
+  it.each(SHARED_STYLES)("renders the same KPI numbers in %s", (style) => {
     renderInicio(style);
     for (const value of shared) {
       expect(screen.getAllByText(String(value)).length).toBeGreaterThan(0);
@@ -185,7 +187,7 @@ describe("InicioClient KPIs across styles", () => {
 });
 
 describe("InicioClient sections", () => {
-  it.each(STYLES)("titles every widget in %s", (style) => {
+  it.each(SHARED_STYLES)("titles every widget in %s", (style) => {
     renderInicio(style);
     for (const title of ["Tareas abiertas por tramo", "Requiere atención", "Mi día", "Avance de proyectos activos", "Carga por persona"]) {
       expect(screen.getAllByText(title).length).toBeGreaterThan(0);
@@ -206,7 +208,7 @@ describe("InicioClient sections", () => {
 });
 
 describe("InicioClient empty states", () => {
-  it.each(STYLES)("gives every widget an empty state in %s", (style) => {
+  it.each(SHARED_STYLES)("gives every widget an empty state in %s", (style) => {
     renderInicio(style, INICIO_EMPTY);
     expect(screen.getByText("Nada requiere atención hoy")).toBeTruthy();
     expect(screen.getByText("Aún no hay proyectos activos")).toBeTruthy();
@@ -219,12 +221,12 @@ describe("InicioClient empty states", () => {
   });
 
   it("counts zero events and zero overdue tasks in the date line", () => {
-    renderInicio("visual", INICIO_EMPTY);
+    renderInicio("analitico", INICIO_EMPTY);
     expect(screen.getByText("viernes, 6 de noviembre · 0 eventos hoy · 0 tareas vencidas")).toBeTruthy();
   });
 
   it("offers Nuevo proyecto when there are no projects", () => {
-    renderInicio("visual", INICIO_EMPTY);
+    renderInicio("analitico", INICIO_EMPTY);
     expect(screen.getByRole("link", { name: "Nuevo proyecto" }).getAttribute("href")).toBe("/proyectos");
   });
 });
@@ -337,7 +339,7 @@ describe("InicioClient series toggles (Ritmo semanal)", () => {
 });
 
 describe("InicioClient collapse", () => {
-  it.each(STYLES)("gives every widget card a collapse toggle in %s", (style) => {
+  it.each(SHARED_STYLES)("gives every widget card a collapse toggle in %s", (style) => {
     renderInicio(style);
     const titles = ["Tareas abiertas por tramo", "Requiere atención", "Mi día", "Avance de proyectos activos", "Carga por persona"];
     if (style !== "esencial") titles.push("Ritmo semanal");
@@ -349,7 +351,7 @@ describe("InicioClient collapse", () => {
 
   it("does not render a collapsed card's body (seeded) and expands it again", () => {
     useInicioDashboard.setState({ collapsed: { attention: true } });
-    renderInicio("visual");
+    renderInicio("analitico");
     const toggle = within(region("Requiere atención")).getByRole("button", { name: "Expandir" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText(ATTENTION_TITLE)).toBeNull();
@@ -360,7 +362,7 @@ describe("InicioClient collapse", () => {
 
   it("collapses an empty widget card too", () => {
     useInicioDashboard.setState({ collapsed: { workload: true } });
-    renderInicio("visual", INICIO_EMPTY);
+    renderInicio("analitico", INICIO_EMPTY);
     expect(within(region("Carga por persona")).getByRole("button", { name: "Expandir" })).toBeTruthy();
     expect(screen.queryByText("Nadie tiene tareas abiertas.")).toBeNull();
   });
@@ -370,26 +372,18 @@ describe("InicioClient chart / table per style", () => {
   const TRAMO = "Tareas abiertas por tramo";
 
   it("renders each style's default without a pick", () => {
-    renderInicio("visual");
+    renderInicio("esencial");
     expect(within(region(TRAMO)).queryAllByRole("columnheader")).toHaveLength(0);
     cleanup();
     renderInicio("analitico");
     expect(within(region(TRAMO)).getAllByRole("columnheader").length).toBeGreaterThan(0);
   });
 
-  it("keeps a table pick in Visual out of Esencial and Analítico", () => {
-    renderInicio("visual");
-    fireEvent.click(within(region(TRAMO)).getByRole("button", { name: "Ver como tabla" }));
-    expect(useInicioDashboard.getState().views).toEqual({ visual: { tramoDonut: "table" } });
-    expect(within(region(TRAMO)).getAllByRole("columnheader").length).toBeGreaterThan(0);
-    cleanup();
-
-    // Esencial falls back to its own list.
+  it("keeps a table pick in Esencial out of Analítico", () => {
     renderInicio("esencial");
-    expect(within(region(TRAMO)).queryAllByRole("columnheader")).toHaveLength(0);
-    expect(
-      within(region(TRAMO)).getByRole("button", { name: "Ver como gráfica" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    fireEvent.click(within(region(TRAMO)).getByRole("button", { name: "Ver como tabla" }));
+    expect(useInicioDashboard.getState().views).toEqual({ esencial: { tramoDonut: "table" } });
+    expect(within(region(TRAMO)).getAllByRole("columnheader").length).toBeGreaterThan(0);
     cleanup();
 
     renderInicio("analitico");
@@ -398,10 +392,9 @@ describe("InicioClient chart / table per style", () => {
     ).toBe("true");
   });
 
-  it("shows the Analítico pace table in Visual when picked there (seeded)", () => {
-    useInicioDashboard.setState({ views: { visual: { weeklyPace: "table", workload: "table" } } });
-    renderInicio("visual");
-    expect(within(region("Ritmo semanal")).getByRole("columnheader", { name: "Neto" })).toBeTruthy();
+  it("shows the Analítico workload table in Esencial when picked there (seeded)", () => {
+    useInicioDashboard.setState({ views: { esencial: { workload: "table" } } });
+    renderInicio("esencial");
     expect(within(region("Carga por persona")).getAllByRole("columnheader").length).toBeGreaterThan(0);
   });
 });

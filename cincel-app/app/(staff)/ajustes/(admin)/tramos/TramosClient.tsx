@@ -5,7 +5,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader } from "@/components/v2/layout/PageHeader";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -417,6 +417,7 @@ export function TramosClient() {
   return (
     <div>
       <PageHeader
+        estilo={false}
         title="Tramos y fases"
         description="Fases, tareas de plantilla e inicio automático de cada tramo."
       />

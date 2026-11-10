@@ -18,6 +18,7 @@ export default async function AjustesLayout({ children }: { children: ReactNode 
   return (
     <div className="flex flex-col">
       <PageHeader
+        estilo={false}
         title="Ajustes"
         description="Tus preferencias y, si eres administrador, las de la organización."
       />

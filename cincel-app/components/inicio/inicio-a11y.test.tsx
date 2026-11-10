@@ -33,6 +33,8 @@ import { INICIO_EMPTY, INICIO_NON_ADMIN } from "./inicio-fixtures";
 
 const MODES = ["light", "dark"] as const;
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
+/** The styles with the shared widget layout and its dashboard controls (Visual is `InicioVisual`). */
+const SHARED_STYLES: PresentationStyle[] = ["esencial", "analitico"];
 
 /** The token pairs the Inicio page puts text and marks on (FE §14.6). */
 const INICIO_PAIRS = new Set([
@@ -112,7 +114,7 @@ describe("Inicio accessibility", () => {
 });
 
 describe("Inicio dashboard controls accessibility", () => {
-  it.each(STYLES)("names the KPI toggles, range, view and collapse controls with their states (%s)", async (style) => {
+  it.each(SHARED_STYLES)("names the KPI toggles, range, view and collapse controls with their states (%s)", async (style) => {
     applyTheme(THEME_IDS[0], "light");
     renderInicio(style, INICIO_NON_ADMIN);
 
@@ -147,10 +149,10 @@ describe("Inicio dashboard controls accessibility", () => {
     useInicioDashboard.setState({
       range: "4w",
       collapsed: { myDay: true, workload: true },
-      views: { visual: { tramoDonut: "table", weeklyPace: "table" } },
+      views: { analitico: { tramoDonut: "chart", weeklyPace: "chart" } },
       hiddenSeries: { weeklyPace: ["created"] },
     });
-    renderInicio("visual", INICIO_NON_ADMIN);
+    renderInicio("analitico", INICIO_NON_ADMIN);
     expect(await seriousViolations()).toEqual([]);
   });
 });

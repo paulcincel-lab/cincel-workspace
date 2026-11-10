@@ -378,7 +378,7 @@ function LoadLine({ person, maxOpen }: { person: PersonDatum; maxOpen: number })
         <span>Carga</span>
         {typeof person.occupancyPct === "number" ? <span className="font-mono">{`${pct}%`}</span> : null}
       </div>
-      <LoadBar segments={[{ percent: pct, label: `${pct}%` }]} tone={loadTone(pct)} />
+      <LoadBar segments={[{ percent: pct, label: `${pct}%` }]} tone={loadTone(pct)} segmentClassName="grow-x" />
     </div>
   );
 }

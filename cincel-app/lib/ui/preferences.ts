@@ -4,7 +4,7 @@
  */
 import type { AppearanceCookie, OrgAppearance, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
 import { toCssVars } from "@/lib/ui/appearance-css";
-import { THEME_PRESETS } from "@/lib/ui/themes";
+import { presetFilledTokens, THEME_PRESETS } from "@/lib/ui/themes";
 import { AppearanceCookieSchema } from "@/lib/validation/redesign";
 
 /** Name of the appearance cookie: JSON `AppearanceCookie` (BE §8.2). */
@@ -45,7 +45,7 @@ export const APPEARANCE_COOKIE_OPTIONS = {
  */
 export function resolveAppearance(org: OrgAppearance & { v?: number }, user: UserPreferences | null): ResolvedAppearance {
   const theme = org.allowUserOverride && user?.theme ? user.theme : org.baseTheme;
-  const tokens = theme === org.baseTheme ? org.tokens : THEME_PRESETS[theme].tokens;
+  const tokens = theme === org.baseTheme ? presetFilledTokens(org.baseTheme, org.tokens) : THEME_PRESETS[theme].tokens;
   const style = org.allowUserOverride && user?.style ? user.style : org.styleDefault;
   const mode = user?.mode ?? DEFAULT_USER_PREFERENCES.mode;
   const density = user?.density ?? DEFAULT_USER_PREFERENCES.density;

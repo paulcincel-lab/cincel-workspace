@@ -139,10 +139,10 @@ describe("Sidebar", () => {
     const links = within(mainNav()).getAllByRole("link");
     expect(links.slice(0, 7).map((link) => link.getAttribute("href"))).toEqual([
       "/inicio",
-      "/mi-espacio",
       "/tareas",
       "/proyectos",
       "/personas",
+      "/mi-espacio",
       "/biblioteca",
       "/asistente",
     ]);
@@ -285,6 +285,48 @@ describe("Sidebar", () => {
     renderSidebar({ slots: { "bandeja-badge": <span>7</span> } });
     expect(screen.getByText("7")).toBeTruthy();
     expect(screen.queryByText("5")).toBeNull();
+  });
+});
+
+describe("Sidebar per canvas", () => {
+  const CANVAS_ITEMS = ["inicio", "tareas", "proyectos", "personas", "mi-espacio", "biblioteca", "asistente"];
+
+  it("orders the items as the canvas", async () => {
+    // The registry's item files read the session only inside `resolve`; the order is static.
+    vi.doMock("@/lib/auth/session", () => ({ requireCapabilityUser: vi.fn() }));
+    const { NAV_ITEM_SOURCES } = await import("@/lib/shell/nav-items");
+    vi.doUnmock("@/lib/auth/session");
+    const sorted = [...NAV_ITEM_SOURCES].sort((a, b) => a.order - b.order);
+    expect(sorted.filter((source) => source.section === "items").map((source) => source.key)).toEqual(CANVAS_ITEMS);
+    expect(sorted.filter((source) => source.section === "footer").map((source) => source.key)).toEqual(["ajustes"]);
+
+    renderSidebar();
+    const hrefs = within(mainNav())
+      .getAllByRole("link")
+      .slice(0, CANVAS_ITEMS.length)
+      .map((link) => link.getAttribute("href"));
+    expect(hrefs).toEqual(CANVAS_ITEMS.map((key) => `/${key}`));
+  });
+
+  it.each([
+    ["/tareas", /^Tareas/],
+    ["/mi-espacio", /^Mi espacio/],
+    ["/ajustes/perfil", /^Ajustes$/],
+  ] as const)("marks the active item per route (%s)", (pathname, name) => {
+    state.pathname = pathname;
+    render(
+      <AppShellClient nav={toClientNavModel(FULL_NAV)} session={ADMIN_SESSION} today={null}>
+        <h1>Contenido</h1>
+      </AppShellClient>,
+    );
+    const active = screen.getByRole("link", { name });
+    expect(active.getAttribute("aria-current")).toBe("page");
+    expect(active.hasAttribute("data-active")).toBe(true);
+    expect(active.className).toContain("data-active:bg-sidebar-primary");
+    expect(active.className).toContain("data-active:text-sidebar-primary-foreground");
+    // Only that link is active across the main nav and the footer.
+    const navs = [mainNav(), screen.getByRole("navigation", { name: "Ajustes" })];
+    expect(navs.flatMap((nav) => [...nav.querySelectorAll("a[data-active]")])).toEqual([active]);
   });
 });
 

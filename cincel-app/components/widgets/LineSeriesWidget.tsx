@@ -157,7 +157,14 @@ export function LineSeriesWidget({
   return (
     <StyleView
       view={view}
-      visual={() => withToggles(<LazyAreaSeriesChart config={config} rows={rows} series={shown} />)}
+      visual={() =>
+        withToggles(
+          // recharts draws its paths at once; the container scales in instead (`ring-in`).
+          <div data-slot="line-series-chart" className="ring-in">
+            <LazyAreaSeriesChart config={config} rows={rows} series={shown} />
+          </div>,
+        )
+      }
       esencial={() =>
         withToggles(
           <ul className="flex flex-col divide-y divide-border">

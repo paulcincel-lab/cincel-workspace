@@ -31,12 +31,15 @@ function shapes() {
     "me.notificationPrefs": qk.me.notificationPrefs(),
     inicio: qk.inicio(),
     "tareas.all": qk.tareas.all,
-    "tareas.page": qk.tareas.page({ ...F, vista: "tablero", cal: "mes" }),
+    "tareas.page": qk.tareas.page({ ...F, estilo: "visual", cal: "mes" }),
     "tareas.list": qk.tareas.list(F),
     "tareas.facets": qk.tareas.facets(F),
+    "tareas.summary": qk.tareas.summary(F),
     "tareas.board(f)": qk.tareas.board(F),
     "tareas.board(f, col)": qk.tareas.board(F, "en_proceso"),
     "tareas.calendar": qk.tareas.calendar(F, "2026-11-01", "2026-11-30"),
+    "tareas.trend": qk.tareas.trend(F),
+    "tareas.byProject": qk.tareas.byProject(F),
     "tareas.startSlot": qk.tareas.startSlot(null),
     "tareas.startPreview": qk.tareas.startPreview("p1", "w1"),
     "tasks.detail": qk.tasks.detail("k1"),
@@ -120,9 +123,12 @@ describe("qk", () => {
     expect(paths.filter((path) => !sampled.includes(path))).toEqual([]);
   });
 
-  it("keeps the Tareas rules: no cursor or limit, prefix matching from tareas.all", () => {
-    const page = qk.tareas.page({ ...F, vista: "lista", cal: "mes" });
-    expect(JSON.stringify(page)).not.toMatch(/cursor|limit|estilo/);
+  it("keeps the Tareas rules: no cursor or limit, estilo only on the page bundle, prefix matching from tareas.all", () => {
+    const page = qk.tareas.page({ ...F, estilo: "analitico", cal: "mes" });
+    expect(JSON.stringify(page)).not.toMatch(/cursor|limit/);
+    for (const key of [qk.tareas.list(F), qk.tareas.facets(F), qk.tareas.board(F), qk.tareas.trend(F)]) {
+      expect(JSON.stringify(key)).not.toMatch(/estilo/);
+    }
     expect(qk.tareas.board(F, "c1").slice(0, 3)).toEqual(qk.tareas.board(F));
     for (const key of [page, qk.tareas.list(F), qk.tareas.facets(F), qk.tareas.board(F)]) {
       expect(key[0]).toBe(qk.tareas.all[0]);

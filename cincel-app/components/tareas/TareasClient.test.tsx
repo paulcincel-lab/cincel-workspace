@@ -170,9 +170,20 @@ vi.mock("./TareasCalendario", () => ({
 }));
 // The task sheet (R3-08) opens from `?tarea=`; none here.
 vi.mock("./TaskSheet", () => ({ TaskSheetRoute: () => null }));
+// The per-style layouts read their own queries (their own tests); here they show the props they get.
+vi.mock("./TareasVisual", () => ({
+  TareasVisual: (p: { actions?: ReactNode } & Record<string, unknown>) => (
+    <section data-testid="view-visual" data-props={Object.keys(p).sort().join(",")}>
+      {p.actions}
+    </section>
+  ),
+}));
+vi.mock("./TareasEsencial", () => ({ TareasEsencial: () => <section data-testid="view-esencial" /> }));
 
+import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
 import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
+import type { PresentationStyle } from "@/lib/types/redesign";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TareasFacets, TareasPageData } from "@/lib/tareas/page-data";
 import { parseTareasQuery, toTareasSearch, type TareasQuery } from "@/lib/tareas/query";
@@ -209,10 +220,25 @@ const FACETS: TareasFacets = {
   ],
 };
 
+/**
+ * The style these tests render: Analítico still shows the selected `?vista=`
+ * view with the shared filters bar; Visual and Esencial have layouts of their own.
+ */
+let style: PresentationStyle = "analitico";
+
+/** The client under the test's style. */
+function styled(node: ReactNode) {
+  return (
+    <StyleProvider style={style} scope="staff">
+      {node}
+    </StyleProvider>
+  );
+}
+
 /** The query the URL holds and the cache `/tareas` hydrates for it: the bundle and the facets it seeded. */
 function seed(client: QueryClient, query: TareasQuery, facets: TareasFacets) {
   const page: TareasPageData = { facets, tramos: TRAMOS, staff: STAFF };
-  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query)), page);
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query, style)), page);
   client.setQueryData(qk.tareas.facets(tareasListFiltersOf(query)), facets);
 }
 
@@ -220,7 +246,7 @@ function renderClient(patch: Partial<TareasQuery> = {}, facets: TareasFacets = F
   navigation.search = toTareasSearch(patch).replace(/^\?/, "");
   const client = createTestQueryClient();
   seed(client, parseTareasQuery(new URLSearchParams(navigation.search)), facets);
-  return renderWithQueryClient(<TareasClient />, { client });
+  return renderWithQueryClient(styled(<TareasClient />), { client });
 }
 
 function chip(name: string): HTMLAnchorElement {
@@ -243,6 +269,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   navigation.search = "";
+  style = "analitico";
   caps.canCreateActivity = true;
   for (const fn of Object.values(pageData)) fn.mockReset();
   replaceState = vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
@@ -283,10 +310,10 @@ describe("TareasClient data", () => {
     const { rerender } = renderClient();
     pageData.getTareasPageData.mockReturnValue(new Promise(() => {}));
     navigation.search = "tramo=diseno";
-    rerender(<TareasClient />);
+    rerender(styled(<TareasClient />));
     expect(pageData.getTareasPageData).toHaveBeenCalledTimes(1);
     expect(pageData.getTareasPageData).toHaveBeenCalledWith(
-      expect.objectContaining({ vista: "tablero", tramo: "diseno", cal: "mes" }),
+      expect.objectContaining({ estilo: "analitico", tramo: "diseno", cal: "mes" }),
     );
     expect(pageData.getTareasFacets).not.toHaveBeenCalled();
     // The previous chips stay while the next bundle loads.
@@ -384,7 +411,7 @@ describe("TareasClient filters", () => {
     const box = screen.getByRole("textbox", { name: "Buscar tareas" }) as HTMLInputElement;
     expect(box.value).toBe("renders");
     navigation.search = "";
-    rerender(<TareasClient />);
+    rerender(styled(<TareasClient />));
     expect(box.value).toBe("");
     expect(replaceState).not.toHaveBeenCalled();
     expect(navigation.replace).not.toHaveBeenCalled();
@@ -392,26 +419,33 @@ describe("TareasClient filters", () => {
 });
 
 describe("TareasClient view switch", () => {
-  it("links the three views, keeps the filters and marks the active one with aria-current", () => {
-    renderClient({ vista: "lista", tramo: "presale", responsable: "yo", cal: "semana" });
-    const nav = screen.getByRole("navigation", { name: "Vista" });
-    const links = within(nav).getAllByRole("link");
-    expect(links.map((l) => l.textContent)).toEqual(["Tablero", "Lista", "Calendario"]);
-    expect(links.map((l) => l.getAttribute("href"))).toEqual([
-      "/tareas?cal=semana&tramo=presale&responsable=yo",
-      "/tareas?vista=lista&cal=semana&tramo=presale&responsable=yo",
-      "/tareas?vista=calendario&cal=semana&tramo=presale&responsable=yo",
-    ]);
-    expect(links[1].getAttribute("aria-current")).toBe("page");
-    expect(links[0].hasAttribute("aria-current")).toBe(false);
-    expect(links[2].hasAttribute("aria-current")).toBe(false);
+  it("renders no Vista switch", () => {
+    for (const vista of ["tablero", "lista", "calendario"] as const) {
+      renderClient({ vista, tramo: "presale" });
+      expect(screen.queryByRole("navigation", { name: "Vista" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Tablero" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Lista" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Calendario" })).toBeNull();
+      cleanup();
+    }
   });
 
-  it("switches the view with history.pushState (back returns to it), no server render", () => {
-    renderClient({ vista: "lista", tramo: "presale" });
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Vista" })).getByRole("link", { name: "Tablero" }));
-    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?tramo=presale");
-    expect(navigation.push).not.toHaveBeenCalled();
+  it("still accepts ?vista= in the URL", () => {
+    navigation.search = "vista=lista&tramo=presale";
+    const client = createTestQueryClient();
+    seed(client, parseTareasQuery(new URLSearchParams(navigation.search)), FACETS);
+    renderWithQueryClient(styled(<TareasClient />), { client });
+    expect(screen.getByTestId("view-lista")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Tareas" })).toBeTruthy();
+    cleanup();
+
+    // An unknown value falls back to the default view instead of failing.
+    navigation.search = "vista=kanban";
+    const other = createTestQueryClient();
+    seed(other, parseTareasQuery(new URLSearchParams(navigation.search)), FACETS);
+    renderWithQueryClient(styled(<TareasClient />), { client: other });
+    expect(screen.getByTestId("view-tablero")).toBeTruthy();
+    expect(pushState).not.toHaveBeenCalled();
   });
 
   it("renders the selected view with its description", () => {
@@ -426,6 +460,24 @@ describe("TareasClient view switch", () => {
     expect(screen.getByTestId("view-calendario")).toBeTruthy();
     expect(screen.getByText("Descripción calendario")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Tareas" })).toBeTruthy();
+  });
+});
+
+describe("TareasClient per style", () => {
+  it("Visual renders the team board with the query, facets, search and the header actions", () => {
+    style = "visual";
+    renderClient({ tramo: "presale" });
+    const visual = screen.getByTestId("view-visual");
+    expect(visual.getAttribute("data-props")).toBe("actions,empty,facets,onQuery,onSearch,query,search,tramos");
+    expect(within(visual).getByRole("button", { name: "Nueva tarea" })).toBeTruthy();
+    expect(screen.queryByTestId("view-tablero")).toBeNull();
+    expect(pageData.getTareasPageData).not.toHaveBeenCalled();
+  });
+
+  it("Esencial renders its own layout", () => {
+    style = "esencial";
+    renderClient();
+    expect(screen.getByTestId("view-esencial")).toBeTruthy();
   });
 });
 

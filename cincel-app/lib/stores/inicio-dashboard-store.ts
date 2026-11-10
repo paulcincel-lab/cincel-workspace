@@ -14,8 +14,24 @@ import type { PresentationStyle } from "@/lib/types/redesign";
  * only. The active style is never stored: `views` keeps the user's overrides
  * per style and each widget keeps its own per-style fallback.
  */
-export type InicioWidget = "kpis" | "tramoDonut" | "weeklyPace" | "attention" | "myDay" | "projectsProgress" | "workload";
-export type InicioKpiKey = "proyectos_activos" | "vencidas" | "bloqueadas" | "revisiones_7d" | "completadas_semana";
+export type InicioWidget =
+  | "kpis"
+  | "tramoDonut"
+  | "weeklyPace"
+  | "attention"
+  | "myDay"
+  | "projectsProgress"
+  | "workload"
+  | "hero"
+  | "todayAgenda";
+export type InicioKpiKey =
+  | "proyectos_activos"
+  | "vencidas"
+  | "bloqueadas"
+  | "revisiones_7d"
+  | "completadas_semana"
+  | "abiertas"
+  | "horas_semana";
 
 /** Every Inicio widget id; stored keys of other ids are dropped on rehydrate. */
 export const INICIO_WIDGETS: readonly InicioWidget[] = [
@@ -26,6 +42,8 @@ export const INICIO_WIDGETS: readonly InicioWidget[] = [
   "myDay",
   "projectsProgress",
   "workload",
+  "hero",
+  "todayAgenda",
 ];
 
 /** Series of "Ritmo semanal" (`WeeklyPaceChart`). */
@@ -46,6 +64,8 @@ export const INICIO_KPI_KEYS: readonly InicioKpiKey[] = [
   "bloqueadas",
   "revisiones_7d",
   "completadas_semana",
+  "abiertas",
+  "horas_semana",
 ];
 
 const KPI_KEY_SET: ReadonlySet<string> = new Set(INICIO_KPI_KEYS);

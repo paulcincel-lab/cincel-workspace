@@ -13,6 +13,7 @@ import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import {
   INICIO_KPI,
   INICIO_KPI_DAYS,
+  INICIO_KPI_OWN_HOURS_LABEL,
   averageAgeByKey,
   byTramoOrder,
   completedInWeek,
@@ -36,6 +37,16 @@ import {
   tramoCountsLine,
   tramoSplit,
 } from "@/lib/dashboard/inicio";
+import {
+  attentionProgress,
+  dominantTramoByStaff,
+  horasSemanaKpi,
+  inicioHero,
+  openShiftsOf,
+  projectTeam,
+  scopedStaffIds,
+  todayAgendaItems,
+} from "@/lib/dashboard/inicio-visual";
 import { TASK_TREND_TIME_ZONE, bucketTaskTrend, localIsoDate, taskTrendQueryWindow } from "@/lib/dashboard/task-trend";
 import { db } from "@/lib/db/client";
 import { dailySeries, kpiFromDaily } from "@/lib/metrics/series";
@@ -47,6 +58,9 @@ import * as projectsRepository from "@/lib/repositories/projects-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import { isTaskClosed } from "@/lib/tasks/status-options";
+import { mondayOf } from "@/lib/time-tracking/local-time";
+import { getTimeTrackingSettings } from "@/lib/time-tracking/settings";
+import { weekHours } from "@/lib/time-tracking/week-hours";
 import { canSeeAdminData, tramoColorVar } from "@/lib/tramos/compat";
 import type { TaskKind } from "@/lib/types/core";
 import type { InicioData } from "@/lib/types/redesign";
@@ -95,9 +109,17 @@ export async function loadInicioPage(user: AuthenticatedUser): Promise<InicioPag
  * `weeklyPace` and `completadas_semana` use the "Avance de tareas" source,
  * which never counts admin tasks (BE §8.8). `plan` / `budgetPct` stay null
  * until a plan source exists.
+ *
+ * Inicio Visual (#989) adds `hero`, `openShifts` (null without
+ * `sections.showTeamWorkload`), `todayAgenda`, the `abiertas` and
+ * `horas_semana` KPIs (the viewer's own hours without team access), the
+ * attention subtask progress and the project open / overdue / delivery /
+ * team fields.
  */
 export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
-  const { dataScope } = resolveDashboardCapabilities(user);
+  const { dataScope, sections } = resolveDashboardCapabilities(user);
+  // Open shifts and the team's hours need the team workload section (#989).
+  const showTeam = sections.showTeamWorkload;
   const viewerId = user.member.id;
   const isAdmin = canSeeAdminData(user);
   const viewer = { ...viewerScopeOf(user), isAdmin };
@@ -113,7 +135,17 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
   const trendWindow = taskTrendQueryWindow(weeks);
   const kinds: TaskKind[] = isAdmin ? ["workflow", "usuario", "admin"] : ["workflow", "usuario"];
 
-  const [allTasks, allProjects, trendSource, taskEvents, projectEvents, staff, reminders] = await Promise.all([
+  const [
+    allTasks,
+    allProjects,
+    trendSource,
+    taskEvents,
+    projectEvents,
+    staff,
+    reminders,
+    openShiftIds,
+    hoursSettings,
+  ] = await Promise.all([
     tasksRepository.listTaskRows({ archived: false, kind: kinds }, viewer),
     projectsRepository.listProjects({}, viewer),
     tasksRepository.listTaskTrendSource(trendWindow.from, trendWindow.to),
@@ -121,6 +153,8 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
     inicioRepository.listStatusEvents("project", historySince),
     staffRepository.listStaff(),
     remindersForDay(db, viewerId, today),
+    showTeam ? inicioRepository.listOpenShiftStaffIds(today) : Promise.resolve(null),
+    getTimeTrackingSettings(),
   ]);
 
   // Scope (same rules as the dashboard); non-admins never get admin tasks.
@@ -148,14 +182,32 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
   const activeProjects = scopedProjects.filter((p) => p.status === "activo");
   const tramoOfTask = (t: (typeof tasks)[number]) => t.workflow?.key ?? null;
 
+  // Horas esta semana: the scope's staff with team access, else the viewer's own hours.
+  const staffById = new Map(staff.map((s) => [s.id, s]));
+  const staffInScope = scopedStaffIds(dataScope, { viewerId, staff, tasks: openTasks, projects: scopedProjects });
+  const hoursStaff = showTeam ? staffInScope : [viewerId];
+  const weekStart = mondayOf(today);
+
   // ── KPIs ──
   const daily = (countOn: (day: string) => number) => dailySeries(inMemoryCounter(countOn), INICIO_KPI_DAYS, now, tz);
-  const [projectsDaily, overdueDaily, blockedDaily, reviewsDaily, completedDaily] = await Promise.all([
+  const [
+    projectsDaily,
+    overdueDaily,
+    blockedDaily,
+    reviewsDaily,
+    completedDaily,
+    openDaily,
+    thisWeekHours,
+    lastWeekHours,
+  ] = await Promise.all([
     daily((day) => scopedProjects.filter((p) => projectActiveOn(projectStatusAt, p, day, tz)).length),
     daily((day) => tasks.filter((t) => state.overdue(t, day)).length),
     daily((day) => tasks.filter((t) => state.blocked(t, day)).length),
     daily((day) => tasks.filter((t) => state.reviewDue(t, day)).length),
     daily((day) => completedInWeek(completions, day, tz)),
+    daily((day) => tasks.filter((t) => state.open(t, day)).length),
+    weekHours(db, hoursStaff, weekStart, hoursSettings),
+    weekHours(db, hoursStaff, shiftIsoDate(weekStart, -7), hoursSettings),
   ]);
 
   const kpis: KpiDatum[] = [
@@ -200,6 +252,26 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
       caption: "últimos 7 días",
       visibleIn: ["analitico"],
     },
+    {
+      ...kpiFromDaily(INICIO_KPI.abiertas.key, INICIO_KPI.abiertas.label, openDaily, {
+        goodWhen: "down",
+        href: INICIO_KPI.abiertas.href,
+      }),
+      split: tramoSplit(openTasks, tramoOfTask),
+      caption: tramoConcentrationLine(openTasks, taskTramoGroup, KPI_CONTEXT.noOpen),
+      visibleIn: ["visual", "analitico"],
+    },
+    {
+      ...horasSemanaKpi({
+        key: INICIO_KPI.horasSemana.key,
+        label: showTeam ? INICIO_KPI.horasSemana.label : INICIO_KPI_OWN_HOURS_LABEL,
+        href: INICIO_KPI.horasSemana.href,
+        thisWeek: thisWeekHours.values(),
+        lastWeek: lastWeekHours.values(),
+        today,
+      }),
+      visibleIn: ["visual"],
+    },
   ];
 
   // ── Tareas abiertas por tramo: value = open, secondary = overdue, extra = { diasProm } ──
@@ -221,7 +293,11 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
   }));
 
   // ── Requiere atención ──
-  const attention = toAttentionItems(openTasks, now);
+  const openById = new Map(openTasks.map((t) => [t.id, t]));
+  const attention = toAttentionItems(openTasks, now).map((item) => {
+    const task = openById.get(item.id);
+    return task ? { ...item, ...attentionProgress(task) } : item;
+  });
 
   // ── Mi día: the caller's events and tasks of today, plus their reminders ──
   const mine = openTasks.filter((t) => involves(t, viewerId));
@@ -229,15 +305,45 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
 
   // ── Avance de proyectos activos (budgetPct is admin-only) ──
   const portfolio = inicioPortfolioRows(activeProjects, tasks, today, (t, day) => state.open(t, day));
-  const projectsProgress = toProgressItems(activeProjects, portfolio).map((item) =>
-    isAdmin ? item : { ...item, budgetPct: null }
-  );
+  const tramoByStaff = dominantTramoByStaff(openTasks);
+  const rowById = new Map(portfolio.map((row) => [row.projectId, row]));
+  const projectById = new Map(activeProjects.map((p) => [p.id, p]));
+  const openByProject = new Map<string, typeof openTasks>();
+  for (const task of openTasks) openByProject.set(task.projectId, [...(openByProject.get(task.projectId) ?? []), task]);
+  const projectsProgress = toProgressItems(activeProjects, portfolio).map((item) => {
+    const row = rowById.get(item.id);
+    const project = projectById.get(item.id);
+    return {
+      ...item,
+      ...(isAdmin ? {} : { budgetPct: null }),
+      open: row?.open ?? 0,
+      overdue: row?.overdue ?? 0,
+      deliveryDate: project?.endDate ?? null,
+      team: project ? projectTeam(project, openByProject.get(item.id) ?? [], tramoByStaff) : [],
+    };
+  });
 
   // ── Carga por persona ──
-  const staffById = new Map(staff.map((s) => [s.id, s]));
   const workload = inicioWorkloadRows(staff, tasks, today).map((row) => toPersonDatum(staffById.get(row.staffId)!, row));
 
-  return { kpis, tasksByTramo, weeklyPace, attention, myDay, projectsProgress, workload };
+  // ── Inicio Visual (#989): hero, open shifts, today's agenda ──
+  const hero = inicioHero(openTasks, overdueToday, today);
+  const openShifts =
+    showTeam && openShiftIds ? openShiftsOf(openShiftIds, new Set(staffInScope), staffById, tramoByStaff) : null;
+  const todayAgenda = todayAgendaItems(openTasks, today, tz);
+
+  return {
+    kpis,
+    tasksByTramo,
+    weeklyPace,
+    attention,
+    myDay,
+    projectsProgress,
+    workload,
+    hero,
+    openShifts,
+    todayAgenda,
+  };
 }
 
 /** The "Avance de tareas" source limited to the caller's dashboard scope. */

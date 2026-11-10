@@ -20,6 +20,8 @@ const ALL_TOKENS: TokenName[] = [
   "border", "border-strong", "input", "ring",
   "chart-1", "chart-2", "chart-3", "chart-4", "chart-5",
   "chart-1-ink", "chart-2-ink", "chart-3-ink", "chart-4-ink", "chart-5-ink",
+  "tint-primary", "tint-violet", "tint-warning", "tint-cyan", "tint-destructive", "tint-success",
+  "destructive-ink", "foreground-soft",
   "sidebar", "sidebar-foreground", "sidebar-primary", "sidebar-primary-foreground",
   "sidebar-accent", "sidebar-accent-foreground", "sidebar-border", "sidebar-ring",
 ];

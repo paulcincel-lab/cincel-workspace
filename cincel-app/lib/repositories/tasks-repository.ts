@@ -21,7 +21,7 @@ import {
 import { closedAtPatch } from "@/lib/project-flow/closing";
 import { flowError } from "@/lib/project-flow/errors";
 import { completionsFromStatusEvents } from "@/lib/dashboard/task-trend";
-import { assertAdminAssignees } from "@/lib/project-flow/admin-tasks";
+import { assertAdminAssignees, todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import type { AdminTaskFilters } from "@/lib/validation/project-flow";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
 import { assertSpaceInProject } from "@/lib/repositories/project-spaces-repository";
@@ -29,6 +29,18 @@ import { assertPhaseInWorkflow } from "@/lib/repositories/workflow-phases-reposi
 import { underlyingStatus } from "@/lib/repositories/task-statuses-repository";
 import { UNSCOPED_VIEWER, scopeTaskDto } from "@/lib/auth/viewer-scope";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
+import {
+  EMPTY_SUMMARY_COUNTS,
+  SIN_TRAMO_LABEL,
+  SIN_TRAMO_SORT,
+  compareSummaryProjects,
+  compareSummaryTramos,
+  type TareasSummary,
+  type TareasSummaryCounts,
+  type TareasSummaryProject,
+  type TareasSummaryUnfilteredProject,
+  summaryTramoKey,
+} from "@/lib/tareas/summary";
 import type {
   AdminTaskInput,
   HistoryEvent,
@@ -302,6 +314,36 @@ function kindCondition(kind: TaskFilters["kind"], viewer: ViewerScope) {
   return ne(tasks.kind, "admin");
 }
 
+/** Today in the org time zone (America/Mexico_City), or the given `YYYY-MM-DD`. */
+function todaySql(today?: string): SQL {
+  return today ? sql`${today}::date` : sql`(now() at time zone 'America/Mexico_City')::date`;
+}
+
+/** A task's due date (`taskDueDate`): commitment, then delivery. */
+function taskDueSql(): SQL {
+  return sql`coalesce(${tasks.commitmentDate}, ${tasks.deliveryDate})`;
+}
+
+/**
+ * Open: not completado and not in a live custom status that closes. A
+ * subquery, so it holds whatever the statement joins.
+ */
+function openTaskSql(): SQL {
+  return sql`(${tasks.status} <> 'completado' and not exists (select 1 from core.task_statuses ts_open where ts_open.id = ${tasks.customStatusId} and ts_open.deleted_at is null and ts_open.closes))`;
+}
+
+/** Open and due before today. */
+function overdueTaskSql(today?: string): SQL {
+  return sql`(${openTaskSql()} and ${taskDueSql()} < ${todaySql(today)})`;
+}
+
+/** The Tareas "Mostrar" filter: abiertas = open; en_retraso = open and overdue. */
+function mostrarCondition(mostrar: TaskFilters["mostrar"], today?: string): SQL | undefined {
+  if (mostrar === "abiertas") return openTaskSql();
+  if (mostrar === "en_retraso") return overdueTaskSql(today);
+  return undefined;
+}
+
 function whereFilters(f: TaskFilters, viewer: ViewerScope) {
   const statuses = f.status ? (Array.isArray(f.status) ? f.status : [f.status]) : undefined;
   return and(
@@ -310,6 +352,7 @@ function whereFilters(f: TaskFilters, viewer: ViewerScope) {
     f.archived === undefined ? eq(tasks.archived, false) : eq(tasks.archived, f.archived),
     f.projectId ? eq(tasks.projectId, f.projectId) : undefined,
     f.workflowId ? eq(tasks.workflowId, f.workflowId) : undefined,
+    f.withoutWorkflow ? isNull(tasks.workflowId) : undefined,
     f.phaseId ? eq(tasks.phaseId, f.phaseId) : undefined,
     f.spaceId ? eq(tasks.spaceId, f.spaceId) : undefined,
     kindCondition(f.kind, viewer),
@@ -327,7 +370,8 @@ function whereFilters(f: TaskFilters, viewer: ViewerScope) {
     f.dateTo
       ? or(lte(tasks.commitmentDate, f.dateTo), lte(tasks.reviewDate, f.dateTo), lte(tasks.deliveryDate, f.dateTo))
       : undefined,
-    f.search ? searchMatch(f.search) : undefined
+    f.search ? searchMatch(f.search) : undefined,
+    mostrarCondition(f.mostrar, f.today)
   );
 }
 
@@ -681,25 +725,88 @@ function rankedBoardSubquery(filters: TaskFilters, viewer: ViewerScope) {
 
 export type TaskRowsPage = { rows: TaskListRow[]; nextCursor: string | null; total: number };
 
+// ── "retraso" order (Tareas Analítico, #988) ────────────────────────────────
+
+/** Keyset of the "retraso" order: rank (0 overdue, 1 open, 2 closed), due date (nulls last), id. */
+type TaskRetrasoSortKey = ["r", number, string, string];
+
+/** The "retraso" order's keys as SQL: overdue first, then open, then closed; each by due date, then id. */
+function retrasoSortExpressions(today?: string): SQL[] {
+  return [
+    sql`(case when ${overdueTaskSql(today)} then 0 when ${openTaskSql()} then 1 else 2 end)`,
+    sql`coalesce(${taskDueSql()}, ${sql.raw(`'${DATE_LAST}'::date`)})`,
+    sql`${tasks.id}`,
+  ];
+}
+
+/** Rows strictly after the cursor in the "retraso" order. */
+function afterRetrasoCursor(key: TaskRetrasoSortKey, today?: string): SQL {
+  const [, rank, due, id] = key;
+  return sql`(${sql.join(retrasoSortExpressions(today), sql`, `)}) > (${rank}::int, ${due}::date, ${id}::uuid)`;
+}
+
+/** The "retraso" sort key of a row, as the SQL computes it (`today` in the org time zone). */
+function retrasoSortKey(row: TaskListItem, today: string): TaskRetrasoSortKey {
+  const due = row.commitmentDate ?? row.deliveryDate ?? null;
+  const closed = row.status === "completado" || Boolean(row.customStatus?.closes);
+  const rank = closed ? 2 : due !== null && due < today ? 0 : 1;
+  return ["r", rank, due ?? DATE_LAST, row.id];
+}
+
+/** A cursor of the "retraso" order; anything else is INVALID. */
+function decodeRetrasoCursor(cursor: string): TaskRetrasoSortKey {
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("INVALID: cursor");
+  }
+  const ok =
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value[0] === "r" &&
+    Number.isInteger(value[1]) &&
+    typeof value[2] === "string" &&
+    ISO_DATE_RE.test(value[2]) &&
+    typeof value[3] === "string" &&
+    UUID_RE.test(value[3]);
+  if (!ok) throw new Error("INVALID: cursor");
+  return value as TaskRetrasoSortKey;
+}
+
 /**
- * One page of slim rows (`TaskListRow`) in a stable keyset order (tramo,
- * fase, manual order, commitment date, id; nulls last), with the total that
- * match the filters. `cursor` is the previous page's `nextCursor`; null when
- * there is no further page. Aggregates come from the same statement, so only
- * the page's tasks are read. `orderBy` has one value today: the board/list order.
+ * One page of slim rows (`TaskListRow`) in a stable keyset order, with the
+ * total that match the filters. `cursor` is the previous page's
+ * `nextCursor`; null when there is no further page. Aggregates come from the
+ * same statement, so only the page's tasks are read.
+ *
+ * `orderBy`:
+ * - "tramo" (default): the board/list order (tramo, fase, manual order,
+ *   commitment date, id; nulls last);
+ * - "retraso" (Tareas Analítico): overdue tasks first by due date (most days
+ *   late first), then the open ones by due date, then the closed ones; the
+ *   due date is `coalesce(commitment, delivery)` and today is `filters.today`
+ *   or today in America/Mexico_City.
  */
 export async function listTasksPage(
   filters: TaskFilters,
   viewer: ViewerScope,
-  opts: { cursor: string | null; limit: number; orderBy?: "tramo"; columnKey?: string }
+  opts: { cursor: string | null; limit: number; orderBy?: "tramo" | "retraso"; columnKey?: string }
 ): Promise<TaskRowsPage> {
   const limit = Math.max(1, Math.floor(opts.limit));
-  const rows = await selectTaskList(filters, viewer, true, {
-    where: and(
-      opts.cursor ? afterCursor(decodeTaskCursor(opts.cursor)) : undefined,
-      opts.columnKey ? sql`${boardColumnKey()} = ${opts.columnKey}` : undefined
-    ),
-    orderBy: pageOrderBy(),
+  const retraso = opts.orderBy === "retraso";
+  const today = filters.today ?? todayInAppTimeZone();
+  let after: SQL | undefined;
+  if (opts.cursor) {
+    after = retraso
+      ? afterRetrasoCursor(decodeRetrasoCursor(opts.cursor), today)
+      : afterCursor(decodeTaskCursor(opts.cursor));
+  }
+  // One "today" for the order and the Mostrar filter.
+  const f: TaskFilters = retraso ? { ...filters, today } : filters;
+  const rows = await selectTaskList(f, viewer, true, {
+    where: and(after, opts.columnKey ? sql`${boardColumnKey()} = ${opts.columnKey}` : undefined),
+    orderBy: retraso ? retrasoSortExpressions(today).map((e) => sql`${e} asc`) : pageOrderBy(),
     limit: limit + 1,
     withTotal: true,
   });
@@ -707,12 +814,14 @@ export async function listTasksPage(
   const last = pageRows.at(-1);
   // With a cursor, `count(*) over ()` counts only the rows after it: the total is the rows before plus those.
   let total = rows[0]?.pageTotal ?? 0;
-  if (opts.cursor) total = await countTasksMatching(filters, viewer, opts.columnKey);
-  return {
-    rows: pageRows.map(toTaskListRow),
-    nextCursor: rows.length > limit && last ? encodeTaskCursor(last.sortKey) : null,
-    total,
-  };
+  if (opts.cursor) total = await countTasksMatching(f, viewer, opts.columnKey);
+  let nextCursor: string | null = null;
+  if (rows.length > limit && last) {
+    nextCursor = retraso
+      ? Buffer.from(JSON.stringify(retrasoSortKey(last.item, today)), "utf8").toString("base64url")
+      : encodeTaskCursor(last.sortKey);
+  }
+  return { rows: pageRows.map(toTaskListRow), nextCursor, total };
 }
 
 /** COUNT(*) of the tasks matching the filters (and the board column). */
@@ -776,6 +885,10 @@ export type TaskFacets = {
   total: number;
   byTramo: Record<string, number>;
   projects: { id: string; name: string; count: number }[];
+  /** "Mostrar" counts: the tasks in the selected tramo and project with each choice (they ignore `mostrar`). */
+  mostrar?: { todas: number; abiertas: number; en_retraso: number };
+  /** The tasks in that scope the viewer manages. */
+  mine?: number;
 };
 
 /**
@@ -794,13 +907,20 @@ export async function taskFacets(
   viewer: ViewerScope,
   scope: { workflowKey: string | null; projectId: string | null } = { workflowKey: null, projectId: null }
 ): Promise<TaskFacets> {
-  const base: TaskFilters = { ...filters, workflowId: undefined, projectId: undefined };
+  const base: TaskFilters = { ...filters, workflowId: undefined, projectId: undefined, mostrar: undefined };
+  const shown = mostrarCondition(filters.mostrar, filters.today);
   const groups = await db
     .select({
       workflowKey: workflows.key,
       projectId: tasks.projectId,
       projectName: projects.name,
-      count: sql<number>`count(*)::int`,
+      count: shown ? sql<number>`(count(*) filter (where ${shown}))::int` : sql<number>`count(*)::int`,
+      all: sql<number>`count(*)::int`,
+      open: sql<number>`(count(*) filter (where ${openTaskSql()}))::int`,
+      overdue: sql<number>`(count(*) filter (where ${overdueTaskSql(filters.today)}))::int`,
+      mine: viewer.staffId
+        ? sql<number>`(count(*) filter (where ${shown ?? sql`true`} and ${tasks.managerId} = ${viewer.staffId}))::int`
+        : sql<number>`0`,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -811,23 +931,33 @@ export async function taskFacets(
     .groupBy(tasks.workflowId, workflows.key, tasks.projectId, projects.name);
 
   let total = 0;
+  let mine = 0;
   const byTramo: Record<string, number> = {};
+  const mostrar = { todas: 0, abiertas: 0, en_retraso: 0 };
   const projectCounts = new Map<string, { id: string; name: string; count: number }>();
   for (const g of groups) {
     const count = Number(g.count);
-    if (scope.projectId === null || g.projectId === scope.projectId) {
+    const inProject = scope.projectId === null || g.projectId === scope.projectId;
+    const inTramo = scope.workflowKey === null || g.workflowKey === scope.workflowKey;
+    if (inProject) {
       total += count;
       if (g.workflowKey) byTramo[g.workflowKey] = (byTramo[g.workflowKey] ?? 0) + count;
     }
-    const inTramo = scope.workflowKey === null || g.workflowKey === scope.workflowKey;
-    if (inTramo || g.projectId === scope.projectId) {
+    if (inProject && inTramo) {
+      mostrar.todas += Number(g.all);
+      mostrar.abiertas += Number(g.open);
+      mostrar.en_retraso += Number(g.overdue);
+      mine += Number(g.mine);
+    }
+    // A project the Mostrar choice leaves without tasks drops out of the options (the selected one stays).
+    if ((inTramo && count > 0) || g.projectId === scope.projectId) {
       const entry = projectCounts.get(g.projectId) ?? { id: g.projectId, name: g.projectName, count: 0 };
       if (inTramo) entry.count += count;
       projectCounts.set(g.projectId, entry);
     }
   }
   const projectsOut = [...projectCounts.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
-  return { total, byTramo, projects: projectsOut };
+  return { total, byTramo, projects: projectsOut, mostrar, mine };
 }
 
 /**
@@ -1745,5 +1875,226 @@ export async function listTaskTrendSource(
       support: support.get(r.id) ?? [],
     })),
     completions: events.filter((e) => liveIds.has(e.taskId)),
+  };
+}
+
+export type TaskDueDay = { date: string; due: number; tramoKey: string | null };
+
+/**
+ * Tareas Visual "Esta semana": the open tasks matching `filters` whose due
+ * date (`coalesce(commitment_date, delivery_date)`) falls in `[from, to]`,
+ * per day, with the tramo most of them are in (`mode()` over
+ * `workflows.key`, null when none has a tramo). Open = not `completado` and
+ * not in a live custom status that closes. Days with no task are left out.
+ */
+export async function taskDueByDay(
+  filters: TaskFilters,
+  viewer: ViewerScope,
+  range: { from: string; to: string }
+): Promise<TaskDueDay[]> {
+  const due = sql`coalesce(${tasks.commitmentDate}, ${tasks.deliveryDate})`;
+  const rows = await db
+    .select({
+      date: sql<string>`(${due})::text`,
+      due: sql<number>`count(*)::int`,
+      tramoKey: sql<string | null>`mode() within group (order by ${workflows.key})`,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
+    .where(
+      and(
+        whereFilters(filters, viewer),
+        ne(tasks.status, "completado"),
+        sql`coalesce(${taskStatuses.closes}, false) = false`,
+        sql`${due} between ${range.from}::date and ${range.to}::date`
+      )
+    )
+    .groupBy(due)
+    .orderBy(due);
+  return rows.map((r) => ({ date: r.date, due: Number(r.due), tramoKey: r.tramoKey ?? null }));
+}
+
+export type TaskProjectCounts = { projectId: string; projectName: string; open: number; overdue: number; completed: number };
+
+/**
+ * Tareas Esencial card counts (`qk.tareas.byProject`), one `GROUP BY
+ * project` over the tasks matching `filters` without `mostrar`: the open
+ * ones, the open ones due before `today` (`coalesce(commitment_date,
+ * delivery_date)`, America/Mexico_City by default) and the closed ones.
+ * Open = not `completado` and not in a live custom status that closes.
+ * Projects with no matching task are left out.
+ */
+export async function taskProjectCounts(
+  filters: TaskFilters,
+  viewer: ViewerScope,
+  today: string = todayInAppTimeZone()
+): Promise<TaskProjectCounts[]> {
+  const base: TaskFilters = { ...filters, mostrar: undefined };
+  const open = openTaskSql();
+  const rows = await db
+    .select({
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      open: sql<number>`(count(*) filter (where ${open}))::int`,
+      overdue: sql<number>`(count(*) filter (where ${overdueTaskSql(today)}))::int`,
+      completed: sql<number>`(count(*) filter (where not ${open}))::int`,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .where(whereFilters(base, viewer))
+    .groupBy(tasks.projectId, projects.name);
+  return rows.map((r) => ({
+    projectId: r.projectId,
+    projectName: r.projectName,
+    open: Number(r.open),
+    overdue: Number(r.overdue),
+    completed: Number(r.completed),
+  }));
+}
+
+// ── Tareas Analítico summary (#988) ─────────────────────────────────────────
+
+/** The five counts of a summary row (`TareasSummaryCounts`) over the rows of its group. */
+function summaryCountColumns(today: string) {
+  const overdue = overdueTaskSql(today);
+  return {
+    total: sql<number>`count(*)::int`,
+    open: sql<number>`(count(*) filter (where ${openTaskSql()}))::int`,
+    overdue: sql<number>`(count(*) filter (where ${overdue}))::int`,
+    blocked: sql<number>`(count(*) filter (where ${tasks.status} = 'bloqueado'))::int`,
+    daysLateSum: sql<number>`(coalesce(sum(${todaySql(today)} - ${taskDueSql()}) filter (where ${overdue}), 0))::int`,
+  };
+}
+
+function summaryCounts(r: { total: number; open: number; overdue: number; blocked: number; daysLateSum: number }): TareasSummaryCounts {
+  return {
+    total: Number(r.total),
+    open: Number(r.open),
+    overdue: Number(r.overdue),
+    blocked: Number(r.blocked),
+    daysLateSum: Number(r.daysLateSum),
+  };
+}
+
+/**
+ * Tareas Analítico counts (`qk.tareas.summary(f)`) in one statement:
+ * `GROUP BY GROUPING SETS ((project, tramo), (project), ())`, with
+ * `grouping()` telling the levels apart. Open = not completado and no
+ * closing custom status; overdue = open and `coalesce(commitment_date,
+ * delivery_date) < today` (`today` in America/Mexico_City, `YYYY-MM-DD`);
+ * `daysLateSum` adds `today - due` over the overdue tasks. Same viewer scope
+ * as the rows (`whereFilters`: admin tasks only for administrators who ask).
+ *
+ * `unfiltered` is the same filters without `mostrar` (one more grouped read,
+ * only when `mostrar` is set). Projects by overdue desc, then name; tramos by
+ * sort order with "Sin tramo" last.
+ */
+export async function taskSummary(filters: TaskFilters, viewer: ViewerScope, today: string): Promise<TareasSummary> {
+  const f: TaskFilters = { ...filters, today };
+  const counts = summaryCountColumns(today);
+  const grouped = db
+    .select({
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      workflowId: tasks.workflowId,
+      workflowKey: workflows.key,
+      workflowName: workflows.name,
+      workflowSortOrder: workflows.sortOrder,
+      projectLevel: sql<number>`grouping(${tasks.projectId})::int`,
+      tramoLevel: sql<number>`grouping(${tasks.workflowId})::int`,
+      ...counts,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    // The search matches fase and espacio names too.
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .where(whereFilters(f, viewer))
+    .groupBy(
+      sql`grouping sets ((${tasks.projectId}, ${projects.name}, ${tasks.workflowId}, ${workflows.key}, ${workflows.name}, ${workflows.sortOrder}), (${tasks.projectId}, ${projects.name}), ())`
+    );
+  const unfilteredQuery = f.mostrar
+    ? db
+        .select({
+          id: tasks.projectId,
+          name: projects.name,
+          workflowId: tasks.workflowId,
+          total: sql<number>`count(*)::int`,
+        })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+        .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+        .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+        .where(whereFilters({ ...f, mostrar: undefined }, viewer))
+        .groupBy(tasks.projectId, projects.name, tasks.workflowId)
+    : Promise.resolve(null);
+  const [rows, unfilteredRows] = await Promise.all([grouped, unfilteredQuery]);
+
+  let totals: TareasSummary["totals"] = { ...EMPTY_SUMMARY_COUNTS, projects: 0 };
+  const byProject = new Map<string, TareasSummaryProject>();
+  const projectOf = (id: string, name: string): TareasSummaryProject => {
+    let entry = byProject.get(id);
+    if (!entry) {
+      entry = { project: { id, name }, ...EMPTY_SUMMARY_COUNTS, tramos: [] };
+      byProject.set(id, entry);
+    }
+    return entry;
+  };
+  for (const r of rows) {
+    const c = summaryCounts(r);
+    if (Number(r.projectLevel) === 1) {
+      totals = { ...c, projects: 0 };
+      continue;
+    }
+    const entry = projectOf(r.projectId, r.projectName);
+    if (Number(r.tramoLevel) === 1) {
+      Object.assign(entry, c);
+      continue;
+    }
+    entry.tramos.push({
+      tramo: r.workflowId
+        ? { id: r.workflowId, key: r.workflowKey ?? null, name: r.workflowName ?? SIN_TRAMO_LABEL, sortOrder: r.workflowSortOrder ?? SIN_TRAMO_SORT }
+        : { id: null, key: null, name: SIN_TRAMO_LABEL, sortOrder: SIN_TRAMO_SORT },
+      ...c,
+    });
+  }
+  const projectsOut = [...byProject.values()].filter((p) => p.total > 0);
+  for (const p of projectsOut) p.tramos.sort(compareSummaryTramos);
+  projectsOut.sort(compareSummaryProjects);
+  totals.projects = projectsOut.length;
+
+  // Without `mostrar` the filtered set is the unfiltered one.
+  const sourceRows =
+    unfilteredRows ??
+    projectsOut.flatMap((p) =>
+      p.tramos.map((t) => ({ id: p.project.id, name: p.project.name, workflowId: t.tramo.id, total: t.total }))
+    );
+  const unfilteredById = new Map<string, TareasSummaryUnfilteredProject>();
+  for (const r of sourceRows) {
+    const entry = unfilteredById.get(r.id) ?? { id: r.id, name: r.name, total: 0, byTramo: {} };
+    const n = Number(r.total);
+    entry.total += n;
+    const key = summaryTramoKey(r.workflowId);
+    entry.byTramo[key] = (entry.byTramo[key] ?? 0) + n;
+    unfilteredById.set(r.id, entry);
+  }
+  const projectList = [...unfilteredById.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  return {
+    projects: projectsOut,
+    totals,
+    unfiltered: {
+      projects: projectList.length,
+      total: projectList.reduce((sum, p) => sum + p.total, 0),
+      projectList,
+    },
   };
 }

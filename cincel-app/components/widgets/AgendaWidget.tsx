@@ -388,6 +388,7 @@ const TRAMO_BLOCK: Record<TramoColorSlot, string> = {
   1: "border-l-[color:var(--chart-1)] bg-[color-mix(in_oklab,var(--chart-1)_14%,var(--card))] text-[color:var(--chart-1-ink,var(--foreground))] dark:bg-[color-mix(in_oklab,var(--chart-1)_22%,var(--card))]",
   2: "border-l-[color:var(--chart-2)] bg-[color-mix(in_oklab,var(--chart-2)_14%,var(--card))] text-[color:var(--chart-2-ink,var(--foreground))] dark:bg-[color-mix(in_oklab,var(--chart-2)_22%,var(--card))]",
   3: "border-l-[color:var(--chart-3)] bg-[color-mix(in_oklab,var(--chart-3)_14%,var(--card))] text-[color:var(--chart-3-ink,var(--foreground))] dark:bg-[color-mix(in_oklab,var(--chart-3)_22%,var(--card))]",
+  4: "border-l-[color:var(--chart-4)] bg-[color-mix(in_oklab,var(--chart-4)_14%,var(--card))] text-[color:var(--chart-4-ink,var(--foreground))] dark:bg-[color-mix(in_oklab,var(--chart-4)_22%,var(--card))]",
 };
 const NEUTRAL_BLOCK = "border-l-[color:var(--border-strong,var(--border))] bg-muted text-foreground";
 
@@ -395,6 +396,7 @@ const TRAMO_DOT: Record<TramoColorSlot, string> = {
   1: "bg-[color:var(--chart-1)]",
   2: "bg-[color:var(--chart-2)]",
   3: "bg-[color:var(--chart-3)]",
+  4: "bg-[color:var(--chart-4)]",
 };
 
 const FOCUS = "rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none";

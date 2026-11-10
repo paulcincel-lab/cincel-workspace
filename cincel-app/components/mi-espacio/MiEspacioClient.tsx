@@ -5,7 +5,6 @@ import { Bell, Lock } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo } from "react";
 
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -95,7 +94,6 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <PageHeader
-        estilo={false}
         title={MI_ESPACIO_TITLE}
         description={MI_ESPACIO_DESCRIPTION}
         badge={
@@ -104,7 +102,6 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
             {MI_ESPACIO_PRIVATE_CHIP}
           </Badge>
         }
-        actions={<EstiloSwitch />}
       />
 
       <QuickCapture />

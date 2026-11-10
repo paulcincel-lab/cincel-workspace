@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { tareasListFiltersOf, tareasPageKeyInputOf, tareasPageOptions } from "@/lib/query/options/tareas";
 import type { TareasListFilters } from "@/lib/query/keys";
 import { DEFAULT_TAREAS_QUERY, parseTareasQuery, type TareasQuery } from "@/lib/tareas/query";
+import { useStyle } from "@/components/shell/StyleProvider";
 
 /**
  * The `/tareas` query from the URL. Filters write it with
@@ -22,20 +23,22 @@ export function useTareasQuery(): TareasQuery {
 
 /** The filters of a query, stable while their values stay the same. */
 export function useTareasFilters(query: TareasQuery): TareasListFilters {
-  const { tramo, proyecto, responsable, estado, q } = query;
+  const { tramo, proyecto, responsable, estado, q, mostrar } = query;
   return useMemo(
-    () => tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, tramo, proyecto, responsable, estado, q }),
-    [tramo, proyecto, responsable, estado, q],
+    () => tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, tramo, proyecto, responsable, estado, q, mostrar }),
+    [tramo, proyecto, responsable, estado, q, mostrar],
   );
 }
 
 /**
- * The view's bundle (`qk.tareas.page(q)`), shared by every component of the
- * screen: one observer per component, one request per key (keys are hashed,
- * so a new input object for the same query is the same query).
+ * The layout's bundle (`qk.tareas.page(q)`, keyed by the current style, as
+ * the server prefetched it), shared by every component of the screen: one
+ * observer per component, one request per key (keys are hashed, so a new
+ * input object for the same query is the same query).
  */
 export function useTareasPage(query: TareasQuery) {
-  return useQuery(tareasPageOptions(tareasPageKeyInputOf(query)));
+  const { style } = useStyle();
+  return useQuery(tareasPageOptions(tareasPageKeyInputOf(query, style)));
 }
 
 /**

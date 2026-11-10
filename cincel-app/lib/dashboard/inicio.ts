@@ -40,7 +40,12 @@ export const INICIO_KPI = {
   bloqueadas: { key: "bloqueadas", label: "Bloqueadas", href: "/tareas?vista=lista&estado=bloqueado" },
   revisiones: { key: "revisiones_7d", label: "Revisiones · 7 días", href: "/tareas?vista=calendario&cal=semana" },
   completadas: { key: "completadas_semana", label: "Completadas · semana", href: "/tareas?vista=lista&estado=completado" },
+  abiertas: { key: "abiertas", label: "Tareas abiertas", href: "/tareas" },
+  horasSemana: { key: "horas_semana", label: "Horas esta semana", href: "/mi-espacio" },
 } as const;
+
+/** The "Horas esta semana" label for a viewer without team workload access (their own hours). */
+export const INICIO_KPI_OWN_HOURS_LABEL = "Mis horas esta semana";
 
 // ── Dates ───────────────────────────────────────────────────────────────────
 
@@ -240,6 +245,7 @@ export const KPI_CONTEXT = {
   noOverdue: "Nada vencido hoy",
   noBlocked: "Nada bloqueado hoy",
   noReview: "Próxima revisión sin agendar",
+  noOpen: "Sin tareas abiertas",
 } as const;
 
 /** A tramo group of a KPI context line, ordered by `rank`, then label. */

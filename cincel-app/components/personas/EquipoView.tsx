@@ -7,7 +7,6 @@ import { AvailabilityWeek } from "@/components/personas/AvailabilityWeek";
 import { PersonasTabs, type PersonasTab } from "@/components/personas/PersonasTabs";
 import { TeamGrid } from "@/components/personas/TeamGrid";
 import { EmptyState } from "@/components/shell/EmptyState";
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Button } from "@/components/ui/shadcn/button";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
@@ -43,7 +42,7 @@ export function PersonasEquipoScreen() {
 }
 
 /**
- * Personas · Equipo (redesign FE §3.6): header + `EstiloSwitch` + tabs, the
+ * Personas · Equipo (redesign FE §3.6): header (with the Estilo switch) + tabs, the
  * "Disponibilidad esta semana" widget and the team cards. Every style
  * difference lives in the people widgets; this view only composes them.
  * "Agregar persona" opens the existing collaborator editor, which saves with
@@ -61,15 +60,9 @@ export function EquipoView({ people, emails, counts, canCreate }: EquipoViewProp
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        estilo={false}
         title={PERSONAS_TITLE}
         description={PERSONAS_DESCRIPTION}
-        actions={
-          <>
-            <EstiloSwitch />
-            {canCreate ? <Button onClick={editor.openAddEditor}>Agregar persona</Button> : null}
-          </>
-        }
+        actions={canCreate ? <Button onClick={editor.openAddEditor}>Agregar persona</Button> : null}
       />
       <PersonasTabs active="equipo" counts={counts} />
 

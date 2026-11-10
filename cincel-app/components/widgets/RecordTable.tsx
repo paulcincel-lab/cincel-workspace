@@ -28,6 +28,7 @@ import {
   formatCell,
   formatTotal,
   groupLabel,
+  HEAT_CELL_CLASS,
   heatLevel,
   isNegativeDelta,
   rowId,
@@ -77,11 +78,6 @@ export const RECORD_TABLE_EMPTY_TITLE = "No hay resultados";
 
 const EXPORT_COMPANY = "Cincel";
 const EXPORT_NAME = "Registros";
-
-const HEAT_CLASS = {
-  crit: "bg-[color-mix(in_oklab,var(--destructive)_16%,var(--card))] text-destructive",
-  warn: "bg-[color-mix(in_oklab,var(--warning)_22%,var(--card))] text-[color:var(--warning-ink)]",
-} as const;
 
 export function RecordTable(props: RecordTableProps) {
   if (props.data.rows.length === 0) {
@@ -293,7 +289,7 @@ function TableView({
           return [
             padding,
             alignClass(column),
-            heat ? HEAT_CLASS[heat] : "",
+            heat ? HEAT_CELL_CLASS[heat] : "",
             isNegativeDelta(column, row) ? "text-destructive" : "",
           ]
             .filter(Boolean)

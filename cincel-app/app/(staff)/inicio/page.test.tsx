@@ -86,6 +86,9 @@ const DATA: InicioData = {
   myDay: [],
   projectsProgress: [],
   workload: [],
+  hero: { dueToday: 0, overdue: 0, overdueProjects: 0, focusProject: null },
+  openShifts: null,
+  todayAgenda: [],
 };
 
 const ACTIVE: SessionAccess = {

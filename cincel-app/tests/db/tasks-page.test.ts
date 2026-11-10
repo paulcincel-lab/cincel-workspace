@@ -245,34 +245,38 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
   });
 
   describe("loadTareasPage / getTareasPageData", () => {
-    it.each(["tablero", "lista"] as const)("stays under 200 KB for %s with the default filters", async (vista) => {
+    it.each(["visual", "analitico"] as const)("stays under 200 KB for %s with the default filters", async (estilo) => {
       const user = await asViewer(admin(), () => requireCapabilityUser());
-      const data = await loadTareasPage(user, { vista, ...NO_FILTERS });
+      const data = await loadTareasPage(user, { estilo, ...NO_FILTERS });
       expect(JSON.stringify(data).length).toBeLessThan(200_000);
-      if (vista === "tablero") {
+      if (estilo === "visual") {
         expect(data.board).toBeDefined();
         for (const status of BASE_STATUSES) expect(data.board!.columns[status]).toBeDefined();
         expect(data.list).toBeUndefined();
       } else {
-        expect(data.list?.rows.length).toBeGreaterThan(0);
+        // Analítico: the counts and the first page of the first expanded groups.
+        expect(data.summary?.projects.length).toBeGreaterThan(0);
+        expect(data.groups?.length).toBeGreaterThan(0);
+        expect(data.groups!.length).toBeLessThanOrEqual(3);
         expect(data.board).toBeUndefined();
       }
     });
 
     it.each([
-      ["tablero", NO_FILTERS],
-      ["lista", NO_FILTERS],
-      ["tablero", { ...NO_FILTERS, responsable: "yo" as const, estado: "pendiente" as const }],
-    ] as const)("runs ≤ 6 statements (%s)", async (vista, filters) => {
+      ["visual", NO_FILTERS],
+      ["analitico", NO_FILTERS],
+      ["visual", { ...NO_FILTERS, responsable: "yo" as const, estado: "pendiente" as const }],
+    ] as const)("runs ≤ 6 statements (%s)", async (estilo, filters) => {
       const tramo = v().workflows[0].key;
       const { count } = await countQueries(() =>
-        asViewer(admin(), () => actions.getTareasPageData({ vista, ...filters, tramo })),
+        asViewer(admin(), () => actions.getTareasPageData({ estilo, ...filters, tramo })),
       );
-      expect(count).toBeLessThanOrEqual(6);
+      // Analítico reads the summary and up to 3 group pages instead of one list page.
+      expect(count).toBeLessThanOrEqual(estilo === "analitico" ? 7 : 6);
     });
 
     it("hands out staff as {id,name} only", async () => {
-      const data = await asViewer(admin(), () => actions.getTareasPageData({ vista: "lista", ...NO_FILTERS }));
+      const data = await asViewer(admin(), () => actions.getTareasPageData({ estilo: "analitico", ...NO_FILTERS }));
       expect(data.staff.length).toBeGreaterThan(0);
       for (const s of data.staff) expect(Object.keys(s).sort()).toEqual(["id", "name"]);
       expect(data.staff.find((s) => s.id === v().managerId)?.name).toBe(`Volumen ${run} Gestor`);
@@ -280,7 +284,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
 
     it("counts the facets of the page like taskFacets", async () => {
       const data = await asViewer(colaborador(), () =>
-        actions.getTareasPageData({ vista: "tablero", ...NO_FILTERS, q: v().marker }),
+        actions.getTareasPageData({ estilo: "visual", ...NO_FILTERS, q: v().marker }),
       );
       const facets = await repo.taskFacets(mine(), { staffId: v().helperId, isAdmin: false });
       expect(data.facets).toEqual(facets);
@@ -289,7 +293,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
     it("never gives a non-admin an admin task; an admin's own ones come with Responsable: Yo", async () => {
       const q = v().marker;
       const member = await asViewer(colaborador(), () =>
-        actions.getTareasPageData({ vista: "tablero", ...NO_FILTERS, q }),
+        actions.getTareasPageData({ estilo: "visual", ...NO_FILTERS, q }),
       );
       const memberRows = Object.values(member.board!.columns).flatMap((c) => c.rows);
       expect(memberRows.every((r) => r.kind !== "admin")).toBe(true);
@@ -315,7 +319,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
 
     it("an unknown tramo loads no rows but keeps the board's columns", async () => {
       const data = await asViewer(admin(), () =>
-        actions.getTareasPageData({ vista: "tablero", ...NO_FILTERS, tramo: `no-${run}` }),
+        actions.getTareasPageData({ estilo: "visual", ...NO_FILTERS, tramo: `no-${run}` }),
       );
       for (const status of BASE_STATUSES) expect(data.board!.columns[status].total).toBe(0);
       const column = await asViewer(admin(), () =>
@@ -329,7 +333,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
     it("without the Tareas capability every read is FORBIDDEN", async () => {
       perms.noTareas = true;
       const viewer = colaborador();
-      await expect(asViewer(viewer, () => actions.getTareasPageData({ vista: "tablero", ...NO_FILTERS }))).rejects.toThrow(
+      await expect(asViewer(viewer, () => actions.getTareasPageData({ estilo: "visual", ...NO_FILTERS }))).rejects.toThrow(
         "FORBIDDEN",
       );
       await expect(
@@ -343,7 +347,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
     });
 
     it("a guest gets FORBIDDEN", async () => {
-      await expect(asViewer(null, () => actions.getTareasPageData({ vista: "lista", ...NO_FILTERS }))).rejects.toThrow(
+      await expect(asViewer(null, () => actions.getTareasPageData({ estilo: "analitico", ...NO_FILTERS }))).rejects.toThrow(
         "FORBIDDEN",
       );
     });

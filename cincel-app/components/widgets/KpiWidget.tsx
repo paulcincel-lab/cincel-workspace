@@ -14,6 +14,7 @@ import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
 import type { WidgetView } from "@/lib/stores/dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { KpiDatum, RecordTableData } from "@/lib/types/widgets";
+import { staggerStyle } from "@/lib/ui/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -22,8 +23,9 @@ import { cn } from "@/lib/utils";
  * `KpiTile`.
  *
  * - Visual: tiles with label and delta chip (`delta.label` / `delta.tone`:
- *   "+4 vs. semana", "sin cambio"), value, sparkline (`series7`, hidden
- *   without data), tramo split bar and context line (`caption`).
+ *   "+4 vs. semana", "sin cambio"), value, full-width sparkline (`series7`,
+ *   hidden without data), tramo split bar and context line (`caption`).
+ *   Tiles fade in 40 ms apart (`anim-in`) and the sparkline draws in.
  * - Esencial: one card of big numbers + labels; no charts, no tints.
  * - Analítico: `RecordTable` rows: Indicador, Hoy, Δ 7 días, Prom. 30 días,
  *   Mín – máx 30 d, Tendencia 7 d.
@@ -122,7 +124,10 @@ function toTile(item: KpiDatum, { selectedKey, onSelect }: Selection = {}): KpiT
 function Visual({ items, ...selection }: { items: KpiDatum[] } & Selection) {
   return (
     <div data-style="visual" data-slot="kpi-widget">
-      <KpiRow spacing="widget" tiles={items.map((item) => toTile(item, selection))} />
+      <KpiRow
+        spacing="widget"
+        tiles={items.map((item, i) => ({ ...toTile(item, selection), className: "anim-in", style: staggerStyle(i, 40) }))}
+      />
     </div>
   );
 }

@@ -572,6 +572,8 @@ export type TaskPatch = Partial<
 export type TaskFilters = {
   projectId?: string;
   workflowId?: string;
+  /** Only the tasks without a tramo (`workflow_id is null`). */
+  withoutWorkflow?: boolean;
   phaseId?: string;
   spaceId?: string;
   /** Default excludes "admin"; admin tasks only when asked and the viewer is admin. */
@@ -583,6 +585,10 @@ export type TaskFilters = {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  /** Tareas "Mostrar": open tasks, or open tasks past `coalesce(commitment, delivery)`. */
+  mostrar?: "abiertas" | "en_retraso";
+  /** `YYYY-MM-DD` the overdue rule compares with; default today in America/Mexico_City. */
+  today?: string;
 };
 
 // ── Starting a tramo (FE §7.1, BE §9) ────────────────────────────────────────

@@ -41,10 +41,10 @@ export function navItem(key: NavItemKey, badge?: number): NavItem {
 export const FULL_NAV: NavModel = {
   items: [
     navItem("inicio"),
-    navItem("mi-espacio", 5),
     navItem("tareas", 31),
     navItem("proyectos"),
     navItem("personas"),
+    navItem("mi-espacio", 5),
     navItem("biblioteca"),
     navItem("asistente"),
   ],

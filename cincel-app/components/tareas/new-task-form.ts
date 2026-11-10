@@ -47,6 +47,11 @@ export type NewTaskDefaults = {
    * (`pendiente`, …) or `custom:<id>`. Applied right after the task is created.
    */
   status?: string;
+  /** Responsable (quick-add `@persona`); null = "Sin responsable". */
+  managerId?: string | null;
+  /** `YYYY-MM-DD` (quick-add date). */
+  deliveryDate?: string | null;
+  priority?: TaskPriority;
 };
 
 export function draftFromDefaults(defaults: NewTaskDefaults = {}): NewTaskDraft {
@@ -55,15 +60,25 @@ export function draftFromDefaults(defaults: NewTaskDefaults = {}): NewTaskDraft 
     projectId: defaults.projectId ?? "",
     workflowId: null,
     phaseId: null,
-    managerId: null,
-    deliveryDate: "",
-    priority: "media",
+    managerId: defaults.managerId ?? null,
+    deliveryDate: defaults.deliveryDate ?? "",
+    priority: defaults.priority ?? "media",
     description: defaults.description ?? "",
     subtasks: [],
   };
 }
 
 type ProjectChoice = Pick<ProjectListItem, "id" | "name" | "currentWorkflowId">;
+
+/** The active tramos in catalog order (the `select` of the tramo catalog query). */
+export function activeWorkflowsInOrder(rows: readonly WorkflowDetail[]): WorkflowDetail[] {
+  return rows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/** Responsables suggested for the tramo first (the `select` of `catalog.assignableStaff`). */
+export function suggestedFirst<T extends { suggested: boolean }>(list: readonly T[]): T[] {
+  return [...list].sort((a, b) => Number(b.suggested) - Number(a.suggested));
+}
 
 /** The draft's project while it's in the list, else the first project; "" without projects. */
 export function resolveProjectId(projectId: string, projects: readonly ProjectChoice[]): string {

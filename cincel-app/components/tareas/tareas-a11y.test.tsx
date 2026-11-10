@@ -61,11 +61,15 @@ vi.mock("./TareasLista", async () => {
 });
 // The task sheet (R3-08) opens from `?tarea=`; none here.
 vi.mock("./TaskSheet", () => ({ TaskSheetRoute: () => null }));
+// Visual and Esencial have their own layouts and a11y tests; this file renders Analítico, which keeps the views.
+vi.mock("./TareasVisual", () => ({ TareasVisual: () => <main /> }));
+vi.mock("./TareasEsencial", () => ({ TareasEsencial: () => <main /> }));
 vi.mock("./TareasCalendario", () => ({
   CALENDARIO_DESCRIPTION: "Fechas de entrega y agenda del equipo. Las horas con ≈ son estimadas.",
   TareasCalendario: () => <div />,
 }));
 
+import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
 import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
@@ -110,9 +114,14 @@ function renderClient(patch: Partial<TareasQuery>, facets: TareasFacets = FACETS
   const query = parseTareasQuery(new URLSearchParams(nav.search));
   const client = createTestQueryClient();
   const page: TareasPageData = { facets, tramos: TRAMOS, staff: STAFF };
-  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query)), page);
+  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query, "analitico")), page);
   client.setQueryData(qk.tareas.facets(tareasListFiltersOf(query)), facets);
-  return renderWithQueryClient(<TareasClient />, { client });
+  return renderWithQueryClient(
+    <StyleProvider style="analitico" scope="staff">
+      <TareasClient />
+    </StyleProvider>,
+    { client },
+  );
 }
 
 beforeAll(() => {
@@ -159,9 +168,9 @@ describe("Tareas shell accessibility", () => {
     expect(await seriousViolations(container)).toEqual([]);
   });
 
-  it("names the view switch and marks the active view", () => {
+  it("renders no Vista switch; the header keeps a single h1", () => {
     renderClient({ vista: "calendario" });
-    const nav = screen.getByRole("navigation", { name: "Vista" });
-    expect(nav.querySelector('[aria-current="page"]')?.textContent).toBe("Calendario");
+    expect(screen.queryByRole("navigation", { name: "Vista" })).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 });

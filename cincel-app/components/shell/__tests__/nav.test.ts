@@ -52,10 +52,10 @@ describe("buildNavModel", () => {
       source("ajustes", 10, { section: "footer" }),
       source("tareas", 30),
       source("inicio", 10),
-      source("mi-espacio", 20),
+      source("mi-espacio", 55),
     ]);
 
-    expect(nav.items.map((i) => i.key)).toEqual(["inicio", "mi-espacio", "tareas"]);
+    expect(nav.items.map((i) => i.key)).toEqual(["inicio", "tareas", "mi-espacio"]);
     expect(nav.footer.map((i) => i.key)).toEqual(["ajustes"]);
   });
 
@@ -89,16 +89,16 @@ describe("buildNavModel", () => {
   it("keeps positive badges and drops zero, negative and non-numeric ones", async () => {
     mocks.listTramos.mockResolvedValue([]);
     const nav = await buildNavModel(ADMIN_SESSION, [
-      source("mi-espacio", 20, { badge: 5 }),
+      source("mi-espacio", 55, { badge: 5 }),
       source("tareas", 30, { badge: 0 }),
       source("inicio", 10, { badge: -2 }),
       source("proyectos", 40, { badge: Number.NaN }),
     ]);
     expect(nav.items.map((i) => [i.key, i.badge])).toEqual([
       ["inicio", undefined],
-      ["mi-espacio", 5],
       ["tareas", undefined],
       ["proyectos", undefined],
+      ["mi-espacio", 5],
     ]);
   });
 

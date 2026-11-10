@@ -86,6 +86,7 @@ export function DocumentReader({ doc, toc, companyDoc }: DocumentReaderProps) {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
+        estilo={false}
         title={title}
         description={companyDoc?.description}
         breadcrumb={[{ label: "Biblioteca", href: "/biblioteca" }, { label: "Empresa", href: "/biblioteca" }, { label: title }]}
@@ -249,6 +250,7 @@ export function EmpresaDocument({ slug, parte }: EmpresaDocumentProps) {
     return (
       <div className="flex flex-col gap-4">
         <PageHeader
+          estilo={false}
           title={doc.title}
           description={doc.description}
           breadcrumb={[{ label: "Biblioteca", href: "/biblioteca" }, { label: "Empresa", href: "/biblioteca" }, { label: doc.title }]}

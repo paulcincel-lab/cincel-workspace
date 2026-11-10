@@ -1,0 +1,155 @@
+/**
+ * `InicioData` for the Inicio Visual tests (#989): the shared fixture plus
+ * the four Visual KPIs, six people on shift and attention items covering the
+ * caption variants.
+ */
+import type { InicioData } from "@/lib/types/redesign";
+
+import { INICIO_NON_ADMIN } from "./inicio-fixtures";
+
+export const VISUAL_NOW = "2026-11-09T15:00:00Z"; // 09:00, Monday 9 November 2026 in Mexico City.
+
+export const INICIO_VISUAL: InicioData = {
+  ...INICIO_NON_ADMIN,
+  kpis: [
+    {
+      key: "abiertas",
+      label: "Tareas abiertas",
+      value: 23,
+      series7: [18, 19, 20, 20, 21, 22, 23],
+      delta: { value: 3, good: false, caption: "vs. semana pasada", label: "+3 vs. semana", tone: "bad" },
+    },
+    {
+      key: "vencidas",
+      label: "Vencidas",
+      value: 7,
+      series7: [9, 9, 8, 8, 8, 7, 7],
+      delta: { value: -2, good: true, caption: "vs. semana pasada", label: "−2 vs. semana", tone: "good" },
+    },
+    {
+      key: "proyectos_activos",
+      label: "Proyectos activos",
+      value: 12,
+      series7: [12, 12, 12, 12, 12, 12, 12],
+      delta: { value: 0, good: true, caption: "vs. semana pasada", label: "sin cambio", tone: "neutral" },
+    },
+    {
+      key: "horas_semana",
+      label: "Horas esta semana",
+      value: 126,
+      display: "126 h",
+      series7: [0, 30, 32, 31, 33, 0, 0],
+      delta: { value: 4, good: true, caption: "vs. semana pasada", label: "+4 h vs. semana", tone: "good" },
+    },
+  ],
+  hero: {
+    dueToday: 4,
+    overdue: 7,
+    overdueProjects: 3,
+    focusProject: { id: "p-1", name: "Oficina Polanco", href: "/proyectos/p-1" },
+  },
+  openShifts: {
+    count: 6,
+    people: [
+      { id: "s-2", initials: "LP", tramo: "diseno" },
+      { id: "s-3", initials: "MR", tramo: "construccion" },
+      { id: "s-4", initials: "AR", tramo: "presale" },
+      { id: "s-5", initials: "JG", tramo: null },
+      { id: "s-6", initials: "CS", tramo: "diseno" },
+      { id: "s-7", initials: "PV", tramo: "decoracion" },
+    ],
+  },
+  attention: [
+    {
+      id: "t-1",
+      title: "Revisar planos de cocina",
+      href: "/tareas?tarea=t-1",
+      project: "Oficina Polanco",
+      tramo: "diseno",
+      reason: "Vencida",
+      tone: "critical",
+      assignee: { id: "s-2", name: "Ana Ruiz", initials: "AR" },
+      due: "2026-10-28",
+      daysLate: 12,
+      subtasks: { done: 2, total: 5 },
+      progressPct: 40,
+    },
+    {
+      id: "t-2",
+      title: "Permiso de obra",
+      href: "/tareas?tarea=t-2",
+      project: "Casa Lomas",
+      tramo: "construccion",
+      reason: "Bloqueada",
+      tone: "warn",
+      assignee: null,
+      due: "2026-11-02",
+      daysLate: 7,
+      subtasks: { done: 0, total: 3 },
+      progressPct: 0,
+    },
+    {
+      id: "t-3",
+      title: "Cotizar mobiliario",
+      href: "/tareas?tarea=t-3",
+      project: "Depto Roma",
+      tramo: "presale",
+      reason: "Vencida",
+      tone: "critical",
+      assignee: { id: "s-3", name: "Marta Ruiz", initials: "MR" },
+      due: "2026-11-06",
+      daysLate: 3,
+      subtasks: null,
+      progressPct: 0,
+    },
+    {
+      id: "t-4",
+      title: "Cuarta tarea fuera del corte",
+      href: "/tareas?tarea=t-4",
+      project: "Depto Roma",
+      tramo: null,
+      reason: "Por vencer",
+      tone: "default",
+      assignee: null,
+      due: "2026-11-10",
+      daysLate: null,
+      subtasks: null,
+      progressPct: 0,
+    },
+  ],
+  projectsProgress: [
+    {
+      id: "p-1",
+      label: "Oficina Polanco",
+      sublabel: "Diseño",
+      real: 64,
+      plan: null,
+      budgetPct: null,
+      colorVar: "var(--chart-2)",
+      href: "/proyectos/p-1",
+      open: 9,
+      overdue: 4,
+      deliveryDate: "2026-11-28",
+      team: [
+        { id: "s-2", initials: "LP", tramo: "diseno" },
+        { id: "s-3", initials: "MR", tramo: "construccion" },
+        { id: "s-4", initials: "AR", tramo: "presale" },
+        { id: "s-5", initials: "JG", tramo: null },
+      ],
+    },
+    {
+      id: "p-2",
+      label: "Depto Roma",
+      sublabel: "Construcción",
+      real: 28,
+      plan: null,
+      budgetPct: null,
+      colorVar: "var(--chart-3)",
+      href: "/proyectos/p-2",
+      open: 3,
+      overdue: 0,
+      deliveryDate: "2026-12-15",
+      team: [{ id: "s-3", initials: "MR", tramo: "construccion" }],
+    },
+  ],
+};

@@ -10,8 +10,14 @@ describe("tramoColorSlot", () => {
     expect(tramoColorSlot({ key: "construccion", sortOrder: 5 })).toBe(3);
   });
 
-  it("uses sortOrder 1..5 for any other tramo", () => {
+  it("decoracion maps to slot 4", () => {
     expect(tramoColorSlot({ key: "decoracion", sortOrder: 4 })).toBe(4);
+    expect(tramoColorSlot({ key: "decoracion", sortOrder: 0 })).toBe(4);
+    expect(tramoColorSlot({ key: "Decoracion ", sortOrder: 9 })).toBe(4);
+    expect(tramoColorVar({ key: "decoracion", sortOrder: 1 })).toBe("var(--chart-4)");
+  });
+
+  it("uses sortOrder 1..5 for any other tramo", () => {
     expect(tramoColorSlot({ key: "otro", sortOrder: 5 })).toBe(5);
     expect(tramoColorSlot({ key: "otro", sortOrder: 1 })).toBe(1);
   });

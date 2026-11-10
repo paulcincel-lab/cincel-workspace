@@ -4,6 +4,7 @@ import {
   DEFAULT_TAREAS_QUERY,
   TAREAS_CAL_MODES,
   TAREAS_ESTADOS,
+  TAREAS_MOSTRAR,
   TAREAS_VISTAS,
   clearTareasFilters,
   hasTareasFilters,
@@ -57,6 +58,7 @@ function randomQuery(r: Rand): TareasQuery {
     proyecto: maybe(r, () => uuid(r)),
     estado: maybe(r, () => oneOf(r, TAREAS_ESTADOS)),
     q: maybe(r, () => oneOf(r, SEARCHES)),
+    mostrar: oneOf(r, TAREAS_MOSTRAR),
     nueva: r() < 0.5,
     fecha: maybe(r, () => oneOf(r, FECHAS)),
   };
@@ -88,6 +90,8 @@ describe("parseTareasQuery / toTareasSearch", () => {
       { proyecto: id },
       { estado: "bloqueado" },
       { q: "renders" },
+      { mostrar: "abiertas" },
+      { mostrar: "en_retraso" },
       { nueva: true },
       { fecha: "2026-11-06" },
       { vista: "calendario", cal: "semana", fecha: "2024-02-29" },
@@ -115,6 +119,7 @@ describe("parseTareasQuery / toTareasSearch", () => {
       q: "   ",
       nueva: "si",
       fecha: "2026-13-01",
+      mostrar: "vencidas",
     });
     expect(parseTareasQuery(sp)).toEqual(DEFAULT_TAREAS_QUERY);
   });
@@ -184,5 +189,59 @@ describe("helpers", () => {
     expect(tareasCalendarRange("mes", today)).toEqual({ from: "2026-10-26", to: "2026-12-06" });
     expect(tareasCalendarRange("semana", today)).toEqual({ from: "2026-11-02", to: "2026-11-08" });
     expect(tareasCalendarRange("dia", today)).toEqual({ from: "2026-11-06", to: "2026-11-06" });
+  });
+});
+
+describe("mostrar", () => {
+  it("parses and serializes mostrar, defaults to todas", () => {
+    for (const mostrar of ["abiertas", "en_retraso"] as const) {
+      const href = tareasHref({ ...DEFAULT_TAREAS_QUERY, mostrar });
+      expect(href).toBe(`/tareas?mostrar=${mostrar}`);
+      expect(parseTareasQuery(new URLSearchParams(href.split("?")[1])).mostrar).toBe(mostrar);
+    }
+    expect(parseTareasQuery(new URLSearchParams("mostrar=")).mostrar).toBe("todas");
+    expect(tareasHref({ ...DEFAULT_TAREAS_QUERY })).toBe("/tareas");
+  });
+
+  it("defaults to todas, which stays out of the URL", () => {
+    expect(parseTareasQuery(new URLSearchParams()).mostrar).toBe("todas");
+    expect(toTareasSearch({ mostrar: "todas" })).toBe("");
+    expect(tareasHref({ mostrar: "en_retraso" })).toBe("/tareas?mostrar=en_retraso");
+  });
+
+  it("parses unknown values to todas", () => {
+    expect(parseTareasQuery(new URLSearchParams("mostrar=vencidas")).mostrar).toBe("todas");
+  });
+
+  it("narrows the tasks and is cleared with the filters", () => {
+    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, mostrar: "abiertas" };
+    expect(hasTareasFilters(q)).toBe(true);
+    expect(clearTareasFilters(q).mostrar).toBe("todas");
+  });
+});
+
+describe("Esencial responsable", async () => {
+  const { esencialResponsable, hasEsencialFilters, isEsencialSoloMias, responsableFilter } = await import("./query");
+
+  it("esencial treats a missing responsable as yo", () => {
+    expect(esencialResponsable(null)).toBe("yo");
+    expect(esencialResponsable("yo")).toBe("yo");
+    expect(esencialResponsable("todos")).toBeNull();
+    const id = "22222222-2222-4222-8222-222222222222";
+    expect(esencialResponsable(id)).toBe(id);
+    expect(isEsencialSoloMias(null)).toBe(true);
+    expect(isEsencialSoloMias("todos")).toBe(false);
+  });
+
+  it("keeps responsable=todos through the URL, and other styles read it as no filter", () => {
+    const query = parseTareasQuery(new URLSearchParams("responsable=todos"));
+    expect(query.responsable).toBe("todos");
+    expect(toTareasSearch(query)).toBe("?responsable=todos");
+    expect(responsableFilter(query.responsable)).toBeNull();
+    expect(hasTareasFilters(query)).toBe(false);
+    // In Esencial, Solo mías off is a filter ("Quitar filtros" turns it back on); the default is not.
+    expect(hasEsencialFilters(query)).toBe(true);
+    expect(hasEsencialFilters(DEFAULT_TAREAS_QUERY)).toBe(false);
+    expect(hasEsencialFilters(clearTareasFilters(query))).toBe(false);
   });
 });

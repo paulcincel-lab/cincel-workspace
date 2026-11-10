@@ -9,14 +9,21 @@ import type { TaskStatus } from "@/lib/types/core";
 
 export type TareasVista = "tablero" | "lista" | "calendario";
 
+/** "Mostrar" filter (`?mostrar=`): every task, the open ones, or the open ones past their due date. */
+export type TareasMostrar = "todas" | "abiertas" | "en_retraso";
+export const TAREAS_MOSTRAR: readonly TareasMostrar[] = ["todas", "abiertas", "en_retraso"];
+
 export type TareasQuery = {
   vista: TareasVista;
   cal: "mes" | "semana" | "dia";
   tramo: string | null;
-  responsable: "yo" | string | null;
+  /** "yo", a staff id, "todos" (written by Esencial's Solo mías toggle: everyone) or null. */
+  responsable: "yo" | "todos" | string | null;
   proyecto: string | null;
   estado: string | null;
   q: string | null;
+  /** `?mostrar=`; default "todas" (left out of the URL). */
+  mostrar: TareasMostrar;
   nueva?: boolean;
   /** Calendar cursor (`?fecha=YYYY-MM-DD`): the day the Calendario view is anchored on; null = today. */
   fecha?: string | null;
@@ -37,6 +44,7 @@ export const DEFAULT_TAREAS_QUERY: TareasQuery = {
   proyecto: null,
   estado: null,
   q: null,
+  mostrar: "todas",
   nueva: false,
   fecha: null,
 };
@@ -84,10 +92,11 @@ export function parseTareasQuery(sp: URLSearchParams): TareasQuery {
     vista: pick(sp.get("vista"), TAREAS_VISTAS, DEFAULT_TAREAS_QUERY.vista),
     cal: pick(sp.get("cal"), TAREAS_CAL_MODES, DEFAULT_TAREAS_QUERY.cal),
     tramo: key(sp.get("tramo")),
-    responsable: responsable === "yo" ? "yo" : id(responsable),
+    responsable: responsable === "yo" || responsable === TAREAS_RESPONSABLE_TODOS ? responsable : id(responsable),
     proyecto: id(sp.get("proyecto")),
     estado: estado !== null && (TAREAS_ESTADOS as readonly string[]).includes(estado) ? estado : null,
     q: searchText(sp.get("q")),
+    mostrar: pick(sp.get("mostrar"), TAREAS_MOSTRAR, DEFAULT_TAREAS_QUERY.mostrar),
     nueva: sp.get("nueva") === "1",
     fecha: calendarDate(sp.get("fecha")),
   };
@@ -104,6 +113,7 @@ export function toTareasSearch(q: Partial<TareasQuery>): string {
   if (q.estado) sp.set("estado", q.estado);
   const text = q.q?.trim();
   if (text) sp.set("q", text);
+  if (q.mostrar && q.mostrar !== DEFAULT_TAREAS_QUERY.mostrar) sp.set("mostrar", q.mostrar);
   if (q.nueva) sp.set("nueva", "1");
   if (q.fecha) sp.set("fecha", q.fecha);
   const out = sp.toString();
@@ -125,9 +135,41 @@ export function toUrlSearchParams(sp: Record<string, string | string[] | undefin
   return out;
 }
 
-/** True when any filter (tramo, responsable, proyecto, estado, search) narrows the tasks. */
+/** True when any filter (tramo, responsable, proyecto, estado, search, mostrar) narrows the tasks. */
 export function hasTareasFilters(q: TareasQuery): boolean {
-  return Boolean(q.tramo || q.responsable || q.proyecto || q.estado || q.q);
+  return Boolean(q.tramo || responsableFilter(q.responsable) || q.proyecto || q.estado || q.q || (q.mostrar && q.mostrar !== "todas"));
+}
+
+/** `?responsable=todos`: everyone's tasks, kept in the URL so Esencial's "Solo mías" off is shareable. */
+export const TAREAS_RESPONSABLE_TODOS = "todos";
+
+/** The responsable a query filters by: "todos" filters nothing. */
+export function responsableFilter(responsable: TareasQuery["responsable"]): "yo" | string | null {
+  return responsable === TAREAS_RESPONSABLE_TODOS ? null : responsable;
+}
+
+/**
+ * The responsable Tareas Esencial filters by: a missing param is "yo" (Solo
+ * mías on by default), "todos" is everyone, anything else as given.
+ */
+export function esencialResponsable(responsable: TareasQuery["responsable"]): "yo" | string | null {
+  return responsable === null ? "yo" : responsableFilter(responsable);
+}
+
+/** True when Solo mías is on in Esencial: no param, or "yo". */
+export function isEsencialSoloMias(responsable: TareasQuery["responsable"]): boolean {
+  return esencialResponsable(responsable) === "yo";
+}
+
+/**
+ * True when an Esencial filter narrows the tasks: the tramo, proyecto,
+ * estado, search, mostrar, or a responsable other than "yo" (Solo mías off
+ * counts, so "Quitar filtros" brings it back).
+ */
+export function hasEsencialFilters(q: TareasQuery): boolean {
+  return Boolean(
+    q.tramo || q.proyecto || q.estado || q.q || (q.mostrar && q.mostrar !== "todas") || !isEsencialSoloMias(q.responsable),
+  );
 }
 
 /** The query with every filter removed; the view, the calendar mode and the calendar date stay. */

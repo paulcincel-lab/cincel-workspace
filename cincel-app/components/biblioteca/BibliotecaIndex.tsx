@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { recentDocumentsToShow } from "@/components/recursos/resources-model";
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Input } from "@/components/ui/shadcn/input";
 import { EntityCardGrid } from "@/components/widgets/EntityCardGrid";
@@ -77,21 +76,17 @@ export function BibliotecaIndex() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        estilo={false}
         title="Biblioteca"
         description="Recursos y documentos de la empresa en un solo lugar."
         actions={
-          <>
-            <Input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar en la biblioteca"
-              aria-label="Buscar en la biblioteca"
-              className="w-full sm:w-72"
-            />
-            <EstiloSwitch />
-          </>
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar en la biblioteca"
+            aria-label="Buscar en la biblioteca"
+            className="w-full sm:w-72"
+          />
         }
       />
 

@@ -27,7 +27,7 @@ function pair(fg: TokenName, bg: TokenName | ChartTint, min: 4.5 | 3): ContrastP
 
 const CHART_SLOTS = [1, 2, 3, 4, 5] as const;
 
-/** BE §5.5. */
+/** BE §5.5, plus the named tints, `destructive-ink` and `foreground-soft` (Estilos). */
 export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   pair("foreground", "background", 4.5),
   pair("foreground", "card", 4.5),
@@ -42,6 +42,15 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   pair("sidebar-foreground", "sidebar", 4.5),
   pair("sidebar-primary-foreground", "sidebar-primary", 4.5),
   ...CHART_SLOTS.map((n) => pair(`chart-${n}-ink` as const, `chart-${n}-tint` as const, 4.5)),
+  pair("secondary-foreground", "tint-primary", 4.5),
+  pair("chart-2-ink", "tint-violet", 4.5),
+  pair("warning-ink", "tint-warning", 4.5),
+  pair("chart-4-ink", "tint-cyan", 4.5),
+  pair("destructive-ink", "tint-destructive", 4.5),
+  pair("success", "tint-success", 4.5),
+  pair("foreground-soft", "card", 4.5),
+  pair("foreground-soft", "background", 4.5),
+  pair("foreground-soft", "muted", 4.5),
   ...CHART_SLOTS.map((n) => pair(`chart-${n}` as const, "card", 3)),
   pair("border-strong", "card", 3),
   pair("ring", "background", 3),

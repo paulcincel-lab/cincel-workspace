@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 
 import { Badge } from "@/components/ui/shadcn/badge";
 import { hasSparklineData, Sparkline } from "@/components/widgets/Sparkline";
@@ -33,6 +34,9 @@ export interface KpiTileProps {
    */
   pressed?: boolean;
   onToggle?(): void;
+  /** Extra classes and inline style on the large tile's root (e.g. an entrance animation and its delay). */
+  className?: string;
+  style?: CSSProperties;
 }
 
 export type KpiDelta = { value: number; good: boolean; caption: string; label?: string; tone?: KpiDeltaTone };
@@ -88,12 +92,25 @@ function SplitBar({ split }: { split: NonNullable<KpiTileProps["split"]> }) {
   );
 }
 
-function LargeTile({ label, value, tone = "default", series7, delta, split, caption, href, pressed, onToggle }: KpiTileProps) {
+function LargeTile({
+  label,
+  value,
+  tone = "default",
+  series7,
+  delta,
+  split,
+  caption,
+  href,
+  pressed,
+  onToggle,
+  className: extraClassName,
+  style,
+}: KpiTileProps) {
   const deltaToneKey = delta ? kpiDeltaTone(delta) : "neutral";
   const body = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[13.5px] font-medium text-foreground/80">{label}</span>
+        <span className="text-[12.5px] font-medium text-muted-foreground">{label}</span>
         {delta ? (
           <Badge
             data-slot="kpi-delta"
@@ -106,29 +123,27 @@ function LargeTile({ label, value, tone = "default", series7, delta, split, capt
           </Badge>
         ) : null}
       </div>
-      <div className="flex items-end justify-between gap-3">
-        <span
-          data-slot="kpi-value"
-          className={cn(
-            "text-[30px] leading-none font-medium tabular-nums",
-            tone === "warn" && "text-destructive",
-            tone === "ok" && "text-success-foreground"
-          )}
-        >
-          {value}
-        </span>
-        {hasSparklineData(series7) ? (
-          <Sparkline
-            points={series7}
-            label={`Tendencia 7 días de ${label}: ${series7.join(", ")}`}
-            width={120}
-            height={36}
-            area
-            strokeWidth={2}
-            className={DELTA_TEXT[deltaToneKey]}
-          />
-        ) : null}
-      </div>
+      <span
+        data-slot="kpi-value"
+        className={cn(
+          "text-[30px] leading-none font-semibold tracking-[-0.02em] tabular-nums",
+          tone === "warn" && "text-destructive",
+          tone === "ok" && "text-success-foreground"
+        )}
+      >
+        {value}
+      </span>
+      {hasSparklineData(series7) ? (
+        <Sparkline
+          points={series7}
+          label={`Tendencia 7 días de ${label}: ${series7.join(", ")}`}
+          width={240}
+          height={28}
+          area
+          strokeWidth={2}
+          className={cn("h-auto w-full", DELTA_TEXT[deltaToneKey])}
+        />
+      ) : null}
       {split ? <SplitBar split={split} /> : null}
       {caption ? (
         <span data-slot="kpi-context" className="text-xs text-muted-foreground">
@@ -137,7 +152,10 @@ function LargeTile({ label, value, tone = "default", series7, delta, split, capt
       ) : null}
     </>
   );
-  const className = "flex flex-col gap-2.5 rounded-lg border border-border bg-card px-5 py-[18px] shadow-sm";
+  const className = cn(
+    "flex flex-col gap-2.5 rounded-lg border border-border bg-card px-5 py-[18px] shadow-sm",
+    extraClassName
+  );
   if (onToggle) {
     return (
       <button
@@ -145,6 +163,7 @@ function LargeTile({ label, value, tone = "default", series7, delta, split, capt
         data-slot="kpi-tile"
         aria-pressed={pressed ?? false}
         onClick={onToggle}
+        style={style}
         className={cn(
           className,
           "text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none aria-pressed:border-ring aria-pressed:bg-muted/40"
@@ -158,6 +177,7 @@ function LargeTile({ label, value, tone = "default", series7, delta, split, capt
     <Link
       href={href}
       data-slot="kpi-tile"
+      style={style}
       className={cn(
         className,
         "transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
@@ -166,7 +186,7 @@ function LargeTile({ label, value, tone = "default", series7, delta, split, capt
       {body}
     </Link>
   ) : (
-    <div data-slot="kpi-tile" className={className}>
+    <div data-slot="kpi-tile" className={className} style={style}>
       {body}
     </div>
   );

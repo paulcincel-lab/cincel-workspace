@@ -1,15 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 
 import { FiltersBar, type FiltersBarProps } from "@/components/patterns/FiltersBar";
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader";
-import { Button, buttonVariants } from "@/components/ui/shadcn/button";
+import { Button } from "@/components/ui/shadcn/button";
+import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { tareasFacetsOptions } from "@/lib/query/options/tareas";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
@@ -27,11 +26,13 @@ import type { WorkflowRef } from "@/lib/types/core";
 
 import { CALENDARIO_DESCRIPTION, TareasCalendario } from "./TareasCalendario";
 import { TareasFilterCombobox, type TareasFilterOption } from "./TareasFilterCombobox";
+import { TareasEsencial } from "./TareasEsencial";
+import { TareasVisual } from "./TareasVisual";
+import { TareasAnalitico } from "./TareasAnalitico";
 import { TareasLista } from "./TareasLista";
 import { TABLERO_DESCRIPTION, TareasTablero } from "./TareasTablero";
 import { TaskSheetRoute } from "./TaskSheet";
 import {
-  pushTareasUrl,
   replaceTareasUrl,
   useTareasFilters,
   useTareasPage,
@@ -45,14 +46,6 @@ export const TAREAS_DESCRIPTIONS: Record<TareasVista, string> = {
   lista: "Todas los tramos en un solo lugar. Ordena por columna o agrupa por estatus.",
   calendario: CALENDARIO_DESCRIPTION,
 };
-
-const VISTA_LABELS: Record<TareasVista, string> = {
-  tablero: "Tablero",
-  lista: "Lista",
-  calendario: "Calendario",
-};
-
-const VISTAS: readonly TareasVista[] = ["tablero", "lista", "calendario"];
 
 export const TAREAS_EMPTY_TITLE = "No hay tareas con estos filtros";
 export const TAREAS_CLEAR_FILTERS = "Quitar filtros";
@@ -69,36 +62,11 @@ const NO_TRAMOS: WorkflowRef[] = [];
 const NO_STAFF: TareasStaffOption[] = [];
 const NO_FACETS: TareasFacets = { total: 0, byTramo: {}, projects: [] };
 
-/** Segmented view switch: links that keep every other filter (FE §3.4), followed without a server render. */
-function ViewSwitch({ query }: { query: TareasQuery }) {
-  return (
-    <nav aria-label="Vista" className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
-      {VISTAS.map((vista) => {
-        const active = vista === query.vista;
-        const href = tareasHref({ ...query, nueva: false, vista });
-        return (
-          <Link
-            key={vista}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            scroll={false}
-            onNavigate={(e) => {
-              e.preventDefault();
-              if (!active) pushTareasUrl(href);
-            }}
-            className={buttonVariants({ variant: active ? "outline" : "ghost", size: "sm" })}
-          >
-            {VISTA_LABELS[vista]}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
 /**
  * /tareas client (redesign FE §3.4, §4.5; Query Migration 4a): header with
- * the view switch and "Nueva tarea", URL-synced filters (tramo chips,
+ * "Nueva tarea" (and the Estilo switch, which supersedes the old Vista
+ * control: `?vista=` still parses so old links open, but nothing writes it
+ * any more), URL-synced filters (tramo chips,
  * "Responsable: Yo", Proyecto, search) and the selected view: Tablero
  * (`TareasTablero`), Lista (`TareasLista`) or Calendario
  * (`TareasCalendario`). It takes no data: the query comes from the URL, the
@@ -217,21 +185,16 @@ export function TareasClient() {
 
   // ── Header and empty state.
   const canCreate = capabilities.canCreateActivity;
-  const actions: ReactNode = (
-    <>
-      <ViewSwitch query={query} />
-      {canCreate ? (
-        <Button
-          onClick={() =>
-            openNewTask({ projectId: query.proyecto ?? undefined, tramoKey: query.tramo ?? undefined }, "tareas")
-          }
-        >
-          <Plus aria-hidden="true" data-icon="inline-start" />
-          Nueva tarea
-        </Button>
-      ) : null}
-    </>
-  );
+  const actions: ReactNode = canCreate ? (
+    <Button
+      onClick={() =>
+        openNewTask({ projectId: query.proyecto ?? undefined, tramoKey: query.tramo ?? undefined }, "tareas")
+      }
+    >
+      <Plus aria-hidden="true" data-icon="inline-start" />
+      Nueva tarea
+    </Button>
+  ) : null;
   const header: PageHeaderProps = { title: "Tareas", description: TAREAS_DESCRIPTIONS[query.vista], actions };
 
   const filtered = hasTareasFilters(query);
@@ -263,7 +226,41 @@ export function TareasClient() {
 
   return (
     <>
-      {view}
+      {/* One layout per style (ADR 0004): Visual is the team board, Esencial the cards per project. */}
+      <PageStyleLayout
+        visual={() => (
+          <TareasVisual
+            query={query}
+            facets={facets}
+            tramos={tramos}
+            actions={actions}
+            search={search}
+            onSearch={setSearch}
+            onQuery={replaceQuery}
+            empty={empty}
+          />
+        )}
+        esencial={() => <TareasEsencial />}
+        analitico={() =>
+          // Analítico is the tables by project and tramo; an old `?vista=calendario` link keeps its calendar.
+          query.vista === "calendario" ? (
+            view
+          ) : (
+            <TareasAnalitico
+              query={query}
+              facets={facets}
+              tramos={tramos}
+              staff={staff}
+              actions={actions}
+              search={search}
+              onSearch={setSearch}
+              onQuery={replaceQuery}
+              empty={empty}
+              canCreate={canCreate}
+            />
+          )
+        }
+      />
       {/* `?tarea=<id>` opens the task sheet over the view, which stays mounted. */}
       <TaskSheetRoute />
     </>
@@ -271,8 +268,8 @@ export function TareasClient() {
 }
 
 /**
- * Calendario has no `ListPage` spec: the shell renders the header (with the
- * `EstiloSwitch` that `ListPage` renders for the other views) and the filters
+ * Calendario has no `ListPage` spec: the shell renders the header (Estilo
+ * switch included, as `ListPage` does for the other views) and the filters
  * above `TareasCalendario`, which reads its mode, date and filters from the
  * URL and its rows from `tareas.calendar`.
  */
@@ -289,16 +286,7 @@ function TareasCalendarioView({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        estilo={false}
-        {...header}
-        actions={
-          <>
-            {header.actions}
-            <EstiloSwitch />
-          </>
-        }
-      />
+      <PageHeader {...header} />
       {filters}
       {empty ? (
         <EmptyState {...empty} />

@@ -13,7 +13,7 @@ import { registerUiStoreReset } from "@/lib/query/reset-client-state";
  *
  * Nothing is persisted: the draft lives in the dialog.
  */
-export type NewTaskSource = "tareas" | "tablero-quick-add" | "proyecto" | "nota" | "url" | "inicio";
+export type NewTaskSource = "tareas" | "tablero-quick-add" | "proyecto" | "nota" | "url" | "inicio" | "quick-add";
 
 export type NewTaskUiState = {
   open: boolean;

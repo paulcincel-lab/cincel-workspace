@@ -105,11 +105,15 @@ function boardData(): TareasBoardData {
 /** The cache `/tareas` hydrates for the Tablero. */
 function seededClient() {
   const client = createTestQueryClient();
-  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY)), {
+  // The bundle is keyed by the style; seed it for every one the tests render.
+  const page = {
     facets: { total: 4, byTramo: {}, projects: [] },
     tramos: [],
     staff: [],
-  });
+  };
+  for (const estilo of ["visual", "esencial", "analitico"] as const) {
+    client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY, estilo)), page);
+  }
   client.setQueryData(qk.tareas.board(tareasListFiltersOf(QUERY)), boardData());
   return client;
 }

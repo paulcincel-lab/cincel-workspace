@@ -15,6 +15,8 @@ interface LoadBarProps {
   /** Fill color by load level; `default` keeps the monochrome `foreground` fill. */
   tone?: "default" | "ok" | "warn" | "critical";
   className?: string;
+  /** Extra classes on every segment (e.g. a grow animation); the width stays inline. */
+  segmentClassName?: string;
 }
 
 const TONE_FILL = {
@@ -29,14 +31,14 @@ const TONE_FILL = {
  * opacity steps on a single hue instead of one color per category — keeps
  * the monochrome token system intact while still reading as distinct bands.
  */
-export function LoadBar({ segments, tone = "default", className }: LoadBarProps) {
+export function LoadBar({ segments, tone = "default", className, segmentClassName }: LoadBarProps) {
   return (
     <div className={cn("flex h-2 overflow-hidden rounded-full bg-muted", className)}>
       {segments.map((seg, i) => (
         <span
           key={i}
           title={seg.label}
-          className={cn("h-full", TONE_FILL[tone])}
+          className={cn("h-full", TONE_FILL[tone], segmentClassName)}
           style={{
             width: `${seg.percent}%`,
             opacity: seg.opacity ?? 1,

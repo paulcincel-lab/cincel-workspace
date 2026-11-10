@@ -10,6 +10,7 @@ import {
   useDeleteAssistantThread,
   type AssistantTurn,
 } from "@/components/asistente/use-asistente-cache";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
 import { ASSISTANT_TOOL_GROUPS } from "@/lib/assistant/starter-prompts";
@@ -201,13 +202,8 @@ export function AsistentePageClient({ threadId: seededThreadId, missingThread = 
         )}
       </aside>
 
-      <section aria-labelledby="asistente-titulo" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-4 lg:px-6">
-        <div className="flex flex-col gap-0.5">
-          <h1 id="asistente-titulo" className="text-lg font-semibold text-foreground">
-            Asistente
-          </h1>
-          <p className="truncate text-sm text-muted-foreground">{activeTitle}</p>
-        </div>
+      <section aria-label="Asistente" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-4 lg:px-6">
+        <PageHeader title="Asistente" description={activeTitle} />
         {shownNotice ? (
           <Alert variant="destructive">
             <AlertDescription>{shownNotice}</AlertDescription>

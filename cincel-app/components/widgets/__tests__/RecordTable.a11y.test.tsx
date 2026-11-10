@@ -20,14 +20,15 @@ const MODES = ["light", "dark"] as const;
 
 /**
  * Token pairs of `CONTRAST_PAIRS` the widget paints: text and headers on
- * `card`, negative deltas and critical heat in `destructive`, warning heat
- * in `warning-ink`.
+ * `card`, negative deltas in `destructive`, heat cells as ink on their tint
+ * (`destructive-ink` / `warning-ink`).
  */
 const RECORD_TABLE_PAIRS = new Set([
   "foreground/card",
   "muted-foreground/card",
   "destructive/card",
-  "warning-ink/card",
+  "destructive-ink/tint-destructive",
+  "warning-ink/tint-warning",
 ]);
 
 function themeStyle(theme: ThemeId, mode: (typeof MODES)[number]): CSSProperties {

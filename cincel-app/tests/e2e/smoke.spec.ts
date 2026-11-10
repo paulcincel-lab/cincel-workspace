@@ -48,11 +48,13 @@ test.describe("Acceso — login e Inicio", () => {
       if (request.method() === "POST" && request.headers()["next-action"]) actionPosts.push(request.url());
     });
 
-    await page.goto(`${BASE_URL}/inicio`, { waitUntil: "networkidle" });
-    for (const label of ["Proyectos activos", "Vencidas", "Bloqueadas"]) {
+    // Inicio Visual (#989): greeting hero, the four KPI tiles and today's agenda.
+    await page.goto(`${BASE_URL}/inicio?estilo=visual`, { waitUntil: "networkidle" });
+    await expect(page.getByRole("region", { name: "Saludo" })).toBeVisible({ timeout: 30_000 });
+    for (const label of ["Tareas abiertas", "Vencidas", "Proyectos activos"]) {
       await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
     }
-    await expect(page.getByText("Mi día", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Agenda de hoy", { exact: true }).first()).toBeVisible();
     expect(actionPosts).toEqual([]);
   });
 });

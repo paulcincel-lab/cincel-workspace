@@ -45,7 +45,7 @@ describe("with Project Flow data", () => {
     expect((await listTramos()).map((t) => t.key)).toEqual(["presale", "diseno", "construccion"]);
   });
 
-  it("names and colors the three known tramos", async () => {
+  it("names and colors the four known tramos", async () => {
     const { tramoLabel, tramoColorSlot, tramoColorVar } = await loadCompat(true);
     expect(tramoLabel("presale")).toBe("Presale");
     expect(tramoLabel("diseno")).toBe("Diseño");
@@ -53,7 +53,9 @@ describe("with Project Flow data", () => {
     expect(tramoColorSlot("presale")).toBe(1);
     expect(tramoColorSlot("diseno")).toBe(2);
     expect(tramoColorSlot("construccion")).toBe(3);
+    expect(tramoColorSlot("decoracion")).toBe(4);
     expect(tramoColorVar("diseno")).toBe("var(--chart-2)");
+    expect(tramoColorVar("decoracion")).toBe("var(--chart-4)");
   });
 
   it("names a fase from its catalog", async () => {
@@ -91,7 +93,7 @@ describe("without Project Flow data", () => {
     expect(tramoLabel("decoracion")).toBe("Decoración");
     expect(tramoLabel("obra_gris")).toBe("Obra gris");
     expect(tramoLabel("  ")).toBe("");
-    expect(tramoColorSlot("decoracion")).toBeNull();
+    expect(tramoColorSlot("obra_gris")).toBeNull();
     expect(tramoColorSlot("")).toBeNull();
     expect(tramoColorVar("otro")).toBe("var(--muted-foreground)");
   });

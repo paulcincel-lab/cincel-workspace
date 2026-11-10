@@ -14,8 +14,19 @@ export type CatalogProjectOption = { id: string; name: string; status: ProjectSt
 /** `catalog.staff`: active staff, in the team's manual order. `name` is the display name (nombre + apellido). */
 export type CatalogStaffOption = { id: string; name: string };
 
-/** `catalog.assignableStaff(workflowId)`: suggested first, then by name. */
-export type CatalogAssignableStaffOption = { id: string; name: string; suggested: boolean };
+/**
+ * `catalog.assignableStaff(workflowId)`: suggested first, then by name. With a
+ * tramo, `openCount` / `overdueCount` are the person's open tasks in that
+ * tramo and how many of them are overdue (due before today in the org time
+ * zone); absent without a tramo.
+ */
+export type CatalogAssignableStaffOption = {
+  id: string;
+  name: string;
+  suggested: boolean;
+  openCount?: number;
+  overdueCount?: number;
+};
 
 /** `catalog.contacts(type?)`: live contacts, by name. */
 export type CatalogContactOption = { id: string; name: string; type: ContactType };

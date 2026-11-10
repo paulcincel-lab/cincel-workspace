@@ -18,6 +18,7 @@ const SLOT_BY_KEY: Record<string, TramoColorSlot> = {
   presale: 1,
   diseno: 2,
   construccion: 3,
+  decoracion: 4,
 };
 
 /** Tailwind classes per slot. Literal strings so Tailwind picks them up. */

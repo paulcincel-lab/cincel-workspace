@@ -9,6 +9,7 @@ import {
   resolveTaskStatusesCapabilities,
   resolveTeamCapabilities,
 } from "@/lib/auth/permissions";
+import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
 import { db } from "@/lib/db/client";
 import { contacts, projects, staff } from "@/lib/db/schema";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
@@ -16,6 +17,7 @@ import * as projectsRepository from "@/lib/repositories/projects-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import * as taskStatusesRepository from "@/lib/repositories/task-statuses-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
+import { getGeneralSettings } from "@/lib/settings/general-settings-server";
 import type {
   CatalogAssignableStaffOption,
   CatalogContactOption,
@@ -75,15 +77,29 @@ export async function loadCatalogStaff(user: AuthenticatedUser): Promise<Catalog
 
 /**
  * Staff who can take a task `{id,name,suggested}`: with a tramo, the ones
- * whose puesto covers it come first. Any staff session, as
+ * whose puesto covers it come first, each with `openCount` / `overdueCount`
+ * (their open tasks in the tramo, overdue = due before today in the org time
+ * zone; the quick-add suggestions). Any staff session, as
  * `fetchAssignableStaffAction` (every task form assigns).
  */
 export async function loadCatalogAssignableStaff(
   _user: AuthenticatedUser,
   input: { workflowId: string | null },
+  options: { now?: Date } = {},
 ): Promise<CatalogAssignableStaffOption[]> {
-  const rows = await staffRepository.listAssignableStaff({ workflowId: input.workflowId });
-  return rows.map((r) => ({ id: r.id, name: staffDisplayName(r), suggested: r.suggested }));
+  const { workflowId } = input;
+  const rows = await staffRepository.listAssignableStaff({ workflowId });
+  if (!workflowId) return rows.map((r) => ({ id: r.id, name: staffDisplayName(r), suggested: r.suggested }));
+  const { settings } = await getGeneralSettings();
+  const todayIso = zonedIsoDate(options.now ?? new Date(), settings.regional.timeZone);
+  const counts = await staffRepository.countOpenTasksInTramo(workflowId, todayIso);
+  return rows.map((r) => ({
+    id: r.id,
+    name: staffDisplayName(r),
+    suggested: r.suggested,
+    openCount: counts.get(r.id)?.open ?? 0,
+    overdueCount: counts.get(r.id)?.overdue ?? 0,
+  }));
 }
 
 /**

@@ -99,8 +99,12 @@ vi.mock("@/components/shell/LoadingSkeleton", () => ({
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import {
   BOARD_COLUMN_EMPTY,
+  BOARD_DROP_HINT,
   TaskBoardWidget,
+  boardCardDelay,
   boardCardHref,
+  boardColumnLabel,
+  boardDueText,
   boardSegments,
 } from "@/components/widgets/TaskBoardWidget";
 import {
@@ -168,16 +172,20 @@ describe("TaskBoardWidget · same fixture in every style", () => {
     const { container } = renderBoard("visual");
 
     for (const [key, count] of Object.entries(taskBoardExpected.counts)) {
-      const column = screen.getByRole("group", { name: `${LABELS[key as keyof typeof LABELS]} · ${count}` });
+      const column = screen.getByRole("region", { name: boardColumnLabel(LABELS[key as keyof typeof LABELS], count) });
       expect(column.querySelectorAll("[data-task-id]").length).toBe(count);
       expect(column.getAttribute("data-collapsed")).toBe(count === 0 ? "true" : null);
     }
     expect(container.querySelectorAll("[data-task-id]").length).toBe(taskBoardExpected.total);
     expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe("/tareas?tarea=t2");
     expect(within(card(container, "t1")).getByText("1/3")).toBeTruthy();
-    // Overdue due date in destructive; future one muted.
-    expect(within(card(container, "t1")).getByText("15-01-2026").className).toContain("text-destructive");
-    expect(within(card(container, "t2")).getByText("15-06-2030").className).not.toContain("text-destructive");
+    // Overdue due date in a destructive chip with the days late; a future one in an outline chip.
+    const overdue = card(container, "t1").querySelector('[data-slot="board-card-due"]')!;
+    expect(overdue.textContent).toMatch(/^15 ene · \d+ d$/);
+    expect(overdue.getAttribute("data-variant")).toBe("destructive");
+    const future = card(container, "t2").querySelector('[data-slot="board-card-due"]')!;
+    expect(future.textContent).toBe("15 jun");
+    expect(future.getAttribute("data-variant")).toBe("outline");
 
     expect(screen.queryByTestId("task-board-esencial")).toBeNull();
     expect(screen.queryByTestId("task-board-analitico")).toBeNull();
@@ -243,19 +251,19 @@ describe("TaskBoardWidget · Visual moves", () => {
     const { container } = renderBoard("visual", { onMove });
 
     fireEvent.dragStart(card(container, "t2"));
-    const target = screen.getByRole("group", { name: "En proceso · 2" });
+    const target = screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) });
     fireEvent.dragOver(target);
     fireEvent.drop(target);
 
     expect(onMove).toHaveBeenCalledWith("t2", "en_proceso");
-    expect(screen.getByRole("group", { name: "Pendiente · 3" }).contains(card(container, "t2"))).toBe(true);
+    expect(screen.getByRole("region", { name: boardColumnLabel("Pendiente", 3) }).contains(card(container, "t2"))).toBe(true);
   });
 
   it("shows the board it is handed: the moved card (the cache's optimistic patch) lands in its column", () => {
     const { container, rerenderWith } = renderBoard("visual");
     rerenderWith({ board: withTaskIn(taskBoardFixture, "t2", "en_proceso") });
-    expect(screen.getByRole("group", { name: "En proceso · 3" }).contains(card(container, "t2"))).toBe(true);
-    expect(screen.getByRole("group", { name: "Pendiente · 2" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: boardColumnLabel("En proceso", 3) }).contains(card(container, "t2"))).toBe(true);
+    expect(screen.getByRole("region", { name: boardColumnLabel("Pendiente", 2) })).toBeTruthy();
   });
 
   it("shows the mapped error when onMove rejects", async () => {
@@ -263,7 +271,7 @@ describe("TaskBoardWidget · Visual moves", () => {
     const { container } = renderBoard("visual", { onMove });
 
     fireEvent.dragStart(card(container, "t2"));
-    const target = screen.getByRole("group", { name: "En proceso · 2" });
+    const target = screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) });
     fireEvent.dragOver(target);
     await act(async () => {
       fireEvent.drop(target);
@@ -277,13 +285,13 @@ describe("TaskBoardWidget · Visual moves", () => {
     const { container, rerenderWith } = renderBoard("visual", { onMove });
 
     fireEvent.dragStart(card(container, "t3"));
-    const strip = screen.getByRole("group", { name: "Bloqueado · 0" });
+    const strip = screen.getByRole("region", { name: boardColumnLabel("Bloqueado", 0) });
     fireEvent.dragOver(strip);
     fireEvent.drop(strip);
     expect(onMove).toHaveBeenCalledWith("t3", "bloqueado");
 
     rerenderWith({ onMove, board: withTaskIn(taskBoardFixture, "t3", "bloqueado") });
-    const column = screen.getByRole("group", { name: "Bloqueado · 1" });
+    const column = screen.getByRole("region", { name: boardColumnLabel("Bloqueado", 1) });
     expect(column.getAttribute("data-collapsed")).toBeNull();
     expect(column.contains(card(container, "t3"))).toBe(true);
     expect(toastError).not.toHaveBeenCalled();
@@ -294,7 +302,7 @@ describe("TaskBoardWidget · Visual moves", () => {
     const { container } = renderBoard("visual", { onMove });
 
     fireEvent.dragStart(card(container, "t1"));
-    const own = screen.getByRole("group", { name: "Pendiente · 3" });
+    const own = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 3) });
     fireEvent.dragOver(own);
     fireEvent.drop(own);
 
@@ -361,12 +369,12 @@ describe("TaskBoardWidget · column totals and Cargar más", () => {
     const { container } = renderBoard("visual", {
       columnPages: { filters: FILTERS, columns: { pendiente: { total: 30, nextCursor: "c-1" } } },
     });
-    const column = screen.getByRole("group", { name: "Pendiente · 30" });
-    fireEvent.click(within(column).getByRole("button", { name: "Cargar más en Pendiente" }));
+    const column = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 30) });
+    fireEvent.click(within(column).getByRole("button", { name: /^Ver \d+ más en Pendiente$/ }));
 
     await waitFor(() => expect(container.querySelector('[data-task-id="t-extra"]')).toBeTruthy());
     expect(pageData.getTareasBoardColumn).toHaveBeenCalledWith({ filters: FILTERS, columnId: "pendiente", cursor: "c-1" });
-    expect(within(column).queryByRole("button", { name: "Cargar más en Pendiente" })).toBeNull();
+    expect(within(column).queryByRole("button", { name: /más en Pendiente$/ })).toBeNull();
   });
 
   it("loads nothing until asked", () => {
@@ -384,7 +392,7 @@ describe("TaskBoardWidget · empty and loading", () => {
     expect(screen.queryByTestId("empty-state")).toBeNull();
     expect(screen.getByTestId("task-board")).toBeTruthy();
     for (const label of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
-      const column = screen.getByRole("group", { name: `${label} · 0` });
+      const column = screen.getByRole("region", { name: boardColumnLabel(label, 0) });
       expect(column.getAttribute("data-collapsed")).toBeNull();
       expect(within(column).getByRole("heading", { name: label })).toBeTruthy();
       expect(within(column).getByText(BOARD_COLUMN_EMPTY)).toBeTruthy();
@@ -398,14 +406,14 @@ describe("TaskBoardWidget · empty and loading", () => {
       table: { ...taskBoardTableFixture, rows: [] },
       customStatuses: [{ id: "cs-qa", name: "QA en revisión" }],
     });
-    expect(screen.getByRole("group", { name: "QA en revisión · 0" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: boardColumnLabel("QA en revisión", 0) })).toBeTruthy();
   });
 
   it("collapses an empty configured custom status to a strip that takes a drop", async () => {
     const onMove = vi.fn(() => Promise.resolve());
     const { container } = renderBoard("visual", { onMove, customStatuses: [{ id: "cs-qa", name: "QA en revisión" }] });
 
-    const strip = screen.getByRole("group", { name: "QA en revisión · 0" });
+    const strip = screen.getByRole("region", { name: boardColumnLabel("QA en revisión", 0) });
     expect(strip.getAttribute("data-collapsed")).toBe("true");
 
     fireEvent.dragStart(card(container, "t1"));
@@ -419,7 +427,7 @@ describe("TaskBoardWidget · empty and loading", () => {
 
   it("lists a configured custom status once when tasks are also in it", () => {
     renderBoard("visual", { customStatuses: [{ id: "cs-rev", name: "En revisión" }] });
-    expect(screen.getAllByRole("group", { name: /^En revisión · / })).toHaveLength(1);
+    expect(screen.getAllByRole("region", { name: /^En revisión, / })).toHaveLength(1);
   });
 
   it.each<PresentationStyle>(["esencial", "analitico"])("renders the default empty state in %s", (style) => {
@@ -460,7 +468,7 @@ describe("TaskBoardWidget · quick-add", () => {
 
     for (const [key, count] of Object.entries(taskBoardExpected.counts)) {
       const label = LABELS[key as keyof typeof LABELS];
-      const column = screen.getByRole("group", { name: `${label} · ${count}` });
+      const column = screen.getByRole("region", { name: boardColumnLabel(label, count) });
       const button = within(column).queryByRole("button", { name: `Agregar tarea en ${label}` });
       // Collapsed strips (empty columns) stay as in the canvas: ring, 0, label.
       if (count === 0) {
@@ -487,5 +495,106 @@ describe("TaskBoardWidget · quick-add", () => {
   it.each<PresentationStyle>(["esencial", "analitico"])("has no quick-add in %s", (style) => {
     renderBoard(style);
     expect(screen.queryByRole("button", { name: /^Agregar tarea en / })).toBeNull();
+  });
+});
+
+describe("TaskBoardWidget · Visual motion and drag state (frame Tareas-Visual)", () => {
+  it("card stagger delay by column and index", () => {
+    const { container } = renderBoard("visual");
+    expect(boardCardDelay(0, 0)).toBe("0ms");
+    expect(boardCardDelay(2, 3)).toBe("260ms");
+    // Capped at 10 cards per column.
+    expect(boardCardDelay(1, 25)).toBe(boardCardDelay(1, 10));
+
+    const pendiente = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 3) });
+    const cards = Array.from(pendiente.querySelectorAll<HTMLElement>('[data-testid="task-card"]'));
+    expect(cards.map((c) => c.style.getPropertyValue("--anim-delay"))).toEqual(["0ms", "60ms", "120ms"]);
+    for (const c of cards) expect(c.className).toContain("anim-in");
+
+    const enProceso = screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) });
+    const first = enProceso.querySelector<HTMLElement>('[data-testid="task-card"]')!;
+    expect(first.style.getPropertyValue("--anim-delay")).toBe("40ms");
+    expect(container.querySelectorAll('[data-testid="task-card"]').length).toBe(taskBoardExpected.total);
+  });
+
+  it("dragged card gets drag-lift", () => {
+    const { container } = renderBoard("visual");
+    const dragged = card(container, "t2");
+    expect(dragged.className).toContain("lift");
+    expect(dragged.className).not.toContain("drag-lift");
+    fireEvent.dragStart(dragged);
+    expect(card(container, "t2").className).toContain("drag-lift");
+    expect(card(container, "t2").className).toContain("border-primary");
+    expect(card(container, "t1").className).not.toContain("drag-lift");
+    fireEvent.dragEnd(card(container, "t2"));
+    expect(card(container, "t2").className).not.toContain("drag-lift");
+  });
+
+  it("drop column shows Suelta aquí", () => {
+    const { container } = renderBoard("visual");
+    expect(screen.queryByText(BOARD_DROP_HINT)).toBeNull();
+
+    fireEvent.dragStart(card(container, "t2"));
+    const target = screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) });
+    fireEvent.dragOver(target);
+
+    expect(within(target).getByText(BOARD_DROP_HINT)).toBeTruthy();
+    expect(target.className).toContain("bg-tint-primary");
+    expect(within(target).getByTestId("board-drop-placeholder")).toBeTruthy();
+    // Only the column under the card.
+    expect(screen.getAllByText(BOARD_DROP_HINT)).toHaveLength(1);
+  });
+
+  it("renderColumnFooter replaces + Agregar", () => {
+    const renderColumnFooter = vi.fn((key: string) => <div data-testid={`footer-${key}`}>Agregar rápido</div>);
+    renderBoard("visual", { renderColumnFooter });
+
+    expect(screen.queryByRole("button", { name: /^Agregar tarea en / })).toBeNull();
+    const pendiente = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 3) });
+    expect(within(pendiente).getByTestId("footer-pendiente")).toBeTruthy();
+    expect(renderColumnFooter).toHaveBeenCalledWith("pendiente");
+    // Collapsed strips have no footer.
+    expect(renderColumnFooter).not.toHaveBeenCalledWith("bloqueado");
+  });
+
+  it("announces Movida a after a drop", () => {
+    const onMove = vi.fn(() => Promise.resolve());
+    const { container } = renderBoard("visual", { onMove });
+    const live = screen.getByTestId("board-announcement");
+    expect(live.getAttribute("aria-live")).toBe("polite");
+    expect(live.textContent).toBe("");
+
+    fireEvent.dragStart(card(container, "t2"));
+    const target = screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) });
+    fireEvent.dragOver(target);
+    fireEvent.drop(target);
+
+    expect(onMove).toHaveBeenCalledWith("t2", "en_proceso");
+    expect(live.textContent).toBe("Movida a En proceso");
+  });
+
+  it("columns are labelled sections with a share bar, cards a tramo strip and a drag handle", () => {
+    const { container } = renderBoard("visual");
+    const pendiente = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 3) });
+    expect(pendiente.tagName).toBe("SECTION");
+    const bar = pendiente.querySelector<HTMLElement>('[data-slot="board-column-bar"] > div')!;
+    expect(bar.className).toContain("grow-x");
+    expect(bar.style.width).toBe(`${Math.round((3 / taskBoardExpected.total) * 100)}%`);
+
+    const t1 = card(container, "t1");
+    expect(t1.querySelector('[data-slot="board-card-strip"]')).toBeTruthy();
+    expect(within(t1).getByRole("button", { name: `Arrastrar ${t1.querySelector("a")!.textContent}` })).toBeTruthy();
+    expect(within(t1).getByText("Subtareas")).toBeTruthy();
+    expect(t1.querySelector('[data-slot="board-card-subtasks"] .grow-x')).toBeTruthy();
+  });
+
+  it("boardDueText: day and short month, overdue adds the days late", () => {
+    expect(boardDueText("2026-11-20", false, "2026-11-09")).toBe("20 nov");
+    expect(boardDueText("2026-10-31", true, "2026-11-09")).toBe("31 oct · 9 d");
+  });
+
+  it("boardColumnLabel pluralizes", () => {
+    expect(boardColumnLabel("Pendiente", 1)).toBe("Pendiente, 1 tarea");
+    expect(boardColumnLabel("Pendiente", 0)).toBe("Pendiente, 0 tareas");
   });
 });

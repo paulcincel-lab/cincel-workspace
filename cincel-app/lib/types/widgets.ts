@@ -60,6 +60,14 @@ export type ProgressItem = {
   colorVar?: string;
   href?: string;
   next?: { title: string; date: string } | null;
+  /** Open tasks of the project (Inicio, `inicioPortfolioRows`). */
+  open?: number;
+  /** Open tasks past their commitment date (Inicio, `inicioPortfolioRows`). */
+  overdue?: number;
+  /** The project's delivery date (`endDate`, `YYYY-MM-DD`), null without one. */
+  deliveryDate?: string | null;
+  /** Manager, coordinator and task assignees, deduplicated (Inicio Visual avatars). */
+  team?: { id: string; initials: string; tramo: TramoKey | null }[];
 };
 
 export type AttentionItem = {
@@ -73,6 +81,10 @@ export type AttentionItem = {
   assignee: { id: string; name: string; initials: string } | null;
   due: string | null;
   daysLate: number | null;
+  /** Live subtareas done / total; null without subtareas (Inicio Visual caption). */
+  subtasks?: { done: number; total: number } | null;
+  /** 0–100: 100 when completed, else the share of done subtareas (`taskProgressPct`). */
+  progressPct?: number;
 };
 
 export type AgendaItem = {

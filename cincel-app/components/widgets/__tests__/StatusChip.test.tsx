@@ -102,3 +102,46 @@ describe("StatusChip states", () => {
     expect(container.textContent).toBe("");
   });
 });
+
+describe("StatusChip variant dot", () => {
+  const INK: Record<string, string> = {
+    "chart-1": "var(--chart-1-ink)",
+    "chart-2": "var(--chart-2-ink)",
+    "chart-3": "var(--chart-3-ink)",
+    destructive: "var(--destructive)",
+  };
+
+  it.each(STYLES)("variant dot renders dot and ink label in every style (%s)", (style) => {
+    for (const key of KEYS) {
+      const { container, unmount } = renderIn(style, <StatusChip status={STATUS_FIXTURE[key]} variant="dot" />);
+      const { label, token } = STATUS_EXPECTED[key];
+      const chips = container.querySelectorAll('[data-slot="status-chip"]');
+      expect(chips).toHaveLength(1);
+      const chip = chips[0] as HTMLElement;
+      expect(chip.getAttribute("data-variant")).toBe("dot");
+      expect(chip.getAttribute("data-token")).toBe(token);
+      expect(chip.textContent).toBe(label);
+      expect(chip.getAttribute("style")).toContain(INK[token]);
+      expect(container.querySelector('[data-slot="badge"]')).toBeNull();
+      const dot = chip.querySelector('span[aria-hidden="true"]') as HTMLElement;
+      expect(dot.className).toContain("size-[7px]");
+      expect(dot.getAttribute("style")).toContain(`var(--${token})`);
+      unmount();
+    }
+  });
+
+  it("default variant is unchanged (auto)", () => {
+    const visual = renderIn("visual", <StatusChip status={STATUS_FIXTURE.bloqueado} />);
+    expect(visual.container.querySelector('[data-slot="badge"]')).not.toBeNull();
+    expect(visual.container.querySelector('[data-variant="dot"]')).toBeNull();
+    visual.unmount();
+    const esencial = renderIn("esencial", <StatusChip status={STATUS_FIXTURE.enProceso} variant="auto" />);
+    expect(esencial.container.querySelector('[data-variant="dot"]')).toBeNull();
+    expect(esencial.container.textContent).toBe("En proceso");
+  });
+
+  it("variant dot keeps the empty text for no status", () => {
+    const { container } = renderIn("esencial", <StatusChip status={null} variant="dot" />);
+    expect(container.textContent).toBe(STATUS_CHIP_EMPTY_TEXT);
+  });
+});

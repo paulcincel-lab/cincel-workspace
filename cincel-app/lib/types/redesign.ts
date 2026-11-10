@@ -13,6 +13,7 @@ import type {
   KpiDatum,
   PersonDatum,
   ProgressItem,
+  TramoKey,
 } from "@/lib/types/widgets";
 
 // ── Appearance ──────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ export type TokenName =
   | "border" | "border-strong" | "input" | "ring"
   | "chart-1" | "chart-2" | "chart-3" | "chart-4" | "chart-5"
   | "chart-1-ink" | "chart-2-ink" | "chart-3-ink" | "chart-4-ink" | "chart-5-ink"
+  | "tint-primary" | "tint-violet" | "tint-warning" | "tint-cyan" | "tint-destructive" | "tint-success"
+  | "destructive-ink" | "foreground-soft"
   | "sidebar" | "sidebar-foreground" | "sidebar-primary" | "sidebar-primary-foreground"
   | "sidebar-accent" | "sidebar-accent-foreground" | "sidebar-border" | "sidebar-ring";
 
@@ -309,6 +312,30 @@ export type InicioData = {
   myDay: AgendaItem[];
   projectsProgress: ProgressItem[];
   workload: PersonDatum[];
+  /** Inicio Visual greeting hero (#989). */
+  hero: InicioHero;
+  /** Staff of the dashboard scope with an open time entry today; null without `showTeamWorkload`. */
+  openShifts: InicioOpenShifts | null;
+  /** Today's scoped task events plus the open tasks due today (`entrega`), by time. */
+  todayAgenda: InicioAgendaItem[];
+};
+
+/** Hero counts: open tasks due today, overdue tasks, their distinct projects, the project with most overdue. */
+export type InicioHero = {
+  dueToday: number;
+  overdue: number;
+  overdueProjects: number;
+  focusProject: { id: string; name: string; href: string } | null;
+};
+
+export type InicioOpenShifts = {
+  count: number;
+  people: { id: string; initials: string; tramo: TramoKey | null }[];
+};
+
+export type InicioAgendaItem = AgendaItem & {
+  kind: "evento" | "entrega";
+  assignee: { id: string; name: string; initials: string } | null;
 };
 
 export type PersonaDetail = {

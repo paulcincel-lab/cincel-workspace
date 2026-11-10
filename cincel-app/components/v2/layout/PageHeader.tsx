@@ -26,9 +26,11 @@ export type PageHeaderProps = {
  * page (Proyectos, Equipo, Directorio, Actividades, Recursos) — factored out
  * once instead of hand-rolled per page.
  *
- * Redesign (FE §4.2): optional breadcrumb and badge, and a 22 px title on
- * redesign pages (`<html data-style>` is only emitted with the redesign on, so
- * legacy pages keep today's title size).
+ * Redesign (FE §4.2): optional breadcrumb and badge; on redesign pages
+ * (`<html data-style>` is only emitted with the redesign on, so legacy pages
+ * keep today's sizes) the title follows the org type scale
+ * (`--type-pageTitle-*`), the description is 15 px and the actions wrap with
+ * a 10 px gap.
  */
 export function PageHeader({ title, description, breadcrumb, actions, badge }: PageHeaderProps) {
   const trail = breadcrumb?.filter((item) => item.label) ?? [];
@@ -59,14 +61,16 @@ export function PageHeader({ title, description, breadcrumb, actions, badge }: P
           </Breadcrumb>
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-semibold [html[data-style]_&]:text-[22px] [html[data-style]_&]:leading-tight">
+          <h1 className="text-lg font-semibold [html[data-style]_&]:text-[length:var(--type-pageTitle-size,22px)] [html[data-style]_&]:leading-tight [html[data-style]_&]:tracking-[-0.02em] [html[data-style]_&]:[font-weight:var(--type-pageTitle-weight,600)]">
             {title}
           </h1>
           {badge ? <div className="flex items-center">{badge}</div> : null}
         </div>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+        {description ? <p className="text-xs text-muted-foreground [html[data-style]_&]:mt-1.5 [html[data-style]_&]:text-[15px]">{description}</p> : null}
       </div>
-      {actions ? <div className="flex gap-2 [html[data-style]_&]:flex-wrap">{actions}</div> : null}
+      {actions ? <div className="flex gap-2 [html[data-style]_&]:flex-wrap [html[data-style]_&]:items-center [html[data-style]_&]:gap-2.5">
+          {actions}
+        </div> : null}
     </div>
   );
 }
