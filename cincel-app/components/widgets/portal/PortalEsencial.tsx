@@ -3,11 +3,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { portalDocumentDownloadUrl } from "@/components/portal/PortalProjectOverview";
 import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { initialsOf } from "@/lib/personas/team";
 import { buildPortalStatusSentence, PORTAL_OVERVIEW_COPY, type PortalOverviewData } from "@/lib/portal/overview";
-import { portalProjectTabHref } from "@/lib/portal/project-tabs";
+import { portalDocumentDownloadUrl, portalProjectTabHref } from "@/lib/portal/project-tabs";
 import { tramoColorSlot, type TramoColorSlot } from "@/lib/tramos/tramo-color";
 import type { PortalFileDTO, PortalProjectDTO, PortalTramoDTO } from "@/lib/types/portal";
 import { cn } from "@/lib/utils";
