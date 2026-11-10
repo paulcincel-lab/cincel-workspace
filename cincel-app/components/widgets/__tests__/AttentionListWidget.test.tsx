@@ -183,7 +183,7 @@ describe("AttentionListWidget", () => {
     for (const style of STYLES) {
       const { unmount } = renderWidget(style);
       const more = within(region()).getByRole("link", { name: "Ver más (7)" });
-      expect(more.getAttribute("href")).toBe("/tareas?vista=lista&atencion=1");
+      expect(more.getAttribute("href")).toBe("/tareas?atencion=1");
       unmount();
     }
   });

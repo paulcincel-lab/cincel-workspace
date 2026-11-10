@@ -237,7 +237,7 @@ async function deleteTaskActionImpl(id: string): Promise<void> {
   if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
     throw new Error("FORBIDDEN: task delete");
   }
-  // No revalidation: the caller (`EventDetailPopover`) invalidates the Tareas, project and Inicio keys.
+  // No revalidation: the caller invalidates the Tareas, project and Inicio keys (`taskDeleteInvalidations`).
   await tasksRepository.softDeleteTask(id, user.member.id);
 }
 

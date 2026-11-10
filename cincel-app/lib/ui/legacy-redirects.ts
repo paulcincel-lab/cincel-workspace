@@ -5,6 +5,10 @@
  * Every old `page.tsx` listed in FE §2.2 is a plain redirect to the target
  * returned here (query string preserved). The canonical link forms
  * (`/tareas/[id]`, `/mi-espacio/notas/[id]`) are not part of this table.
+ *
+ * `/tareas?vista=` (the old Tablero / Lista / Calendario switch) redirects
+ * to its Estilo: Tablero is Visual, Lista is Analítico and Calendario is the
+ * page without the param. The Calendario-only params (`cal`, `fecha`) go too.
  */
 
 /** What a Next.js page receives as `searchParams`, or a ready `URLSearchParams`. */
@@ -26,10 +30,10 @@ const RECURSOS_RENAMES: Readonly<Record<string, string>> = {
 const STATIC_TARGETS: Readonly<Record<string, string>> = {
   "/": "/inicio",
   "/dashboard": "/inicio",
-  "/tablero": "/tareas?vista=tablero",
-  "/mis-tareas": "/tareas?vista=lista&responsable=yo",
-  "/calendario": "/tareas?vista=calendario",
-  "/actividades/general": "/tareas?vista=lista",
+  "/tablero": "/tareas?estilo=visual",
+  "/mis-tareas": "/tareas?estilo=analitico&responsable=yo",
+  "/calendario": "/tareas",
+  "/actividades/general": "/tareas?estilo=analitico",
   "/equipo": "/personas",
   "/directorio": "/personas/clientes",
   "/clientes": "/personas/clientes",
@@ -40,6 +44,30 @@ const STATIC_TARGETS: Readonly<Record<string, string>> = {
   "/configuracion": "/ajustes/apariencia",
   "/configuracion/google/primeros-pasos": "/ajustes/google/primeros-pasos",
 };
+
+/** The old `?vista=` values and the Estilo each one opens (null: none, the viewer's own). */
+const VISTA_ESTILOS: Readonly<Record<string, string | null>> = {
+  tablero: "visual",
+  lista: "analitico",
+  calendario: null,
+};
+
+/** `/tareas` params of the removed view switch and Calendario view, dropped on the way. */
+const TAREAS_OLD_PARAMS: ReadonlySet<string> = new Set(["vista", "cal", "fecha"]);
+
+/** `/tareas?vista=…` → the same page in its Estilo, or null when there is no `vista` param. */
+function tareasVistaTarget(entries: [string, string][]): string | null {
+  const vista = entries.find(([key]) => key === "vista")?.[1];
+  if (vista === undefined) return null;
+  const query = new URLSearchParams();
+  const estilo = VISTA_ESTILOS[vista] ?? null;
+  if (estilo && !entries.some(([key]) => key === "estilo")) query.append("estilo", estilo);
+  for (const [key, value] of entries) {
+    if (!TAREAS_OLD_PARAMS.has(key)) query.append(key, value);
+  }
+  const serialized = query.toString();
+  return serialized ? `/tareas?${serialized}` : "/tareas";
+}
 
 function toEntries(searchParams: LegacySearchParams): [string, string][] {
   if (!searchParams) return [];
@@ -80,7 +108,7 @@ function targetFor(path: string): string | null {
   switch (root) {
     case "actividades":
       if (second) return null;
-      return `/tareas?${new URLSearchParams({ vista: "lista", tramo: first }).toString()}`;
+      return `/tareas?${new URLSearchParams({ estilo: "analitico", tramo: first }).toString()}`;
     case "proveedores":
       return second ? null : "/personas/proveedores";
     case "recursos":
@@ -104,14 +132,17 @@ function targetFor(path: string): string | null {
  */
 export function legacyRedirectTarget(pathname: string, searchParams?: LegacySearchParams): string | null {
   const path = normalizePath(pathname);
+  if (path === "/tareas") return tareasVistaTarget(toEntries(searchParams));
   const target = targetFor(path);
   if (!target) return null;
 
   const [targetPath, targetQuery = ""] = target.split("?", 2) as [string, string?];
   const query = new URLSearchParams(targetQuery);
   const fixedKeys = new Set(query.keys());
+  const toTareas = targetPath === "/tareas";
   for (const [key, value] of toEntries(searchParams)) {
-    if (!fixedKeys.has(key)) query.append(key, value);
+    if (fixedKeys.has(key) || (toTareas && TAREAS_OLD_PARAMS.has(key))) continue;
+    query.append(key, value);
   }
 
   const isTramoStart = path.startsWith("/actividades/") && path !== "/actividades/general";

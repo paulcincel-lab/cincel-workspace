@@ -206,7 +206,7 @@ describe("TaskBoardWidget · same fixture in every style", () => {
       if (key === "completado") {
         expect(within(section).queryByTestId("record-table")).toBeNull();
         expect(within(section).getByRole("link", { name: "Ver completadas en la lista" }).getAttribute("href")).toBe(
-          "/tareas?vista=lista&estado=completado",
+          "/tareas?estado=completado",
         );
       } else {
         expect(within(section).getByTestId("record-table").querySelectorAll("tr").length).toBe(count);
@@ -326,25 +326,25 @@ describe("TaskBoardWidget · Visual moves", () => {
 
 describe("TaskBoardWidget · card link", () => {
   it("keeps the view and every filter and adds tarea", () => {
-    nav.search = "vista=tablero&tramo=diseno&responsable=yo&q=planos";
+    nav.search = "estilo=visual&tramo=diseno&responsable=yo&q=planos";
     renderBoard("visual");
     expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe(
-      "/tareas?vista=tablero&tramo=diseno&responsable=yo&q=planos&tarea=t2",
+      "/tareas?estilo=visual&tramo=diseno&responsable=yo&q=planos&tarea=t2",
     );
   });
 
   it("boardCardHref replaces an open tarea", () => {
-    expect(boardCardHref("/tareas", "vista=tablero&estado=pendiente&tarea=old", "t9")).toBe(
-      "/tareas?vista=tablero&estado=pendiente&tarea=t9",
+    expect(boardCardHref("/tareas", "estilo=visual&estado=pendiente&tarea=old", "t9")).toBe(
+      "/tareas?estilo=visual&estado=pendiente&tarea=t9",
     );
   });
 
   it("opens the sheet shallowly (history.pushState, no navigation)", () => {
     const pushState = vi.spyOn(window.history, "pushState");
-    nav.search = "vista=tablero&tramo=diseno";
+    nav.search = "estilo=visual&tramo=diseno";
     renderBoard("visual");
     fireEvent.click(screen.getByRole("link", { name: "Planos ejecutivos" }));
-    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?vista=tablero&tramo=diseno&tarea=t2");
+    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?estilo=visual&tramo=diseno&tarea=t2");
     pushState.mockRestore();
   });
 });

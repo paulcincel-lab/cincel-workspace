@@ -33,12 +33,8 @@ import { scopeTaskDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
 import type { TareasListFilters } from "@/lib/query/keys";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
-import type { TaskFilters, TaskListRow, TaskRef, TaskStatus } from "@/lib/types/core";
-import type { QueryClient } from "@tanstack/react-query";
-import { calendarFetchRange, fromDayKey, startOfDay } from "@/lib/calendar/calendar-agenda";
-import { STALE, qk } from "@/lib/query/keys";
-import { prefetch } from "@/lib/query/server";
-import { esencialResponsable, type TareasQuery } from "@/lib/tareas/query";
+import type { TaskFilters, TaskListRow, TaskRef } from "@/lib/types/core";
+import { esencialResponsable } from "@/lib/tareas/query";
 import { EMPTY_TAREAS_SUMMARY, SIN_TRAMO_KEY, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
 import {
   currentTaskStatus,
@@ -61,78 +57,6 @@ import {
   type TareasByProject,
   type TareasProjectGroup,
 } from "@/lib/tareas/page-data";
-
-// ── Calendario (Query Migration 4c, #957) ────────────────────────────────────
-
-/**
- * `TareasListFilters` → repository `TaskFilters`: the tramo key becomes its
- * workflow id, "Responsable: Yo" the viewer. Null when the tramo key matches
- * no live tramo, so the view loads nothing (as the page did).
- */
-async function calendarTaskFilters(
-  user: AuthenticatedUser,
-  filters: TareasListFilters,
-): Promise<TaskFilters | null> {
-  const out: TaskFilters = {};
-  if (filters.tramo) {
-    const tramo = (await workflowsRepository.listTramosNav()).find((t) => t.key === filters.tramo);
-    if (!tramo) return null;
-    out.workflowId = tramo.id;
-  }
-  if (filters.proyecto) out.projectId = filters.proyecto;
-  // "todos" (Esencial's Solo mías off) filters nothing.
-  if (filters.responsable && filters.responsable !== "todos") {
-    out.involvesStaffId = filters.responsable === "yo" ? user.member.id : filters.responsable;
-  }
-  if (filters.estado) out.status = filters.estado as TaskStatus;
-  if (filters.q) out.search = filters.q;
-  if (filters.mostrar && filters.mostrar !== "todas") out.mostrar = filters.mostrar;
-  return out;
-}
-
-/**
- * `tareas.calendar(f, from, to)` loader: `(user, input) => data`.
- * `getTareasCalendarData` calls it after the session check and parsing; a
- * server prefetch calls it directly. FORBIDDEN without the Tareas capability.
- * Slim rows (`TaskListRow`, no `notes`) with a commitment, review or delivery
- * date in the inclusive range; admin tasks never (the default task kinds),
- * client names only for administrators (the repository's viewer scoping).
- */
-export async function loadTareasCalendar(
-  user: AuthenticatedUser,
-  input: { filters: TareasListFilters; from: string; to: string },
-): Promise<TaskListRow[]> {
-  if (!resolveActivitiesCapabilities(user).canViewActivities) throw new Error("FORBIDDEN: tareas");
-  const filters = await calendarTaskFilters(user, input.filters);
-  if (!filters) return [];
-  return tasksRepository.listTaskRows({ ...filters, dateFrom: input.from, dateTo: input.to }, viewerScopeOf(user));
-}
-
-/**
- * Server prefetch of the range `/tareas?vista=calendario` shows first
- * (`cal` + `?fecha`, or today), under the key `tareasCalendarOptions` uses.
- * The page already checked the viewer; the loader re-checks the capability.
- */
-export async function prefetchTareasCalendar(
-  qc: QueryClient,
-  user: AuthenticatedUser,
-  query: TareasQuery,
-  today: Date = new Date(),
-): Promise<void> {
-  const filters: TareasListFilters = {
-    tramo: query.tramo,
-    proyecto: query.proyecto,
-    responsable: query.responsable,
-    estado: (query.estado as TaskStatus | null) ?? null,
-    q: query.q,
-    ...(query.mostrar && query.mostrar !== "todas" ? { mostrar: query.mostrar } : {}),
-  };
-  const cursor = query.fecha ? fromDayKey(query.fecha) : startOfDay(today);
-  const { from, to } = calendarFetchRange(query.cal, cursor);
-  await prefetch(qc, { queryKey: qk.tareas.calendar(filters, from, to), staleTime: STALE.screen }, () =>
-    loadTareasCalendar(user, { filters, from, to }),
-  );
-}
 
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
 

@@ -127,7 +127,7 @@ describe("PersonaDetail", () => {
   it("links the task list to the person's tasks", () => {
     renderIn("visual", { canSeeAdminData: false, canViewHours: false });
     const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
-    expect(hrefs).toContain("/tareas?vista=lista&responsable=s-paul");
+    expect(hrefs).toContain("/tareas?responsable=s-paul");
   });
 });
 

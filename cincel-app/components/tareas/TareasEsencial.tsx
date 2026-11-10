@@ -416,7 +416,7 @@ export function TareasEsencial() {
   const empty: EmptyStateProps = filtered
     ? {
         title: ESENCIAL_EMPTY_FILTERED,
-        action: { label: ESENCIAL_CLEAR_FILTERS, onClick: () => replaceTareasUrl(hrefFor(clearTareasFilters(query))) },
+        action: { label: ESENCIAL_CLEAR_FILTERS, onClick: () => replaceTareasUrl(hrefFor(clearTareasFilters())) },
       }
     : {
         title: ESENCIAL_EMPTY_MINE,

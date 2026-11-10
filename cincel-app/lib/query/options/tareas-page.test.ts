@@ -35,7 +35,7 @@ import {
 } from "./tareas";
 
 const FILTERS = { tramo: "diseno", proyecto: null, responsable: "yo" as const, estado: null, q: "plano" };
-const KEY = { estilo: "visual" as const, cal: "mes" as const, ...FILTERS };
+const KEY = { estilo: "visual" as const, ...FILTERS };
 
 const PAGE: TareasPageData = {
   facets: { total: 3, byTramo: { diseno: 3 }, projects: [] },
@@ -50,8 +50,8 @@ beforeEach(() => {
 });
 
 describe("tareasPageKeyInputOf", () => {
-  it("keys the style, the calendar mode and the filters: never nueva, fecha, cursor or limit", () => {
-    const key = tareasPageKeyInputOf({ ...DEFAULT_TAREAS_QUERY, ...FILTERS, nueva: true, fecha: "2026-11-08" });
+  it("keys the style and the filters: never nueva, cursor or limit", () => {
+    const key = tareasPageKeyInputOf({ ...DEFAULT_TAREAS_QUERY, ...FILTERS, nueva: true });
     expect(key).toEqual(KEY);
     expect(qk.tareas.page(key)).toEqual(["tareas", "page", KEY]);
   });
@@ -79,7 +79,7 @@ describe("seedTareasPage / tareasPageOptions", () => {
     const data = await client.fetchQuery(tareasPageOptions(KEY));
 
     expect(actions.getTareasPageData).toHaveBeenCalledTimes(1);
-    expect(actions.getTareasPageData).toHaveBeenCalledWith({ estilo: "visual", cal: "mes", ...FILTERS });
+    expect(actions.getTareasPageData).toHaveBeenCalledWith({ estilo: "visual", ...FILTERS });
     expect(data.board).toBeUndefined();
     expect(client.getQueryData(qk.tareas.board(FILTERS))).toEqual(PAGE.board);
     expect(actions.getTareasBoard).not.toHaveBeenCalled();
@@ -113,12 +113,11 @@ describe("tareasListInfiniteOptions / tareasBoardColumnOptions", () => {
 });
 
 describe("tableroMoveInvalidations", () => {
-  it("lists the facets, Lista, calendar, trend, summary, project tabs, Inicio, badges and my tasks, never the board", () => {
+  it("lists the facets, Lista, trend, summary, project tabs, Inicio, badges and my tasks, never the board", () => {
     const keys = tableroMoveInvalidations("p1").map((k) => JSON.stringify(k));
     expect(keys).toEqual([
       JSON.stringify(["tareas", "facets"]),
       JSON.stringify(["tareas", "list"]),
-      JSON.stringify(["tareas", "calendar"]),
       JSON.stringify(["tareas", "trend"]),
       JSON.stringify(["tareas", "summary"]),
       JSON.stringify(qk.proyectos.tab("p1", "tareas")),
@@ -129,11 +128,11 @@ describe("tableroMoveInvalidations", () => {
       JSON.stringify(qk.me.tasks()),
     ]);
     expect(keys.some((k) => k.includes('"board"'))).toBe(false);
-    expect(tableroMoveInvalidations(null)).toHaveLength(8);
+    expect(tableroMoveInvalidations(null)).toHaveLength(7);
   });
 
-  it("tareasListFiltersOf drops the view", () => {
-    expect(tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, vista: "lista", ...FILTERS })).toEqual(FILTERS);
+  it("tareasListFiltersOf drops nueva", () => {
+    expect(tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, nueva: true, ...FILTERS })).toEqual(FILTERS);
   });
 });
 
@@ -174,7 +173,7 @@ describe("Analítico (#988)", () => {
       totals: { total: 0, open: 0, overdue: 0, blocked: 0, daysLateSum: 0, projects: 0 },
       unfiltered: { projects: 0, total: 0 },
     };
-    seedTareasPage(client, { ...FILTERS, estilo: "analitico", cal: "mes" }, {
+    seedTareasPage(client, { ...FILTERS, estilo: "analitico" }, {
       facets: { total: 0, byTramo: {}, projects: [] },
       tramos: [],
       staff: [],

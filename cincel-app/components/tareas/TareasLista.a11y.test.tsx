@@ -14,7 +14,7 @@ import { DISENO, LISTA_TASKS, LISTA_TRAMOS } from "./fixtures/lista-tasks";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams("vista=lista&tramo=diseno"),
+  useSearchParams: () => new URLSearchParams("estilo=analitico&tramo=diseno"),
 }));
 
 vi.mock("next/link", () => ({
@@ -98,9 +98,9 @@ import { seedSessionUser } from "@/tests/helpers/session-user";
 // The components read the signed-in user from the session store; seed it with the mocked user.
 beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
-const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "lista", tramo: "diseno" };
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo: "diseno" };
 
-/** The cache `/tareas?vista=lista&tramo=diseno` hydrates. */
+/** The cache `/tareas?estilo=analitico&tramo=diseno` hydrates. */
 function seededClient() {
   const client = createTestQueryClient();
   // The bundle is keyed by the style; seed it for every one the tests render.

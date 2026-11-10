@@ -14,7 +14,7 @@ export type WidgetCardFixture = {
 export const widgetCardFixture: WidgetCardFixture = {
   title: "Ritmo semanal",
   tone: "ok",
-  moreHref: "/tareas?vista=lista",
+  moreHref: "/tareas",
   items: [
     { key: "creadas", label: "Creadas", value: 24, display: "24" },
     { key: "completadas", label: "Completadas", value: 18, display: "18" },

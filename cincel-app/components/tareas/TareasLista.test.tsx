@@ -10,7 +10,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 import { LISTA_TASKS, LISTA_TRAMOS } from "./fixtures/lista-tasks";
 
 const nav = vi.hoisted(() => ({
-  search: "vista=lista",
+  search: "estilo=analitico",
   replace: vi.fn(),
   refresh: vi.fn(),
 }));
@@ -139,7 +139,7 @@ const LISTA_ROWS = LISTA_TASKS.map(
     }) as TaskListRow,
 );
 
-/** The cache `/tareas?vista=lista` hydrates: the page bundle and the first list page it seeded. */
+/** The cache `/tareas?estilo=analitico` hydrates: the page bundle and the first list page it seeded. */
 function seededClient(query: TareasQuery, nextCursor: string | null = null) {
   const client = createTestQueryClient();
   const page: TareasPageData = { facets: { total: 5, byTramo: {}, projects: [] }, tramos: LISTA_TRAMOS, staff: [] };
@@ -159,7 +159,7 @@ function renderLista({
   style = "visual",
   nextCursor = null,
 }: { tramo?: string | null; style?: PresentationStyle; nextCursor?: string | null } = {}) {
-  const query: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "lista", tramo };
+  const query: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo };
   return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
       <TareasLista query={query} header={{ title: "Tareas" }} />
@@ -169,7 +169,7 @@ function renderLista({
 }
 
 beforeEach(() => {
-  nav.search = "vista=lista";
+  nav.search = "estilo=analitico";
   listPageProps.length = 0;
   for (const fn of Object.values(pageData)) fn.mockReset();
 });
@@ -202,13 +202,13 @@ describe("TareasLista", () => {
   it("links each task to its sheet over the current view and shows its tramo", () => {
     renderLista();
     const link = screen.getByRole("link", { name: "Levantamiento" });
-    expect(link.getAttribute("href")).toBe("/tareas?vista=lista&tarea=t1");
+    expect(link.getAttribute("href")).toBe("/tareas?estilo=analitico&tarea=t1");
     expect(screen.getAllByTestId("tramo-badge").map((b) => b.textContent)).toContain("Diseño");
     expect(screen.getByTestId("lista-table").getAttribute("data-columns")).toContain("pctVencidas");
   });
 
   it("shows only the selected tramo's tasks", () => {
-    nav.search = "vista=lista&tramo=diseno";
+    nav.search = "estilo=analitico&tramo=diseno";
     renderLista({ tramo: "diseno" });
     const rows = screen.getByTestId("lista-table").querySelectorAll("tr[data-row-id]");
     expect([...rows].map((r) => r.getAttribute("data-row-id"))).toEqual(["t1", "t2"]);
@@ -223,7 +223,7 @@ describe("TareasLista", () => {
     const pushState = vi.spyOn(window.history, "pushState");
     renderLista();
     screen.getByRole("link", { name: "Levantamiento" }).click();
-    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?vista=lista&tarea=t1");
+    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?estilo=analitico&tarea=t1");
     pushState.mockRestore();
   });
 
@@ -244,7 +244,7 @@ describe("TareasLista", () => {
     await act(async () => spec.pagination?.onEndReached?.());
 
     expect(pageData.getTareasListPage).toHaveBeenCalledWith({
-      filters: tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, vista: "lista" }),
+      filters: tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY }),
       cursor: "cur-1",
     });
     await waitFor(() => expect(screen.getByRole("link", { name: "Siguiente página" })).toBeTruthy());
@@ -255,14 +255,14 @@ describe("TareasLista", () => {
 
 describe("TareasLista start slot", () => {
   it("mounts the start slot for exactly one known tramo", () => {
-    nav.search = "vista=lista&tramo=diseno";
+    nav.search = "estilo=analitico&tramo=diseno";
     renderLista({ tramo: "diseno" });
     expect(screen.getByTestId("tareas-start-slot").getAttribute("data-workflow")).toBe("w-diseno");
     expect(screen.getByTestId("lista-table")).toBeTruthy();
   });
 
   it("renders no slot with several tramos selected", () => {
-    nav.search = "vista=lista&tramo=presale,diseno&project=p9&iniciar=1";
+    nav.search = "estilo=analitico&tramo=presale,diseno&project=p9&iniciar=1";
     renderLista({ tramo: "presale,diseno" });
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
   });
@@ -276,7 +276,7 @@ describe("TareasLista start slot", () => {
   });
 
   it("never reloads the route", () => {
-    nav.search = "vista=lista&tramo=diseno";
+    nav.search = "estilo=analitico&tramo=diseno";
     renderLista({ tramo: "diseno" });
     expect(nav.refresh).not.toHaveBeenCalled();
     expect(nav.replace).not.toHaveBeenCalled();

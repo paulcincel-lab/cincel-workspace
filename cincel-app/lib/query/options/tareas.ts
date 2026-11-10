@@ -1,7 +1,6 @@
 import { keepPreviousData, queryOptions, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import {
-  getTareasCalendarData,
   getTareasStartSlotData,
   getTaskSheetData,
   searchProjectTasksAction,
@@ -15,7 +14,6 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 import type {
   StartTramoPreview,
   TaskDetail,
-  TaskListRow,
   TaskRef,
   TaskStatus,
   WorkflowDetail,
@@ -50,8 +48,8 @@ import type {
 
 /**
  * The Lista start slot of one tramo (`qk.tareas.startSlot(tramoId)`), 30 s
- * stale. Mounted only on `vista=lista` with exactly one tramo selected. Null
- * when the tramo is missing or inactive.
+ * stale. Mounted only with exactly one tramo selected. Null when the tramo is
+ * missing or inactive.
  */
 export function tareasStartSlotOptions(tramoId: string) {
   return queryOptions<TareasStartSlotData | null>({
@@ -76,8 +74,8 @@ export function startTramoPreviewOptions(projectId: string, workflowId: string) 
 
 /**
  * What starting or undoing a tramo invalidates (plan §3 "Tramo start"): the
- * tramo's start slot, every Tareas view (list, board, facets, calendar and the
- * other start slots under the `tareas` prefix), the project list and the
+ * tramo's start slot, every Tareas view (list, board, facets and the other
+ * start slots under the `tareas` prefix), the project list and the
  * project's detail keys, the project options, Inicio and the shell badges.
  */
 export function tramoStartInvalidations(target: { projectId: string; workflowId: string }): QueryKey[] {
@@ -92,7 +90,7 @@ export function tramoStartInvalidations(target: { projectId: string; workflowId:
   ];
 }
 
-// ── Calendario (Query Migration 4c, #957) ────────────────────────────────────
+// ── Filters ──────────────────────────────────────────────────────────────────
 
 /** The filters of a `/tareas` query, as the Tareas keys carry them. */
 export function tareasListFiltersOf(query: TareasQuery): TareasListFilters {
@@ -107,31 +105,13 @@ export function tareasListFiltersOf(query: TareasQuery): TareasListFilters {
 }
 
 /**
- * The Calendario rows of one inclusive range (`qk.tareas.calendar(f, from,
- * to)`), 30 s stale. The previous range stays on screen while the next one
- * loads. The query function only reads: the Google sync is a mutation.
- */
-export function tareasCalendarOptions(filters: TareasListFilters, from: string, to: string) {
-  return queryOptions<TaskListRow[]>({
-    queryKey: qk.tareas.calendar(filters, from, to),
-    queryFn: () => getTareasCalendarData({ filters, from, to }),
-    staleTime: STALE.screen,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/** Every `tareas.calendar` entry. */
-export const TAREAS_CALENDAR_PREFIX: QueryKey = [...qk.tareas.all, "calendar"];
-
-/**
- * What deleting a task invalidates (plan §3, `deleteTaskAction`): every
- * calendar range, the list, board, facets and first-page keys, the project's
+ * What deleting a task invalidates (plan §3, `deleteTaskAction`): the list,
+ * board, facets and first-page keys, the project's
  * Tareas tab, Inicio and the shell badges. The task's own detail is removed
  * (`removeQueries(tasks.detail(id))`), not refetched.
  */
 export function taskDeleteInvalidations(projectId: string | null | undefined): QueryKey[] {
   return [
-    TAREAS_CALENDAR_PREFIX,
     [...qk.tareas.all, "list"],
     [...qk.tareas.all, "board"],
     [...qk.tareas.all, "facets"],
@@ -244,12 +224,11 @@ export function projectTaskOptions(projectId: string, q: string) {
   });
 }
 
-/** The Tareas views a task edit can change: first page, lista, tablero, calendario and facets. */
+/** The Tareas views a task edit can change: first page, lista, tablero, facets, trend and summaries. */
 const TAREAS_VIEW_KEYS: readonly QueryKey[] = [
   [...qk.tareas.all, "page"],
   [...qk.tareas.all, "list"],
   [...qk.tareas.all, "board"],
-  [...qk.tareas.all, "calendar"],
   [...qk.tareas.all, "facets"],
   [...qk.tareas.all, "trend"],
   [...qk.tareas.all, "by-project"],
@@ -317,11 +296,11 @@ export function taskDependencyInvalidations(taskId: string, otherId: string): Qu
 
 /**
  * `qk.tareas.page` input of a `/tareas` query: the resolved style (the
- * server prefetch and the client pass the same one), the calendar mode and
- * the filters (never `nueva` or `fecha`).
+ * server prefetch and the client pass the same one) and the filters (never
+ * `nueva`).
  */
 export function tareasPageKeyInputOf(query: TareasQuery, estilo: PresentationStyle = "visual"): TareasPageKeyInput {
-  return { estilo, cal: query.cal, ...tareasListFiltersOf(query) };
+  return { estilo, ...tareasListFiltersOf(query) };
 }
 
 function filtersOfPageKey(q: TareasPageKeyInput): TareasListFilters {
@@ -377,7 +356,6 @@ export function tareasPageOptions(q: TareasPageKeyInput) {
     queryFn: async ({ client }) => {
       const data = await getTareasPageData({
         estilo: q.estilo,
-        cal: q.cal,
         ...filtersOfPageKey(q),
       });
       return seedTareasPage(client, q, data);
@@ -450,7 +428,7 @@ export function tareasBoardColumnOptions(f: TareasListFilters, columnId: string,
 
 /**
  * What a Tablero drag invalidates once it settles (plan §3, §4.4): the
- * facets and every Lista (and calendar) entry, the project's Tareas tab,
+ * facets and every Lista entry, the project's Tareas tab,
  * resumen and cronograma, Inicio, the shell badges and my tasks. Not the board it just
  * patched: the optimistic move already matches the server.
  */
@@ -458,7 +436,6 @@ export function tableroMoveInvalidations(projectId: string | null): QueryKey[] {
   return [
     TAREAS_FACETS_PREFIX,
     TAREAS_LIST_PREFIX,
-    TAREAS_CALENDAR_PREFIX,
     [...qk.tareas.all, "trend"],
     [...qk.tareas.all, "summary"],
     ...(projectId

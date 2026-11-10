@@ -2,14 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_TAREAS_QUERY,
-  TAREAS_CAL_MODES,
   TAREAS_ESTADOS,
   TAREAS_MOSTRAR,
-  TAREAS_VISTAS,
   clearTareasFilters,
   hasTareasFilters,
   parseTareasQuery,
-  tareasCalendarRange,
   tareasHref,
   toTareasSearch,
   toUrlSearchParams,
@@ -47,12 +44,8 @@ function uuid(r: Rand): string {
 const TRAMO_KEYS = ["presale", "diseno", "construccion", "decoracion", "tramo_2", "a-b"];
 const SEARCHES = ["plano", "Cambiar tapas", "niño & café", "a+b=c", "100%", "¿qué?", "?q=1&x=2", "línea #3"];
 
-const FECHAS = ["2026-11-06", "2024-02-29", "2026-01-01", "2026-12-31", "1999-07-15"];
-
 function randomQuery(r: Rand): TareasQuery {
   return {
-    vista: oneOf(r, TAREAS_VISTAS),
-    cal: oneOf(r, TAREAS_CAL_MODES),
     tramo: maybe(r, () => oneOf(r, TRAMO_KEYS)),
     responsable: maybe(r, () => (r() < 0.5 ? "yo" : uuid(r))),
     proyecto: maybe(r, () => uuid(r)),
@@ -60,7 +53,6 @@ function randomQuery(r: Rand): TareasQuery {
     q: maybe(r, () => oneOf(r, SEARCHES)),
     mostrar: oneOf(r, TAREAS_MOSTRAR),
     nueva: r() < 0.5,
-    fecha: maybe(r, () => oneOf(r, FECHAS)),
   };
 }
 
@@ -81,9 +73,6 @@ describe("parseTareasQuery / toTareasSearch", () => {
   it("round trips each field on its own", () => {
     const id = "0b9c1f7e-3a4d-4c2b-9e8f-1a2b3c4d5e6f";
     const cases: Partial<TareasQuery>[] = [
-      { vista: "lista" },
-      { vista: "calendario", cal: "semana" },
-      { cal: "dia" },
       { tramo: "diseno" },
       { responsable: "yo" },
       { responsable: id },
@@ -93,8 +82,6 @@ describe("parseTareasQuery / toTareasSearch", () => {
       { mostrar: "abiertas" },
       { mostrar: "en_retraso" },
       { nueva: true },
-      { fecha: "2026-11-06" },
-      { vista: "calendario", cal: "semana", fecha: "2024-02-29" },
     ];
     for (const partial of cases) {
       expect(roundTrip(partial)).toEqual({ ...DEFAULT_TAREAS_QUERY, ...partial });
@@ -110,23 +97,20 @@ describe("parseTareasQuery / toTareasSearch", () => {
 
   it("falls back to the defaults for unknown or malformed values", () => {
     const sp = new URLSearchParams({
-      vista: "kanban",
-      cal: "anio",
       tramo: "dise no!",
       responsable: "alguien",
       proyecto: "123",
       estado: "cancelado",
       q: "   ",
       nueva: "si",
-      fecha: "2026-13-01",
       mostrar: "vencidas",
     });
     expect(parseTareasQuery(sp)).toEqual(DEFAULT_TAREAS_QUERY);
   });
 
   it("keeps the valid fields when others are malformed", () => {
-    const sp = new URLSearchParams({ vista: "lista", cal: "x", tramo: "presale", estado: "nope" });
-    expect(parseTareasQuery(sp)).toEqual({ ...DEFAULT_TAREAS_QUERY, vista: "lista", tramo: "presale" });
+    const sp = new URLSearchParams({ tramo: "presale", estado: "nope", mostrar: "x" });
+    expect(parseTareasQuery(sp)).toEqual({ ...DEFAULT_TAREAS_QUERY, tramo: "presale" });
   });
 
   it("trims and caps the search text", () => {
@@ -140,55 +124,31 @@ describe("parseTareasQuery / toTareasSearch", () => {
   });
 
   it("writes params in a fixed order with a leading ?", () => {
-    expect(toTareasSearch({ q: "a b", tramo: "presale", vista: "lista", responsable: "yo" })).toBe(
-      "?vista=lista&tramo=presale&responsable=yo&q=a+b",
-    );
-  });
-});
-
-describe("fecha", () => {
-  it("round trips the calendar date", () => {
-    expect(toTareasSearch({ fecha: "2026-11-06" })).toBe("?fecha=2026-11-06");
-    expect(parseTareasQuery(new URLSearchParams("fecha=2026-11-06")).fecha).toBe("2026-11-06");
-    expect(tareasHref({ vista: "calendario", fecha: "2026-11-06" })).toBe("/tareas?vista=calendario&fecha=2026-11-06");
+    expect(toTareasSearch({ q: "a b", tramo: "presale", responsable: "yo" })).toBe("?tramo=presale&responsable=yo&q=a+b");
   });
 
-  it("drops malformed or impossible dates", () => {
-    for (const bad of ["", "2026-11-6", "06-11-2026", "2026-02-30", "2025-02-29", "2026-00-10", "2026-11-06T00:00", "hoy"]) {
-      expect(parseTareasQuery(new URLSearchParams({ fecha: bad })).fecha).toBeNull();
-    }
-  });
-
-  it("is not a filter and survives clearing the filters", () => {
-    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "calendario", fecha: "2026-11-06", tramo: "presale" };
-    expect(hasTareasFilters({ ...DEFAULT_TAREAS_QUERY, fecha: "2026-11-06" })).toBe(false);
-    expect(clearTareasFilters(q)).toEqual({ ...DEFAULT_TAREAS_QUERY, vista: "calendario", fecha: "2026-11-06" });
+  it("ignores the params of the removed view switch and Calendario view", () => {
+    const sp = new URLSearchParams({ vista: "calendario", cal: "semana", fecha: "2026-11-06", tramo: "presale" });
+    const query = parseTareasQuery(sp);
+    expect(query).toEqual({ ...DEFAULT_TAREAS_QUERY, tramo: "presale" });
+    expect(toTareasSearch(query)).toBe("?tramo=presale");
   });
 });
 
 describe("helpers", () => {
   it("toUrlSearchParams keeps the first of repeated values and skips undefined", () => {
-    const sp = toUrlSearchParams({ vista: ["lista", "tablero"], tramo: "presale", q: undefined });
-    expect(sp.get("vista")).toBe("lista");
+    const sp = toUrlSearchParams({ estado: ["pendiente", "bloqueado"], tramo: "presale", q: undefined });
+    expect(sp.get("estado")).toBe("pendiente");
     expect(sp.get("tramo")).toBe("presale");
     expect(sp.has("q")).toBe(false);
   });
 
-  it("hasTareasFilters / clearTareasFilters keep the view and drop every filter", () => {
-    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "calendario", cal: "semana", tramo: "presale", q: "x" };
+  it("hasTareasFilters / clearTareasFilters drop every filter", () => {
+    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo: "presale", q: "x" };
     expect(hasTareasFilters(q)).toBe(true);
-    const cleared = clearTareasFilters(q);
-    expect(cleared).toEqual({ ...DEFAULT_TAREAS_QUERY, vista: "calendario", cal: "semana" });
+    const cleared = clearTareasFilters();
+    expect(cleared).toEqual(DEFAULT_TAREAS_QUERY);
     expect(hasTareasFilters(cleared)).toBe(false);
-    expect(hasTareasFilters({ ...DEFAULT_TAREAS_QUERY, vista: "lista" })).toBe(false);
-  });
-
-  it("tareasCalendarRange pads the month to whole weeks, Monday first", () => {
-    // Friday 6 Nov 2026: November starts on a Sunday and ends on a Monday.
-    const today = new Date(2026, 10, 6);
-    expect(tareasCalendarRange("mes", today)).toEqual({ from: "2026-10-26", to: "2026-12-06" });
-    expect(tareasCalendarRange("semana", today)).toEqual({ from: "2026-11-02", to: "2026-11-08" });
-    expect(tareasCalendarRange("dia", today)).toEqual({ from: "2026-11-06", to: "2026-11-06" });
   });
 });
 
@@ -216,7 +176,7 @@ describe("mostrar", () => {
   it("narrows the tasks and is cleared with the filters", () => {
     const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, mostrar: "abiertas" };
     expect(hasTareasFilters(q)).toBe(true);
-    expect(clearTareasFilters(q).mostrar).toBe("todas");
+    expect(clearTareasFilters().mostrar).toBe("todas");
   });
 });
 
@@ -242,6 +202,6 @@ describe("Esencial responsable", async () => {
     // In Esencial, Solo mías off is a filter ("Quitar filtros" turns it back on); the default is not.
     expect(hasEsencialFilters(query)).toBe(true);
     expect(hasEsencialFilters(DEFAULT_TAREAS_QUERY)).toBe(false);
-    expect(hasEsencialFilters(clearTareasFilters(query))).toBe(false);
+    expect(hasEsencialFilters(clearTareasFilters())).toBe(false);
   });
 });

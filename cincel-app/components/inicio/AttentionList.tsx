@@ -27,7 +27,7 @@ export function AttentionList({ items, totalCount }: AttentionListProps) {
       title={TITLE}
       items={items}
       totalCount={totalCount ?? items.length}
-      moreHref="/tareas?vista=lista&responsable=yo"
+      moreHref="/tareas?responsable=yo"
       collapsible={collapsible}
     />
   );

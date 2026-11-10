@@ -15,7 +15,7 @@ export type AttentionListFixture = {
 export const attentionListFixture: AttentionListFixture = {
   title: "Requiere atención",
   totalCount: 7,
-  moreHref: "/tareas?vista=lista&atencion=1",
+  moreHref: "/tareas?atencion=1",
   items: [
     {
       id: "t-planos-cocina",

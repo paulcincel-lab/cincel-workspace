@@ -30,52 +30,11 @@ import {
 import { z } from "zod";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { loadTareasCalendar, loadTareasStartSlot, loadTaskSheet, searchProjectTasks } from "@/lib/loaders/tareas";
+import { loadTareasStartSlot, loadTaskSheet, searchProjectTasks } from "@/lib/loaders/tareas";
 import type { TareasStartSlotData } from "@/lib/types/tareas-start-slot";
 import type { TaskSheetData } from "@/lib/types/task-sheet";
-import { TAREAS_MOSTRAR, TAREAS_SEARCH_MAX } from "@/lib/tareas/query";
-import type { TaskListRow, TaskRef } from "@/lib/types/core";
+import type { TaskRef } from "@/lib/types/core";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
-
-// ── Calendario (Query Migration 4c, #957) ────────────────────────────────────
-
-/** Longest range one calendar call may ask for (the month grid plus the previous week fits). */
-const CALENDAR_MAX_DAYS = 62;
-
-const DAY_MS = 86_400_000;
-
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
-}
-
-const TareasListFiltersInput = z.object({
-  tramo: z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{1,64}$/)
-    .nullable(),
-  proyecto: UuidSchema.nullable(),
-  responsable: z.union([z.literal("yo"), z.literal("todos"), UuidSchema]).nullable(),
-  estado: z.enum(["pendiente", "en_proceso", "completado", "bloqueado"]).nullable(),
-  q: z.string().max(TAREAS_SEARCH_MAX).nullable(),
-  mostrar: z.enum(TAREAS_MOSTRAR).optional(),
-});
-
-const TareasCalendarInput = z
-  .object({ filters: TareasListFiltersInput, from: z.iso.date(), to: z.iso.date() })
-  .refine((v) => v.to >= v.from, { path: ["to"] })
-  .refine((v) => daysBetween(v.from, v.to) <= CALENDAR_MAX_DAYS, { path: ["to"] });
-
-/**
- * `qk.tareas.calendar(f, from, to)` (Query Migration 4c, #957): the slim task
- * rows with a date in the inclusive range. Parses the input (a range over 62
- * days or reversed is INVALID), requires a staff session and hands the viewer
- * to the loader, which requires the Tareas capability (FORBIDDEN otherwise).
- * Read-only.
- */
-export async function getTareasCalendarData(input: z.input<typeof TareasCalendarInput>): Promise<TaskListRow[]> {
-  const parsed = parseInput(TareasCalendarInput, input);
-  return loadTareasCalendar(await requireCapabilityUser(), parsed);
-}
 
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
 

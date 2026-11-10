@@ -13,19 +13,14 @@ import { qk } from "@/lib/query/keys";
 
 /** Every `me.reminders(range)` list. */
 const ME_REMINDERS_PREFIX: QueryKey = qk.me.reminders("today-tomorrow").slice(0, 2);
-/** Every `tareas.calendar(...)` range. */
-const TAREAS_CALENDAR_PREFIX: QueryKey = qk.tareas.calendar(
-  { tramo: null, proyecto: null, responsable: null, estado: null, q: null },
-  "",
-  "",
-).slice(0, 2);
 
 const NOTES: readonly QueryKey[] = [qk.me.notes()];
 const CHECKLISTS: readonly QueryKey[] = [qk.me.checklists()];
 const REMINDERS: readonly QueryKey[] = [ME_REMINDERS_PREFIX, qk.shell.badges(), qk.inicio()];
 const CLOCK: readonly QueryKey[] = [qk.me.today()];
 const TASKS: readonly QueryKey[] = [qk.tareas.all, qk.inicio(), qk.shell.badges()];
-const EVENTS: readonly QueryKey[] = [TAREAS_CALENDAR_PREFIX];
+/** Calendar events show in Inicio's agenda. */
+const EVENTS: readonly QueryKey[] = [qk.inicio()];
 const EMAIL: readonly QueryKey[] = [qk.me.gmail.all];
 const PROJECTS: readonly QueryKey[] = [qk.proyectos.all];
 

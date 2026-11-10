@@ -46,13 +46,13 @@ describe("useGoogleConnectResult", () => {
   afterEach(() => window.history.replaceState({}, "", "/"));
 
   it("returns the error and strips the params from the URL", async () => {
-    window.history.replaceState({}, "", "/calendario?vista=mes&google_connected=error&motivo=retry");
+    window.history.replaceState({}, "", "/calendario?modo=mes&google_connected=error&motivo=retry");
     const { result: hook } = renderHook(() => useGoogleConnectResult());
 
     await waitFor(() => expect(hook.current?.success).toBe(false));
     expect(hook.current?.message).toBe("No se pudo completar la conexión con Google. Intenta de nuevo.");
     expect(window.location.pathname).toBe("/calendario");
-    expect(window.location.search).toBe("?vista=mes");
+    expect(window.location.search).toBe("?modo=mes");
   });
 
   it("returns success after the consent round trip", async () => {

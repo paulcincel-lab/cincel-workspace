@@ -58,7 +58,7 @@ describe("WidgetCard", () => {
     expect(chip).not.toBeNull();
     expect(chip?.getAttribute("aria-hidden")).toBe("true");
     expect(region.className).toContain("shadow-(--shadow-card)");
-    expect(within(region).getByRole("link", { name: "Ver todo" }).getAttribute("href")).toBe("/tareas?vista=lista");
+    expect(within(region).getByRole("link", { name: "Ver todo" }).getAttribute("href")).toBe("/tareas");
     expect(values()).toEqual(["24", "18", "3"]);
     expect(container.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
   });

@@ -7,7 +7,7 @@ import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams("vista=tablero&tarea=t-1"),
+  useSearchParams: () => new URLSearchParams("estilo=visual&tarea=t-1"),
 }));
 
 vi.mock("@/components/patterns/FormSheet", async () => {

@@ -8,7 +8,7 @@ import {
 import { qk, STALE } from "@/lib/query/keys";
 
 /**
- * The viewer's calendar integration status (Calendario › Sincronizar and
+ * The viewer's calendar integration status (the calendar feed dialog and
  * Ajustes › Integraciones). Both live under
  * `qk.ajustes.page('integraciones', { part: 'calendar' })`, so invalidating
  * `ajustes.page('integraciones')` refetches them.
@@ -29,11 +29,5 @@ export function calendarFeedStatusOptions() {
   });
 }
 
-/**
- * What a calendar sync or feed change invalidates (#954 Invalidations): every
- * `tareas.calendar` entry and the Integraciones settings.
- */
-export const CALENDAR_INTEGRATION_INVALIDATE: readonly QueryKey[] = [
-  [...qk.tareas.all, "calendar"],
-  qk.ajustes.page("integraciones"),
-];
+/** What a calendar sync or feed change invalidates (#954 Invalidations): the Integraciones settings. */
+export const CALENDAR_INTEGRATION_INVALIDATE: readonly QueryKey[] = [qk.ajustes.page("integraciones")];

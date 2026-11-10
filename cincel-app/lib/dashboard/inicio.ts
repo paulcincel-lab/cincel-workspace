@@ -37,13 +37,13 @@ export const ADMIN_TRAMO_KEY = "admin";
 
 export const INICIO_KPI = {
   proyectosActivos: { key: "proyectos_activos", label: "Proyectos activos", href: "/proyectos" },
-  vencidas: { key: "vencidas", label: "Vencidas", href: "/tareas?vista=lista" },
-  bloqueadas: { key: "bloqueadas", label: "Bloqueadas", href: "/tareas?vista=lista&estado=bloqueado" },
-  revisiones: { key: "revisiones_7d", label: "Revisiones · 7 días", href: "/tareas?vista=calendario&cal=semana" },
-  completadas: { key: "completadas_semana", label: "Completadas · semana", href: "/tareas?vista=lista&estado=completado" },
+  vencidas: { key: "vencidas", label: "Vencidas", href: "/tareas" },
+  bloqueadas: { key: "bloqueadas", label: "Bloqueadas", href: "/tareas?estado=bloqueado" },
+  revisiones: { key: "revisiones_7d", label: "Revisiones · 7 días", href: "/tareas" },
+  completadas: { key: "completadas_semana", label: "Completadas · semana", href: "/tareas?estado=completado" },
   abiertas: { key: "abiertas", label: "Tareas abiertas", href: "/tareas" },
   horasSemana: { key: "horas_semana", label: "Horas esta semana", href: "/mi-espacio" },
-  retrasoPromedio: { key: "retraso_promedio", label: "Retraso promedio", href: "/tareas?vista=lista" },
+  retrasoPromedio: { key: "retraso_promedio", label: "Retraso promedio", href: "/tareas" },
 } as const;
 
 /** The "Horas esta semana" label for a viewer without team workload access (their own hours). */

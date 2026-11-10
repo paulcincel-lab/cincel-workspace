@@ -156,7 +156,7 @@ export function useTableroMove(f: TareasListFilters) {
 const NO_BOARD: TareasBoardData = { columns: {}, statuses: [] };
 
 /**
- * Tareas · Tablero (`/tareas?vista=tablero`, FE §3.4): `ListPage` with
+ * Tareas · Tablero (FE §3.4): `ListPage` with
  * `spec.kind = "board"`, from `tareas.board(f)` (seeded by the page bundle
  * and enabled once it is in, so a filter change sends one request). Every
  * column of the status catalog shows, with 0 when empty (#919).

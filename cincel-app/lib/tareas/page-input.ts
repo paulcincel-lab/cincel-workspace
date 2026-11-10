@@ -29,7 +29,6 @@ export const TareasListFiltersSchema = z.object(TareasFilterFields);
 export const TareasPageInput = z.object({
   estilo: z.enum(["visual", "esencial", "analitico"]),
   ...TareasFilterFields,
-  cal: z.enum(["mes", "semana", "dia"]).default("mes"),
 });
 
 /** Opaque keyset cursors are base64url. */
