@@ -164,11 +164,12 @@ test.describe("Proyectos · tramos", () => {
     await expect(page.getByRole("group", { name: "Tramo actual: Presale" }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(ETAPA)).toHaveCount(0);
 
-    // Visual: the portfolio board has the card in the Presale column.
+    // Visual: the project grid has its card with the Presale chip.
     await page.goto(`${BASE_URL}/proyectos?estilo=visual`, { waitUntil: "domcontentloaded" });
-    await expect(
-      page.locator(`[data-slot="board-column"][data-column="presale"] [data-slot="board-card"][data-project="${projectId}"]`),
-    ).toBeVisible({ timeout: 30_000 });
+    const visualCard = page.locator(`[data-slot="project-card"][data-project="${projectId}"]`);
+    await expect(visualCard).toBeVisible({ timeout: 30_000 });
+    // The chip names the tramo, then the current fase ("Presale · Inicial").
+    await expect(visualCard.getByText(/^Presale( · .+)?$/)).toBeVisible();
     await expect(page.getByText(ETAPA)).toHaveCount(0);
 
     // Ficha: a "Tramos" card (never "Etapas") with Presale started and current.
@@ -209,7 +210,7 @@ test.describe("Proyectos · tramos", () => {
     expect(rows.tasks.some((t) => t.phase_id === lastPhase.id)).toBe(false);
   });
 
-  test("«Ninguno» creates the project with no tramo; it shows under Sin tramo", async ({ page }) => {
+  test("«Ninguno» creates the project with no tramo; it shows as Sin tramo", async ({ page }) => {
     const name = `Proyecto sin tramo E2E ${RUN_ID}`;
     const dialog = await openNewProjectWithTramo(page, name, "Ninguno");
     await expect(dialog.getByRole("group", { name: "Fases" })).toHaveCount(0);
@@ -221,11 +222,39 @@ test.describe("Proyectos · tramos", () => {
     expect(rows.current).toBeNull();
     expect(rows.tasks).toHaveLength(0);
 
-    // Visual: the portfolio board has the card in the "Sin tramo" column.
+    // Analítico: a row like any other, "Sin tramo" in Tramo actual.
+    await page.goto(`${BASE_URL}/proyectos?estilo=analitico&q=${encodeURIComponent(name)}`, { waitUntil: "domcontentloaded" });
+    const row = page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await expect(row.getByText("Sin tramo", { exact: true })).toBeVisible();
+
+    // Visual: the project grid has its card with the "Sin tramo" chip.
     await page.goto(`${BASE_URL}/proyectos?estilo=visual`, { waitUntil: "domcontentloaded" });
-    await expect(
-      page.locator(`[data-slot="board-column"][data-column="sin-tramo"] [data-slot="board-card"][data-project="${projectId}"]`),
-    ).toBeVisible({ timeout: 30_000 });
+    const visualCard = page.locator(`[data-slot="project-card"][data-project="${projectId}"]`);
+    await expect(visualCard).toBeVisible({ timeout: 30_000 });
+    await expect(visualCard.getByText("Sin tramo", { exact: true })).toBeVisible();
+
+    // Resumen (#1043), every style: the empty state with "Iniciar un tramo", never Presale's default fases.
+    const tramoSection = {
+      visual: page.getByRole("region", { name: "Avance del proyecto" }),
+      esencial: page.getByRole("region", { name: "Tramos" }),
+      analitico: page.locator("#s-tramos"),
+    };
+    for (const estilo of ["visual", "esencial", "analitico"] as const) {
+      await page.goto(`${BASE_URL}/proyectos/${projectId}?estilo=${estilo}`, { waitUntil: "domcontentloaded" });
+      const section = tramoSection[estilo];
+      const empty = section.getByTestId("resumen-no-tramo");
+      await expect(empty).toBeVisible({ timeout: 30_000 });
+      await expect(empty.getByText("Este proyecto aún no tiene tramo.")).toBeVisible();
+      await expect(empty.getByRole("button", { name: "Iniciar un tramo" })).toBeVisible();
+      await expect(section.getByText(/Presale/)).toHaveCount(0);
+    }
+
+    // The button opens the Iniciar tramo sheet with a tramo picker and nothing preselected.
+    await page.getByTestId("resumen-no-tramo").getByRole("button", { name: "Iniciar un tramo" }).click();
+    const sheet = page.getByRole("dialog", { name: "Iniciar tramo" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("combobox", { name: "Tramo" })).toContainText("Elige un tramo");
   });
 
   test("a duplicate project name, in any casing, is refused with the NAME_TAKEN copy", async ({ page }) => {

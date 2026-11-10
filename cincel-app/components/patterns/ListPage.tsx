@@ -23,6 +23,10 @@ export type ListSpec =
       data: RecordTableData;
       renderCell?: RecordTableProps["renderCell"];
       rowActions?: RecordTableProps["rowActions"];
+      /** Per-row `⋯` menu and Supr (`RecordTable.rowMenu`). */
+      rowMenu?: RecordTableProps["rowMenu"];
+      /** Controlled row checkboxes (`RecordTable.rowSelection`, #1040). */
+      rowSelection?: RecordTableProps["rowSelection"];
       /** Opt-in "Cargar más" under the table (`RecordTable.onEndReached`). */
       pagination?: Pick<RecordTableProps, "onEndReached" | "hasMore" | "loadingMore">;
     }
@@ -80,7 +84,7 @@ function ListWidget({ spec, empty }: { spec: ListSpec; empty?: EmptyStateProps }
   switch (spec.kind) {
     case "table":
       return (
-        <RecordTable data={spec.data} renderCell={spec.renderCell} rowActions={spec.rowActions} {...spec.pagination} />
+        <RecordTable data={spec.data} renderCell={spec.renderCell} rowActions={spec.rowActions} rowMenu={spec.rowMenu} rowSelection={spec.rowSelection} {...spec.pagination} />
       );
     case "cards":
       return <EntityCardGrid items={spec.items} table={spec.table} footer={spec.footer} view={spec.view} />;

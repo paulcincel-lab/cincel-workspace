@@ -268,9 +268,13 @@ describe("Proyectos list accessibility · Analítico (#994)", () => {
       expect(headers.length).toBeGreaterThan(0);
       for (const th of headers) expect(th.getAttribute("scope")).toBe("col");
     }
-    // The tramo nav and the anchors.
-    const tramoNav = screen.getByRole("navigation", { name: "Ir a tramo" });
-    expect(within(tramoNav).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual(["#t-presale", "#t-diseno"]);
+    // No "Ir a tramo" anchors (#1042): each project row has a named expand toggle instead.
+    expect(screen.queryByRole("navigation", { name: "Ir a tramo" })).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Tareas de «Casa Lomas»" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // The tramo bar's segments are pressed toggles.
+    const legend = screen.getByRole("list", { name: "Filtrar por tramo" });
+    expect(within(legend).getAllByRole("button").every((b) => b.getAttribute("aria-pressed") === "false")).toBe(true);
   });
 
   /** The heat fills (status tint over the card) under their text (status ink). */
@@ -319,15 +323,13 @@ describe("Proyectos list accessibility · Visual (#992)", () => {
       expect(await seriousViolations(listed.container)).toEqual([]);
       listed.unmount();
 
-      // A selected tramo with no project, a project without tramo, and no drag permission.
-      useProyectosDashboard.getState().selectKpi("construccion");
-      const selected = renderVisual({
+      // A project without tramo, and a viewer who can't create projects.
+      const loose = renderVisual({
         projects: [...PROJECTS, { ...PROJECTS[2], id: "p-sin", name: "Bodega Norte", status: "activo" }],
-        canChangeProjectStage: false,
+        canCreateProject: false,
       });
-      expect(await seriousViolations(selected.container)).toEqual([]);
-      selected.unmount();
-      useProyectosDashboard.getState().reset();
+      expect(await seriousViolations(loose.container)).toEqual([]);
+      loose.unmount();
 
       const empty = renderVisual({ projects: [], portfolio: [] });
       expect(await seriousViolations(empty.container)).toEqual([]);
@@ -337,20 +339,21 @@ describe("Proyectos list accessibility · Visual (#992)", () => {
 
   it("rings and bars expose role img with labels", () => {
     const { container } = renderVisual();
-    // Casa Lomas: real 62 % (attention ring and board bar); Diseño's average bar.
-    expect(screen.getAllByRole("img", { name: "Avance 62 %" }).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByRole("img", { name: "Avance medio 62 %" })).toHaveLength(1);
-    expect(screen.getByRole("img", { name: "Tramo actual: Diseño" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: /^Equipo: Ana López, Luis Paz/ })).toBeTruthy();
+    // Casa Lomas: real 62 % (attention ring and its grid card); the summary's average bar.
+    expect(screen.getAllByRole("img", { name: "Avance 62 %" })).toHaveLength(2);
+    expect(screen.getAllByRole("img", { name: "Avance medio 39 %" })).toHaveLength(1);
+    // The stepper only on the attention card.
+    expect(screen.getAllByRole("img", { name: "Tramo actual: Diseño" })).toHaveLength(1);
+    expect(screen.getAllByRole("img", { name: /^Equipo: Ana López, Luis Paz/ }).length).toBeGreaterThan(0);
     for (const img of container.querySelectorAll('[role="img"]')) expect(img.getAttribute("aria-label")).toBeTruthy();
   });
 
-  it("board cards are reachable by Tab in reading order", () => {
+  it("project cards are reachable by Tab in reading order", () => {
     const { container } = renderVisual();
-    const board = container.querySelector<HTMLElement>('[data-slot="portfolio-board"]')!;
-    const cards = [...board.querySelectorAll<HTMLAnchorElement>('[data-slot="board-card"]')];
-    // Column order (Presale, Diseño, Construcción), then card order: plain links, none taken out of the tab order.
-    expect(cards.map((c) => c.dataset.project)).toEqual(["p-andares", "p-lomas"]);
+    const board = container.querySelector<HTMLElement>('[data-slot="project-grid"]')!;
+    const cards = [...board.querySelectorAll<HTMLAnchorElement>('[data-slot="project-card"]')];
+    // By name: plain links, none taken out of the tab order.
+    expect(cards.map((c) => c.dataset.project)).toEqual(["p-lomas", "p-andares"]);
     for (const card of cards) {
       expect(card.tagName).toBe("A");
       expect(card.getAttribute("tabindex")).toBeNull();

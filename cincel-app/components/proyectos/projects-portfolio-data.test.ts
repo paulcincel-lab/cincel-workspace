@@ -24,7 +24,9 @@ import {
   portfolioCsv,
   portfolioFilterGroups,
   portfolioFiltersSearch,
-  portfolioGroups,
+  portfolioTable,
+  projectOpenTasksFilters,
+  sortByDueDate,
   portfolioHeat,
   portfolioHeatLegend,
   portfolioKpis,
@@ -35,8 +37,9 @@ import {
   attentionProjects,
   deliveryTimeline,
   moveProjectToTramo,
-  portfolioBoard,
-  tramoSummaries,
+  portfolioProjectCards,
+  portfolioSummary,
+  summaryTone,
   tramoTone,
   visualDescription,
 } from "./projects-portfolio-data";
@@ -259,22 +262,14 @@ describe("portfolioFilterGroups", () => {
   });
 });
 
-describe("portfolioGroups", () => {
+describe("portfolioTable", () => {
   const projects = [LOMAS, ANDARES, BOSQUE];
 
-  it("group metrics, footer totals and anchors", () => {
-    const { groups, totals, anchors } = portfolioGroups(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
-    expect(groups.map((g) => g.id)).toEqual(["t-presale", "t-diseno"]);
-    const diseno = groups[1];
-    expect(diseno.label).toBe("Diseño");
-    expect(diseno.caption).toBe("2 proyectos");
-    // Rows by name inside the group.
-    expect(diseno.rows!.map((r) => r.name)).toEqual(["Casa Bosque", "Casa Lomas"]);
-    expect(diseno.metrics.map((m) => m.value)).toEqual(["avance 51 %", "10 abiertas", "6 vencidas", "60 %", "6.2 d"]);
-    expect(diseno.metrics[2].tone).toBe("destructive");
-    expect(groups[0].metrics.map((m) => m.value)).toEqual(["avance 15 %", "8 abiertas", "0 vencidas", "0 %", "—"]);
-    expect(groups[0].metrics[2].tone).toBe("default");
-    expect(diseno.rows![0]).toMatchObject({ id: "p-bosque", overduePct: 67, avgDelayDays: 7, budgetSpentPct: null });
+  it("one row per project by name, with its tramo; footer totals", () => {
+    const { rows, totals } = portfolioTable(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
+    expect(rows.map((r) => r.name)).toEqual(["Casa Bosque", "Casa Lomas", "Depto Andares"]);
+    expect(rows.map((r) => r.tramo)).toEqual(["Diseño", "Diseño", "Presale"]);
+    expect(rows[0]).toMatchObject({ id: "p-bosque", overduePct: 67, avgDelayDays: 7, budgetSpentPct: null });
 
     expect(totals).toEqual({
       name: "Total · 3 proyectos",
@@ -286,32 +281,52 @@ describe("portfolioGroups", () => {
       avgDelayDays: "6.2 d",
       nextDelivery: "",
     });
-    expect(anchors).toEqual([
-      { id: "t-presale", label: "Presale", count: 0 },
-      { id: "t-diseno", label: "Diseño", count: 6 },
-    ]);
 
-    // One project: one group, totals still there.
-    const one = portfolioGroups([ANDARES], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
-    expect(one.groups).toHaveLength(1);
+    const one = portfolioTable([ANDARES], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
+    expect(one.rows).toHaveLength(1);
     expect(one.totals.name).toBe("Total · 1 proyecto");
-    // No rows: no groups, KPIs-style placeholders.
-    const none = portfolioGroups([], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
-    expect(none.groups).toEqual([]);
+    const none = portfolioTable([], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
+    expect(none.rows).toEqual([]);
     expect(none.totals).toMatchObject({ name: "Total · 0 proyectos", real: "—", overduePct: "—", avgDelayDays: "—" });
+  });
+
+  it("a project without a tramo is a row like the rest, Sin tramo, sorted after every tramo", () => {
+    const loose: ProjectListItem = { ...named(ANDARES, "p-suelto", "Abeto"), needsTramo: true };
+    const { rows } = portfolioTable([...projects, loose], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
+    expect(rows.map((r) => r.id)).toEqual(["p-suelto", "p-bosque", "p-lomas", "p-andares"]);
+    expect(rows[0]).toMatchObject({ tramo: "Sin tramo", tramoKey: null });
+    expect(sortPortfolioRows(rows, { key: "tramo", direction: "asc" }).map((r) => r.id)).toEqual([
+      "p-andares",
+      "p-bosque",
+      "p-lomas",
+      "p-suelto",
+    ]);
+    // Descending reverses the tramos; Sin tramo stays last.
+    expect(sortPortfolioRows(rows, { key: "tramo", direction: "desc" }).map((r) => r.id)).toEqual([
+      "p-bosque",
+      "p-lomas",
+      "p-andares",
+      "p-suelto",
+    ]);
+    expect(sortPortfolioRows(rows, { key: "name", direction: "desc" }).map((r) => r.name)).toEqual([
+      "Depto Andares",
+      "Casa Lomas",
+      "Casa Bosque",
+      "Abeto",
+    ]);
   });
 
   it("omits the budget column without canSeeAdminData", () => {
     expect(portfolioColumns({ canSeeAdminData: false }).map((c) => c.key)).not.toContain("budgetSpentPct");
-    const plain = portfolioGroups(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
+    const plain = portfolioTable(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
     expect(plain.totals.budgetSpentPct).toBeUndefined();
-    expect(plain.groups.flatMap((g) => g.rows!).every((r) => r.budgetSpentPct === null)).toBe(true);
+    expect(plain.rows.every((r) => r.budgetSpentPct === null)).toBe(true);
     expect(portfolioHeatLegend({ canSeeAdminData: false })).toBe(
       "Heat: % vencidas > 45 % ámbar, > 60 % rojo · Desv. plan ≤ −5 ámbar, ≤ −8 rojo.",
     );
 
     expect(portfolioColumns({ canSeeAdminData: true }).at(-1)).toMatchObject({ key: "budgetSpentPct", label: "Presup. ejercido" });
-    const admin = portfolioGroups(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: true });
+    const admin = portfolioTable(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: true });
     expect(admin.totals.budgetSpentPct).toBe("52 %");
     expect(portfolioHeatLegend({ canSeeAdminData: true })).toBe(
       "Heat: % vencidas > 45 % ámbar, > 60 % rojo · Desv. plan ≤ −5 ámbar, ≤ −8 rojo · Presup. ejercido por encima del avance, ámbar. La columna de presupuesto solo la ven administradores.",
@@ -319,9 +334,8 @@ describe("portfolioGroups", () => {
   });
 
   it("heat follows PORTFOLIO_HEAT exactly", () => {
-    const { groups } = portfolioGroups(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: true });
-    const [bosque, lomas] = groups[1].rows!;
-    const [andares] = groups[0].rows!;
+    const { rows } = portfolioTable(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: true });
+    const [bosque, lomas, andares] = rows;
     expect(PORTFOLIO_HEAT.overduePct).toEqual({ warnAbove: 45, critAbove: 60 });
     // 67 % → rojo, 50 % → ámbar, 0 % → none.
     expect(portfolioHeat("overduePct", bosque)).toBe("crit");
@@ -340,8 +354,7 @@ describe("portfolioGroups", () => {
   });
 
   it("sorts numeric columns with nulls last", () => {
-    const { groups } = portfolioGroups(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
-    const rows = groups.flatMap((g) => g.rows!);
+    const { rows } = portfolioTable(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
     expect(sortPortfolioRows(rows, { key: "open", direction: "desc" }).map((r) => r.id)).toEqual(["p-andares", "p-bosque", "p-lomas"]);
     expect(sortPortfolioRows(rows, { key: "avgDelayDays", direction: "asc" }).map((r) => r.id)).toEqual([
       "p-lomas",
@@ -349,6 +362,29 @@ describe("portfolioGroups", () => {
       "p-andares",
     ]);
     expect(sortPortfolioRows(rows, null)).toBe(rows);
+  });
+});
+
+describe("project tasks under a row", () => {
+  it("reads the project's open tasks, every tramo and responsable", () => {
+    expect(projectOpenTasksFilters("p-lomas")).toEqual({
+      tramo: null,
+      proyecto: "p-lomas",
+      responsable: null,
+      estado: null,
+      q: null,
+      mostrar: "abiertas",
+    });
+  });
+
+  it("sorts by due date (commitment, else delivery), undated last, then title", () => {
+    const tasks = [
+      { title: "B", commitmentDate: null, deliveryDate: null },
+      { title: "C", commitmentDate: "2026-11-20T00:00:00Z", deliveryDate: null },
+      { title: "A", commitmentDate: null, deliveryDate: "2026-11-10" },
+      { title: "D", commitmentDate: "2026-11-20", deliveryDate: null },
+    ];
+    expect(sortByDueDate(tasks, (t) => t).map((t) => t.title)).toEqual(["A", "C", "D", "B"]);
   });
 });
 
@@ -393,16 +429,17 @@ describe("portfolioCsv", () => {
       ...named(LOMAS, "p-lomas", 'Casa "Lomas"; fase 2'),
       client: { id: "c1", name: "=HYPERLINK(1)", type: "cliente" },
     };
-    const { groups } = portfolioGroups([tricky, ANDARES], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
-    const csv = portfolioCsv(groups, { canSeeAdminData: false });
+    const { rows } = portfolioTable([tricky, ANDARES], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
+    const csv = portfolioCsv(rows, { canSeeAdminData: false });
     expect(csv.startsWith("﻿")).toBe(true);
     const lines = csv.slice(1).split("\r\n");
     expect(lines[0]).toBe("Tramo;Proyecto;Cliente;Avance;Desv. plan;Abiertas;Vencidas;% vencidas;Retraso prom.;Próxima entrega");
-    expect(lines[1]).toBe("Presale;Depto Andares;;15;3;8;0;0;;");
-    expect(lines[2]).toBe(`Diseño;"Casa ""Lomas""; fase 2";'=HYPERLINK(1);62;-8;4;2;50;4.5;Plano de acabados · 2026-11-12`);
+    // By name: Casa Lomas, then Depto Andares.
+    expect(lines[1]).toBe(`Diseño;"Casa ""Lomas""; fase 2";'=HYPERLINK(1);62;-8;4;2;50;4.5;Plano de acabados · 2026-11-12`);
+    expect(lines[2]).toBe("Presale;Depto Andares;;15;3;8;0;0;;");
     expect(lines.at(-1)).toBe("");
 
-    const admin = portfolioCsv(portfolioGroups([LOMAS], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: true }).groups, { canSeeAdminData: true });
+    const admin = portfolioCsv(portfolioTable([LOMAS], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: true }).rows, { canSeeAdminData: true });
     const adminLines = admin.slice(1).split("\r\n");
     expect(adminLines[0].endsWith(";Presup. ejercido")).toBe(true);
     expect(adminLines[1].endsWith(";54")).toBe(true);
@@ -411,40 +448,46 @@ describe("portfolioCsv", () => {
 
 // ── Visual (#992) ───────────────────────────────────────────────────────────
 
-describe("tramoSummaries", () => {
-  it("sums open and overdue and rounds the average per tramo", () => {
+describe("portfolioSummary", () => {
+  it("Proyectos activos, Tareas abiertas, Vencidas and Avance medio over the shown projects", () => {
     const second = { ...LOMAS, id: "p-lomas-2", name: "Casa Lomas 2" };
     const rows = portfolioById([
-      row({ projectId: LOMAS.id, real: 62, open: 4, overdue: 2 }),
-      row({ projectId: second.id, real: 15, open: 3, overdue: 1 }),
-      row({ projectId: ANDARES.id, real: 15, open: 8, overdue: 0 }),
+      row({ projectId: LOMAS.id, real: 62, open: 4, overdue: 2, deviation: -8 }),
+      row({ projectId: second.id, real: 15, open: 3, overdue: 1, deviation: null }),
+      row({ projectId: ANDARES.id, real: 15, open: 8, overdue: 0, deviation: 3 }),
     ]);
-    const diseno = tramoSummaries([LOMAS, second, ANDARES], rows, TRAMOS).find((s) => s.key === "diseno");
-    expect(diseno).toEqual({
-      key: "diseno",
-      tramoId: "w2",
-      label: "Diseño",
-      projectCount: 2,
-      openTasks: 7,
-      // (62 + 15) / 2 = 38.5
-      avgProgress: 39,
-      overdue: 3,
-    });
+    const cards = portfolioSummary([LOMAS, second, ANDARES], rows);
+    expect(cards.map((c) => [c.key, c.label, c.value])).toEqual([
+      ["activos", "Proyectos activos", "3"],
+      ["abiertas", "Tareas abiertas", "15"],
+      ["vencidas", "Vencidas", "3"],
+      // (62 + 15 + 15) / 3 = 30.7
+      ["avance", "Avance medio", "31 %"],
+    ]);
+    // 1 of 3 projects without overdue tasks; 12 of 15 open tasks on time; 3 of 15 overdue.
+    expect(cards.map((c) => c.bar)).toEqual([33, 80, 20, 31]);
+    expect(cards[0].footnote).toEqual({ lead: "Con vencidas", figure: "2", tone: "destructive" });
+    expect(cards[2].aside).toBe("2 proyectos");
+    // Mean deviation over the projects with a plan: (−8 + 3) / 2.
+    expect(cards[3].footnote).toEqual({ lead: "Desv. plan", figure: "−2.5", tone: "destructive" });
+    expect(cards[3].barLabel).toBe("Avance medio 31 %");
   });
 
-  it("keeps empty tramos with zeros", () => {
-    const summaries = tramoSummaries([LOMAS], portfolioById(PORTFOLIO), TRAMOS);
-    expect(summaries.map((s) => s.key)).toEqual(["presale", "diseno", "construccion"]);
-    expect(summaries[2]).toMatchObject({ projectCount: 0, openTasks: 0, avgProgress: 0, overdue: 0 });
+  it("zeros without projects", () => {
+    const cards = portfolioSummary([], new Map());
+    expect(cards.map((c) => [c.value, c.bar])).toEqual([
+      ["0", 0],
+      ["0", 0],
+      ["0", 0],
+      ["0 %", 0],
+    ]);
+    expect(cards[2].footnote).toEqual({ lead: "Sin vencidas" });
+    expect(cards[3].footnote).toEqual({ lead: "Sin plan" });
   });
 
-  it("matches the board's column counts", () => {
-    const projects = [LOMAS, ANDARES, { ...PAUSADO, status: "activo" as const }];
-    const rows = portfolioById(PORTFOLIO);
-    const board = portfolioBoard(projects, rows, TRAMOS);
-    const summaries = tramoSummaries(projects, rows, TRAMOS);
-    expect(summaries.map((s) => [s.key, s.projectCount])).toEqual(board.map((c) => [c.key, c.cards.length]));
-    expect(summaries.reduce((n, s) => n + s.openTasks, 0)).toBe(board.flatMap((c) => c.cards).reduce((n, c) => n + c.open, 0));
+  it("tones: chart slots, Vencidas in destructive", () => {
+    expect(summaryTone("2")).toEqual({ color: "var(--chart-2)", ink: "var(--chart-2-ink)", soft: "var(--tint-violet)" });
+    expect(summaryTone("destructive")).toEqual({ color: "var(--destructive)", ink: "var(--destructive-ink)", soft: "var(--tint-destructive)" });
   });
 });
 
@@ -501,31 +544,14 @@ describe("attentionProjects", () => {
   });
 });
 
-describe("portfolioBoard", () => {
-  it("puts needsTramo projects in a leading Sin tramo column only when non-empty", () => {
-    const rows = portfolioById(PORTFOLIO);
-    const withoutTramo = portfolioBoard([LOMAS, ANDARES], rows, TRAMOS);
-    expect(withoutTramo.map((c) => c.key)).toEqual(["presale", "diseno", "construccion"]);
-    expect(withoutTramo.every((c) => c.droppable)).toBe(true);
-
+describe("portfolioProjectCards", () => {
+  it("one card per project by name, a project without tramo included", () => {
     const sinTramo = { ...PAUSADO, status: "activo" as const };
-    const board = portfolioBoard([LOMAS, ANDARES, sinTramo], rows, TRAMOS);
-    expect(board.map((c) => c.key)).toEqual([NO_TRAMO_KEY, "presale", "diseno", "construccion"]);
-    expect(board[0]).toMatchObject({ label: "Sin tramo", tramoId: null, droppable: false });
-    expect(board[0].cards.map((c) => c.id)).toEqual([PAUSADO.id]);
-  });
-
-  it("builds the card subtitle from the client and the next delivery", () => {
-    const board = portfolioBoard([{ ...LOMAS, client: { id: "c1", name: "Familia Gómez", type: "cliente" } }], portfolioById(PORTFOLIO), TRAMOS);
-    const card = board.find((c) => c.key === "diseno")!.cards[0];
-    expect(card).toEqual({
-      id: LOMAS.id,
-      name: "Casa Lomas",
-      subtitle: "Familia Gómez · Plano de acabados 12 nov",
-      real: 62,
-      open: 4,
-      overdue: 2,
-    });
+    const cards = portfolioProjectCards([LOMAS, ANDARES, sinTramo], portfolioById(PORTFOLIO), TRAMOS);
+    expect(cards.map((c) => c.name)).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+    expect(cards[2]).toMatchObject({ tramoKey: null, badge: "Sin tramo" });
+    // Same shape as an attention card.
+    expect(cards[0]).toEqual(attentionProjects([LOMAS], portfolioById(PORTFOLIO), TRAMOS)[0]);
   });
 });
 
@@ -578,8 +604,8 @@ describe("deliveryTimeline", () => {
 
 describe("visualDescription", () => {
   it("uses singular forms", () => {
-    expect(visualDescription(1, 1, 1)).toBe("1 obra activa en 1 tramo · 1 entrega en los próximos 11 días.");
-    expect(visualDescription(7, 4, 0)).toBe("7 obras activas en 4 tramos · 0 entregas en los próximos 11 días.");
+    expect(visualDescription(1, 1)).toBe("1 obra activa · 1 entrega en los próximos 11 días.");
+    expect(visualDescription(7, 0)).toBe("7 obras activas · 0 entregas en los próximos 11 días.");
   });
 });
 

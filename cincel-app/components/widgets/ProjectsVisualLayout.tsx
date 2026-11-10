@@ -1,31 +1,27 @@
 "use client";
 
-import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useId, useMemo, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, FolderKanban, Plus } from "lucide-react";
-import { toast } from "sonner";
 
 import {
-  NO_TRAMO_KEY,
   NO_UPCOMING_DELIVERY,
   PROJECTS_TITLE,
   activeOnlyProjects,
   attentionProjects,
   deliveryTimeline,
   formatDeliveryDate,
-  moveProjectToTramo,
   orderedTramos,
-  portfolioBoard,
   portfolioById,
-  tramoSummaries,
+  portfolioProjectCards,
+  portfolioSummary,
+  summaryTone,
   tramoTone,
   visualDescription,
   type AttentionProject,
-  type BoardCard,
-  type BoardColumn,
+  type PortfolioSummaryCard,
   type TramoStep,
-  type TramoSummary,
   type TramoTone,
 } from "@/components/proyectos/projects-portfolio-data";
 import { EmptyState } from "@/components/shell/EmptyState";
@@ -35,14 +31,8 @@ import { Button } from "@/components/ui/shadcn/button";
 import { ProjectsVisualSkeleton } from "@/components/widgets/route-skeletons";
 import { DeliveryTimelineWidget } from "@/components/widgets/DeliveryTimelineWidget";
 import { PageHeader } from "@/components/widgets/PageHeader";
-import { PortfolioBoardWidget } from "@/components/widgets/PortfolioBoardWidget";
-import { setProjectCurrentTramoAction } from "@/lib/actions/projects-actions";
-import { actionErrorCode } from "@/lib/errors";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
-import { qk } from "@/lib/query/keys";
-import { useActionMutation } from "@/lib/query/mutation";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
-import { selectSelectedTramo, useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
 import { staggerStyle } from "@/lib/ui/motion";
 import { cn } from "@/lib/utils";
 
@@ -53,14 +43,13 @@ import { cn } from "@/lib/utils";
  *
  * 1. `PageHeader`: "{n} obras activas en {t} tramos · {k} entregas en los
  *    próximos 11 días." and "Nuevo proyecto" (`onNewProject`).
- * 2. Tramo summary: one toggle card per tramo (open tasks, average progress
- *    bar, overdue). Pressing one sets `selectedKpi` (session only); the board
- *    then shows only that column and the timeline only that tramo.
+ * 2. Portfolio summary (#1042): four cards (Proyectos activos, Tareas
+ *    abiertas, Vencidas, Avance medio), each with its bar and footnote.
  * 3. "Requieren atención": up to three projects with overdue tasks.
- * 4. "Tablero del portafolio" (`PortfolioBoardWidget`): drag a project to
- *    another tramo (`setProjectCurrentTramoAction`, optimistic over
- *    `qk.proyectos.list()`, rolled back with a toast on error). Only with
- *    `canChangeProjectStage`.
+ * 4. "Todos los proyectos" (#1042): one card per project (the attention
+ *    card without the tramo stepper; the tramo is only its chip), by name.
+ *    A card opens the project. Tramo is never a grouping here: it changes
+ *    from the Tramo actual cell in Analítico or from the project.
  * 5. "Próximas entregas" (`DeliveryTimelineWidget`): today … today + 10.
  *
  * Only `activo` projects are shown (paused ones are reachable from
@@ -75,32 +64,15 @@ export const VISUAL_ERROR_TITLE = "No se pudieron cargar los proyectos";
 export const VISUAL_EMPTY_TITLE = "Aún no hay proyectos";
 export const VISUAL_EMPTY_DESCRIPTION = "Crea el primero para empezar a darle seguimiento.";
 export const VISUAL_NEW_PROJECT_LABEL = "Nuevo proyecto";
-export const SUMMARY_SECTION_LABEL = "Portafolio por tramo";
+export const SUMMARY_SECTION_LABEL = "Resumen del portafolio";
 export const ATTENTION_TITLE = "Requieren atención";
 export const ATTENTION_LINK_LABEL = "Ver todos →";
 export const ATTENTION_LINK_HREF = "/proyectos?estilo=analitico&mostrar=vencidas";
-export const BOARD_TITLE = "Tablero del portafolio";
-export const BOARD_HINT = "Arrastra un proyecto para moverlo de tramo";
+export const PROJECTS_GRID_TITLE = "Todos los proyectos";
 export const TIMELINE_TITLE = "Próximas entregas";
 
 /** Visual section entrance: each section rises 60 ms after the one before. */
 const SECTION_STEP_MS = 60;
-
-/** Toast and live-region copy of a failed move, by action error code. */
-export function moveErrorText(err: unknown): string {
-  switch (actionErrorCode(err)) {
-    case "FORBIDDEN":
-      return "No tienes permiso para mover proyectos";
-    case "NOT_STARTED":
-      return "Ese tramo aún no ha iniciado en este proyecto";
-    default:
-      return "No se pudo mover el proyecto";
-  }
-}
-
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
 
 // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -174,75 +146,67 @@ function TramoStepper({ steps, current, toneOf }: { steps: TramoStep[]; current:
   );
 }
 
-function SummaryCard({
-  summary,
-  index,
-  tone,
-  pressed,
-  onToggle,
-}: {
-  summary: TramoSummary;
-  index: number;
-  tone: TramoTone;
-  pressed: boolean;
-  onToggle(): void;
-}) {
+function SummaryCard({ card, index }: { card: PortfolioSummaryCard; index: number }) {
+  const tone = summaryTone(card.tone);
   return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onToggle}
-      data-slot="tramo-summary"
-      data-tramo={summary.key}
-      className={cn(
-        "anim-in lift flex min-w-0 flex-col gap-3 rounded-[14px] border border-t-4 bg-card px-5 py-[18px] text-left text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        pressed && "outline-2 outline-offset-2 outline-ring",
-      )}
+    <div
+      data-slot="portfolio-summary"
+      data-summary={card.key}
+      className="anim-in lift flex min-w-0 flex-col gap-3 rounded-[14px] border border-t-4 bg-card px-5 py-[18px] text-left text-foreground"
       style={{ borderTopColor: tone.color, ...staggerStyle(index, 80) }}
     >
       <span className="flex items-center justify-between gap-2">
         <span className="min-w-0 truncate text-[13px] font-semibold" style={{ color: tone.ink }}>
-          {summary.label}
+          {card.label}
         </span>
-        <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-          {plural(summary.projectCount, "proyecto", "proyectos")}
-        </span>
+        {card.aside ? <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{card.aside}</span> : null}
       </span>
       <span className="flex items-baseline gap-2">
-        <span className="font-mono text-[34px] font-semibold leading-none tabular-nums">{summary.openTasks}</span>
-        <span className="text-[13px] text-muted-foreground">tareas abiertas</span>
+        <span className="font-mono text-[34px] font-semibold leading-none tabular-nums">{card.value}</span>
+        {card.unit ? <span className="text-[13px] text-muted-foreground">{card.unit}</span> : null}
       </span>
-      <span
-        role="img"
-        aria-label={`Avance medio ${summary.avgProgress} %`}
-        className="block h-2 overflow-hidden rounded-full"
-        style={{ background: tone.soft }}
-      >
+      <span role="img" aria-label={card.barLabel} className="block h-2 overflow-hidden rounded-full" style={{ background: tone.soft }}>
         <span
           className="grow-x block h-full rounded-full"
-          style={{ width: `${summary.avgProgress}%`, background: tone.color, "--anim-delay": `${200 + 80 * index}ms` } as CSSProperties}
+          style={{ width: `${card.bar}%`, background: tone.color, "--anim-delay": `${200 + 80 * index}ms` } as CSSProperties}
         />
       </span>
       <span className="text-[12.5px] text-muted-foreground">
-        Avance medio <b className="font-mono font-semibold tabular-nums text-foreground">{summary.avgProgress} %</b> ·{" "}
-        {summary.overdue > 0 ? (
-          <span className="font-mono tabular-nums text-destructive">{plural(summary.overdue, "vencida", "vencidas")}</span>
-        ) : (
-          "al día"
-        )}
+        {card.footnote.lead}
+        {card.footnote.figure ? (
+          <>
+            {" "}
+            <b className={cn("font-mono font-semibold tabular-nums", card.footnote.tone === "destructive" ? "text-destructive" : "text-foreground")}>
+              {card.footnote.figure}
+            </b>
+          </>
+        ) : null}
       </span>
-    </button>
+    </div>
   );
 }
 
-function AttentionCard({ project, index, toneOf }: { project: AttentionProject; index: number; toneOf(key: string | null): TramoTone }) {
+/** A project card: "Requieren atención" (with the tramo stepper) and the project grid (`steps` false). */
+function ProjectCard({
+  project,
+  index,
+  toneOf,
+  slot = "attention-card",
+  steps = true,
+}: {
+  project: AttentionProject;
+  index: number;
+  toneOf(key: string | null): TramoTone;
+  slot?: string;
+  steps?: boolean;
+}) {
   const tone = toneOf(project.tramoKey);
   const current = project.steps.find((s) => s.state === "current")?.label ?? project.badge.split(" · ")[0];
   const names = project.team.map((p) => p.name).join(", ");
   return (
     <Link
       href={`/proyectos/${project.id}`}
-      data-slot="attention-card"
+      data-slot={slot}
       data-project={project.id}
       className="anim-in lift flex min-w-0 flex-col overflow-hidden rounded-[14px] border bg-card text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       style={staggerStyle(index, 80)}
@@ -281,7 +245,7 @@ function AttentionCard({ project, index, toneOf }: { project: AttentionProject; 
             ) : null}
           </div>
         </div>
-        {project.steps.length > 0 ? <TramoStepper steps={project.steps} current={current} toneOf={toneOf} /> : null}
+        {steps && project.steps.length > 0 ? <TramoStepper steps={project.steps} current={current} toneOf={toneOf} /> : null}
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="rounded-full bg-muted px-2.5 py-[3px] text-[12.5px] font-medium">
@@ -326,64 +290,20 @@ function AttentionCard({ project, index, toneOf }: { project: AttentionProject; 
 
 // ── Layout ─────────────────────────────────────────────────────────────────
 
-type MoveVars = { id: string; workflowId: string };
-
 function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNewProject?(): void }) {
-  const { projects, portfolio, tramos, today, canCreateProject, canChangeProjectStage } = data;
+  const { projects, portfolio, tramos, today, canCreateProject } = data;
   const attentionId = useId();
-  const boardId = useId();
-  const selectedKpi = useProyectosDashboard(selectSelectedTramo);
-  const toggleKpi = useProyectosDashboard((s) => s.toggleKpi);
-  const [announcement, setAnnouncement] = useState("");
+  const gridId = useId();
 
   const listed = useMemo(() => activeOnlyProjects(projects), [projects]);
   const rows = useMemo(() => portfolioById(portfolio), [portfolio]);
   const tramoOrder = useMemo(() => orderedTramos(listed, tramos), [listed, tramos]);
-  const summaries = useMemo(() => tramoSummaries(listed, rows, tramos), [listed, rows, tramos]);
+  const summary = useMemo(() => portfolioSummary(listed, rows), [listed, rows]);
   const attention = useMemo(() => attentionProjects(listed, rows, tramos), [listed, rows, tramos]);
-  const board = useMemo(() => portfolioBoard(listed, rows, tramos), [listed, rows, tramos]);
+  const cards = useMemo(() => portfolioProjectCards(listed, rows, tramos), [listed, rows, tramos]);
   const timeline = useMemo(() => deliveryTimeline(listed, rows, today), [listed, rows, today]);
 
-  // A selection from another layout that names no card here applies to nothing.
-  const selected = selectedKpi !== null && summaries.some((s) => s.key === selectedKpi) ? selectedKpi : null;
-  const shownColumns = selected === null ? board : board.filter((c) => c.key === selected);
-  const shownItems =
-    selected === null ? timeline.items : timeline.items.filter((item) => (item.tramoKey ?? NO_TRAMO_KEY) === selected);
-
   const toneOf = (key: string | null) => tramoTone(key, tramoOrder);
-  const tramosWithProjects = summaries.filter((s) => s.key !== NO_TRAMO_KEY && s.projectCount > 0).length;
-
-  const move = useActionMutation(({ id, workflowId }: MoveVars) => setProjectCurrentTramoAction(id, workflowId), {
-    optimistic: {
-      onMutate: async (qc, { id, workflowId }) => {
-        await qc.cancelQueries({ queryKey: qk.proyectos.list() });
-        const previous = qc.getQueryData<ProyectosPageData>(qk.proyectos.list());
-        if (previous) qc.setQueryData(qk.proyectos.list(), moveProjectToTramo(previous, id, workflowId));
-        return { previous };
-      },
-      rollback: (qc, snap) => {
-        if (snap.previous) qc.setQueryData(qk.proyectos.list(), snap.previous);
-      },
-    },
-    // The copy depends on the error code: shown by the call's own onError.
-    onFormError: () => undefined,
-    invalidate: ({ id }) => [qk.proyectos.list(), qk.proyectos.shell(id), qk.proyectos.resumen(id)],
-  });
-
-  function handleMove(card: BoardCard, _from: BoardColumn, to: BoardColumn) {
-    if (!canChangeProjectStage || !to.tramoId) return;
-    setAnnouncement(`${card.name} movido a ${to.label}`);
-    move.mutate(
-      { id: card.id, workflowId: to.tramoId },
-      {
-        onError: (err) => {
-          const text = moveErrorText(err);
-          toast.error(text);
-          setAnnouncement(text);
-        },
-      },
-    );
-  }
 
   const newButton = canCreateProject ? (
     <Button type="button" onClick={() => onNewProject?.()}>
@@ -406,14 +326,14 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
     );
   }
 
-  // Sections rise in one after another (summary, attention, board, timeline).
-  const boardIndex = attention.length > 0 ? 2 : 1;
+  // Sections rise in one after another (summary, attention, projects, timeline).
+  const gridIndex = attention.length > 0 ? 2 : 1;
 
   return (
     <div className="flex min-w-0 flex-col gap-5" data-slot="projects-visual">
       <PageHeader
         title={PROJECTS_TITLE}
-        description={visualDescription(listed.length, tramosWithProjects, timeline.items.length)}
+        description={visualDescription(listed.length, timeline.items.length)}
         actions={newButton}
       />
 
@@ -423,15 +343,8 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
         className="rise grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
         style={staggerStyle(0, SECTION_STEP_MS)}
       >
-        {summaries.map((summary, index) => (
-          <SummaryCard
-            key={summary.key}
-            summary={summary}
-            index={index}
-            tone={toneOf(summary.key)}
-            pressed={selected === summary.key}
-            onToggle={() => toggleKpi(summary.key)}
-          />
+        {summary.map((card, index) => (
+          <SummaryCard key={card.key} card={card} index={index} />
         ))}
       </section>
 
@@ -452,50 +365,47 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
           </div>
           <div className="grid gap-[18px] [grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))]">
             {attention.map((project, index) => (
-              <AttentionCard key={project.id} project={project} index={index} toneOf={toneOf} />
+              <ProjectCard key={project.id} project={project} index={index} toneOf={toneOf} />
             ))}
           </div>
         </section>
       ) : null}
 
       <section
-        aria-labelledby={boardId}
-        data-section="board"
+        aria-labelledby={gridId}
+        data-section="projects"
         className="rise flex flex-col gap-3.5"
-        style={staggerStyle(boardIndex, SECTION_STEP_MS)}
+        style={staggerStyle(gridIndex, SECTION_STEP_MS)}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 id={boardId} className="text-lg font-semibold">
-            {BOARD_TITLE}
+          <h2 id={gridId} className="text-lg font-semibold">
+            {PROJECTS_GRID_TITLE}
           </h2>
-          {canChangeProjectStage ? <span className="text-[12.5px] text-muted-foreground">{BOARD_HINT}</span> : null}
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {cards.length} {cards.length === 1 ? "proyecto" : "proyectos"}
+          </span>
         </div>
-        <PortfolioBoardWidget
-          columns={shownColumns}
-          toneOf={toneOf}
-          canMove={canChangeProjectStage}
-          onMove={handleMove}
-          announcement={announcement}
-          onAnnounce={setAnnouncement}
-          lastColumnFooter={
-            canCreateProject ? (
-              <Button type="button" variant="outline" className="h-11 border-dashed" onClick={() => onNewProject?.()}>
-                <Plus aria-hidden="true" />
-                {VISUAL_NEW_PROJECT_LABEL}
-              </Button>
-            ) : null
-          }
-        />
+        <div data-slot="project-grid" className="grid gap-[18px] [grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))]">
+          {cards.map((project, index) => (
+            <ProjectCard key={project.id} project={project} index={index} toneOf={toneOf} slot="project-card" steps={false} />
+          ))}
+          {canCreateProject ? (
+            <Button type="button" variant="outline" className="h-auto min-h-28 border-dashed" onClick={() => onNewProject?.()}>
+              <Plus aria-hidden="true" />
+              {VISUAL_NEW_PROJECT_LABEL}
+            </Button>
+          ) : null}
+        </div>
       </section>
 
       <DeliveryTimelineWidget
         title={TIMELINE_TITLE}
         days={timeline.days}
-        items={shownItems}
+        items={timeline.items}
         rangeLabel={timeline.rangeLabel}
         toneOf={toneOf}
         legend={tramoOrder.map((t) => ({ key: t.key, label: t.name }))}
-        enterIndex={boardIndex + 1}
+        enterIndex={gridIndex + 1}
       />
     </div>
   );
