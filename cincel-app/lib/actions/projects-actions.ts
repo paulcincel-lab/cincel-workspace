@@ -7,7 +7,11 @@ import { after } from "next/server";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import {
+  canSeeAdminData,
+  resolveActivitiesCapabilities,
+  resolveProjectsCapabilities,
+} from "@/lib/auth/permissions";
 import { retryProjectFolders, syncProjectFolderName, syncProjectFolders } from "@/lib/google/project-folders-app";
 import { actionErrorCode } from "@/lib/errors";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
@@ -64,8 +68,11 @@ const viewerOf = (user: AuthenticatedUser): ViewerScope => ({ staffId: user.memb
 
 /**
  * Creates a project with only a name (BE §9.4). Older callers may still pass
- * a full `ProjectInput`; only `name` is read. `canCreateProject`. Errors:
- * FORBIDDEN, EMPTY, NAME_TAKEN.
+ * a full `ProjectInput`; only `name`, `startWorkflowId` and `phaseIds` are
+ * read. `canCreateProject`; choosing the starting tramo (sending
+ * `startWorkflowId` or `phaseIds`) also needs `activities.canCreateActivity`,
+ * the Iniciar tramo sheet's capability (#1034). Errors: FORBIDDEN, EMPTY,
+ * NAME_TAKEN, INVALID, PHASE_MISMATCH, NO_PHASES.
  */
 export async function createProjectAction(
   ...args: Parameters<typeof createProjectActionImpl>
@@ -78,7 +85,15 @@ async function createProjectActionImpl(input: ProjectCreateInput | ProjectInput)
   if (!resolveProjectsCapabilities(user).canCreateProject) {
     throw new Error("FORBIDDEN: project create");
   }
-  const row = await projectsRepository.createProject({ name: input?.name }, user.member.id);
+  const { startWorkflowId, phaseIds } = (input ?? {}) as ProjectCreateInput;
+  const picksTramo = startWorkflowId !== undefined || phaseIds !== undefined;
+  if (picksTramo && !resolveActivitiesCapabilities(user).canCreateActivity) {
+    throw new Error("FORBIDDEN: start tramo");
+  }
+  const row = await projectsRepository.createProject(
+    picksTramo ? { name: input?.name, startWorkflowId, phaseIds } : { name: input?.name },
+    user.member.id
+  );
   // Drive runs after the response; no client yet, so only the internal folders.
   // A failure leaves the project with drive_folder_status = failed.
   after(() => syncProjectFolders(row.id));
@@ -87,7 +102,7 @@ async function createProjectActionImpl(input: ProjectCreateInput | ProjectInput)
 }
 
 /** Codes the create sheet shows as copy instead of the generic error. */
-const CREATE_PROJECT_CODES = new Set(["FORBIDDEN", "EMPTY", "NAME_TAKEN"]);
+const CREATE_PROJECT_CODES = new Set(["FORBIDDEN", "EMPTY", "NAME_TAKEN", "INVALID", "PHASE_MISMATCH", "NO_PHASES"]);
 
 /**
  * `createProjectAction` for the create sheet. Production builds hide the

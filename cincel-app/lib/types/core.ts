@@ -373,8 +373,20 @@ export type ProjectDetail = Project & {
   links: ProjectLink[];
 };
 
-/** "+ Nuevo proyecto": the name only (FE §3.4). */
-export type ProjectCreateInput = { name: string };
+/**
+ * "+ Nuevo proyecto" (FE §3.4): the name, plus the starting tramo (#1034).
+ * `startWorkflowId` missing: the first tramo starts when its auto-start is
+ * `on_create`; `null`: no tramo starts; an id: that tramo starts with
+ * `phaseIds` (every active fase when missing), unassigned.
+ */
+export type ProjectCreateInput = { name: string; startWorkflowId?: string | null; phaseIds?: string[] };
+
+/** The create dialog's "Tramo inicial" options: active tramos in catalog order with their active fases. */
+export type ProjectCreateStartOptions = {
+  /** What a create without the field starts: the first tramo when its auto-start is on, else null ("Ninguno"). */
+  defaultWorkflowId: string | null;
+  tramos: Array<WorkflowRef & { phases: Array<WorkflowPhaseRef & { templateCount: number }> }>;
+};
 
 export type ProjectInput = {
   code?: string | null;

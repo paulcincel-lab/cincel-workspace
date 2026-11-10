@@ -224,6 +224,141 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     );
   });
 
+  async function workflowByKey(key: string) {
+    const [wf] = await db
+      .select({ id: schema.workflows.id })
+      .from(schema.workflows)
+      .where(and(eq(schema.workflows.key, key), isNull(schema.workflows.deletedAt)))
+      .limit(1);
+    const phases = await db
+      .select({ id: schema.workflowPhases.id })
+      .from(schema.workflowPhases)
+      .where(and(eq(schema.workflowPhases.workflowId, wf!.id), eq(schema.workflowPhases.active, true)))
+      .orderBy(asc(schema.workflowPhases.sortOrder));
+    return { id: wf!.id, phaseIds: phases.map((p) => p.id) };
+  }
+
+  async function stagesOf(projectId: string) {
+    return db
+      .select({ workflowId: schema.projectStages.workflowId })
+      .from(schema.projectStages)
+      .where(eq(schema.projectStages.projectId, projectId));
+  }
+
+  async function workflowTasksOf(projectId: string) {
+    return db
+      .select({ workflowId: schema.tasks.workflowId, phaseId: schema.tasks.phaseId, managerId: schema.tasks.managerId })
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.kind, "workflow")));
+  }
+
+  it("starts the chosen tramo with only the checked fases (#1034)", async () => {
+    await setFirstAutoStart("on_create");
+    const diseno = await workflowByKey("diseno");
+    expect(diseno.phaseIds.length).toBeGreaterThan(1);
+    const checked = diseno.phaseIds.slice(0, 1);
+    const project = await repo.createProject(
+      { name: `Casa Diseño ${run}`, startWorkflowId: diseno.id, phaseIds: checked },
+      actorId
+    );
+    projectIds.push(project.id);
+
+    expect(await stagesOf(project.id)).toEqual([{ workflowId: diseno.id }]);
+    expect(project.currentWorkflow?.id).toBe(diseno.id);
+    const tasks = await workflowTasksOf(project.id);
+    const templates = await db
+      .select({ id: schema.workflowTaskTemplates.id })
+      .from(schema.workflowTaskTemplates)
+      .where(
+        and(
+          inArray(schema.workflowTaskTemplates.phaseId, checked),
+          eq(schema.workflowTaskTemplates.active, true)
+        )
+      );
+    expect(tasks).toHaveLength(templates.length);
+    expect(tasks.every((t) => t.workflowId === diseno.id && checked.includes(t.phaseId!))).toBe(true);
+    expect(tasks.every((t) => t.managerId === null)).toBe(true);
+    const [batch] = await db
+      .select({ trigger: schema.tramoStartBatches.trigger })
+      .from(schema.tramoStartBatches)
+      .where(eq(schema.tramoStartBatches.projectId, project.id));
+    expect(batch?.trigger).toBe("on_create");
+    expect(await assignClientTasks(project.id)).toHaveLength(1);
+  });
+
+  it("starts every active fase of the chosen tramo when phaseIds is missing", async () => {
+    await setFirstAutoStart("manual");
+    const diseno = await workflowByKey("diseno");
+    const project = await repo.createProject({ name: `Casa Diseño Todo ${run}`, startWorkflowId: diseno.id }, actorId);
+    projectIds.push(project.id);
+    const tasks = await workflowTasksOf(project.id);
+    expect(new Set(tasks.map((t) => t.phaseId))).toEqual(
+      new Set(
+        (
+          await db
+            .select({ phaseId: schema.workflowTaskTemplates.phaseId })
+            .from(schema.workflowTaskTemplates)
+            .where(
+              and(
+                inArray(schema.workflowTaskTemplates.phaseId, diseno.phaseIds),
+                eq(schema.workflowTaskTemplates.active, true)
+              )
+            )
+        ).map((t) => t.phaseId)
+      )
+    );
+  });
+
+  it("starts no tramo with startWorkflowId null, even when the first tramo auto-starts", async () => {
+    await setFirstAutoStart("on_create");
+    const project = await repo.createProject({ name: `Casa Ninguno ${run}`, startWorkflowId: null }, actorId);
+    projectIds.push(project.id);
+    expect(await stagesOf(project.id)).toEqual([]);
+    expect(project.currentWorkflow).toBeNull();
+    expect(project.needsTramo).toBe(true);
+    expect(await workflowTasksOf(project.id)).toHaveLength(0);
+    expect(await assignClientTasks(project.id)).toHaveLength(1);
+  });
+
+  it("rejects an unknown or inactive tramo with INVALID and a foreign fase with PHASE_MISMATCH", async () => {
+    await setFirstAutoStart("manual");
+    await expect(
+      repo.createProject({ name: `Casa Rara ${run}`, startWorkflowId: randomUUID() }, actorId)
+    ).rejects.toThrow(/^INVALID/);
+
+    const construccion = await workflowByKey("construccion");
+    await db.update(schema.workflows).set({ active: false }).where(eq(schema.workflows.id, construccion.id));
+    try {
+      await expect(
+        repo.createProject({ name: `Casa Inactiva ${run}`, startWorkflowId: construccion.id }, actorId)
+      ).rejects.toThrow(/^INVALID/);
+    } finally {
+      await db.update(schema.workflows).set({ active: true }).where(eq(schema.workflows.id, construccion.id));
+    }
+
+    const diseno = await workflowByKey("diseno");
+    await expect(
+      repo.createProject(
+        { name: `Casa Mezcla ${run}`, startWorkflowId: diseno.id, phaseIds: [construccion.phaseIds[0]!] },
+        actorId
+      )
+    ).rejects.toThrow("PHASE_MISMATCH");
+    await expect(
+      repo.createProject({ name: `Casa Vacía ${run}`, startWorkflowId: diseno.id, phaseIds: [] }, actorId)
+    ).rejects.toThrow("NO_PHASES");
+    await expect(
+      repo.createProject({ name: `Casa Sin Tramo ${run}`, startWorkflowId: null, phaseIds: diseno.phaseIds }, actorId)
+    ).rejects.toThrow(/^INVALID/);
+
+    // Every rejection rolled back: none of those projects exists.
+    const names = [`Casa Rara ${run}`, `Casa Inactiva ${run}`, `Casa Mezcla ${run}`, `Casa Vacía ${run}`, `Casa Sin Tramo ${run}`];
+    const rows = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(inArray(schema.projects.name, names));
+    expect(rows).toEqual([]);
+  });
+
   it("assertAdminAssignees accepts admins and refuses anyone else", async () => {
     await expect(adminTasks.assertAdminAssignees(db, [adminId])).resolves.toBeUndefined();
     await expect(adminTasks.assertAdminAssignees(db, [adminId, actorId])).rejects.toThrow("ASSIGNEE_NOT_ADMIN");

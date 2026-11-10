@@ -29,7 +29,7 @@ import { loadProjectResumen, tramoCatalog } from "@/lib/proyectos/project-resume
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import { listPortfolioRows } from "@/lib/repositories/projects-portfolio-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
-import type { ProjectListItem, WorkflowRef } from "@/lib/types/core";
+import type { ProjectCreateStartOptions, ProjectListItem, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
 /**
@@ -276,6 +276,8 @@ export type ProyectosPageData = {
   canChangeProjectStage: boolean;
   /** Project fields edit in place (Responsable, #1026); `updateProjectAction` checks it again. Absent = false. */
   canEditProjectGeneral?: boolean;
+  /** The create dialog shows "Tramo inicial" (`canCreateProject` and `activities.canCreateActivity`, #1034). Absent = false. */
+  canPickStartTramo?: boolean;
   /** The viewer's staff id ("Solo míos": manager, coordinator or member). */
   viewerStaffId: string;
   /** Today in the project timezone (`scheduleToday`), `YYYY-MM-DD`: the delivery timeline's first day. */
@@ -336,8 +338,35 @@ export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new
     canCreateProject: capabilities.canCreateProject,
     canChangeProjectStage: capabilities.canChangeProjectStage,
     canEditProjectGeneral: capabilities.canEditProjectGeneral,
+    canPickStartTramo: canPickStartTramo(user),
     viewerStaffId,
     today,
+  };
+}
+
+/** Choosing the starting tramo of a new project: create projects and start tramos (#1034). */
+function canPickStartTramo(user: AuthenticatedUser): boolean {
+  return resolveProjectsCapabilities(user).canCreateProject && resolveActivitiesCapabilities(user).canCreateActivity;
+}
+
+/**
+ * `qk.proyectos.createStart()`: the create dialog's "Tramo inicial" options
+ * (#1034), one query (`listWorkflowPhaseTree`). Null without
+ * `canPickStartTramo`.
+ */
+export async function loadProjectCreateStartOptions(user: AuthenticatedUser): Promise<ProjectCreateStartOptions | null> {
+  if (!canPickStartTramo(user)) return null;
+  const tree = await workflowsRepository.listWorkflowPhaseTree();
+  const first = tree[0];
+  return {
+    defaultWorkflowId: first && first.autoStart === "on_create" && first.phases.length > 0 ? first.id : null,
+    tramos: tree.map((wf) => ({
+      id: wf.id,
+      key: wf.key,
+      name: wf.name,
+      sortOrder: wf.sortOrder,
+      phases: wf.phases.map((p) => ({ id: p.id, name: p.name, sortOrder: p.sortOrder, templateCount: p.templateCount })),
+    })),
   };
 }
 

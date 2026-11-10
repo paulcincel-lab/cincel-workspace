@@ -32,7 +32,11 @@ export const PositionInputSchema = z.object({
   active: z.boolean().optional(),
   weeklyCapacityHours: z.number().int().min(0).max(80).nullable().optional(),
 });
-export const ProjectCreateInputSchema = z.object({ name });
+export const ProjectCreateInputSchema = z.object({
+  name,
+  startWorkflowId: uuid.nullable().optional(),
+  phaseIds: z.array(uuid).max(50).optional(),
+});
 export const ProjectSpaceNameSchema = name;
 export const OrderedIdsSchema = z.array(uuid).max(500);
 /** `setPositionPhasesAction`, `setStaffPositionsAction`. */

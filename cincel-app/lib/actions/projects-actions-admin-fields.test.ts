@@ -10,9 +10,11 @@ vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: vi.fn(async () => ({ member: { id: ACTOR }, access: session.access })),
 }));
 
+const activities = vi.hoisted(() => ({ canCreateActivity: true }));
 vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveProjectsCapabilities: () => ({ canCreateProject: true, canEditProjectGeneral: true, canArchiveProject: true }),
+  resolveActivitiesCapabilities: () => ({ canCreateActivity: activities.canCreateActivity }),
 }));
 
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
@@ -44,6 +46,7 @@ beforeEach(() => {
   afterCallbacks.length = 0;
   vi.clearAllMocks();
   session.access = "Administrador";
+  activities.canCreateActivity = true;
   repo.createProject.mockResolvedValue({ id: PROJECT, name: "Casa Valle" });
   repo.updateProject.mockResolvedValue({ id: PROJECT, name: "Casa Valle" });
 });
@@ -66,6 +69,29 @@ describe("createProjectAction (name only)", () => {
     expect(paths).not.toContain("/proyectos");
     // The ficha reads its own query (5b, #960).
     expect(paths).not.toContain(`/proyectos/${PROJECT}/ficha`);
+  });
+
+  it("passes the starting tramo and fases through (#1034)", async () => {
+    const WF = "77777777-7777-4777-8777-777777777777";
+    await createProjectAction({ name: "Casa Valle", startWorkflowId: WF, phaseIds: [PROJECT] });
+    expect(repo.createProject).toHaveBeenCalledWith(
+      { name: "Casa Valle", startWorkflowId: WF, phaseIds: [PROJECT] },
+      ACTOR
+    );
+    await createProjectAction({ name: "Casa Valle", startWorkflowId: null });
+    expect(repo.createProject).toHaveBeenLastCalledWith(
+      { name: "Casa Valle", startWorkflowId: null, phaseIds: undefined },
+      ACTOR
+    );
+  });
+
+  it("refuses a starting tramo without the start-tramo capability", async () => {
+    activities.canCreateActivity = false;
+    await expect(createProjectAction({ name: "Casa Valle", startWorkflowId: null })).rejects.toThrow("FORBIDDEN");
+    expect(repo.createProject).not.toHaveBeenCalled();
+    // The name-only create stays open to them.
+    await createProjectAction({ name: "Casa Valle" });
+    expect(repo.createProject).toHaveBeenCalledWith({ name: "Casa Valle" }, ACTOR);
   });
 
   it("surfaces the repository's NAME_TAKEN", async () => {

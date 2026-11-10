@@ -16,6 +16,7 @@ import type { StartTramoResult } from "@/lib/types/core";
 import { READINESS } from "./catalog";
 import { refreshStageClosed } from "./closing";
 import type { FlowDb, FlowExecutor, FlowTx } from "./db";
+import { FLOW_ERROR, flowError } from "./errors";
 import { startTramo } from "./start-tramo";
 
 /** Active fase ids of a tramo, in catalog order. */
@@ -54,6 +55,37 @@ export async function autoStartOnCreate(
     assignment: { mode: "none" },
     actorId,
     trigger: "on_create",
+  });
+}
+
+/**
+ * Project create with a chosen starting tramo (#1034): starts `workflowId`
+ * with `phaseIds` (every active fase when missing; a tramo without fases
+ * opens its stage only), unassigned, `trigger: 'on_create'`. Errors: INVALID
+ * (unknown, deleted or inactive tramo), PHASE_MISMATCH, NO_PHASES.
+ */
+export async function startChosenOnCreate(
+  tx: FlowTx,
+  projectId: string,
+  actorId: string,
+  workflowId: string,
+  phaseIds?: string[]
+): Promise<StartTramoResult> {
+  const [wf] = await tx
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(and(eq(workflows.id, workflowId), isNull(workflows.deletedAt), eq(workflows.active, true)))
+    .limit(1);
+  if (!wf) throw flowError(FLOW_ERROR.INVALID, "startWorkflowId");
+  const ids = phaseIds ?? (await activePhaseIds(tx, workflowId));
+  return startTramo(tx, {
+    projectId,
+    workflowId,
+    phaseIds: ids,
+    assignment: { mode: "none" },
+    actorId,
+    trigger: "on_create",
+    stageOnly: phaseIds === undefined && ids.length === 0,
   });
 }
 

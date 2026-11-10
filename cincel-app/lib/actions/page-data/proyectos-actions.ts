@@ -25,11 +25,13 @@ import type { PortalActivityRow } from "@/lib/types/portal";
 import {
   loadProyectoResumen,
   loadProyectoTareas,
+  loadProjectCreateStartOptions,
   loadProyectosPage,
   type ProyectoTareasData,
   type ProyectosPageData,
 } from "@/lib/loaders/proyectos";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
+import type { ProjectCreateStartOptions } from "@/lib/types/core";
 import { suggestAssignee, type AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
@@ -123,6 +125,14 @@ const ProyectoTareasInput = z.object({ id: UuidSchema });
 export async function getProyectosPageData(input: z.input<typeof ProyectosPageInput> = {}): Promise<ProyectosPageData> {
   parseInput(ProyectosPageInput, input);
   return loadProyectosPage(await requireCapabilityUser());
+}
+
+/** `qk.proyectos.createStart()`: the create dialog's "Tramo inicial" options; null when the viewer can't pick one. */
+export async function getProjectCreateStartOptions(
+  input: z.input<typeof ProyectosPageInput> = {},
+): Promise<ProjectCreateStartOptions | null> {
+  parseInput(ProyectosPageInput, input);
+  return loadProjectCreateStartOptions(await requireCapabilityUser());
 }
 
 /** `qk.proyectos.resumen(id)`: null for a project out of scope or deleted; admin data stripped for non-admins. */

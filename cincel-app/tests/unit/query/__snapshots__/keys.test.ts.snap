@@ -313,6 +313,10 @@ exports[`qk > builds every key shape 1`] = `
     "clientes",
     "activity",
   ],
+  "proyectos.createStart": [
+    "proyectos",
+    "create-start",
+  ],
   "proyectos.cronograma": [
     "proyectos",
     "p1",
@@ -546,6 +550,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "importData",
   "proyectos.all",
   "proyectos.list",
+  "proyectos.createStart",
   "proyectos.detail",
   "proyectos.shell",
   "proyectos.resumen",

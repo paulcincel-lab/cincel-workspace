@@ -51,6 +51,7 @@ function shapes() {
     importData: qk.importData("project", "p1"),
     "proyectos.all": qk.proyectos.all,
     "proyectos.list": qk.proyectos.list(),
+    "proyectos.createStart": qk.proyectos.createStart(),
     "proyectos.detail": qk.proyectos.detail("p1"),
     "proyectos.shell": qk.proyectos.shell("p1"),
     "proyectos.resumen": qk.proyectos.resumen("p1"),
