@@ -26,6 +26,8 @@ import type { TaskListRow } from "@/lib/types/core";
 import type { RecordColumn } from "@/lib/types/widgets";
 
 import { OVERDUE_SHARE_HEAT } from "./lista-table";
+import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
+import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 import { PRIORITY_LABEL, daysLate, taskDueDate } from "./tablero-table";
 
 export const ANALITICO_DESCRIPTION = "Por proyecto y tramo, ordenada por retraso.";
@@ -39,6 +41,7 @@ export const ANALITICO_COLUMNS: RecordColumn[] = [
   { key: "tramo", label: "Tramo" },
   { key: "fase", label: "Fase" },
   { key: "responsable", label: "Responsable" },
+  { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL },
   { key: "estatus", label: "Estatus" },
   { key: "vence", label: "Vence", mono: true },
   { key: "prioridad", label: "Prioridad" },

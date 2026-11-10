@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { FiltersBar, type FiltersBarProps } from "@/components/patterns/FiltersBar";
@@ -11,7 +11,20 @@ import { ErrorState } from "@/components/shell/ErrorState";
 import { Button } from "@/components/ui/shadcn/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { RecordTable } from "@/components/widgets/RecordTable";
+import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { projectTaskSupportColumn } from "@/components/widgets/proyectos-cell-edits";
+import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
+import { TASK_SUPPORT_COLUMN } from "@/components/tareas/task-cell-edits";
+import { SUPPORT_COLUMN_LABEL } from "@/components/tareas/task-table-copy";
+import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { catalogStaffOptions } from "@/lib/query/options/catalog";
+import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
+import { deleteTargetOf, useDeleteTasks } from "@/components/tareas/use-delete-tasks";
+import { TaskBulkBar } from "@/components/tareas/TaskBulkBar";
+import { useTaskSelection } from "@/components/tareas/use-task-selection";
+import { HiddenCompletedLine, HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
 import { StatusChip } from "@/components/widgets/StatusChip";
+import { useHideCompletedTasks } from "@/components/tareas/use-hide-completed";
 import {
   PROJECT_TASK_ESTADO_LABEL,
   PROJECT_TASK_ESTADOS,
@@ -37,7 +50,9 @@ import {
   type ProjectTasksQuery,
 } from "@/lib/proyectos/project-tasks-by-fase";
 import { proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { qk } from "@/lib/query/keys";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { isTaskClosed } from "@/lib/tasks/status-options";
 
 export type ProjectTasksByFaseProps = {
   projectId: string;
@@ -121,19 +136,32 @@ export function ProjectTasksByFase({ projectId, tasks, includeAdmin = false, tod
     }, PROJECT_TASKS_SEARCH_DEBOUNCE_MS);
   }
 
+  // Delete (#1041): deleted tasks leave the list and the counts right away.
+  const deletes = useDeleteTasks({ invalidate: [qk.proyectos.resumen(projectId), qk.proyectos.shell(projectId)] });
+  const isHidden = deletes.isHidden;
   const rows = useMemo(
-    () => topLevelTasks(includeAdmin ? tasks : tasks.filter((task) => task.kind !== "admin")),
-    [tasks, includeAdmin],
+    () =>
+      topLevelTasks(includeAdmin ? tasks : tasks.filter((task) => task.kind !== "admin")).filter(
+        (task) => !isHidden(task.id, task.parentTaskId),
+      ),
+    [tasks, includeAdmin, isHidden],
   );
   const byPerson = useMemo(
     () => filterByPersonAndSearch(rows, { responsable: query.responsable, q: draft }),
     [rows, query.responsable, draft],
   );
   const counts = useMemo(() => estadoCounts(byPerson, today), [byPerson, today]);
-  const shown = useMemo(
+  const matching = useMemo(
     () => byPerson.filter((task) => matchesEstado(task, query.estado, today)),
     [byPerson, query.estado, today],
   );
+  // "Ocultar completadas" (#1039): the task list leaves them out and says how many; the summary keeps them.
+  const [hideCompleted, setHideCompleted] = useHideCompletedTasks();
+  const shown = useMemo(
+    () => (hideCompleted ? matching.filter((task) => !isTaskClosed(task)) : matching),
+    [matching, hideCompleted],
+  );
+  const hiddenCompleted = matching.length - shown.length;
 
   // Groups and their progress cover every task of the project; the list shows the filtered ones.
   const { mode, groups } = useMemo(() => groupProjectTasks(rows, { includeAdmin, today }), [rows, includeAdmin, today]);
@@ -145,8 +173,30 @@ export function ProjectTasksByFase({ projectId, tasks, includeAdmin = false, tod
   }, [groups, shown]);
 
   const groupsTable = useMemo(() => buildGroupsTable(groups, mode), [groups, mode]);
-  const tasksTable = useMemo(() => buildTasksTable(shownGroups, today), [shownGroups, today]);
+  // Apoyo (#1038) edits in place; the other columns stay as they are.
+  const qc = useQueryClient();
+  const user = useSessionStore(selectAuthenticatedUser);
+  const caps = useMemo(() => resolveActivitiesCapabilities(user), [user]);
+  const [staffWanted, setStaffWanted] = useState(false);
+  const staffQuery = useQuery({ ...catalogStaffOptions(), enabled: staffWanted });
+  const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const tasksTable = useMemo(() => {
+    const table = buildTasksTable(shownGroups, today);
+    const people = staffQuery.data ?? [];
+    const support = projectTaskSupportColumn<ProjectTaskRow>({ qc, projectId, tasks: tasksById, people, viewer: { caps } });
+    return {
+      ...table,
+      columns: table.columns.map((column) => (column.key === TASK_SUPPORT_COLUMN ? { ...column, edit: support.edit, canEdit: support.canEdit } : column)),
+    } as typeof table;
+  }, [shownGroups, today, staffQuery.data, qc, projectId, tasksById, caps]);
   const people = useMemo(() => responsableOptions(rows), [rows]);
+
+  // Row checkboxes and the bulk bar (#1040) on the task list: a filter change clears the selection.
+  const visibleIds = useMemo(() => tasksTable.rows.map((row) => String(row.id)), [tasksTable.rows]);
+  const selection = useTaskSelection({
+    visibleIds,
+    resetKey: JSON.stringify([query.estado, query.responsable, draft, hideCompleted]),
+  });
   const hasUnassigned = rows.some((task) => !task.managerId);
 
   const chips: NonNullable<FiltersBarProps["chips"]> = PROJECT_TASK_ESTADOS.map((estado) => ({
@@ -213,6 +263,8 @@ export function ProjectTasksByFase({ projectId, tasks, includeAdmin = false, tod
         return isTaskLate(task, today) ? <span className="text-destructive">{String(row[columnKey])}</span> : undefined;
       case "responsable":
         return task.manager ? undefined : <span className="text-muted-foreground">{UNASSIGNED_LABEL}</span>;
+      case TASK_SUPPORT_COLUMN:
+        return <PeopleStack people={task.support} label={SUPPORT_COLUMN_LABEL} />;
       default:
         return undefined;
     }
@@ -267,16 +319,44 @@ export function ProjectTasksByFase({ projectId, tasks, includeAdmin = false, tod
               · {shown.length} de {rows.length} mostradas
             </span>
           </h2>
-          <RecordTable
-            data={tasksTable}
-            renderCell={renderTaskCell}
-            emptyState={{
-              title: "No hay tareas con estos filtros",
-              action: { label: "Ver todas", onClick: clearFilters },
-            }}
-          />
+          <HideCompletedSwitch className="self-start" checked={hideCompleted} onCheckedChange={setHideCompleted} />
+          <CellCommitProvider queryKeys={[qk.proyectos.tab(projectId, "tareas")]}>
+            <div className="contents" onPointerEnter={() => setStaffWanted(true)} onFocusCapture={() => setStaffWanted(true)}>
+              <RecordTable
+                data={tasksTable}
+                renderCell={renderTaskCell}
+                rowSelection={{
+                  selectable: true,
+                  selectedIds: selection.selectedIds,
+                  onSelectionChange: selection.onSelectionChange,
+                  getRowLabel: (row) => (row as ProjectTaskRow).task.title,
+                }}
+                rowMenu={{
+                  getRowLabel: (row) => (row as ProjectTaskRow).task.title,
+                  // The title is already the task's link: the menu only adds Eliminar.
+                  rowActions: (row) => deletes.rowActions(deleteTargetOf((row as ProjectTaskRow).task)),
+                  onRowDelete: deletes.canDelete
+                    ? (row) => deletes.request([deleteTargetOf((row as ProjectTaskRow).task)])
+                    : undefined,
+                }}
+                emptyState={{
+                  title: "No hay tareas con estos filtros",
+                  action: { label: "Ver todas", onClick: clearFilters },
+                }}
+              />
+            </div>
+          </CellCommitProvider>
+          <HiddenCompletedLine as="line" count={hiddenCompleted} onShow={() => setHideCompleted(false)} />
         </section>
       ) : null}
+      {deletes.dialog}
+      <TaskBulkBar
+        selection={selection}
+        taskOf={(id) => tasksById.get(id)}
+        staff={staffQuery.data ?? []}
+        deletes={deletes}
+        invalidate={[qk.proyectos.shell(projectId)]}
+      />
     </div>
   );
 }

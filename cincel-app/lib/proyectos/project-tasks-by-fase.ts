@@ -328,6 +328,8 @@ export function buildTasksTable(groups: ProjectTaskGroup[], today: string): Reco
       tarea: task.title,
       estatusTexto: isTaskLate(task, today) ? "Vencida" : taskStatusLabel(task),
       responsable: task.manager?.name ?? UNASSIGNED_LABEL,
+      // The cell renders the avatars; the names are its text value.
+      apoyo: task.support.length > 0 ? task.support.map((s) => s.name).join(", ") : null,
       vence: formatDueDate(task.commitmentDate),
       dias: dueDaysText(task, today),
       subtareas: subtasksText(task),
@@ -340,6 +342,7 @@ export function buildTasksTable(groups: ProjectTaskGroup[], today: string): Reco
       { key: "tarea", label: "Tarea" },
       { key: "estatusTexto", label: "Estatus", hideOn: ["visual", "analitico"] },
       { key: "responsable", label: "Responsable" },
+      { key: "apoyo", label: "Apoyo", hideOn: ["esencial"] },
       { key: "vence", label: "Vence" },
       { key: "dias", label: "Días", hideOn: ["visual", "esencial"] },
       { key: "subtareas", label: "Subtareas", align: "right" },

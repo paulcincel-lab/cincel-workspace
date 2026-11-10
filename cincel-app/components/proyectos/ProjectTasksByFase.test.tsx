@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 
 const refresh = vi.fn();
 const push = vi.fn();
@@ -249,7 +249,7 @@ describe("filters", () => {
 });
 
 function renderTab(style: PresentationStyle, props: Partial<Parameters<typeof ProjectTasksByFase>[0]> = {}) {
-  return render(
+  return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
       <ProjectTasksByFase projectId="p1" tasks={FASE_TASKS} today={TODAY} {...props} />
     </StyleProvider>,

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
@@ -10,8 +10,16 @@ import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { EditableCell } from "@/components/widgets/EditableCell";
+import { ROW_ACTIONS_HEADER, ROW_ACTIONS_WIDTH, RowActionsMenu, rowDeleteKeyDown } from "@/components/widgets/RowActionsMenu";
 import { OPEN_TASK_LABEL, cellEditState } from "@/components/widgets/editable-cell";
 import type { TableRowActionsProps, TableSelectionProps } from "@/components/widgets/table-rows";
+import {
+  HeaderSelectCheckbox,
+  RowSelectCheckbox,
+  SELECT_CELL_CLASS,
+  useTableSelection,
+  type TableSelection,
+} from "@/components/widgets/table-selection";
 import {
   HEAT_CELL_CLASS,
   columnAlign,
@@ -78,6 +86,20 @@ export type Group<Row> = {
   loading?: boolean;
   hasMore?: boolean;
   hidden?: boolean;
+  /** "table" layout: no group row; the rows are always shown (a flat list, #1042). */
+  headless?: boolean;
+};
+/**
+ * Expandable rows (#1042): a chevron in the first cell toggles a full-width
+ * row under the row with `render(row)` (e.g. a project's tasks). The caller
+ * keeps which rows are open.
+ */
+export type RowDetail<Row> = {
+  isOpen(row: Row): boolean;
+  onToggle(row: Row): void;
+  /** The toggle's accessible name, e.g. "Tareas de «Casa Lomas»". */
+  label(row: Row): string;
+  render(row: Row): ReactNode;
 };
 export type GroupAnchor = { groupId: string; label: string; count: number; tone?: "destructive" | "muted" };
 export type GroupedTableProps<Row extends Record<string, unknown>> = {
@@ -115,6 +137,8 @@ export type GroupedTableProps<Row extends Record<string, unknown>> = {
   sortable?: string[];
   sort?: { key: string; direction: "asc" | "desc" } | null;
   onSortChange?(key: string): void;
+  /** Expandable rows: see `RowDetail`. */
+  rowDetail?: RowDetail<Row>;
 } & TableSelectionProps<Row> &
   TableRowActionsProps<Row>;
 
@@ -185,6 +209,24 @@ function prefersReducedMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Columns after the data columns: the `⋯` row actions (#1041). */
+/** Columns before the data columns: the row checkboxes (#1040). */
+function leadingColumns<Row extends Record<string, unknown>>(props: GroupedTableProps<Row>): number {
+  return props.selectable ? 1 : 0;
+}
+
+/** Every row id of the groups (and their children), in the order the table shows them. */
+function orderedRowIds<Row>(groups: Group<Row>[], idOf: (row: Row, index: number) => string): string[] {
+  return groups.flatMap((group) => [
+    ...(group.rows ?? []).map((row, index) => idOf(row, index)),
+    ...orderedRowIds(group.children ?? [], idOf),
+  ]);
+}
+
+function trailingColumns<Row extends Record<string, unknown>>(props: GroupedTableProps<Row>): number {
+  return props.rowActions ? 1 : 0;
 }
 
 function hasChildren<Row>(group: Group<Row>): boolean {
@@ -260,6 +302,9 @@ type Ctx<Row extends Record<string, unknown>> = {
   columns: RecordColumn[];
   /** The keyboard grid, when a column is editable. */
   grid: UseCellGrid | null;
+  /** The row checkboxes (#1040); `enabled` false without `selectable`. */
+  selection: TableSelection;
+  idOf(row: Row, index: number): string;
   isOpen(id: string): boolean;
   toggle(id: string): void;
 };
@@ -278,7 +323,7 @@ function isMonoColumn(column: RecordColumn): boolean {
 function cellClass(column: RecordColumn, first: boolean, heat: HeatLevel): string {
   const numeric = columnAlign(column) === "right";
   return cn(
-    "border-b border-border px-3 py-[7px] whitespace-nowrap group-hover/row:bg-muted/50",
+    "border-b border-border px-3 py-[7px] whitespace-nowrap group-hover/row:bg-muted/50 group-data-[selected]/row:bg-muted",
     first && "pl-10",
     numeric ? "text-right tabular-nums" : "overflow-hidden text-ellipsis",
     isMonoColumn(column) && "font-mono",
@@ -287,9 +332,14 @@ function cellClass(column: RecordColumn, first: boolean, heat: HeatLevel): strin
 }
 
 /** The `<thead>` row: sortable headers are buttons with `aria-sort`; `badge` draws a pill after the label. */
-function HeaderRow<Row extends Record<string, unknown>>({ ctx }: { ctx: Ctx<Row> }) {
+function HeaderRow<Row extends Record<string, unknown>>({ ctx, rowIds = [] }: { ctx: Ctx<Row>; rowIds?: readonly string[] }) {
   return (
     <tr>
+      {ctx.selection.enabled ? (
+        <th scope="col" data-slot="row-select-head" className={cn("border-b bg-muted py-2 text-left", SELECT_CELL_CLASS)}>
+          <HeaderSelectCheckbox selection={ctx.selection} ids={rowIds} />
+        </th>
+      ) : null}
       {ctx.columns.map((column, index) => {
         const sortable = ctx.props.sortable?.includes(column.key) ?? false;
         const label = (
@@ -328,6 +378,11 @@ function HeaderRow<Row extends Record<string, unknown>>({ ctx }: { ctx: Ctx<Row>
           </th>
         );
       })}
+      {ctx.props.rowActions ? (
+        <th scope="col" data-slot="row-actions-head" style={{ width: ROW_ACTIONS_WIDTH }} className="border-b bg-muted px-1 py-2">
+          <span className="sr-only">{ROW_ACTIONS_HEADER}</span>
+        </th>
+      ) : null}
     </tr>
   );
 }
@@ -344,6 +399,7 @@ function FooterCells<Row extends Record<string, unknown>>({
 }) {
   return (
     <tr data-slot={slot}>
+      {ctx.selection.enabled ? <td className="bg-muted" /> : null}
       {ctx.columns.map((column, index) => (
         <td
           key={column.key}
@@ -358,6 +414,7 @@ function FooterCells<Row extends Record<string, unknown>>({
           {formatTotal(column, totals)}
         </td>
       ))}
+      {ctx.props.rowActions ? <td className="bg-muted" /> : null}
     </tr>
   );
 }
@@ -377,13 +434,25 @@ function LeafRow<Row extends Record<string, unknown>>({
   const isNew = props.isRowNew?.(row) ?? false;
   const muted = props.isRowMuted?.(row) ?? false;
   const id = props.getRowId?.(row, index) ?? rowId(row, index);
+  const detail = props.rowDetail;
+  const detailOpen = detail?.isOpen(row) ?? false;
+  const detailId = domId("fila-detalle", id);
+  const span = columns.length + leadingColumns(props) + trailingColumns(props);
   return (
+    <>
     <tr
       data-slot="leaf-row"
       data-row-id={id}
+      data-selected={ctx.selection.isSelected(id) ? "" : undefined}
       {...(grid ? { [GRID_GROUP_ATTR]: groupId } : {})}
       className={cn("group/row", isNew && "row-new", grid && GRID_ROW_CLASS)}
+      onKeyDown={props.onRowDelete ? (event) => rowDeleteKeyDown(event, () => props.onRowDelete?.(row)) : undefined}
     >
+      {ctx.selection.enabled ? (
+        <td data-slot="row-select-cell" className={cn("border-b border-border py-0 group-hover/row:bg-muted/50 group-data-[selected]/row:bg-muted", SELECT_CELL_CLASS)}>
+          <RowSelectCheckbox selection={ctx.selection} id={id} label={props.getRowLabel?.(row) ?? id} />
+        </td>
+      ) : null}
       {columns.map((column, columnIndex) => {
         const first = columnIndex === 0;
         const custom = props.renderCell?.(column.key, row);
@@ -413,6 +482,24 @@ function LeafRow<Row extends Record<string, unknown>>({
               ) : null}
             </span>
           );
+          if (detail) {
+            content = (
+              <span className="inline-flex max-w-full items-center gap-1">
+                <button
+                  type="button"
+                  aria-expanded={detailOpen}
+                  aria-controls={detailOpen ? detailId : undefined}
+                  aria-label={detail.label(row)}
+                  data-slot="row-detail-toggle"
+                  onClick={() => detail.onToggle(row)}
+                  className="-ml-7 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {detailOpen ? <ChevronDown aria-hidden="true" className="size-3.5" /> : <ChevronRight aria-hidden="true" className="size-3.5" />}
+                </button>
+                {content}
+              </span>
+            );
+          }
         }
         const heat = heatLevel(props.heat, column.key, row[column.key]);
         const edit = column.edit;
@@ -448,13 +535,27 @@ function LeafRow<Row extends Record<string, unknown>>({
           </td>
         );
       })}
+      {props.rowActions ? (
+        <td data-slot="row-actions-cell" className="border-b border-border px-1 py-0 text-right group-hover/row:bg-muted/50">
+          <RowActionsMenu rowLabel={props.getRowLabel?.(row) ?? id} actions={props.rowActions(row)} />
+        </td>
+      ) : null}
     </tr>
+    {detail && detailOpen ? (
+      <tr id={detailId} data-slot="row-detail">
+        {/* `data-row-detail`: the outer keyboard grid skips the cells of a table rendered here. */}
+        <td colSpan={span} data-row-detail="" className="border-b border-border bg-muted/30 p-0">
+          {detail.render(row)}
+        </td>
+      </tr>
+    ) : null}
+    </>
   );
 }
 
 /** The rows of a group that holds rows: leaf rows, skeleton, "Cargar más" and quick-add last. */
 function GroupRows<Row extends Record<string, unknown>>({ ctx, group }: { ctx: Ctx<Row>; group: Group<Row> }) {
-  const span = ctx.columns.length;
+  const span = ctx.columns.length + leadingColumns(ctx.props) + trailingColumns(ctx.props);
   return (
     <>
       {(group.rows ?? []).map((row, index) => (
@@ -502,11 +603,18 @@ function ChildGroup<Row extends Record<string, unknown>>({
   const open = ctx.isOpen(group.id);
   const toggle = () => ctx.toggle(group.id);
   const bodyId = domId("grupo-filas", group.id);
+  if (group.headless) {
+    return (
+      <tbody data-slot="child-rows" data-group-id={group.id}>
+        <GroupRows ctx={ctx} group={group} />
+      </tbody>
+    );
+  }
   return (
     <>
       <tbody data-slot="child-group" data-group-id={group.id}>
         <tr id={anchorId} className={anchorId ? "scroll-mt-12" : undefined}>
-          <td colSpan={ctx.columns.length} className="border-b border-border p-0">
+          <td colSpan={ctx.columns.length + leadingColumns(ctx.props) + trailingColumns(ctx.props)} className="border-b border-border p-0">
             <button
               ref={setHeaderRef ? (el) => setHeaderRef(group.id, el) : undefined}
               type="button"
@@ -564,7 +672,9 @@ function TopGroup<Row extends Record<string, unknown>>({
   const open = ctx.isOpen(group.id);
   const toggle = () => ctx.toggle(group.id);
   const bodyId = domId("grupo-cuerpo", group.id);
-  const minWidth = ctx.columns.reduce((sum, column) => sum + (column.width ?? DEFAULT_COLUMN_WIDTH), 0);
+  const minWidth =
+    ctx.columns.reduce((sum, column) => sum + (column.width ?? DEFAULT_COLUMN_WIDTH), 0) +
+    trailingColumns(ctx.props) * ROW_ACTIONS_WIDTH;
   const children = group.children ?? [];
   const ownRows = group.rows !== undefined || !hasChildren(group) || group.loading === true;
   return (
@@ -602,7 +712,7 @@ function TopGroup<Row extends Record<string, unknown>>({
               style={{ minWidth }}
             >
               <thead className="sticky top-0">
-                <HeaderRow ctx={ctx} />
+                <HeaderRow ctx={ctx} rowIds={orderedRowIds([group], ctx.idOf)} />
               </thead>
               {ownRows ? (
                 <tbody data-slot="group-rows">
@@ -627,6 +737,13 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
   const ids = useMemo(() => allIds(groups), [groups]);
   const editable = columns.some((column) => column.edit !== undefined);
   const grid = useCellGrid(editable);
+  const { getRowId } = p;
+  const idOf = useMemo(
+    () => (row: Row, index: number) => getRowId?.(row, index) ?? rowId(row, index),
+    [getRowId],
+  );
+  const rowOrder = useMemo(() => orderedRowIds(groups, idOf), [groups, idOf]);
+  const selection = useTableSelection(p, rowOrder);
 
   // Uncontrolled: the ids whose state differs from `defaultExpanded`.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(() => new Set());
@@ -708,14 +825,23 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
 
   const topIds = new Set(groups.map((group) => group.id));
   const anchors = (p.anchors ?? []).filter((anchor) => topIds.has(anchor.groupId));
-  const ctx: Ctx<Row> = { props: p, columns, grid: editable ? grid : null, isOpen, toggle };
+  const ctx: Ctx<Row> = { props: p, columns, grid: editable ? grid : null, selection, idOf, isOpen, toggle };
   const setHeaderRef = (id: string, el: HTMLButtonElement | null) => {
     if (el) headers.current.set(id, el);
     else headers.current.delete(id);
   };
 
   const body = (
-    <div data-slot="grouped-table" className="flex min-w-0 flex-col gap-3" {...(editable ? grid.rootProps : {})}>
+    <div data-slot="grouped-table" className="flex min-w-0 flex-col gap-3" {...(editable ? grid.rootProps : {})}
+      {...(selection.enabled
+        ? {
+            onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+              grid.rootProps.onKeyDown(event);
+              selection.onKeyDown(event);
+            },
+          }
+        : {})}
+    >
       {anchors.length > 0 || p.toggleAll !== false ? (
       <div className="flex flex-wrap items-center gap-2">
         {anchors.length > 0 ? (
@@ -765,7 +891,7 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
             >
               <caption className="sr-only">{p.label}</caption>
               <thead className="sticky top-0 z-10">
-                <HeaderRow ctx={ctx} />
+                <HeaderRow ctx={ctx} rowIds={rowOrder} />
               </thead>
               {groups.map((group) => (
                 <ChildGroup key={group.id} ctx={ctx} group={group} anchorId={groupAnchorId(group.id)} setHeaderRef={setHeaderRef} />

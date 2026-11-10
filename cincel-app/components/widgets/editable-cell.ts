@@ -46,6 +46,8 @@ export type PeopleCellEdit<Row> = {
   options(row: Row): CellOption[];
   /** Ids that can't be picked for this row (e.g. its Responsable). */
   exclude?(row: Row): string[];
+  /** Shown beside an excluded option ("Ya es responsable"). */
+  excludedLabel?: string;
 };
 
 /** What a column's `edit` takes: a single-value kind or the people multi-select. */
@@ -62,6 +64,22 @@ export const PEOPLE_MAX_AVATARS = 3;
 export const PEOPLE_OVERFLOW = (n: number): string => `+${n}`;
 /** A people cell with nobody picked. */
 export const PEOPLE_EMPTY = "—";
+/** Keys of the people editor, in its footer. */
+export const PEOPLE_HINT = { left: "↑↓ elegir · Espacio marcar · Enter guardar", right: "Esc cerrar" } as const;
+
+/** What a cell saves: one value (`null` clears) or, for a people cell, the whole list. */
+export type CellValue = string | null | string[];
+
+/** Same value: lists compare as sets (order and repeats don't count). */
+export function sameCellValue(a: CellValue, b: CellValue): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    const left = new Set(a);
+    const right = new Set(b);
+    return left.size === right.size && [...left].every((id) => right.has(id));
+  }
+  return a === b;
+}
 
 /** true, or the reason shown when the viewer clicks a locked cell */
 export type CanEdit<Row> = (row: Row) => true | string;
@@ -117,6 +135,8 @@ export const LOCK_REASON = {
   tramo: "Solo un admin puede mover la tarea de tramo.",
   /** Responsable without `canChangeResponsible`. */
   responsible: "Solo un admin puede cambiar el responsable.",
+  /** Apoyo (equipo de apoyo, #1038): the same permission as the Responsable. */
+  support: "Solo un admin puede cambiar el equipo de apoyo.",
   /** Estatus when `statusScope === "none"`. */
   status: "Tu rol no puede cambiar el estatus de las tareas.",
   /** Fase of a subtask: it inherits the parent's. */

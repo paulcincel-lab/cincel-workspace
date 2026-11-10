@@ -23,6 +23,9 @@ import { ErrorState } from "@/components/shell/ErrorState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { newTaskInvalidations } from "@/components/tareas/NewTaskDialog";
 import { TaskSheetRoute, taskSheetHref } from "@/components/tareas/TaskSheet";
+import { deleteTargetOf, useDeleteTasks } from "@/components/tareas/use-delete-tasks";
+import { TaskBulkBar } from "@/components/tareas/TaskBulkBar";
+import { useTaskSelection } from "@/components/tareas/use-task-selection";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
@@ -31,8 +34,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/shadcn/table";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
+import { HiddenCompletedLine, HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
+import { useHideCompletedTasks } from "@/components/tareas/use-hide-completed";
 import { KpiStrip, type KpiStripItem } from "@/components/widgets/KpiStrip";
 import { MI_ESPACIO_COMMIT_KEYS, miEspacioTaskColumns } from "@/components/widgets/mi-espacio-task-columns";
+import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { TASK_SUPPORT_COLUMN } from "@/components/tareas/task-cell-edits";
+import { SUPPORT_COLUMN_LABEL } from "@/components/tareas/task-table-copy";
 import { PageHeader } from "@/components/widgets/PageHeader";
 import { QuickAddRow, type QuickAddCreated, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
@@ -69,13 +77,14 @@ import {
   meGmailThreadsOptions,
   meNotificationsOptions,
   meNotificationsSummaryOptions,
+  meClosedTasksOptions,
   meTasksOptions,
   meWeekHoursOptions,
 } from "@/lib/query/options/mi-espacio";
 import { qk } from "@/lib/query/keys";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
-import { statusColorToken, statusDotClass } from "@/lib/tasks/status-options";
+import { isTaskClosed, statusColorToken, statusDotClass } from "@/lib/tasks/status-options";
 import { addDays, localDate, mondayOf } from "@/lib/time-tracking/local-time";
 import { tramoColorVar } from "@/lib/tramos/tramo-color";
 import type { TaskDetail, TaskListItem } from "@/lib/types/core";
@@ -308,20 +317,30 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   // ── Tasks ──
   const queryClient = useQueryClient();
   const statusesQuery = useQuery(catalogOptions.taskStatuses());
-  const { canCreateActivity, statusScope } = capabilities;
+  const { canCreateActivity, statusScope, canChangeResponsible } = capabilities;
+  // Apoyo (#1038): the people list loads once the viewer can change it.
+  const staffQuery = useQuery({ ...catalogOptions.staff(), enabled: canChangeResponsible });
   const [closedTasks] = useState(() => new Map<string, TaskListItem>());
   const taskColumns = useMemo(
     () =>
       miEspacioTaskColumns({
         qc: queryClient,
-        capabilities: { canCreateActivity, statusScope },
+        capabilities: { canCreateActivity, statusScope, canChangeResponsible },
         statuses: statusesQuery.data ?? [],
+        staff: staffQuery.data ?? NO_STAFF,
         left: closedTasks,
       }),
-    [queryClient, canCreateActivity, statusScope, statusesQuery.data, closedTasks],
+    [queryClient, canCreateActivity, statusScope, canChangeResponsible, statusesQuery.data, staffQuery.data, closedTasks],
   );
   const [created, setCreated] = useState<ReadonlySet<string>>(() => new Set());
-  const allTasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
+  // Delete (#1041): deleted tasks (and their subtasks) leave the table and the counts right away.
+  const deletes = useDeleteTasks();
+  const isHidden = deletes.isHidden;
+  const allTasks = useMemo(
+    () => (tasksQuery.data ?? []).filter((task) => !isHidden(task.id, task.parentTaskId)),
+    [tasksQuery.data, isHidden],
+  );
+  const tasksById = useMemo(() => new Map(allTasks.map((task) => [task.id, task])), [allTasks]);
   const tramoOptions = useMemo(() => {
     const byKey = new Map<string, { label: string; count: number; color: string; sortOrder: number }>();
     for (const task of allTasks) {
@@ -346,8 +365,46 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
       }),
     [allTasks, tramo, filters.estado, today, q],
   );
-  const groups = useMemo(() => myTasksGroups(visibleTasks, today), [visibleTasks, today]);
+  // "Ocultar completadas" (#1039): off adds my closed tasks (muted, never late) to the table;
+  // on leaves them out and each project says how many. The counts and KPIs stay on open work.
+  // Hidden by default here (Mi espacio always listed open work only); the switch shows them.
+  const [hideCompleted, setHideCompleted] = useHideCompletedTasks({ defaultHidden: true });
+  const doneQuery = useQuery(meClosedTasksOptions());
+  const visibleDone = useMemo(
+    () =>
+      (doneQuery.data ?? []).filter((task) => {
+        if (isHidden(task.id, task.parentTaskId)) return false;
+        if (tramo && task.workflow?.key !== tramo) return false;
+        if (filters.estado === "retraso") return false;
+        return matches(task.title, q);
+      }),
+    [doneQuery.data, isHidden, tramo, filters.estado, q],
+  );
+  const tableTasks = useMemo(
+    () => (hideCompleted ? visibleTasks : [...visibleTasks, ...visibleDone.filter((t) => !visibleTasks.some((o) => o.id === t.id))]),
+    [hideCompleted, visibleTasks, visibleDone],
+  );
+  const hiddenDoneByProject = useMemo(() => {
+    const out = new Map<string, number>();
+    if (!hideCompleted) return out;
+    for (const task of visibleDone) {
+      const id = task.project?.id ?? task.projectId;
+      out.set(id, (out.get(id) ?? 0) + 1);
+    }
+    return out;
+  }, [hideCompleted, visibleDone]);
+  const groups = useMemo(() => myTasksGroups(tableTasks, today), [tableTasks, today]);
   const visibleRows = useMemo(() => groups.flatMap((g) => (g.children ?? []).flatMap((c) => c.rows ?? [])), [groups]);
+  // ── Row checkboxes and the bulk bar (#1040): a filter change clears the selection.
+  const visibleIds = useMemo(() => visibleRows.map((row) => row.id), [visibleRows]);
+  const selection = useTaskSelection({
+    visibleIds,
+    resetKey: JSON.stringify([filters.estado, tramo, q, hideCompleted]),
+  });
+  const taskOfId = useMemo(() => {
+    const byId = new Map(tableTasks.map((task) => [task.id, task]));
+    return (id: string) => byId.get(id);
+  }, [tableTasks]);
   const all = useMemo(() => taskMetrics(allTasks, today), [allTasks, today]);
   const shown = useMemo(() => taskMetrics(visibleTasks, today), [visibleTasks, today]);
 
@@ -450,7 +507,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     const quickAdd = (
       <QuickAddRow
         variant="row"
-        colSpan={taskColumns.length}
+        colSpan={taskColumns.length + 2}
         context={{
           label: `Agregar tarea en ${group.label}`,
           projectId: group.id,
@@ -465,6 +522,28 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
       />
     );
     const children = group.children.map((child, index, list) => (index === list.length - 1 ? { ...child, quickAdd } : child));
+    return { ...group, children };
+  });
+
+  const shownGroups: Group<TaskRow>[] = tableGroups.map((group) => {
+    const hidden = hiddenDoneByProject.get(group.id) ?? 0;
+    if (hidden === 0 || !group.children || group.children.length === 0) return group;
+    const line = (
+      <HiddenCompletedLine count={hidden} colSpan={taskColumns.length + 2} onShow={() => setHideCompleted(false)} />
+    );
+    const children = group.children.map((child, index, list) =>
+      index === list.length - 1
+        ? {
+            ...child,
+            quickAdd: (
+              <>
+                {line}
+                {child.quickAdd}
+              </>
+            ),
+          }
+        : child,
+    );
     return { ...group, children };
   });
 
@@ -643,12 +722,14 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
         ) : visibleTasks.length === 0 ? (
           <EmptyState title={NO_MATCH} action={{ label: CLEAR_FILTERS, onClick: clearFilters }} />
         ) : (
-          <div className="p-3">
+          <div className="flex flex-col gap-2 p-3">
+            <HideCompletedSwitch className="self-end" checked={hideCompleted} onCheckedChange={setHideCompleted} />
             <CellCommitProvider<TaskRow> queryKeys={MI_ESPACIO_COMMIT_KEYS}>
               <GroupedTable<TaskRow>
                 label="Mis tareas"
                 columns={taskColumns}
-                groups={tableGroups}
+                groups={shownGroups}
+                isRowMuted={(row) => isTaskClosed(row)}
                 expanded={expanded}
                 onExpandedChange={onExpandedChange}
                 getRowId={(row) => row.id}
@@ -656,8 +737,36 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
                 isRowNew={(row) => created.has(row.id)}
                 totals={{ label: totalsLabel, summary: `${lateSum} d` }}
                 renderCell={(key, row) => renderTaskCell(key, row)}
+                getRowLabel={(row) => tasksById.get(row.id)?.title ?? row.id}
+                selectable
+                selectedIds={selection.selectedIds}
+                onSelectionChange={selection.onSelectionChange}
+                rowActions={(row) => {
+                  const task = tasksById.get(row.id);
+                  return task
+                    ? deletes.rowActions(deleteTargetOf(task), () =>
+                        window.history.pushState(null, "", taskSheetHref("/mi-espacio", search, row.id)),
+                      )
+                    : [];
+                }}
+                onRowDelete={
+                  deletes.canDelete
+                    ? (row) => {
+                        const task = tasksById.get(row.id);
+                        if (task) deletes.request([deleteTargetOf(task)]);
+                      }
+                    : undefined
+                }
               />
+              {deletes.dialog}
             </CellCommitProvider>
+            <TaskBulkBar
+              selection={selection}
+              taskOf={taskOfId}
+              staff={staffQuery.data ?? NO_STAFF}
+              deletes={deletes}
+              invalidate={MI_ESPACIO_COMMIT_KEYS}
+            />
           </div>
         )}
       </SectionCard>
@@ -796,7 +905,10 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
 
 // ── Pieces ──────────────────────────────────────────────────────────────────
 
+const NO_STAFF: { id: string; name: string }[] = [];
+
 function renderTaskCell(key: string, row: TaskRow): ReactNode | undefined {
+  if (key === TASK_SUPPORT_COLUMN) return <PeopleStack people={row.support} label={SUPPORT_COLUMN_LABEL} />;
   if (key === "title") {
     return (
       <span title={row.title} className="inline-block max-w-[320px] truncate align-bottom">

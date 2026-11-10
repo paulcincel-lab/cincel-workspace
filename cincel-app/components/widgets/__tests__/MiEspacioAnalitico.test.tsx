@@ -525,7 +525,15 @@ describe("MiEspacioAnalitico editable cells", () => {
   it("Tarea, Estatus, Vence and Prioridad edit; Subtareas and Días de retraso stay calculated", () => {
     renderAnalitico();
     const kinds = Object.fromEntries(grouped.props!.columns.map((c) => [c.key, c.edit?.kind ?? null]));
-    expect(kinds).toEqual({ title: "text", estatus: "select", vence: "date", prioridad: "select", subtareas: null, retraso: null });
+    expect(kinds).toEqual({
+      title: "text",
+      apoyo: "people",
+      estatus: "select",
+      vence: "date",
+      prioridad: "select",
+      subtareas: null,
+      retraso: null,
+    });
     expect(column("title").edit).toMatchObject({ required: true });
     expect(column("vence").edit).toMatchObject({ quickPicks: true, clearable: true });
     // Rest state unchanged: the title is still plain text inside the row link.

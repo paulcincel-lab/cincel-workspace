@@ -6,7 +6,8 @@ import {
   fetchGmailThreadsAction,
 } from "@/lib/actions/gmail-actions";
 import { fetchRemindersAction } from "@/lib/actions/my-space-actions";
-import { fetchMyOpenTasksAction } from "@/lib/actions/tasks-actions";
+import { fetchMyOpenTasksAction, fetchMyTasksAction } from "@/lib/actions/tasks-actions";
+import { isTaskClosed } from "@/lib/tasks/status-options";
 import { fetchMyWeekHoursAction } from "@/lib/actions/time-tracking-actions";
 import { fetchNotificationsAction, fetchNotificationsSummaryAction } from "@/lib/actions/notifications-actions";
 import {
@@ -155,6 +156,20 @@ export function meTasksOptions() {
   return queryOptions<TaskListItem[]>({
     queryKey: qk.me.tasks(),
     queryFn: () => fetchMyOpenTasksAction(),
+    staleTime: STALE.screen,
+  });
+}
+
+/**
+ * My closed tasks (Mi espacio with "Ocultar completadas" off, #1039): the
+ * `fetchMyTasksAction` rows that are completado or in a closing custom
+ * status. Under the `me.tasks` prefix, so every invalidation of my tasks
+ * refreshes it too.
+ */
+export function meClosedTasksOptions() {
+  return queryOptions<TaskListItem[]>({
+    queryKey: [...qk.me.tasks(), "closed"] as const,
+    queryFn: async () => (await fetchMyTasksAction()).filter(isTaskClosed),
     staleTime: STALE.screen,
   });
 }

@@ -6,7 +6,7 @@
  * midnights so no browser clock zone leaks in.
  */
 import type { Group } from "@/components/widgets/GroupedTable";
-import { taskStatusLabel } from "@/lib/tasks/status-options";
+import { isTaskClosed, taskStatusLabel } from "@/lib/tasks/status-options";
 import { addDays, dayOfWeek, localDate, localHourMinute, mondayOf } from "@/lib/time-tracking/local-time";
 import { tramoColorVar } from "@/lib/tramos/tramo-color";
 import type { TaskListItem } from "@/lib/types/core";
@@ -348,6 +348,10 @@ export type TaskRow = {
   tramoSortOrder: number;
   status: TaskListItem["status"];
   customStatus: TaskListItem["customStatus"];
+  /** The Responsable (can't also be apoyo). */
+  managerId: string | null;
+  /** The equipo de apoyo (#1038). */
+  support: TaskListItem["support"];
   /** Status label: the custom status name over the base label. */
   estatus: string;
   /** Commitment date `YYYY-MM-DD`, or null. */
@@ -369,7 +373,10 @@ const PRIORITY_LABEL: Record<TaskListItem["priority"], string> = { alta: "Alta",
 
 /** The row of one open task, seen on `today`. */
 export function taskRow(task: TaskListItem, today: string): TaskRow {
-  const info = dueInfo(task, today);
+  // A closed task (shown with "Ocultar completadas" off) is never late.
+  const closed = isTaskClosed(task);
+  const due0 = dueInfo(task, today);
+  const info = closed && due0.tone === "overdue" ? { ...due0, tone: "none" as const, daysLate: 0 } : due0;
   const due = dateOnly(task.commitmentDate);
   const workflow = task.workflow;
   return {
@@ -383,6 +390,8 @@ export function taskRow(task: TaskListItem, today: string): TaskRow {
     tramoSortOrder: workflow?.sortOrder ?? Number.MAX_SAFE_INTEGER,
     status: task.status,
     customStatus: task.customStatus,
+    managerId: task.managerId,
+    support: task.support,
     estatus: taskStatusLabel(task),
     due,
     vence: due ? (info.tone === "today" ? "hoy" : shortDate(due)) : "—",

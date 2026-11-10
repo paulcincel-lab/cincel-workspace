@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { Lock } from "lucide-react";
 
 import { CellEditor } from "@/components/widgets/CellEditor";
-import type { AnyCellEdit, CanEdit, CellEdit, PeopleCellEdit } from "@/components/widgets/editable-cell";
+import { sameCellValue, type AnyCellEdit, type CanEdit, type CellValue } from "@/components/widgets/editable-cell";
 import { useCellCommit, useCellCommitContext } from "@/components/widgets/use-cell-commit";
 import { useCellGridContext, type CellHandle } from "@/components/widgets/use-cell-grid";
 
@@ -35,20 +35,12 @@ const REOPEN_GUARD_MS = 250;
 
 export function EditableCell<Row>(props: EditableCellProps<Row>): ReactNode {
   if (!props.edit) return props.children;
-  if (props.edit.kind === "people") return <PeopleEditable {...props} edit={props.edit} />;
   return <Editable {...props} edit={props.edit} />;
 }
 
-/**
- * A people cell (#1038). Contract stub: renders the content untouched until
- * the multi-select editor lands.
- */
-function PeopleEditable<Row>({ children }: EditableCellProps<Row> & { edit: PeopleCellEdit<Row> }): ReactNode {
-  return children;
-}
-
-function isClearable<Row>(edit: CellEdit<Row>): boolean {
-  return edit.kind !== "text" && edit.clearable === true;
+/** Delete / Backspace on the cell clears it (a people cell clears only from its editor). */
+function isClearable<Row>(edit: AnyCellEdit<Row>): boolean {
+  return edit.kind !== "text" && edit.kind !== "people" && edit.clearable === true;
 }
 
 /** Sets `name` on `el` while `on`, removes it otherwise. */
@@ -57,7 +49,7 @@ function flag(el: HTMLElement, name: string, on: boolean, value = "") {
   else el.removeAttribute(name);
 }
 
-function Editable<Row>({ row, rowId, columnKey, edit, canEdit, label, children }: EditableCellProps<Row> & { edit: CellEdit<Row> }) {
+function Editable<Row>({ row, rowId, columnKey, edit, canEdit, label, children }: EditableCellProps<Row> & { edit: AnyCellEdit<Row> }) {
   const grid = useCellGridContext();
   const saveOptions = useCellCommitContext();
   const commit = useCellCommit<Row>({
@@ -100,8 +92,8 @@ function Editable<Row>({ row, rowId, columnKey, edit, canEdit, label, children }
     };
   }, [anchor, commit.pending]);
 
-  const save = (value: string | null) => {
-    if (locked || value === edit.value(row)) return;
+  const save = (value: CellValue) => {
+    if (locked || sameCellValue(value, edit.value(row))) return;
     grid?.saving(rowId, columnKey);
     void commit.commit(edit, row, value);
   };
@@ -130,7 +122,7 @@ function Editable<Row>({ row, rowId, columnKey, edit, canEdit, label, children }
       },
       get acceptsLetters() {
         const now = latest.current;
-        return !now.locked && (now.edit.kind === "select" || now.edit.kind === "person");
+        return !now.locked && (now.edit.kind === "select" || now.edit.kind === "person" || now.edit.kind === "people");
       },
     };
     return grid.register(rowId, columnKey, handle);

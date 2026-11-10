@@ -181,7 +181,7 @@ describe("TareasAnalitico", () => {
 
   it("expand all and collapse all", async () => {
     renderAnalitico();
-    const headers = () => screen.getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    const headers = () => screen.getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded") && !b.closest('[data-slot="row-actions-cell"]'));
     expect(headers()).toHaveLength(5);
     expect(headers().every((b) => b.getAttribute("aria-expanded") === "true")).toBe(true);
 
