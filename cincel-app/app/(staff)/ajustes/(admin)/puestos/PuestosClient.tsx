@@ -1,11 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
+import { CatalogLayout } from "@/components/ajustes/CatalogEditorPanel";
+import {
+  CatalogCreateButton,
+  CatalogInlineAdd,
+  CatalogListHeader,
+  CatalogRowMenu,
+  MonoCount,
+  catalogActionTrigger,
+  rowNewClass,
+  useFlashedRows,
+} from "@/components/ajustes/catalog-parts";
 import { PositionEditorDrawer, type PositionDraft } from "@/components/configuracion/PositionEditorDrawer";
 import { DataTable } from "@/components/ui/DataTable";
+import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,9 +28,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/shadcn/alert-dialog";
+import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/shadcn/avatar";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { Button } from "@/components/ui/shadcn/button";
-import { createRowActionsColumn } from "@/components/v2/table/RowActionsMenu";
+import { TableCell, TableRow } from "@/components/ui/shadcn/table";
 import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   createPositionAction,
@@ -32,7 +44,9 @@ import { useActionMutation } from "@/lib/query/mutation";
 import { ajustesPuestosOptions, type AjustesPuestosPageData } from "@/lib/query/options/ajustes";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
-import type { Position } from "@/lib/types/core";
+import { tramoColorClass } from "@/lib/tramos/tramo-color";
+import type { Position, WorkflowDetail } from "@/lib/types/core";
+import { cn } from "@/lib/utils";
 
 const ERROR_COPY: Record<string, string> = {
   FORBIDDEN: "No tienes permiso para realizar esta acción.",
@@ -40,7 +54,14 @@ const ERROR_COPY: Record<string, string> = {
   EMPTY: "Escribe un nombre.",
   NAME_TAKEN: "Ya existe un puesto con ese nombre.",
   IN_USE: "Este puesto se asigna desde un grupo de Google. Quita el grupo en Configuración → Google primero.",
+  INVALID: "Revisa los datos: la capacidad va de 0 a 80 horas.",
 };
+
+/** Tooltip of the disabled "Eliminar" on a Google-managed puesto. */
+export const GOOGLE_MANAGED_DELETE_REASON = "Lo usa un grupo de Google.";
+
+/** Chips and avatars shown before collapsing the rest into "+{n}". */
+const SHOWN = 2;
 
 /** Spanish copy for a puestos action error (`"CODE"` or `"CODE: detail"`). */
 export function positionErrorText(error: unknown, fallback: string): string {
@@ -51,6 +72,22 @@ export function positionErrorText(error: unknown, fallback: string): string {
 
 function integrantesLabel(count: number): string {
   return count === 1 ? "1 integrante lo perderá." : `${count} integrantes lo perderán.`;
+}
+
+/** Members of a puesto: the active holders when loaded, else the holder count. */
+function memberCount(position: Position): number {
+  return position.members ? position.members.length : position.staffCount;
+}
+
+/** Footer totals: puestos, distinct people and Σ capacity × members (hours per week). */
+export function puestosTotals(positions: readonly Position[]): { puestos: number; personas: number; hours: number } {
+  const people = new Set<string>();
+  let hours = 0;
+  for (const position of positions) {
+    for (const member of position.members ?? []) people.add(member.id);
+    hours += (position.weeklyCapacityHours ?? 0) * memberCount(position);
+  }
+  return { puestos: positions.length, personas: people.size, hours };
 }
 
 /**
@@ -85,22 +122,36 @@ type SaveVars = {
   /** The puesto being edited, or null for a new one. */
   id: string | null;
   name: string;
+  weeklyCapacityHours: number | null;
   phaseIds: string[];
   /** Called with the saved puesto before its fases are saved. */
   onSaved: (saved: Position) => void;
 };
 
-/** Create or rename, then replace the candidate fases: two POSTs in sequence (the fases need the id). */
-async function savePosition({ id, name, phaseIds, onSaved }: SaveVars) {
-  const saved = unwrapActionResult(id ? await updatePositionAction(id, { name }) : await createPositionAction({ name }));
+/** Create or update, then replace the candidate fases: two POSTs in sequence (the fases need the id). */
+async function savePosition({ id, name, weeklyCapacityHours, phaseIds, onSaved }: SaveVars) {
+  const input = { name, weeklyCapacityHours };
+  const saved = unwrapActionResult(id ? await updatePositionAction(id, input) : await createPositionAction(input));
   onSaved(saved);
   return setPositionPhasesAction(saved.id, phaseIds);
 }
 
+/** A candidate fase chip (12 px, pill) with its tramo's color dot. */
+function PhaseChip({ label, tramo }: { label: string; tramo: WorkflowDetail | undefined }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
+      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", tramoColorClass(tramo ?? null))} />
+      {label}
+    </span>
+  );
+}
+
 /**
- * Ajustes › Puestos. Reads `qk.ajustes.page('puestos')`, hydrated by the
- * page (no fetch on mount). Every write invalidates `POSITION_INVALIDATIONS`;
- * a reorder is optimistic on the cache and rolls back with a toast.
+ * Ajustes › Puestos (frame `Ajustes-Puestos`): the list of puestos with their
+ * candidate fases, members and weekly capacity, and the editor next to it.
+ * Reads `qk.ajustes.page('puestos')`, hydrated by the page (no fetch on
+ * mount). Every write invalidates `POSITION_INVALIDATIONS`; a reorder (mouse
+ * or keyboard) is optimistic on the cache and rolls back with a toast.
  */
 export function PuestosClient() {
   const { positions, workflows } = useSuspenseQuery(ajustesPuestosOptions()).data;
@@ -109,17 +160,27 @@ export function PuestosClient() {
     () => resolvePositionsCapabilities(authenticatedUser).canManagePositions,
     [authenticatedUser],
   );
+  const workflowsById = useMemo(() => new Map(workflows.map((w) => [w.id, w])), [workflows]);
 
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState<Position | null>(null);
   const [formError, setFormError] = useState("");
+  /** The row whose "•••" gets focus back when the editor closes. */
+  const focusRowId = useRef<string | null>(null);
 
   const [deleting, setDeleting] = useState<Position | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [addError, setAddError] = useState("");
+  const { flashed, flash } = useFlashedRows();
 
   const saveMutation = useActionMutation(savePosition, {
     invalidate: POSITION_INVALIDATIONS,
-    // The drawer shows the error inline with the puestos copy (`save()`).
+    // The editor shows the error inline with the puestos copy (`save()`).
+    onFormError: () => undefined,
+  });
+
+  const createMutation = useActionMutation((name: string) => createPositionAction({ name }), {
+    invalidate: POSITION_INVALIDATIONS,
     onFormError: () => undefined,
   });
 
@@ -140,12 +201,14 @@ export function PuestosClient() {
   });
 
   function openNew() {
+    focusRowId.current = null;
     setEditing(null);
     setFormError("");
     setShowEditor(true);
   }
 
   function openEdit(position: Position) {
+    focusRowId.current = position.id;
     setEditing(position);
     setFormError("");
     setShowEditor(true);
@@ -168,6 +231,7 @@ export function PuestosClient() {
       await saveMutation.mutateAsync({
         id: editing?.id ?? null,
         name,
+        weeklyCapacityHours: draft.weeklyCapacityHours,
         phaseIds: draft.phaseIds,
         // Keep the saved puesto as the one being edited, so a failed fase save retries an update, not a second create.
         onSaved: setEditing,
@@ -175,6 +239,18 @@ export function PuestosClient() {
       closeEditor();
     } catch (error) {
       setFormError(positionErrorText(error, "No se pudo guardar el puesto."));
+    }
+  }
+
+  /** Inline add: Enter creates the puesto with that name and flashes its row. */
+  async function createInline(name: string) {
+    setAddError("");
+    try {
+      const created = await createMutation.mutateAsync(name);
+      flash(created.id);
+    } catch (error) {
+      setAddError(positionErrorText(error, "No se pudo crear el puesto."));
+      throw error;
     }
   }
 
@@ -188,6 +264,7 @@ export function PuestosClient() {
     setDeleteError("");
     try {
       await deleteMutation.mutateAsync(deleting.id);
+      if (editing?.id === deleting.id) closeEditor();
       setDeleting(null);
     } catch (error) {
       setDeleteError(positionErrorText(error, "No se pudo eliminar el puesto."));
@@ -203,7 +280,7 @@ export function PuestosClient() {
       {
         id: "order",
         header: "Orden",
-        cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.index + 1}</span>,
+        cell: ({ row }) => <span className="font-mono text-[13px] text-muted-foreground">{row.index + 1}</span>,
       },
       {
         accessorKey: "name",
@@ -213,76 +290,174 @@ export function PuestosClient() {
       {
         id: "phases",
         header: "Fases candidatas",
-        cell: ({ row }) =>
-          row.original.phases.length === 0 ? (
-            <span className="text-sm text-muted-foreground">Sin fases</span>
-          ) : (
+        cell: ({ row }) => {
+          const phases = row.original.phases;
+          if (phases.length === 0) return <span className="text-sm text-muted-foreground">Sin fases</span>;
+          const rest = phases.length - SHOWN;
+          return (
             <div className="flex flex-wrap gap-1">
-              {row.original.phases.map((phase) => (
-                <Badge key={phase.id} variant="outline">
-                  {phase.workflowName} · {phase.name}
-                </Badge>
+              {phases.slice(0, SHOWN).map((phase) => (
+                <PhaseChip
+                  key={phase.id}
+                  label={`${phase.workflowName} · ${phase.name}`}
+                  tramo={workflowsById.get(phase.workflowId)}
+                />
               ))}
+              {rest > 0 ? (
+                <span
+                  className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  title={phases
+                    .slice(SHOWN)
+                    .map((phase) => `${phase.workflowName} · ${phase.name}`)
+                    .join(", ")}
+                >
+                  +{rest}
+                </span>
+              ) : null}
             </div>
-          ),
+          );
+        },
       },
       {
-        id: "staffCount",
+        id: "members",
         header: "Integrantes",
-        cell: ({ row }) => <Badge variant="outline">{row.original.staffCount}</Badge>,
+        cell: ({ row }) => {
+          const members = row.original.members ?? [];
+          const rest = members.length - SHOWN;
+          return (
+            <div className="flex items-center gap-2">
+              {members.length > 0 ? (
+                <AvatarGroup className="-space-x-1.5" aria-hidden="true">
+                  {members.slice(0, SHOWN).map((member) => (
+                    <Avatar key={member.id} size="sm" title={member.name}>
+                      <AvatarFallback>{member.initials}</AvatarFallback>
+                    </Avatar>
+                  ))}
+                  {rest > 0 ? <AvatarGroupCount className="text-xs">+{rest}</AvatarGroupCount> : null}
+                </AvatarGroup>
+              ) : null}
+              <span className="font-mono text-[13px] tabular-nums">{memberCount(row.original)}</span>
+            </div>
+          );
+        },
+      },
+      {
+        id: "capacity",
+        header: () => (
+          <span className="inline-flex items-center gap-1.5">
+            Capacidad / semana
+            <Badge variant="secondary">nuevo</Badge>
+          </span>
+        ),
+        cell: ({ row }) => {
+          const hours = row.original.weeklyCapacityHours;
+          return <MonoCount>{hours === null || hours === undefined ? "—" : `${hours} h`}</MonoCount>;
+        },
       },
       ...(canManage
         ? [
-            createRowActionsColumn<Position>(() => [
-              { label: "Editar", onSelect: (p) => openEdit(p) },
-              {
-                label: "Eliminar",
-                separatorBefore: true,
-                variant: "destructive",
-                onSelect: (p) => askDelete(p),
-              },
-            ]),
+            {
+              id: "actions",
+              header: () => <span className="sr-only">Acciones</span>,
+              cell: ({ row }) => (
+                <CatalogRowMenu
+                  name={row.original.name}
+                  actionId={row.original.id}
+                  actions={[
+                    { label: "Editar", onSelect: () => openEdit(row.original) },
+                    {
+                      label: "Eliminar",
+                      destructive: true,
+                      disabledReason: row.original.googleManaged ? GOOGLE_MANAGED_DELETE_REASON : null,
+                      onSelect: () => askDelete(row.original),
+                    },
+                  ]}
+                />
+              ),
+            } satisfies ColumnDef<Position, unknown>,
           ]
         : []),
     ],
-    [canManage],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canManage, workflowsById],
   );
 
-  return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-border bg-card p-8 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Puestos</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Los candidatos solo se sugieren al asignar tareas; cualquiera puede asignarse.
-            </p>
-          </div>
-          {canManage ? <Button onClick={openNew}>+ Nuevo puesto</Button> : null}
-        </div>
-      </section>
+  const totals = puestosTotals(positions);
+  // The grip column DataTable adds while reordering is on.
+  const colSpan = columns.length + (canManage ? 1 : 0);
 
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+  return (
+    <CatalogLayout
+      panel={
+        <PositionEditorDrawer
+          show={showEditor}
+          onClose={closeEditor}
+          position={editing}
+          workflows={workflows}
+          canManage={canManage}
+          isSaving={saveMutation.isPending}
+          formError={formError}
+          onSave={(draft) => void save(draft)}
+          onDelete={askDelete}
+          returnFocus={() => catalogActionTrigger(focusRowId.current)}
+        />
+      }
+    >
+      <section
+        aria-labelledby="puestos-title"
+        className="flex flex-col gap-4 rounded-[14px] border border-border bg-card p-5 text-card-foreground shadow-xs"
+      >
+        <CatalogListHeader
+          id="puestos-title"
+          title="Puestos"
+          count={positions.length}
+          description="Las fases candidatas solo se sugieren al asignar tareas; cualquiera puede asignarse."
+          action={canManage ? <CatalogCreateButton label="Nuevo puesto" onClick={openNew} /> : undefined}
+        />
+
         <DataTable
           columns={columns}
           data={positions}
           getRowId={(row) => row.id}
+          getRowLabel={(row) => row.name}
           onRowClick={canManage ? (row) => openEdit(row) : undefined}
           onReorderRows={canManage ? reorder : undefined}
+          rowClassName={(row) => rowNewClass(row.id, flashed)}
+          headerClassName={(columnId) => (columnId === "capacity" ? "text-right" : undefined)}
           emptyMessage="Aún no hay puestos."
+          footer={
+            <TableRow>
+              <TableCell colSpan={colSpan}>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-[13px]">
+                  <span>Total · {totals.puestos === 1 ? "1 puesto" : `${totals.puestos} puestos`}</span>
+                  <span className="font-mono tabular-nums">
+                    {totals.personas === 1 ? "1 persona" : `${totals.personas} personas`}
+                  </span>
+                  <span className="font-mono tabular-nums">{totals.hours} h</span>
+                </div>
+              </TableCell>
+            </TableRow>
+          }
         />
-      </section>
 
-      <PositionEditorDrawer
-        show={showEditor}
-        onClose={closeEditor}
-        position={editing}
-        workflows={workflows}
-        canManage={canManage}
-        isSaving={saveMutation.isPending}
-        formError={formError}
-        onSave={(draft) => void save(draft)}
-      />
+        {canManage ? (
+          <CatalogInlineAdd
+            label="Agregar puesto"
+            placeholder="Agregar puesto…"
+            onCreate={createInline}
+            className="rounded-[10px] border border-dashed border-border"
+          />
+        ) : null}
+        {addError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{addError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <p className="text-[12.5px] text-muted-foreground">
+          Capacidad / semana es nueva: alimenta la carga de Personas (horas asignadas ÷ capacidad).
+        </p>
+      </section>
 
       <AlertDialog open={deleting !== null} onOpenChange={(next) => (next ? undefined : setDeleting(null))}>
         <AlertDialogContent>
@@ -309,6 +484,6 @@ export function PuestosClient() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </CatalogLayout>
   );
 }

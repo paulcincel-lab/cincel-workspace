@@ -50,7 +50,7 @@ import { GET as download } from "@/app/api/portal/projects/[pid]/files/[fileId]/
 import { GET as preview } from "@/app/api/portal/projects/[pid]/files/[fileId]/preview/route";
 
 const PID = "11111111-1111-4111-8111-111111111111";
-const user = { id: "user-1", name: "Cliente", email: "cliente@gmail.com", contactId: "contact-1" };
+const user = { id: "user-1", name: "Cliente", email: "cliente@gmail.com", contactId: "contact-1", companyName: null };
 const access = {
   accessId: "access-1",
   projectId: PID,

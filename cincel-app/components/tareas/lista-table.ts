@@ -8,6 +8,7 @@
  * widget decides what each style shows. Pure and client-safe.
  */
 import { BASE_STATUSES, BASE_STATUS_LABEL, isTaskClosed } from "@/lib/tasks/status-options";
+import { pctVencidas, retrasoPromedio, type TareasSummaryCounts } from "@/lib/tareas/summary";
 import type { TaskListItem } from "@/lib/types/core";
 import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
 
@@ -17,6 +18,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Heat thresholds of "% vencidas" (FE §15.2: > 45 % warning tint, > 60 % destructive tint). */
 export const OVERDUE_SHARE_HEAT = { key: "pctVencidas", warnAt: 45, critAt: 60 } as const;
+
+/** Heat thresholds of "Días de retraso" (frames: 3–4 plain, 6–9 warning tint, 12 destructive tint). */
+export const DAYS_LATE_HEAT = { key: "diasRetraso", warnAt: 4, critAt: 10 } as const;
+
+/** Heat thresholds of "Desv. vs plan" (`Proyectos-Analitico` legend: ≤ −5 warning tint, ≤ −8 destructive tint). */
+export const PLAN_DEVIATION_HEAT = { key: "desvPlan", warnAt: -4, critAt: -7, direction: "below" } as const;
 
 /** Esencial grouping labels (FE §3.4 "Vencidas / Esta semana / Más adelante"). */
 export type ListaPlazo = "Vencida" | "Esta semana" | "Más adelante" | "Completada";
@@ -60,11 +67,6 @@ export function listaPlazo(task: TaskListItem, today: string): ListaPlazo {
   return "Más adelante";
 }
 
-/** One decimal, no trailing ".0". */
-function round1(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
 export type ProjectSummary = {
   /** Open (not closed) tasks of the project in the list. */
   abiertas: number;
@@ -76,16 +78,31 @@ export type ProjectSummary = {
   retrasoPromedio: number;
 };
 
-function summarize(tasks: TaskListItem[], today: string): ProjectSummary {
+/** The summary counts (`TareasSummaryCounts`) of some tasks, as `taskSummary` counts them on the server. */
+export function summaryCountsOf(tasks: TaskListItem[], today: string): TareasSummaryCounts {
   const open = tasks.filter((t) => !isTaskClosed(t));
   const late = open.map((t) => daysLate(t, today)).filter((d) => d > 0);
-  const totalLate = late.reduce((acc, d) => acc + d, 0);
   return {
-    abiertas: open.length,
-    vencidas: late.length,
-    pctVencidas: open.length > 0 ? Math.round((late.length / open.length) * 100) : 0,
-    retrasoPromedio: late.length > 0 ? round1(totalLate / late.length) : 0,
+    total: tasks.length,
+    open: open.length,
+    overdue: late.length,
+    blocked: tasks.filter((t) => t.status === "bloqueado").length,
+    daysLateSum: late.reduce((acc, d) => acc + d, 0),
   };
+}
+
+/** A `ProjectSummary` from summary counts, through the shared helpers (`pctVencidas`, `retrasoPromedio`). */
+export function projectSummaryOf(counts: TareasSummaryCounts): ProjectSummary {
+  return {
+    abiertas: counts.open,
+    vencidas: counts.overdue,
+    pctVencidas: pctVencidas(counts),
+    retrasoPromedio: retrasoPromedio(counts) ?? 0,
+  };
+}
+
+function summarize(tasks: TaskListItem[], today: string): ProjectSummary {
+  return projectSummaryOf(summaryCountsOf(tasks, today));
 }
 
 /** The by-project summary (Analítico), keyed by project id. */

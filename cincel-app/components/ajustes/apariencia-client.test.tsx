@@ -7,8 +7,7 @@
  * debounced once (in the store). The org data is the hydrated
  * `qk.ajustes.page('apariencia')`.
  */
-import type { ReactNode } from "react";
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { qk } from "@/lib/query/keys";
@@ -41,26 +40,6 @@ vi.mock("@/lib/actions/page-data/ajustes-actions", () => ({
   getAjustesIntegracionesPageData: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } }));
-
-// The shared settings patterns render plain markup here so the page can be exercised on its own.
-vi.mock("@/components/patterns/SettingsSection", () => ({
-  SettingsSection: ({ title, description, children }: { title: string; description?: string; children: ReactNode }) => (
-    <section aria-label={title}>
-      <h2>{title}</h2>
-      {description ? <p>{description}</p> : null}
-      {children}
-    </section>
-  ),
-}));
-vi.mock("@/components/patterns/SettingsRow", () => ({
-  SettingsRow: ({ label, description, control, htmlFor }: { label: string; description?: string; control: ReactNode; htmlFor?: string }) => (
-    <div>
-      <label htmlFor={htmlFor}>{label}</label>
-      {description ? <p>{description}</p> : null}
-      {control}
-    </div>
-  ),
-}));
 
 import { useStyle } from "@/components/shell/StyleProvider";
 
@@ -116,6 +95,48 @@ afterEach(() => {
 });
 
 describe("AparienciaClient", () => {
+  it("theme cards are a radiogroup and apply instantly", async () => {
+    mocks.update.mockReturnValue(new Promise(() => {}));
+    renderClient();
+    const group = screen.getByRole("radiogroup", { name: "Tema" });
+    expect(group).toBeTruthy();
+    expect(within(group).getAllByRole("radio")).toHaveLength(3);
+    expect(within(group).getByText("Seleccionado")).toBeTruthy();
+
+    fireEvent.click(radio("Grafito"));
+
+    // Applied before the action answers (it never does here).
+    await waitFor(() => expect(radio("Grafito").getAttribute("aria-checked")).toBe("true"));
+    expect(mocks.update).toHaveBeenCalledWith({ theme: "grafito" });
+  });
+
+  it("renders the sections in the frame order", () => {
+    renderClient();
+    const titles = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(titles).toEqual(["Tema", "Modo", "Estilo", "Tamaño de texto", "Densidad"]);
+  });
+
+  it("fixed org style locks the style cards", () => {
+    renderClient({ org: { allowUserOverride: false, styleDefault: "analitico" }, prefs: { style: "esencial" } });
+    const group = screen.getByRole("radiogroup", { name: "Estilo" });
+    const cards = within(group).getAllByRole("radio");
+    expect(cards).toHaveLength(3);
+    for (const card of cards) expect(card.getAttribute("aria-disabled")).toBe("true");
+    expect(radio("Analítico").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Tu despacho usa Analítico para todos.")).toBeTruthy();
+
+    fireEvent.click(radio("Visual"));
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("links the selected style to Tareas in that style", () => {
+    renderClient({ prefs: { style: "esencial" } });
+    expect(screen.getByRole("link", { name: "Ver Tareas en este estilo →" }).getAttribute("href")).toBe(
+      "/tareas?estilo=esencial",
+    );
+    expect(screen.getByText(/Si tu despacho fija un estilo para todos/)).toBeTruthy();
+  });
+
   it("applies a theme change optimistically before the action answers", async () => {
     mocks.update.mockReturnValue(new Promise(() => {}));
     renderClient();
@@ -179,16 +200,11 @@ describe("AparienciaClient", () => {
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ style: null }));
   });
 
-  it("marks the organization theme with the badge and notes its name", () => {
-    renderClient();
-    expect(screen.getByText("Organización")).toBeTruthy();
-    expect(screen.getByText("El tema de la organización es Azul Cincel. Puedes usar otro solo para ti.")).toBeTruthy();
-  });
-
   it("disables the Tema and Estilo cards with the organization copy when overrides are off", async () => {
     renderClient({ org: { allowUserOverride: false }, prefs: { theme: "grafito", style: "esencial" } });
 
-    expect(screen.getAllByText(OVERRIDE_LOCKED_COPY)).toHaveLength(2);
+    expect(screen.getAllByText(OVERRIDE_LOCKED_COPY)).toHaveLength(1);
+    expect(screen.getByText("Tu despacho usa Visual para todos.")).toBeTruthy();
     // The org values show, not the stored personal ones.
     expect(radio("Azul Cincel").getAttribute("aria-checked")).toBe("true");
     expect(radio("Visual").getAttribute("aria-checked")).toBe("true");
@@ -211,7 +227,7 @@ describe("AparienciaClient", () => {
 
     fireEvent.click(radio("Cálido"));
 
-    await waitFor(() => expect(screen.getAllByText(OVERRIDE_LOCKED_COPY)).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText(OVERRIDE_LOCKED_COPY)).toHaveLength(1));
     expect(radio("Azul Cincel").getAttribute("aria-checked")).toBe("true");
     expect(radio("Cálido").hasAttribute("data-disabled")).toBe(true);
     expect(mocks.toastError).not.toHaveBeenCalled();
@@ -258,17 +274,15 @@ describe("AparienciaClient", () => {
     await waitFor(() => expect(document.documentElement.getAttribute("data-density")).toBe("compacta"));
   });
 
-  it("debounces the text size slider once, in the store, into one action call", async () => {
+  it("debounces the text size once, in the store, into one action call", async () => {
     vi.useFakeTimers();
     renderClient();
-    const slider = screen.getByRole("slider", { name: "Tamaño de texto" });
+    expect(screen.getByRole("radiogroup", { name: "Tamaño de texto" })).toBeTruthy();
 
-    fireEvent.keyDown(slider, { key: "ArrowRight" });
-    fireEvent.keyDown(slider, { key: "ArrowRight" });
-    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    fireEvent.click(radio("Grande"));
 
-    // The preview follows the slider at once.
-    expect((screen.getByTestId("apariencia-preview-body") as HTMLElement).style.fontSize).toBe("15.5px");
+    // Applied at once.
+    expect(radio("Grande").getAttribute("aria-checked")).toBe("true");
     expect(mocks.update).not.toHaveBeenCalled();
 
     act(() => {
@@ -280,7 +294,7 @@ describe("AparienciaClient", () => {
       vi.advanceTimersByTime(1);
     });
     expect(mocks.update).toHaveBeenCalledTimes(1);
-    expect(mocks.update).toHaveBeenCalledWith({ textSize: 15.5 });
+    expect(mocks.update).toHaveBeenCalledWith({ textSize: 15 });
   });
 
   it("makes no client page-data call on mount (the data is hydrated)", () => {
@@ -288,11 +302,18 @@ describe("AparienciaClient", () => {
     expect(mocks.pageData).not.toHaveBeenCalled();
   });
 
-  it("snaps text sizes to 13–16 in steps of 0.5", () => {
+  it("text size snaps to the three values", () => {
     expect(toTextSize(12)).toBe(13);
-    expect(toTextSize(14.26)).toBe(14.5);
+    expect(toTextSize(13.5)).toBe(13);
     expect(toTextSize(14.2)).toBe(14);
-    expect(toTextSize(17)).toBe(16);
+    expect(toTextSize(14.5)).toBe(14);
+    expect(toTextSize(15.5)).toBe(15);
+    expect(toTextSize(17)).toBe(15);
+  });
+
+  it("shows a stored in-between size as the nearest option", () => {
+    renderClient({ prefs: { textSize: 15.5 } });
+    expect(radio("Grande").getAttribute("aria-checked")).toBe("true");
   });
 
   it("has no switch back to the old design", () => {

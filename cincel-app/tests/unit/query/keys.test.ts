@@ -15,9 +15,12 @@ function shapes() {
     "org.general": qk.org.general(),
     "me.today": qk.me.today(),
     "me.weekHours": qk.me.weekHours(),
+    "me.weekHours(w)": qk.me.weekHours("2026-11-02"),
+    "me.tasks": qk.me.tasks(),
     "me.preferences": qk.me.preferences(),
     "me.profile": qk.me.profile(),
     "me.notifications": qk.me.notifications({ unreadOnly: true, kinds: ["task"] }),
+    "me.notificationsSummary": qk.me.notificationsSummary(),
     "me.gmail.all": qk.me.gmail.all,
     "me.gmail.status": qk.me.gmail.status(),
     "me.gmail.threads()": qk.me.gmail.threads(),
@@ -31,12 +34,15 @@ function shapes() {
     "me.notificationPrefs": qk.me.notificationPrefs(),
     inicio: qk.inicio(),
     "tareas.all": qk.tareas.all,
-    "tareas.page": qk.tareas.page({ ...F, vista: "tablero", cal: "mes" }),
+    "tareas.page": qk.tareas.page({ ...F, estilo: "visual", cal: "mes" }),
     "tareas.list": qk.tareas.list(F),
     "tareas.facets": qk.tareas.facets(F),
+    "tareas.summary": qk.tareas.summary(F),
     "tareas.board(f)": qk.tareas.board(F),
     "tareas.board(f, col)": qk.tareas.board(F, "en_proceso"),
     "tareas.calendar": qk.tareas.calendar(F, "2026-11-01", "2026-11-30"),
+    "tareas.trend": qk.tareas.trend(F),
+    "tareas.byProject": qk.tareas.byProject(F),
     "tareas.startSlot": qk.tareas.startSlot(null),
     "tareas.startPreview": qk.tareas.startPreview("p1", "w1"),
     "tasks.detail": qk.tasks.detail("k1"),
@@ -56,6 +62,7 @@ function shapes() {
     "proyectos.history": qk.proyectos.history("p1"),
     "proyectos.clientesActivity": qk.proyectos.clientesActivity("p1"),
     "proyectos.remap": qk.proyectos.remap("p1"),
+    "proyectos.assigneeSuggestion": qk.proyectos.assigneeSuggestion("p1", "f1", "s1"),
     "personas.equipo": qk.personas.equipo(),
     "personas.counts": qk.personas.counts(),
     "personas.contacts": qk.personas.contacts("clientes", null),
@@ -120,9 +127,12 @@ describe("qk", () => {
     expect(paths.filter((path) => !sampled.includes(path))).toEqual([]);
   });
 
-  it("keeps the Tareas rules: no cursor or limit, prefix matching from tareas.all", () => {
-    const page = qk.tareas.page({ ...F, vista: "lista", cal: "mes" });
-    expect(JSON.stringify(page)).not.toMatch(/cursor|limit|estilo/);
+  it("keeps the Tareas rules: no cursor or limit, estilo only on the page bundle, prefix matching from tareas.all", () => {
+    const page = qk.tareas.page({ ...F, estilo: "analitico", cal: "mes" });
+    expect(JSON.stringify(page)).not.toMatch(/cursor|limit/);
+    for (const key of [qk.tareas.list(F), qk.tareas.facets(F), qk.tareas.board(F), qk.tareas.trend(F)]) {
+      expect(JSON.stringify(key)).not.toMatch(/estilo/);
+    }
     expect(qk.tareas.board(F, "c1").slice(0, 3)).toEqual(qk.tareas.board(F));
     for (const key of [page, qk.tareas.list(F), qk.tareas.facets(F), qk.tareas.board(F)]) {
       expect(key[0]).toBe(qk.tareas.all[0]);
@@ -133,6 +143,7 @@ describe("qk", () => {
     expect(qk.tasks.subtasks("k1").slice(0, 2)).toEqual(qk.tasks.detail("k1"));
     expect(qk.proyectos.cronograma("p1").slice(0, 2)).toEqual(qk.proyectos.detail("p1"));
     expect(qk.me.gmail.thread("t1").slice(0, 2)).toEqual(qk.me.gmail.all);
+    expect(qk.me.weekHours("2026-11-02").slice(0, 2)).toEqual(qk.me.weekHours());
     expect(qk.contacts.history("c1").slice(0, 2)).toEqual(qk.contacts.detail("c1"));
   });
 });

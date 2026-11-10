@@ -78,7 +78,7 @@ describe("portal login and 404 accessibility in the organization theme", () => {
           setMode(mode);
           const { container } = render(
             <PortalAppearance appearance={orgAppearance(theme)}>
-              <PortalShell clientName={null}>
+              <PortalShell clientName={null} companyName={null}>
                 <PortalLoginForm linkError />
               </PortalShell>
             </PortalAppearance>,
@@ -92,7 +92,7 @@ describe("portal login and 404 accessibility in the organization theme", () => {
           setMode(mode);
           const { container } = render(
             <PortalAppearance appearance={orgAppearance(theme)}>
-              <PortalShell clientName="Ana López">
+              <PortalShell clientName="Ana López" companyName={null}>
                 <PortalNotFoundView />
               </PortalShell>
             </PortalAppearance>,

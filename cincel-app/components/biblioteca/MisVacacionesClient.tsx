@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/shell/PageHeader";
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { KpiWidget } from "@/components/widgets/KpiWidget";
 import { IMPLEMENTED } from "@/lib/actions/vacations-actions.flags";
 import { myVacationsOptions, vacationAbsencesOptions } from "@/lib/query/options/biblioteca";
@@ -40,16 +39,10 @@ export function MisVacacionesClient({ month, year }: MisVacacionesClientProps) {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        estilo={false}
         title="Mis vacaciones"
         description={`Saldo ${year}, solicitudes y quién está fuera este mes.`}
         breadcrumb={[{ label: "Biblioteca", href: "/biblioteca" }, { label: "Mis vacaciones" }]}
-        actions={
-          <>
-            {canRequest && mine ? <VacationForm balance={mine.balance} /> : null}
-            <EstiloSwitch />
-          </>
-        }
+        actions={canRequest && mine ? <VacationForm balance={mine.balance} /> : null}
       />
       {mine ? (
         <section aria-label={`Saldo ${year}`}>

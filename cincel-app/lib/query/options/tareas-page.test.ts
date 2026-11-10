@@ -6,6 +6,7 @@ const actions = vi.hoisted(() => ({
   getTareasFacets: vi.fn(),
   getTareasListPage: vi.fn(),
   getTareasBoardColumn: vi.fn(),
+  getTareasSummary: vi.fn(),
   getTareasCalendarData: vi.fn(),
   getTareasStartSlotData: vi.fn(),
   getTaskSheetData: vi.fn(),
@@ -20,6 +21,7 @@ import { qk } from "@/lib/query/keys";
 import { createTestQueryClient } from "@/lib/query/test-utils";
 import type { TareasPageData } from "@/lib/tareas/page-data";
 import { DEFAULT_TAREAS_QUERY } from "@/lib/tareas/query";
+import { tareasGroupFilters } from "@/lib/tareas/summary";
 
 import {
   seedTareasPage,
@@ -29,10 +31,11 @@ import {
   tareasListInfiniteOptions,
   tareasPageKeyInputOf,
   tareasPageOptions,
+  tareasSummaryOptions,
 } from "./tareas";
 
 const FILTERS = { tramo: "diseno", proyecto: null, responsable: "yo" as const, estado: null, q: "plano" };
-const KEY = { vista: "tablero" as const, cal: "mes" as const, ...FILTERS };
+const KEY = { estilo: "visual" as const, cal: "mes" as const, ...FILTERS };
 
 const PAGE: TareasPageData = {
   facets: { total: 3, byTramo: { diseno: 3 }, projects: [] },
@@ -47,7 +50,7 @@ beforeEach(() => {
 });
 
 describe("tareasPageKeyInputOf", () => {
-  it("keys the view, the calendar mode and the filters: never nueva, fecha, cursor or limit", () => {
+  it("keys the style, the calendar mode and the filters: never nueva, fecha, cursor or limit", () => {
     const key = tareasPageKeyInputOf({ ...DEFAULT_TAREAS_QUERY, ...FILTERS, nueva: true, fecha: "2026-11-08" });
     expect(key).toEqual(KEY);
     expect(qk.tareas.page(key)).toEqual(["tareas", "page", KEY]);
@@ -76,7 +79,7 @@ describe("seedTareasPage / tareasPageOptions", () => {
     const data = await client.fetchQuery(tareasPageOptions(KEY));
 
     expect(actions.getTareasPageData).toHaveBeenCalledTimes(1);
-    expect(actions.getTareasPageData).toHaveBeenCalledWith({ vista: "tablero", cal: "mes", ...FILTERS });
+    expect(actions.getTareasPageData).toHaveBeenCalledWith({ estilo: "visual", cal: "mes", ...FILTERS });
     expect(data.board).toBeUndefined();
     expect(client.getQueryData(qk.tareas.board(FILTERS))).toEqual(PAGE.board);
     expect(actions.getTareasBoard).not.toHaveBeenCalled();
@@ -110,23 +113,75 @@ describe("tareasListInfiniteOptions / tareasBoardColumnOptions", () => {
 });
 
 describe("tableroMoveInvalidations", () => {
-  it("lists the facets, Lista, calendar, project tabs, Inicio and badges, never the board", () => {
+  it("lists the facets, Lista, calendar, trend, summary, project tabs, Inicio, badges and my tasks, never the board", () => {
     const keys = tableroMoveInvalidations("p1").map((k) => JSON.stringify(k));
     expect(keys).toEqual([
       JSON.stringify(["tareas", "facets"]),
       JSON.stringify(["tareas", "list"]),
       JSON.stringify(["tareas", "calendar"]),
+      JSON.stringify(["tareas", "trend"]),
+      JSON.stringify(["tareas", "summary"]),
       JSON.stringify(qk.proyectos.tab("p1", "tareas")),
       JSON.stringify(qk.proyectos.resumen("p1")),
       JSON.stringify(qk.proyectos.cronograma("p1")),
       JSON.stringify(qk.inicio()),
       JSON.stringify(qk.shell.badges()),
+      JSON.stringify(qk.me.tasks()),
     ]);
     expect(keys.some((k) => k.includes('"board"'))).toBe(false);
-    expect(tableroMoveInvalidations(null)).toHaveLength(5);
+    expect(tableroMoveInvalidations(null)).toHaveLength(8);
   });
 
   it("tareasListFiltersOf drops the view", () => {
     expect(tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, vista: "lista", ...FILTERS })).toEqual(FILTERS);
+  });
+});
+
+describe("Analítico (#988)", () => {
+  it("tareasListFiltersOf keeps mostrar only when it narrows", () => {
+    expect(tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, ...FILTERS, mostrar: "todas" })).toEqual(FILTERS);
+    expect(tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, ...FILTERS, mostrar: "en_retraso" })).toEqual({
+      ...FILTERS,
+      mostrar: "en_retraso",
+    });
+  });
+
+  it("loads the summary under qk.tareas.summary(f) and a group's rows in retraso order", async () => {
+    const summary = {
+      projects: [],
+      totals: { total: 0, open: 0, overdue: 0, blocked: 0, daysLateSum: 0, projects: 0 },
+      unfiltered: { projects: 0, total: 0 },
+    };
+    actions.getTareasSummary.mockResolvedValue(summary);
+    const client = createTestQueryClient();
+    const options = tareasSummaryOptions(FILTERS);
+    expect(options.queryKey).toEqual(qk.tareas.summary(FILTERS));
+    expect(await client.fetchQuery(options)).toEqual(summary);
+    expect(actions.getTareasSummary).toHaveBeenCalledWith({ filters: FILTERS });
+
+    actions.getTareasListPage.mockResolvedValue({ rows: [], nextCursor: null, total: 0 });
+    const group = tareasGroupFilters(FILTERS, "p1", "diseno");
+    await client.fetchInfiniteQuery(tareasListInfiniteOptions(group));
+    expect(actions.getTareasListPage).toHaveBeenLastCalledWith({ filters: group, cursor: null, orderBy: "retraso" });
+  });
+
+  it("seeds the summary and the group pages from the bundle", () => {
+    const client = createTestQueryClient();
+    const group = tareasGroupFilters(FILTERS, "p1", "diseno");
+    const page = { rows: [], nextCursor: null, total: 0 };
+    const summary = {
+      projects: [],
+      totals: { total: 0, open: 0, overdue: 0, blocked: 0, daysLateSum: 0, projects: 0 },
+      unfiltered: { projects: 0, total: 0 },
+    };
+    seedTareasPage(client, { ...FILTERS, estilo: "analitico", cal: "mes" }, {
+      facets: { total: 0, byTramo: {}, projects: [] },
+      tramos: [],
+      staff: [],
+      summary,
+      groups: [{ filters: group, page }],
+    });
+    expect(client.getQueryData(qk.tareas.summary(FILTERS))).toEqual(summary);
+    expect(client.getQueryData(qk.tareas.list(group))).toEqual({ pages: [page], pageParams: [null] });
   });
 });

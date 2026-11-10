@@ -3,6 +3,8 @@
  * codes stored in the database — display labels live in the UI.
  */
 
+import type { TramoColorSlot } from "@/lib/tramos/tramo-color";
+
 // ── Enums ───────────────────────────────────────────────────────────────────
 export type ContactType = "cliente" | "socio" | "proveedor";
 export type ContactKind = "empresa" | "particular";
@@ -114,8 +116,12 @@ export type Position = PositionRef & {
   staffCount: number;
   /** Referenced by a Google group mapping (can't be deleted: IN_USE). */
   googleManaged: boolean;
+  /** Hours per week one person in this puesto can take (0–80); null = no capacity set. */
+  weeklyCapacityHours?: number | null;
+  /** Active people who hold the puesto, by name. */
+  members?: { id: string; name: string; initials: string }[];
 };
-export type PositionInput = { name: string; active?: boolean };
+export type PositionInput = { name: string; active?: boolean; weeklyCapacityHours?: number | null };
 
 // ── People outside (CRM) ────────────────────────────────────────────────────
 export type Contact = {
@@ -207,6 +213,8 @@ export type Workflow = {
   active: boolean;
   sortOrder: number;
   autoStart: WorkflowAutoStart;
+  /** The tramo's chosen color slot (1–5); null = derived from its key / sortOrder (`tramoColorSlot`). */
+  colorSlot?: TramoColorSlot | null;
 };
 
 /** A fase of a tramo's catalog. */
@@ -254,6 +262,8 @@ export type WorkflowInput = {
   description?: string | null;
   active?: boolean;
   sortOrder?: number;
+  /** 1–5, or null to go back to the derived color. */
+  colorSlot?: TramoColorSlot | null;
 };
 
 export type WorkflowTaskTemplateInput = {
@@ -298,7 +308,14 @@ export type Project = {
 
 export type StaffRef = { id: string; name: string };
 export type ContactRef = { id: string; name: string; type: ContactType };
-export type WorkflowRef = { id: string; key: string; name: string; sortOrder: number };
+export type WorkflowRef = {
+  id: string;
+  key: string;
+  name: string;
+  sortOrder: number;
+  /** The tramo's chosen color slot, when the read carries it (`tramoColorSlot` prefers it). */
+  colorSlot?: TramoColorSlot | null;
+};
 
 /** A tramo started on a project. */
 export type ProjectTramo = WorkflowRef & { startedAt: string | null; closedAt: string | null; current: boolean };
@@ -321,6 +338,8 @@ export type ProjectListItem = Project & {
   stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
+  /** Active staff in `project_members`, by name (the full team avatars; "Solo míos"). */
+  members: StaffRef[];
   taskCounts: { total: number; open: number; blocked: number };
 };
 
@@ -418,6 +437,8 @@ export type TaskStatusOption = {
   closes: boolean;
   countsAsCompleted: boolean;
   sortOrder: number;
+  /** ISO timestamp; the list shows "Nuevo" for 24 h after it. */
+  createdAt?: string;
 };
 
 export type TaskStatusInput = {
@@ -572,6 +593,8 @@ export type TaskPatch = Partial<
 export type TaskFilters = {
   projectId?: string;
   workflowId?: string;
+  /** Only the tasks without a tramo (`workflow_id is null`). */
+  withoutWorkflow?: boolean;
   phaseId?: string;
   spaceId?: string;
   /** Default excludes "admin"; admin tasks only when asked and the viewer is admin. */
@@ -583,6 +606,10 @@ export type TaskFilters = {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  /** Tareas "Mostrar": open tasks, or open tasks past `coalesce(commitment, delivery)`. */
+  mostrar?: "abiertas" | "en_retraso";
+  /** `YYYY-MM-DD` the overdue rule compares with; default today in America/Mexico_City. */
+  today?: string;
 };
 
 // ── Starting a tramo (FE §7.1, BE §9) ────────────────────────────────────────
@@ -686,6 +713,8 @@ export type DriveFileMeta = {
   iconLink: string | null;
   thumbnailLink: string | null;
   webViewLink: string | null;
+  /** Bytes reported by Drive; null for Google-native documents, folders or before the first sync. */
+  sizeBytes?: number | null;
   syncedAt: string | null;
 };
 

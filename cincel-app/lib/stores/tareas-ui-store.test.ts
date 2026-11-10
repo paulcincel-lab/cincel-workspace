@@ -20,7 +20,7 @@ const state = () => useTareasUi.getState();
 
 describe("useTareasUi", () => {
   it("starts with no selected day", () => {
-    expect(TAREAS_UI_INITIAL).toEqual({ calendar: { selectedDay: null } });
+    expect(TAREAS_UI_INITIAL).toEqual({ calendar: { selectedDay: null }, analitico: { collapsed: [] } });
     expect(selectSelectedDay(state())).toBeNull();
   });
 
@@ -56,5 +56,12 @@ describe("useTareasUi", () => {
     expect(selectSelectedDay(state())).toBeNull();
     // Nothing selected: nothing to clear.
     expect(clearSelectedDayOutside({ from: "2026-11-30", to: "2027-01-03" })).toBe(false);
+  });
+
+  it("remembers the collapsed Analítico groups until a reset", () => {
+    state().setAnaliticoCollapsed(["p:1", "t:1:none"]);
+    expect(state().analitico.collapsed).toEqual(["p:1", "t:1:none"]);
+    resetTareasUi();
+    expect(state().analitico.collapsed).toEqual([]);
   });
 });

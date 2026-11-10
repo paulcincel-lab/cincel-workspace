@@ -4,13 +4,15 @@ import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { SettingsRow } from "@/components/patterns/SettingsRow";
+import { SettingsSaveBar } from "@/components/ajustes/SettingsSaveBar";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
 import { usePhotoUploadMutation, useRemovePhotoMutation } from "@/components/shell/photo-upload";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
 import { Button } from "@/components/ui/shadcn/button";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { IMPLEMENTED as PHOTO_IMPLEMENTED } from "@/lib/actions/profile-photo-actions.flags";
 import { unwrapActionResult } from "@/lib/actions/action-result";
@@ -29,8 +31,9 @@ import {
   usePerfilFormApi,
   type PerfilDraft,
 } from "@/lib/stores/ajustes/perfil-form-store";
-import type { PerfilData, WeekHours } from "@/lib/types/redesign";
+import type { DayHours, PerfilData, WeekHours } from "@/lib/types/redesign";
 import { isGoogleManagedRefusal } from "@/lib/types/workspace-access";
+import { cn } from "@/lib/utils";
 
 export type { PerfilData } from "@/lib/types/redesign";
 
@@ -46,10 +49,44 @@ export const NAME_REQUIRED_COPY = "Escribe tu nombre.";
 
 const hoursFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 
-/** "32.5 h de 40 h" (or "6 h" when there is no target this week). */
+/** Whole hours and minutes of a decimal hour count (rounded to the minute). */
+function hoursAndMinutes(hours: number): { h: number; m: number } {
+  const minutes = Math.max(0, Math.round(hours * 60));
+  return { h: Math.floor(minutes / 60), m: minutes % 60 };
+}
+
+/** "32 h 30 min de 40 h" (or "6 h" when there is no target this week). */
 export function formatWeekHoursLine(week: WeekHours): string {
-  const total = `${hoursFormat.format(week.total)} h`;
+  const { h, m } = hoursAndMinutes(week.total);
+  const total = m > 0 ? `${h} h ${m} min` : `${h} h`;
   return week.target > 0 ? `${total} de ${hoursFormat.format(week.target)} h` : total;
+}
+
+const WEEKDAY_LABELS = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"] as const;
+
+/** "8 h 30", "8 h", or "—" without a record. */
+export function formatDayHours(hours: number): string {
+  if (!(hours > 0)) return "—";
+  const { h, m } = hoursAndMinutes(hours);
+  return m > 0 ? `${h} h ${String(m).padStart(2, "0")}` : `${h} h`;
+}
+
+/** "LUN 9 · 8 h 30" for one day (`date` is a local `YYYY-MM-DD`). */
+export function formatDayLine(day: DayHours): string {
+  const [year, month, date] = day.date.split("-").map(Number);
+  const weekday = new Date(year, (month ?? 1) - 1, date ?? 1).getDay();
+  return `${WEEKDAY_LABELS[weekday]} ${date} · ${formatDayHours(day.hours)}`;
+}
+
+/** Monday to Friday of the week, in order (weekend days are left out). */
+export function weekdaysOf(week: WeekHours): DayHours[] {
+  return week.days
+    .filter((day) => {
+      const [year, month, date] = day.date.split("-").map(Number);
+      const weekday = new Date(year, (month ?? 1) - 1, date ?? 1).getDay();
+      return weekday >= 1 && weekday <= 5;
+    })
+    .slice(0, 5);
 }
 
 /** Up to two initials for the avatar fallback. */
@@ -79,10 +116,56 @@ export function PerfilClient({ children }: PerfilClientProps) {
   const profile = usePerfilData();
   return (
     <PerfilFormStoreProvider initial={perfilDraftOf(profile)}>
-      <div className="flex flex-col gap-4">{children}</div>
+      <div className="flex min-w-0 flex-col gap-4">{children}</div>
     </PerfilFormStoreProvider>
   );
 }
+
+/** One labelled field of a settings grid: label 13 px / 500, gap 6 px, hint 12 px. */
+function Field({
+  id,
+  label,
+  hint,
+  hintId,
+  error,
+  errorId,
+  className,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  hintId?: string;
+  error?: string | null;
+  errorId?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <Label htmlFor={id} className="text-[13px] font-medium text-foreground">
+        {label}
+      </Label>
+      {children}
+      {error ? (
+        <p id={errorId} className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+      {hint ? (
+        <p id={hintId} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Read-only inputs: `--muted` background, `--sidebar-foreground` text. */
+const READ_ONLY_INPUT_CLASS = "bg-muted text-sidebar-foreground";
+
+/** Two-column field grid (one column below 640 px), gap 14 × 16 px. */
+const FIELD_GRID_CLASS = "grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2";
 
 // ── Foto de perfil ──────────────────────────────────────────────────────────
 
@@ -128,45 +211,51 @@ export function PerfilFoto() {
   };
 
   return (
-    <SettingsSection title="Foto de perfil">
-      <div className="flex flex-wrap items-center gap-4">
-        <Avatar size="lg">
+    <SettingsSection
+      title="Foto de perfil"
+      description={<span id={hintId}>{PHOTO_HINT}</span>}
+      icon={
+        <Avatar className="size-16">
           {photoUrl ? <AvatarImage src={photoUrl} alt="Tu foto de perfil" /> : null}
-          <AvatarFallback>{initialsOf(name)}</AvatarFallback>
+          <AvatarFallback className="bg-secondary text-xl font-semibold text-secondary-foreground">
+            {initialsOf(name)}
+          </AvatarFallback>
         </Avatar>
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={inputRef}
-              id={inputId}
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              aria-label="Elegir una foto"
-              aria-describedby={hintId}
-              tabIndex={-1}
-              onChange={(event) => onFile(event.target.files?.[0])}
-            />
-            <Button type="button" disabled={pending !== null} onClick={() => inputRef.current?.click()} aria-describedby={hintId}>
-              {pending === "upload" ? "Subiendo…" : "Cambiar foto"}
+      }
+      actions={
+        <>
+          <input
+            ref={inputRef}
+            id={inputId}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            aria-label="Elegir una foto"
+            aria-describedby={hintId}
+            tabIndex={-1}
+            onChange={(event) => onFile(event.target.files?.[0])}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending !== null}
+            onClick={() => inputRef.current?.click()}
+            aria-describedby={hintId}
+          >
+            {pending === "upload" ? "Subiendo…" : "Cambiar foto"}
+          </Button>
+          {photoUrl && PHOTO_IMPLEMENTED.removeMyPhotoAction ? (
+            <Button type="button" variant="ghost" disabled={pending !== null} onClick={onRemove}>
+              {pending === "remove" ? "Quitando…" : "Quitar"}
             </Button>
-            {photoUrl && PHOTO_IMPLEMENTED.removeMyPhotoAction ? (
-              <Button type="button" variant="destructive" disabled={pending !== null} onClick={onRemove}>
-                {pending === "remove" ? "Quitando…" : "Quitar"}
-              </Button>
-            ) : null}
-          </div>
-          <p id={hintId} className="text-xs text-muted-foreground">
-            {PHOTO_HINT}
-          </p>
-        </div>
-      </div>
+          ) : null}
+        </>
+      }
+    >
       {error ? (
-        <div className="mt-3">
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
     </SettingsSection>
   );
@@ -214,7 +303,9 @@ export function PerfilDatos() {
     name: useId(),
     nameError: useId(),
     puesto: useId(),
+    puestoHint: useId(),
     email: useId(),
+    emailHint: useId(),
     phone: useId(),
     signature: useId(),
     language: useId(),
@@ -231,23 +322,25 @@ export function PerfilDatos() {
       vars.staff
         ? [qk.me.profile(), qk.personas.equipo(), qk.personas.detail(vars.staffId), qk.catalog.staff()]
         : [qk.personas.detail(vars.staffId)],
-    successToast: "Perfil guardado",
+    successToast: "Cambios guardados",
     onFormError: (text) => form.getState().setFormError(text),
   });
   const isPending = save.isPending;
 
   const staffChanged = name.trim() !== data.name || phone.trim() !== data.phone;
   const signatureChanged = signature.trim() !== data.emailSignature.trim();
-  const dirty = staffChanged || signatureChanged;
+  const dirtyCount =
+    Number(name.trim() !== data.name) + Number(phone.trim() !== data.phone) + Number(signatureChanged);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const onCancel = () => form.getState().reset();
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submit = () => {
     const state = form.getState();
     state.setFormError(null);
     if (!name.trim()) {
       state.setFieldError("name", NAME_REQUIRED_COPY);
+      nameRef.current?.focus();
       return;
     }
     state.setFieldError("name", null);
@@ -268,48 +361,48 @@ export function PerfilDatos() {
     );
   };
 
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (dirtyCount > 0 && !isPending) submit();
+  };
+
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
       <SettingsSection title="Datos personales">
-        <SettingsRow
-          label="Nombre"
-          htmlFor={ids.name}
-          control={
-            <div className="flex flex-col gap-1">
-              <Input
-                id={ids.name}
-                value={name}
-                onChange={(event) => setField("name", event.target.value)}
-                autoComplete="name"
-                maxLength={120}
-                required
-                aria-invalid={nameError ? true : undefined}
-                aria-describedby={nameError ? ids.nameError : undefined}
-              />
-              {nameError ? (
-                <p id={ids.nameError} className="text-xs text-destructive">
-                  {nameError}
-                </p>
-              ) : null}
-            </div>
-          }
-        />
-        <SettingsRow
-          label="Puesto"
-          description={PUESTO_HINT}
-          htmlFor={ids.puesto}
-          control={<Input id={ids.puesto} value={data.puesto || "Sin puesto"} readOnly />}
-        />
-        <SettingsRow
-          label="Correo"
-          description={CORREO_HINT}
-          htmlFor={ids.email}
-          control={<Input id={ids.email} type="email" value={data.email} readOnly />}
-        />
-        <SettingsRow
-          label="Teléfono"
-          htmlFor={ids.phone}
-          control={
+        <div className={FIELD_GRID_CLASS}>
+          <Field id={ids.name} label="Nombre" error={nameError} errorId={ids.nameError}>
+            <Input
+              ref={nameRef}
+              id={ids.name}
+              value={name}
+              onChange={(event) => setField("name", event.target.value)}
+              autoComplete="name"
+              maxLength={120}
+              required
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? ids.nameError : undefined}
+            />
+          </Field>
+          <Field id={ids.puesto} label="Puesto" hint={PUESTO_HINT} hintId={ids.puestoHint}>
+            <Input
+              id={ids.puesto}
+              value={data.puesto || "Sin puesto"}
+              readOnly
+              aria-describedby={ids.puestoHint}
+              className={READ_ONLY_INPUT_CLASS}
+            />
+          </Field>
+          <Field id={ids.email} label="Correo" hint={CORREO_HINT} hintId={ids.emailHint}>
+            <Input
+              id={ids.email}
+              type="email"
+              value={data.email}
+              readOnly
+              aria-describedby={ids.emailHint}
+              className={READ_ONLY_INPUT_CLASS}
+            />
+          </Field>
+          <Field id={ids.phone} label="Teléfono">
             <Input
               id={ids.phone}
               type="tel"
@@ -318,66 +411,78 @@ export function PerfilDatos() {
               autoComplete="tel"
               maxLength={40}
             />
-          }
-        />
+          </Field>
+        </div>
       </SettingsSection>
 
       <SettingsSection title="Firma">
-        <SettingsRow
-          label="Firma de correo"
-          htmlFor={ids.signature}
-          control={
-            <Textarea
-              id={ids.signature}
-              rows={4}
-              value={signature}
-              onChange={(event) => setField("emailSignature", event.target.value)}
-              maxLength={2000}
-            />
-          }
-        />
+        <Field id={ids.signature} label="Firma de correo">
+          <Textarea
+            id={ids.signature}
+            rows={3}
+            value={signature}
+            onChange={(event) => setField("emailSignature", event.target.value)}
+            maxLength={2000}
+          />
+        </Field>
       </SettingsSection>
 
       <SettingsSection title="Idioma y región" description={REGION_HINT}>
-        <SettingsRow
-          label="Idioma"
-          htmlFor={ids.language}
-          control={<Input id={ids.language} value={PERFIL_LANGUAGE_LABEL} readOnly />}
-        />
-        <SettingsRow
-          label="Zona horaria"
-          htmlFor={ids.timeZone}
-          control={<Input id={ids.timeZone} value={PERFIL_TIME_ZONE_LABEL} readOnly />}
-        />
+        <div className={FIELD_GRID_CLASS}>
+          <Field id={ids.language} label="Idioma">
+            <Input id={ids.language} value={PERFIL_LANGUAGE_LABEL} readOnly className={READ_ONLY_INPUT_CLASS} />
+          </Field>
+          <Field id={ids.timeZone} label="Zona horaria">
+            <Input id={ids.timeZone} value={PERFIL_TIME_ZONE_LABEL} readOnly className={READ_ONLY_INPUT_CLASS} />
+          </Field>
+        </div>
       </SettingsSection>
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" disabled={!dirty || isPending} onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={!dirty || isPending}>
-          {isPending ? "Guardando…" : "Guardar cambios"}
-        </Button>
-      </div>
+      <SettingsSaveBar
+        dirtyCount={dirtyCount}
+        saving={isPending}
+        error={error}
+        saveLabel="Guardar cambios"
+        onDiscard={onCancel}
+        onSave={submit}
+      />
     </form>
   );
 }
 
 // ── Mis horas esta semana ───────────────────────────────────────────────────
 
-/** One line with this week's hours; absent unless time tracking is enabled. */
+/**
+ * This week's hours against the target (badge) and one bar per weekday;
+ * absent unless time tracking is enabled for the person.
+ */
 export function PerfilHorasSemana() {
   const { week } = usePerfilData();
   if (!week) return null;
+  const days = weekdaysOf(week);
+  const dailyTarget = week.target > 0 ? week.target / 5 : 8;
   return (
-    <SettingsSection title="Mis horas esta semana">
-      <p className="text-sm text-foreground">{formatWeekHoursLine(week)}</p>
+    <SettingsSection
+      title="Mis horas esta semana"
+      actions={
+        <Badge variant="outline" className="font-mono">
+          {formatWeekHoursLine(week)}
+        </Badge>
+      }
+    >
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {days.map((day) => {
+          const ratio = Math.min(1, Math.max(0, day.hours / dailyTarget));
+          return (
+            <li key={day.date} className="flex flex-col gap-1.5">
+              <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-muted">
+                <span className="grow-x block h-full rounded-full bg-primary" style={{ width: `${ratio * 100}%` }} />
+              </span>
+              <span className="font-mono text-[11.5px] text-sidebar-foreground">{formatDayLine(day)}</span>
+            </li>
+          );
+        })}
+      </ul>
     </SettingsSection>
   );
 }
@@ -406,12 +511,12 @@ export function passwordChangeErrorText(reason: string): string {
   }
 }
 
-/** The existing password change (`changePasswordAction`), in the settings layout. */
 /** `changePasswordAction` with one object argument, for the mutation. */
 function changePassword(draft: PasswordDraft) {
   return changePasswordAction(draft.currentPassword, draft.nextPassword, draft.confirmPassword);
 }
 
+/** The existing password change (`changePasswordAction`), with its own button outside the save bar. */
 export function PerfilContrasena() {
   const [draft, setDraft] = useState<PasswordDraft>(EMPTY_PASSWORD_DRAFT);
   const [error, setError] = useState("");
@@ -419,14 +524,7 @@ export function PerfilContrasena() {
   // No cache effect: the password is not shown anywhere.
   const change = useActionMutation(changePassword, { onFormError: (text) => setError(text) });
   const isPending = change.isPending;
-  const ids = {
-    current: useId(),
-    currentHelp: useId(),
-    next: useId(),
-    nextHelp: useId(),
-    confirm: useId(),
-    confirmHelp: useId(),
-  };
+  const ids = { current: useId(), next: useId(), confirm: useId() };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -446,65 +544,38 @@ export function PerfilContrasena() {
 
   return (
     <SettingsSection title="Cambiar contraseña" description="Actualiza tu contraseña sin cerrar sesión.">
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-        <SettingsRow
-          label="Contraseña actual"
-          htmlFor={ids.current}
-          control={
-            <div className="flex flex-col gap-1">
-              <Input
-                id={ids.current}
-                type="password"
-                autoComplete="current-password"
-                value={draft.currentPassword}
-                onChange={(event) => setDraft((current) => ({ ...current, currentPassword: event.target.value }))}
-                aria-describedby={ids.currentHelp}
-              />
-              <p id={ids.currentHelp} className="text-xs text-muted-foreground">
-                Necesaria para confirmar que la solicitud viene del usuario correcto.
-              </p>
-            </div>
-          }
-        />
-        <SettingsRow
-          label="Nueva contraseña"
-          htmlFor={ids.next}
-          control={
-            <div className="flex flex-col gap-1">
-              <Input
-                id={ids.next}
-                type="password"
-                autoComplete="new-password"
-                value={draft.nextPassword}
-                onChange={(event) => setDraft((current) => ({ ...current, nextPassword: event.target.value }))}
-                placeholder="Mínimo 8 caracteres"
-                aria-describedby={ids.nextHelp}
-              />
-              <p id={ids.nextHelp} className="text-xs text-muted-foreground">
-                Mínimo 8 caracteres. Puedes usar una frase fácil de recordar.
-              </p>
-            </div>
-          }
-        />
-        <SettingsRow
-          label="Confirmar nueva contraseña"
-          htmlFor={ids.confirm}
-          control={
-            <div className="flex flex-col gap-1">
-              <Input
-                id={ids.confirm}
-                type="password"
-                autoComplete="new-password"
-                value={draft.confirmPassword}
-                onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))}
-                aria-describedby={ids.confirmHelp}
-              />
-              <p id={ids.confirmHelp} className="text-xs text-muted-foreground">
-                Escribe la misma contraseña para evitar errores de captura.
-              </p>
-            </div>
-          }
-        />
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3.5">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-3">
+          <Field id={ids.current} label="Contraseña actual">
+            <Input
+              id={ids.current}
+              type="password"
+              autoComplete="current-password"
+              value={draft.currentPassword}
+              onChange={(event) => setDraft((current) => ({ ...current, currentPassword: event.target.value }))}
+            />
+          </Field>
+          <Field id={ids.next} label="Nueva contraseña">
+            <Input
+              id={ids.next}
+              type="password"
+              autoComplete="new-password"
+              value={draft.nextPassword}
+              onChange={(event) => setDraft((current) => ({ ...current, nextPassword: event.target.value }))}
+              placeholder="Mínimo 8 caracteres"
+            />
+          </Field>
+          <Field id={ids.confirm} label="Confirmar nueva contraseña">
+            <Input
+              id={ids.confirm}
+              type="password"
+              autoComplete="new-password"
+              value={draft.confirmPassword}
+              onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))}
+              placeholder="Mínimo 8 caracteres"
+            />
+          </Field>
+        </div>
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -516,7 +587,7 @@ export function PerfilContrasena() {
           </p>
         ) : null}
         <div className="flex justify-end">
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" variant="outline" disabled={isPending}>
             {isPending ? "Guardando…" : "Guardar nueva contraseña"}
           </Button>
         </div>

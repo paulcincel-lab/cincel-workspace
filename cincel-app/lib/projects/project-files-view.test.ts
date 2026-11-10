@@ -25,10 +25,10 @@ function listing(overrides: Partial<OkFilesResult> = {}): OkFilesResult {
     folderId: "root",
     breadcrumbs: [{ id: "root", name: "Casa Lomas" }],
     items: [
-      { id: "f1", name: "01 Interno", mimeType: FOLDER, sizeBytes: null, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, webViewLink: null, kind: "folder" },
-      { id: "a", name: "Planta arquitectónica.pdf", mimeType: "application/pdf", sizeBytes: 2_516_582, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, webViewLink: "https://drive.example/a", kind: "file" },
-      { id: "b", name: "Instalación.dwg", mimeType: "application/octet-stream", sizeBytes: 6_081_741, modifiedAt: "2026-10-28T10:00:00Z", iconLink: null, webViewLink: null, kind: "file" },
-      { id: "c", name: "Cortes.pdf", mimeType: "application/pdf", sizeBytes: 1_048_576, modifiedAt: "", iconLink: null, webViewLink: null, kind: "file" },
+      { id: "f1", name: "01 Interno", mimeType: FOLDER, sizeBytes: null, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, thumbnailLink: null, webViewLink: null, kind: "folder" },
+      { id: "a", name: "Planta arquitectónica.pdf", mimeType: "application/pdf", sizeBytes: 2_516_582, modifiedAt: "2026-11-03T17:40:00Z", iconLink: null, thumbnailLink: null, webViewLink: "https://drive.example/a", kind: "file" },
+      { id: "b", name: "Instalación.dwg", mimeType: "application/octet-stream", sizeBytes: 6_081_741, modifiedAt: "2026-10-28T10:00:00Z", iconLink: null, thumbnailLink: null, webViewLink: null, kind: "file" },
+      { id: "c", name: "Cortes.pdf", mimeType: "application/pdf", sizeBytes: 1_048_576, modifiedAt: "", iconLink: null, thumbnailLink: null, webViewLink: null, kind: "file" },
     ],
     ...overrides,
   };

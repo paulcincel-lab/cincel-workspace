@@ -79,6 +79,8 @@ const CHECKLIST: Checklist = {
   id: "c1",
   title: "Visita de obra · Ensenada",
   projectId: null,
+  projectName: null,
+  updatedAt: "2026-11-01T12:00:00.000Z",
   items: [
     { id: "i1", text: "Llevar planos impresos", done: true, sortOrder: 0 },
     { id: "i2", text: "Medir vanos de cancelería", done: true, sortOrder: 1 },

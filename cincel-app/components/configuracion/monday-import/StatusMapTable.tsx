@@ -25,7 +25,10 @@ import {
   type StatusMapRow,
 } from "@/lib/monday-import/status-map";
 import { BASE_STATUS_LABELS, decodeStatusTarget, encodeStatusTarget } from "@/lib/monday-import/wizard-steps";
-import type { TaskStatusInput, TaskStatusOption } from "@/lib/types/core";
+import { BASE_STATUS_COLOR, customStatusBase, statusDotClass } from "@/lib/tasks/status-options";
+import type { TaskStatus, TaskStatusInput, TaskStatusOption } from "@/lib/types/core";
+import type { StatusTarget } from "@/scripts/monday/mapping.schema";
+import { cn } from "@/lib/utils";
 import type { MondayImportChoices, MondayStatusMap } from "@/lib/types/monday-import";
 
 /** Same cadence as the wizard's draft saves. */
@@ -57,16 +60,28 @@ const STATUS_CREATED_KEYS = [
   qk.proyectos.list(),
 ] as const;
 
+/** The base status a Cincel target reads as (its color and whether it closes the task). */
+function targetBase(target: StatusTarget, statuses: MondayImportChoices["statuses"]): { base: TaskStatus; closes: boolean } {
+  if ("customStatusId" in target) {
+    const custom = statuses.find((status) => status.id === target.customStatusId);
+    const closes = custom?.closes ?? false;
+    return { base: customStatusBase({ closes }), closes };
+  }
+  return { base: target.status, closes: target.status === "completado" };
+}
+
 /** One monday label; "Crear estatus…" opens an inline form that creates it in Configuración → Estatus. */
 function StatusMapRowView({
   row,
   statusChoices,
+  statuses,
   invalid,
   onChange,
   onStatusCreated,
 }: {
   row: StatusMapRow;
   statusChoices: Choice[];
+  statuses: MondayImportChoices["statuses"];
   invalid: boolean;
   onChange: (row: StatusMapRow, patch: Partial<StatusMapRow["entry"]>) => void;
   onStatusCreated: (status: CreatedStatus) => void;
@@ -110,18 +125,23 @@ function StatusMapRowView({
     })();
   }
 
+  const { base, closes: targetCloses } = targetBase(row.entry.target, statuses);
+  const suggested = !statuses.some((status) => status.name.trim().toLowerCase() === row.name.trim().toLowerCase());
+
   return (
     <TableRow>
       <TableCell className="align-top whitespace-normal">
-        <span className="text-foreground">{row.name}</span>
-        {row.defaulted ? (
-          <Badge variant="outline" className="ml-2">
-            Sin equivalente
-          </Badge>
-        ) : null}
+        <span className="flex flex-wrap items-center gap-2">
+          <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", statusDotClass(BASE_STATUS_COLOR[base]))} />
+          <span className="text-foreground">{row.name}</span>
+          {row.defaulted ? <Badge variant="outline">Sin equivalente</Badge> : null}
+        </span>
       </TableCell>
-      <TableCell className="align-top tabular-nums">{row.items ?? "—"}</TableCell>
-      <TableCell className="space-y-2" aria-invalid={invalid ? true : undefined}>
+      <TableCell className="text-right align-top font-mono tabular-nums">{row.items ?? "—"}</TableCell>
+      <TableCell aria-hidden="true" className="align-top text-muted-foreground">
+        →
+      </TableCell>
+      <TableCell className="min-w-[190px] space-y-2" aria-invalid={invalid ? true : undefined}>
         <ChoiceSelect
           label={`Estatus de Cincel para ${row.name}`}
           value={encodeStatusTarget(row.entry.target)}
@@ -135,6 +155,19 @@ function StatusMapRowView({
             if (target) onChange(row, { target });
           }}
         />
+        {row.defaulted ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {suggested ? <span>Sugerido: «{row.name}»</span> : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`Confirmar ${row.name} como ${BASE_STATUS_LABELS.pendiente}`}
+              onClick={() => onChange(row, { target: row.entry.target })}
+            >
+              Dejar en {BASE_STATUS_LABELS.pendiente}
+            </Button>
+          </div>
+        ) : null}
         {invalid ? <p className="text-sm text-destructive">Este estatus ya no existe. Elige otro.</p> : null}
         {creating ? (
           <div className="space-y-2">
@@ -183,6 +216,7 @@ function StatusMapRowView({
           </div>
         ) : null}
       </TableCell>
+      <TableCell className="align-top">{targetCloses ? "Sí" : "No"}</TableCell>
       <TableCell className="align-top">
         <ChoiceSelect
           label={`Prioridad para ${row.name}`}
@@ -308,9 +342,11 @@ export function StatusMapTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Etiqueta</TableHead>
-            <TableHead>Elementos</TableHead>
+            <TableHead>Estatus de monday</TableHead>
+            <TableHead className="text-right">Elementos</TableHead>
+            <TableHead>a</TableHead>
             <TableHead>Estatus de Cincel</TableHead>
+            <TableHead>Cierra la tarea</TableHead>
             <TableHead>Prioridad</TableHead>
           </TableRow>
         </TableHeader>
@@ -320,6 +356,7 @@ export function StatusMapTable({
               key={row.key}
               row={row}
               statusChoices={statusChoices}
+              statuses={choices.statuses}
               invalid={notFound && isMissingCustomStatus(row.entry.target, choices.statuses)}
               onChange={change}
               onStatusCreated={onStatusCreated}

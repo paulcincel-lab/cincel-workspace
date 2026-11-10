@@ -10,6 +10,8 @@ import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { useStyle } from "@/components/shell/StyleProvider";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Card, CardContent, CardFooter } from "@/components/ui/shadcn/card";
+import { LIFT_CLASS } from "@/components/widgets/lift";
+import { ProgressRing } from "@/components/widgets/ProgressRing";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
@@ -24,7 +26,8 @@ import { cn } from "@/lib/utils";
  *
  * - Visual: cards with a tinted 84 px head (tramo chip + progress ring) when the
  *   item has a tramo, otherwise an icon chip row (`iconName`, lucide); title,
- *   subtitle, badges tinted by tone and a meta row.
+ *   subtitle, badges tinted by tone and a meta row. The ring fills in
+ *   (`ring`) and cards with a link lift on hover and focus (`lift`).
  * - Esencial: white bordered cards (no shadow, no tints): title + text meta.
  * - Analítico: `table` when given, otherwise one built from `title`,
  *   `subtitle` and `meta` (plus tramo, avance and badges when the items carry
@@ -124,21 +127,25 @@ function EntityIcon({ name, className }: { name: string | undefined; className?:
   return <DynamicIcon name={resolved} className={className} aria-hidden="true" />;
 }
 
-/** 52 px progress ring; the number is text, the ring is decoration. */
-function ProgressRing({ progress }: { progress: number }) {
-  const pct = Math.max(0, Math.min(100, Math.round(progress)));
+/**
+ * 52 px progress ring (SVG, `pathLength` 100, fills in with `ring`): one image
+ * labelled "{n} % de avance"; the number is shown in its center.
+ */
+function EntityProgressRing({ progress }: { progress: number }) {
   return (
-    <span
+    <ProgressRing
       data-slot="entity-progress"
-      className="relative inline-flex size-13 shrink-0 items-center justify-center rounded-full"
-      style={{ background: `conic-gradient(var(--entity-color) calc(${pct} * 1%), var(--card) 0)` }}
+      percent={progress}
+      size={52}
+      stroke={5}
+      color="var(--entity-color)"
+      track="var(--card)"
+      animated
     >
-      <span aria-hidden="true" className="absolute inset-[5px] rounded-full bg-card" />
-      <span className="sr-only">{ENTITY_PROGRESS_LABEL} </span>
       <span data-value="progress" className="relative text-[11px] font-medium tabular-nums text-foreground">
         {formatProgress(progress)}
       </span>
-    </span>
+    </ProgressRing>
   );
 }
 
@@ -191,7 +198,7 @@ function VisualCard({ item, footer }: { item: EntityCard; footer?: (item: Entity
   return (
     <Card
       data-item={item.id}
-      className={cn("relative w-full gap-3 shadow-sm", item.tramo && "pt-0")}
+      className={cn("relative w-full gap-3 shadow-sm", item.tramo && "pt-0", item.href && LIFT_CLASS)}
       style={tintVars(item)}
     >
       {item.tramo ? (
@@ -207,7 +214,7 @@ function VisualCard({ item, footer }: { item: EntityCard; footer?: (item: Entity
             ) : null}
             <TramoBadge tramo={tramoRef(item.tramo)} variant="chip" />
           </span>
-          {item.progress !== undefined ? <ProgressRing progress={item.progress} /> : null}
+          {item.progress !== undefined ? <EntityProgressRing progress={item.progress} /> : null}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3 px-4">
@@ -221,7 +228,7 @@ function VisualCard({ item, footer }: { item: EntityCard; footer?: (item: Entity
             <EntityIcon name={item.iconName} className="size-4.5" />
           </span>
           {item.progress !== undefined ? (
-            <ProgressRing progress={item.progress} />
+            <EntityProgressRing progress={item.progress} />
           ) : item.href ? (
             <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
           ) : null}

@@ -15,7 +15,11 @@ const actions = vi.hoisted(() => ({
   getMiEspacioPageData: vi.fn(),
   fetchMiEspacioNotesPage: vi.fn(),
   fetchMiEspacioChecklistsPage: vi.fn(),
+  fetchMyOpenTasksAction: vi.fn(),
+  fetchMyWeekHoursAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/tasks-actions", () => ({ fetchMyOpenTasksAction: actions.fetchMyOpenTasksAction }));
+vi.mock("@/lib/actions/time-tracking-actions", () => ({ fetchMyWeekHoursAction: actions.fetchMyWeekHoursAction }));
 vi.mock("@/lib/actions/notifications-actions", () => ({ fetchNotificationsAction: actions.fetchNotificationsAction }));
 vi.mock("@/lib/actions/gmail-actions", () => ({
   fetchGmailStatusAction: actions.fetchGmailStatusAction,
@@ -36,6 +40,8 @@ import {
   markCachedNotificationsRead,
   meNotificationsOptions,
   meNotesOptions,
+  meTasksOptions,
+  meWeekHoursOptions,
   patchCachedGmailThread,
   prefetchMiEspacio,
   seedMiEspacio,
@@ -84,6 +90,8 @@ const DATA: MiEspacioPageData = {
   checklistsCursor: null,
   notes: [],
   notesCursor: null,
+  tasks: [{ id: "k1", title: "Planos", commitmentDate: "2026-11-09" } as MiEspacioPageData["tasks"][number]],
+  canCreateTask: true,
 };
 
 function badges(unreadCount: number): ShellBadges {
@@ -142,6 +150,27 @@ describe("seeding", () => {
     // And the seeded keys need no fetch of their own.
     await client.prefetchInfiniteQuery(meNotesOptions());
     expect(actions.fetchMiEspacioNotesPage).not.toHaveBeenCalled();
+  });
+});
+
+describe("me.tasks", () => {
+  it("seedMiEspacio seeds me.tasks", async () => {
+    const client = createTestQueryClient();
+    seedMiEspacio(client, DATA);
+    expect(client.getQueryData(qk.me.tasks())).toEqual(DATA.tasks);
+    // Seeded: no request of its own on the first render.
+    await client.prefetchQuery(meTasksOptions());
+    expect(actions.fetchMyOpenTasksAction).not.toHaveBeenCalled();
+  });
+
+  it("meWeekHoursOptions keys one week under the me.weekHours prefix", async () => {
+    const client = createTestQueryClient();
+    actions.fetchMyWeekHoursAction.mockResolvedValue({ days: [], total: 0, target: 40 });
+    expect(meWeekHoursOptions("2026-11-02").queryKey).toEqual(["me", "week-hours", "2026-11-02"]);
+    await client.fetchQuery(meWeekHoursOptions("2026-11-02"));
+    expect(actions.fetchMyWeekHoursAction).toHaveBeenCalledWith({ weekStart: "2026-11-02" });
+    await client.fetchQuery(meWeekHoursOptions());
+    expect(actions.fetchMyWeekHoursAction).toHaveBeenLastCalledWith(undefined);
   });
 });
 

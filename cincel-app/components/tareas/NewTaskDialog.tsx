@@ -13,42 +13,31 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/shadcn/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { fetchCatalogAssignableStaff, fetchCatalogProjectOptions } from "@/lib/actions/page-data/catalog-actions";
-import {
-  createSubtaskAction,
-  createUserTaskAction,
-  setTaskCustomStatusAction,
-  setTaskStatusAction,
-} from "@/lib/actions/tasks-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { STALE, qk } from "@/lib/query/keys";
 import { mutationErrorText, runAction, useActionMutation } from "@/lib/query/mutation";
 import type { CatalogProjectOption } from "@/lib/types/catalog";
-import type {
-  ProjectListItem,
-  SubtaskInput,
-  TaskDetail,
-  TaskPriority,
-  UserTaskInput,
-  WorkflowDetail,
-} from "@/lib/types/core";
+import type { ProjectListItem, TaskPriority } from "@/lib/types/core";
 import {
   PRIORITY_OPTIONS,
+  activeWorkflowsInOrder,
   applyTemplate,
   hasErrors,
   draftFromDefaults,
-  initialStatusTarget,
   resolvePhaseId,
   resolveProjectId,
   resolveWorkflowId,
   toSubtaskInputs,
   toUserTaskInput,
   tramoFases,
+  suggestedFirst,
   tramoTemplateTitles,
   validateDraft,
   type DraftErrors,
   type NewTaskDefaults,
   type NewTaskDraft,
 } from "./new-task-form";
+import { createTaskWithExtras, newTaskInvalidations, newTaskWorkflowsKey } from "./quick-add-create";
 
 export type NewTaskDialogProps = {
   open: boolean;
@@ -69,68 +58,7 @@ function activeProjectChoices(rows: readonly CatalogProjectOption[]): ProjectCho
     .map((p) => ({ id: p.id, name: p.name, currentWorkflowId: p.currentWorkflowId }));
 }
 
-/** The active tramos in catalog order. */
-function activeWorkflowsInOrder(rows: readonly WorkflowDetail[]): WorkflowDetail[] {
-  return rows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
-/** Responsables suggested for the tramo first. */
-function suggestedFirst<T extends { suggested: boolean }>(list: readonly T[]): T[] {
-  return [...list].sort((a, b) => Number(b.suggested) - Number(a.suggested));
-}
-
-/**
- * The tramo catalog with its fases and task templates (the Fase field and
- * "Usar plantilla del tramo" need them). Kept under the `catalog.workflows`
- * prefix, so every invalidation of `qk.catalog.workflows()` refreshes it.
- */
-export const newTaskWorkflowsKey = () => [...qk.catalog.workflows(), "detail"] as const;
-
-/** Keys a created task (and its subtareas) makes stale (plan §3, `createUserTaskAction` / `createSubtaskAction`). */
-export function newTaskInvalidations(projectId: string, created?: { taskId: string; withSubtasks: boolean }) {
-  const keys: (readonly unknown[])[] = [
-    qk.tareas.all,
-    qk.proyectos.tab(projectId, "tareas"),
-    qk.proyectos.shell(projectId),
-    qk.proyectos.resumen(projectId),
-    qk.proyectos.list(),
-    qk.inicio(),
-    qk.shell.badges(),
-  ];
-  if (created?.withSubtasks) keys.push(qk.tasks.detail(created.taskId), qk.tasks.subtasks(created.taskId));
-  return keys;
-}
-
-type CreateTaskVars = { input: UserTaskInput; statusKey?: string; subtasks: SubtaskInput[] };
-type CreateTaskResult = { task: TaskDetail; partialError: unknown };
-
-/**
- * `createUserTaskAction`, then the board column's status, then one
- * `createSubtaskAction` per subtarea. Only the create can fail the call: once
- * the task exists a failed status move or subtarea is reported, not retried,
- * so a second "Crear tarea" can't duplicate the task.
- */
-async function createTaskWithExtras({ input, statusKey, subtasks }: CreateTaskVars): Promise<CreateTaskResult> {
-  const task = await runAction(createUserTaskAction, input);
-  let partialError: unknown = null;
-  const target = initialStatusTarget(statusKey, task);
-  if (target) {
-    try {
-      if (target.kind === "custom") await runAction(() => setTaskCustomStatusAction(task.id, target.id), undefined);
-      else await runAction(() => setTaskStatusAction(task.id, target.status), undefined);
-    } catch (err) {
-      partialError = err;
-    }
-  }
-  for (const subtask of subtasks) {
-    try {
-      await runAction((v: SubtaskInput) => createSubtaskAction(task.id, v), subtask);
-    } catch (err) {
-      partialError ??= err;
-    }
-  }
-  return { task, partialError };
-}
+export { createTaskWithExtras, newTaskInvalidations, newTaskWorkflowsKey } from "./quick-add-create";
 
 /**
  * New task dialog (redesign FE §3.4, frame `NuevaTarea`),

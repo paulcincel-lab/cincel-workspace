@@ -24,5 +24,31 @@ export type AssistantContextIds = { projectId?: string; taskId?: string; personI
 /** The name-only confirmed context: never more than an id and a label. */
 export type AssistantContextLabel = { id: string; label: string };
 
-/** Timings and token usage of one assistant message (shape fixed by #979; filled by the Asistente issue). */
-export type AssistantMessageMeta = { toolMs?: number; responseMs?: number; usage?: { inputTokens: number; outputTokens: number } };
+/**
+ * Times and token usage of one message (`assistant_messages.metadata`).
+ * Streamed by the chat route on `start` / `finish`; the loaders add
+ * `createdAt` from the row. Older rows have none: durations show "—".
+ */
+export type AssistantMessageMeta = {
+  /** ISO; from `assistant_messages.created_at`, or set at `start` for a live message. */
+  createdAt?: string;
+  /** toolCallId → ms (`onToolExecutionEnd.toolExecutionMs`), merged across the approval resume. */
+  toolMs?: Record<string, number>;
+  /** `start` → `finish` of the turn. */
+  responseMs?: number;
+  /** `finish.totalUsage`. */
+  usage?: { inputTokens: number; outputTokens: number };
+};
+
+/** A chat message with its metadata. */
+export type AssistantUIMessage = UIMessage<AssistantMessageMeta>;
+
+/** A tramo as a context chip shows it (dot color from `tramoColorClass`). */
+export type TramoRef = { key: string; name: string; sortOrder: number };
+
+/**
+ * A removable context chip of the Asistente composer: the project
+ * (`context.projectId`) or the module (`context.route`) the next message is
+ * about.
+ */
+export type ContextChip = { kind: "project" | "module"; id: string; label: string; tramo?: TramoRef };

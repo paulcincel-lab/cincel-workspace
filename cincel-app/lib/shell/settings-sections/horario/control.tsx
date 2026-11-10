@@ -1,5 +1,5 @@
 /**
- * Settings section "Control de horario activado / desactivado y fecha obligatoria" of /ajustes/horario (redesign FE §3.8, §21.1; Phase 6).
+ * Settings section "Activar control de horario" (Desactivado · En prueba · Obligatorio and the mandatory date) of /ajustes/horario (redesign FE §3.8, §21.1; Phase 6).
  *
  * `canManageTimeTracking` only. Renders inside `HorarioClient`, which holds the settings.
  */

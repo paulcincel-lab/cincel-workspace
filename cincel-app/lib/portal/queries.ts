@@ -1,21 +1,29 @@
 import "server-only";
 
-import { and, asc, eq, isNull, ne, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
 import {
+  projectMembers,
   projectPortalAccess,
   projects,
   projectSchedules,
   projectStages,
   scheduleTasks,
   staff,
+  tasks,
   workflows,
 } from "@/lib/db/schema";
-import type { PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
+import type { PortalProjectDTO, PortalScheduleDTO, PortalTeamMemberDTO, PortalTramoDTO } from "@/lib/types/portal";
 
-import { toPortalProjectDTO, toPortalScheduleDTO, toPortalTramosDTO, type PortalScheduleTaskRow } from "./dto";
+import {
+  toPortalProjectDTO,
+  toPortalScheduleDTO,
+  toPortalTeamMemberDTO,
+  toPortalTramosDTO,
+  type PortalScheduleTaskRow,
+} from "./dto";
 import type { PortalProjectAccess } from "./session-store";
 
 /**
@@ -122,11 +130,23 @@ export async function getPortalSchedule(access: PortalProjectAccess): Promise<Po
 }
 
 /**
- * The tramo catalog with the project's state in each (FE §3.11 `PhaseStepper`). One query: the project's
- * current tramo comes with the access row. Reads only the tramo key, name, order and the project's stage
- * dates; nothing about tasks or staff.
+ * The tramo catalog with the project's state and progress in each (FE §3.11 `PhaseStepper`, Portal Visual
+ * Fases). One query: the catalog with the project's stage dates (the current tramo comes with the access row),
+ * left-joined with, per tramo, the number of live tasks of this project and how many are closed. Only those
+ * counts leave the aggregate: no task titles, statuses or staff.
  */
 export async function getPortalProjectTramos(access: PortalProjectAccess): Promise<PortalTramoDTO[]> {
+  const progress = db
+    .select({
+      workflowId: tasks.workflowId,
+      total: count().as("total"),
+      done: sql<number>`count(*) filter (where ${tasks.closedAt} is not null)`.as("done"),
+    })
+    .from(tasks)
+    .where(and(eq(tasks.projectId, access.projectId), isNull(tasks.deletedAt), eq(tasks.archived, false)))
+    .groupBy(tasks.workflowId)
+    .as("portal_tramo_progress");
+
   const rows = await db
     .select({
       id: workflows.id,
@@ -136,13 +156,70 @@ export async function getPortalProjectTramos(access: PortalProjectAccess): Promi
       sortOrder: workflows.sortOrder,
       startedAt: projectStages.startedAt,
       closedAt: projectStages.closedAt,
+      total: progress.total,
+      done: progress.done,
     })
     .from(workflows)
     .leftJoin(
       projectStages,
       and(eq(projectStages.workflowId, workflows.id), eq(projectStages.projectId, access.projectId))
     )
+    .leftJoin(progress, eq(progress.workflowId, workflows.id))
     .where(isNull(workflows.deletedAt))
     .orderBy(asc(workflows.sortOrder), asc(workflows.name));
-  return toPortalTramosDTO(rows, access.currentWorkflowId);
+
+  return toPortalTramosDTO(
+    rows,
+    access.currentWorkflowId,
+    rows.map((r) => ({ workflowId: r.id, total: r.total ?? 0, done: r.done ?? 0 }))
+  );
+}
+
+/** Role shown for the project's manager when they have no `project_members` role. */
+export const PORTAL_MANAGER_ROLE = "Responsable del proyecto";
+
+/**
+ * "Tu equipo Cincel": the project's manager first, then the other `project_members` by name. One query over
+ * `staff`, left-joined with this project's `project_members`; soft-deleted staff are left out. Each person is a
+ * name and a role; only the manager keeps an email (the same one `PortalProjectDTO.manager` already exposes),
+ * so members have no **Escribir**.
+ */
+export async function getPortalTeam(access: PortalProjectAccess): Promise<PortalTeamMemberDTO[]> {
+  const isMember = isNotNull(projectMembers.projectId);
+  const rows = await db
+    .select({
+      id: staff.id,
+      name: staff.name,
+      lastName: staff.lastName,
+      email: staff.email,
+      role: projectMembers.role,
+    })
+    .from(staff)
+    .leftJoin(projectMembers, and(eq(projectMembers.staffId, staff.id), eq(projectMembers.projectId, access.projectId)))
+    .where(and(isNull(staff.deletedAt), access.managerId ? or(eq(staff.id, access.managerId), isMember) : isMember))
+    .orderBy(asc(staff.name), asc(staff.lastName));
+
+  const manager = rows.find((r) => r.id === access.managerId);
+  const team: PortalTeamMemberDTO[] = [];
+  if (manager) {
+    team.push(
+      toPortalTeamMemberDTO({ name: manager.name, lastName: manager.lastName, role: manager.role || PORTAL_MANAGER_ROLE,
+        email: manager.email })
+    );
+  }
+  for (const r of rows) {
+    if (r === manager) continue;
+    team.push(toPortalTeamMemberDTO({ name: r.name, lastName: r.lastName, role: r.role, email: null }));
+  }
+  return team;
+}
+
+/** The Drive id of the project's cover photo (`projects.cover_drive_file_id`), or null while staff haven't set one. */
+export async function getPortalProjectCoverFileId(access: PortalProjectAccess): Promise<string | null> {
+  const [row] = await db
+    .select({ cover: projects.coverDriveFileId })
+    .from(projects)
+    .where(eq(projects.id, access.projectId))
+    .limit(1);
+  return row?.cover?.trim() ? row.cover.trim() : null;
 }

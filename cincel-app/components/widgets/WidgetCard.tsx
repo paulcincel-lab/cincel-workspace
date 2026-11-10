@@ -7,15 +7,18 @@ import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState"
 import { LoadingSkeleton, type LoadingSkeletonProps } from "@/components/shell/LoadingSkeleton";
 import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
+import { LIFT_CLASS } from "@/components/widgets/lift";
 import { StyleView } from "@/components/widgets/StyleView";
 import type { Tone } from "@/lib/types/widgets";
+import { staggerStyle } from "@/lib/ui/motion";
 import { cn } from "@/lib/utils";
 
 /**
  * Card container of the widget library (redesign FE §4.10.1); extends shadcn
  * `Card` (`CardHeader` / `CardAction`).
  *
- * - Visual: card with the theme shadow, tinted icon chip, title and action link.
+ * - Visual: card with the theme shadow, tinted icon chip, title and action link;
+ *   a card with header actions (a link or button) lifts on hover and focus.
  * - Esencial: the same card without the icon chip and without a shadow (1 px border).
  * - Analítico: table container (radius 10, `muted` header row, no shadow).
  *
@@ -40,6 +43,11 @@ export type WidgetCardProps = {
   skeleton?: LoadingSkeletonProps["variant"];
   /** Collapse control: a toggle button in the actions slot; the body is not rendered while collapsed. */
   collapsible?: { collapsed: boolean; onToggle(): void };
+  /**
+   * Visual: position of the card among a page's sections (Resumen,
+   * Proyectos); the card rises in (`rise`) 60 ms after the one before.
+   */
+  enterIndex?: number;
 };
 
 function CollapseToggle({ collapsed, onToggle, bodyId }: NonNullable<WidgetCardProps["collapsible"]> & { bodyId: string }) {
@@ -110,6 +118,7 @@ export function WidgetCard({
   loading = false,
   skeleton = "list",
   collapsible,
+  enterIndex,
 }: WidgetCardProps) {
   const titleId = useId();
   const bodyId = useId();
@@ -140,7 +149,12 @@ export function WidgetCard({
   return (
     <StyleView
       visual={() => (
-        <Card {...regionProps} data-style="visual" className="shadow-(--shadow-card)">
+        <Card
+          {...regionProps}
+          data-style="visual"
+          className={cn("shadow-(--shadow-card)", headerActions && LIFT_CLASS, enterIndex !== undefined && "rise")}
+          style={enterIndex !== undefined ? staggerStyle(enterIndex, 60) : undefined}
+        >
           <CardHeader className="flex items-center gap-3">
             {Icon ? (
               <span

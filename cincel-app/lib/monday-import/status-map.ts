@@ -256,3 +256,16 @@ export function isMissingCustomStatus(target: StatusTarget, statuses: MondayImpo
 export function setStatusMapEntry(map: MondayStatusMap, key: string, entry: StatusMapEntry): MondayStatusMap {
   return { ...map, [key]: entry };
 }
+
+/**
+ * monday labels still waiting for a Cincel status: not in the saved map and
+ * without a default («Sin equivalente»). Equivalencias shows "{k} por revisar"
+ * and keeps "Continuar" off while there are any.
+ */
+export function statusesToReview(
+  labels: StatusMapLabel[],
+  saved: MondayStatusMap,
+  statuses: MondayImportChoices["statuses"],
+): number {
+  return statusMapRows(labels, saved, statuses).filter((row) => row.defaulted).length;
+}

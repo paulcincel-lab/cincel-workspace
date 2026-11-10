@@ -44,7 +44,8 @@ vi.mock("@/lib/auth/session", () => ({
     access: state.access,
   })),
 }));
-vi.mock("@/lib/auth/permissions", () => ({
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveTeamCapabilities: vi.fn(() => ({ canViewTeam: state.canViewTeam })),
   canViewTeamHours: vi.fn(() => state.teamHours),
 }));

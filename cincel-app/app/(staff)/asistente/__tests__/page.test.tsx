@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
     fetchAssistantThreadsAction: true,
     fetchAssistantThreadAction: true,
     deleteAssistantThreadAction: true,
+    pinAssistantThreadAction: true,
+    markAssistantThreadReadAction: true,
     importLegacyAssistantThreadAction: true,
     fetchAssistantActionsAction: true,
   } as Record<string, boolean>,
@@ -24,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   fetchThreads: vi.fn(),
   fetchThread: vi.fn(),
   deleteThread: vi.fn(),
+  pinThread: vi.fn(),
+  markRead: vi.fn(),
   importLegacy: vi.fn(),
   sendMessage: vi.fn(),
   onFinish: null as null | ((event: { message: UIMessage; messages: UIMessage[] }) => void),
@@ -43,6 +47,8 @@ vi.mock("@/lib/loaders/asistente", () => ({ loadAsistentePageData: mocks.loadPag
 vi.mock("@/lib/actions/assistant-actions", () => ({
   fetchAssistantThreadsAction: mocks.fetchThreads,
   deleteAssistantThreadAction: mocks.deleteThread,
+  pinAssistantThreadAction: mocks.pinThread,
+  markAssistantThreadReadAction: mocks.markRead,
   importLegacyAssistantThreadAction: mocks.importLegacy,
   fetchAssistantActionsAction: vi.fn(async () => []),
 }));
@@ -50,6 +56,15 @@ vi.mock("@/lib/actions/page-data/asistente-actions", () => ({
   fetchAssistantThreadAction: mocks.fetchThread,
   lookupAssistantContextAction: vi.fn(async () => null),
   getAsistentePageData: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogProjectOptions: vi.fn(async () => []),
+  fetchCatalogAssignableStaff: vi.fn(async () => []),
+  fetchCatalogContacts: vi.fn(async () => []),
+  fetchCatalogProjectSpaces: vi.fn(async () => []),
+  fetchCatalogStaff: vi.fn(async () => []),
+  fetchCatalogTaskStatuses: vi.fn(async () => []),
+  fetchCatalogWorkflows: vi.fn(async () => []),
 }));
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } }));
 // useChat is replaced by a local state holder so the tests never hit the network.
@@ -82,11 +97,18 @@ const T_LUNES = "aaaaaaaa-0000-4000-8000-000000000003";
 const T_ANTES = "aaaaaaaa-0000-4000-8000-000000000004";
 const T_BORRADO = "aaaaaaaa-0000-4000-8000-0000000000ff";
 
+const STATUS = { pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0 };
 const THREADS: AssistantThreadSummary[] = [
-  { id: T_HOY, title: "Avance de Local Espinopapa", updatedAt: at(2026, 10, 5, 10, 42) },
-  { id: T_SEMANA, title: "Minuta junta Platzi → tareas", updatedAt: at(2026, 10, 3) },
-  { id: T_LUNES, title: "Comparar cotizaciones de cancelería", updatedAt: at(2026, 10, 2, 9) },
-  { id: T_ANTES, title: "Cronograma remodelación Ensenada", updatedAt: at(2026, 9, 20) },
+  { ...STATUS, id: T_HOY, title: "Avance de Local Espinopapa", updatedAt: at(2026, 10, 5, 10, 42), pendingApprovals: 1 },
+  { ...STATUS, id: T_SEMANA, title: "Minuta junta Platzi → tareas", updatedAt: at(2026, 10, 3, 9, 15), unread: true },
+  { ...STATUS, id: T_LUNES, title: "Comparar cotizaciones de cancelería", updatedAt: at(2026, 10, 2, 9) },
+  {
+    ...STATUS,
+    id: T_ANTES,
+    title: "Cronograma remodelación Ensenada",
+    updatedAt: at(2026, 9, 20),
+    pinnedAt: at(2026, 10, 1),
+  },
 ];
 
 function textMessage(id: string, role: "user" | "assistant", text: string): UIMessage {
@@ -137,6 +159,11 @@ beforeEach(() => {
   mocks.fetchThreads.mockResolvedValue(THREADS);
   mocks.fetchThread.mockImplementation(async (id: string) => STORED[id] ?? null);
   mocks.deleteThread.mockResolvedValue({ ok: true, data: undefined });
+  mocks.pinThread.mockImplementation(async ({ id, pinned }: { id: string; pinned: boolean }) => ({
+    ...THREADS.find((t) => t.id === id)!,
+    pinnedAt: pinned ? NOW.toISOString() : null,
+  }));
+  mocks.markRead.mockResolvedValue(undefined);
   mocks.importLegacy.mockResolvedValue({ id: "t-legacy" });
 });
 
@@ -163,51 +190,99 @@ describe("/asistente page data", () => {
   });
 });
 
+const EMPTY_TEXT = "Pregunta por tus proyectos y tareas; confirma antes de que cambie algo.";
+
+function rail() {
+  return screen.getByRole("complementary", { name: "Conversaciones" });
+}
+
+function log() {
+  return screen.getByRole("log", { name: "Mensajes" });
+}
+
+async function deleteOpenThread() {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Más opciones" }));
+  });
+  await act(async () => {
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Eliminar conversación" }));
+  });
+  expect(await screen.findByText("¿Eliminar esta conversación?")).toBeTruthy();
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+  });
+}
+
 describe("/asistente history", () => {
-  it("groups threads into Hoy, Esta semana and Anteriores", async () => {
+  it("groups threads into Fijadas and Recientes with their status lines", async () => {
     await renderPage();
 
-    const history = screen.getByRole("complementary", { name: "Conversaciones" });
-    const headings = within(history).getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["Hoy", "Esta semana", "Anteriores"]);
+    const headings = within(rail()).getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(headings).toEqual(["Fijadas", "Recientes"]);
 
-    const hoy = within(history).getByRole("region", { name: "Hoy" });
-    expect(within(hoy).getByText("Avance de Local Espinopapa")).toBeTruthy();
-    expect(within(hoy).getByText("10:42")).toBeTruthy();
+    const fijadas = within(rail()).getByRole("region", { name: "Fijadas" });
+    expect(within(fijadas).getByText("Cronograma remodelación Ensenada")).toBeTruthy();
+    expect(within(fijadas).getByText("20 oct")).toBeTruthy();
 
-    const semana = within(history).getByRole("region", { name: "Esta semana" });
-    expect(within(semana).getByText("Minuta junta Platzi → tareas")).toBeTruthy();
-    expect(within(semana).getByText("Comparar cotizaciones de cancelería")).toBeTruthy();
-
-    const anteriores = within(history).getByRole("region", { name: "Anteriores" });
-    expect(within(anteriores).getByText("Cronograma remodelación Ensenada")).toBeTruthy();
+    const recientes = within(rail()).getByRole("region", { name: "Recientes" });
+    const titles = within(recientes).getAllByRole("link").map((a) => a.textContent);
+    expect(titles[0]).toContain("Avance de Local Espinopapa");
+    expect(within(recientes).getByText("Confirmación pendiente · 10:42")).toBeTruthy();
+    expect(within(recientes).getByText("Nueva respuesta · 09:15")).toBeTruthy();
+    expect(within(recientes).getByText("lun 2 nov")).toBeTruthy();
   });
 
-  it("delete removes the thread from the list optimistically and drops its cache entry", async () => {
-    const { client } = await renderPage();
-    client.setQueryData(qk.asistente.thread(T_SEMANA), STORED[T_SEMANA]);
+  it("search filters the titles ignoring case and accents", async () => {
+    await renderPage();
+
+    fireEvent.change(within(rail()).getByLabelText("Buscar conversaciones"), { target: { value: "REMODELACION" } });
+    expect(within(rail()).getAllByRole("link").map((a) => a.textContent)).toEqual([
+      expect.stringContaining("Cronograma remodelación Ensenada"),
+    ]);
+
+    fireEvent.change(within(rail()).getByLabelText("Buscar conversaciones"), { target: { value: "zzz" } });
+    expect(within(rail()).getByText("Sin conversaciones con ese texto.")).toBeTruthy();
+  });
+
+  it("pin moves the open thread to Fijadas and saves it", async () => {
+    await renderPage({ thread: T_HOY });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Eliminar conversación Minuta junta Platzi → tareas" }));
+      fireEvent.click(screen.getByRole("button", { name: "Fijar conversación" }));
     });
 
+    expect(mocks.pinThread).toHaveBeenCalledWith({ id: T_HOY, pinned: true });
+    const fijadas = within(rail()).getByRole("region", { name: "Fijadas" });
+    await waitFor(() => expect(within(fijadas).getByText("Avance de Local Espinopapa")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Quitar de fijadas" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("opening a thread marks it read", async () => {
+    await renderPage({ thread: T_SEMANA });
+    await act(async () => {});
+    expect(mocks.markRead).toHaveBeenCalledWith({ id: T_SEMANA });
+  });
+
+  it("delete from the menu removes the thread optimistically and drops its cache entry", async () => {
+    const { client } = await renderPage({ thread: T_SEMANA });
+
+    await deleteOpenThread();
+
     expect(mocks.deleteThread).toHaveBeenCalledWith(T_SEMANA);
-    expect(screen.queryByText("Minuta junta Platzi → tareas")).toBeNull();
-    expect(screen.getByText("Comparar cotizaciones de cancelería")).toBeTruthy();
+    expect(within(rail()).queryByText("Minuta junta Platzi → tareas")).toBeNull();
+    expect(within(rail()).getByText("Comparar cotizaciones de cancelería")).toBeTruthy();
     await waitFor(() => expect(client.getQueryData(qk.asistente.thread(T_SEMANA))).toBeUndefined());
     expect(mocks.fetchThreads).not.toHaveBeenCalled();
   });
 
   it("a failed delete puts the thread back and shows the error copy", async () => {
     mocks.deleteThread.mockResolvedValueOnce({ ok: false, error: "FORBIDDEN" });
-    const { client } = await renderPage();
+    const { client } = await renderPage({ thread: T_SEMANA });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Eliminar conversación Minuta junta Platzi → tareas" }));
-    });
+    await deleteOpenThread();
 
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción."));
-    expect(screen.getByText("Minuta junta Platzi → tareas")).toBeTruthy();
+    expect(within(rail()).getByText("Minuta junta Platzi → tareas")).toBeTruthy();
     expect(client.getQueryData<AssistantThreadSummary[]>(qk.asistente.threads())?.map((t) => t.id)).toEqual(
       THREADS.map((t) => t.id),
     );
@@ -225,7 +300,7 @@ describe("/asistente history", () => {
     await renderPage({ thread: T_BORRADO });
 
     expect(screen.getByText("Ya no existe. Recarga la página.")).toBeTruthy();
-    expect(screen.getByText("Prueba con una de estas preguntas:")).toBeTruthy();
+    expect(within(log()).getByText(EMPTY_TEXT)).toBeTruthy();
   });
 
   it("switching threads uses replaceState and the query: one call per uncached thread, none when cached", async () => {
@@ -233,7 +308,7 @@ describe("/asistente history", () => {
     replaceState.mockClear();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Minuta junta Platzi → tareas/ }));
+      fireEvent.click(within(rail()).getByRole("link", { name: /^Minuta junta Platzi → tareas/ }));
     });
     await waitFor(() => expect(screen.getByText("Creé cinco tareas desde la minuta.")).toBeTruthy());
     expect(mocks.fetchThread).toHaveBeenCalledTimes(1);
@@ -243,7 +318,7 @@ describe("/asistente history", () => {
 
     // Back to the seeded thread: cached, no request.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Avance de Local Espinopapa/ }));
+      fireEvent.click(within(rail()).getByRole("link", { name: /^Avance de Local Espinopapa/ }));
     });
     await waitFor(() => expect(screen.getByText("¿Cómo va Local Espinopapa?")).toBeTruthy());
     expect(mocks.fetchThread).toHaveBeenCalledTimes(1);
@@ -255,11 +330,11 @@ describe("/asistente history", () => {
     await renderPage();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Comparar cotizaciones de cancelería/ }));
+      fireEvent.click(within(rail()).getByRole("link", { name: /^Comparar cotizaciones de cancelería/ }));
     });
 
     await waitFor(() => expect(screen.getByText("Ya no existe. Recarga la página.")).toBeTruthy());
-    expect(screen.queryByText("Comparar cotizaciones de cancelería")).toBeNull();
+    expect(within(rail()).queryByText("Comparar cotizaciones de cancelería")).toBeNull();
   });
 
   it("Nueva conversación clears ?thread= and the store thread", async () => {
@@ -271,7 +346,8 @@ describe("/asistente history", () => {
 
     expect(replaceState).toHaveBeenLastCalledWith(window.history.state, "", "/asistente");
     expect(useAssistantUi.getState().threadId).toBeNull();
-    expect(screen.getByText("Prueba con una de estas preguntas:")).toBeTruthy();
+    expect(within(log()).getByText(EMPTY_TEXT)).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText("Mensaje al asistente"));
   });
 });
 
@@ -310,12 +386,15 @@ describe("/asistente finished turn", () => {
   });
 });
 
-describe("/asistente Herramientas panel", () => {
-  it("a tool button puts its starter prompt in the composer without sending", async () => {
+describe("/asistente starters", () => {
+  it("Más ideas puts a starter prompt in the composer without sending", async () => {
     await renderPage();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Cuantificación/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Más ideas/ }));
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^Cuantificación/ }));
     });
 
     const composer = screen.getByLabelText("Mensaje al asistente") as HTMLTextAreaElement;
@@ -323,10 +402,24 @@ describe("/asistente Herramientas panel", () => {
     expect(mocks.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("draws the Cutto group with its buttons disabled", async () => {
+  it("a suggestion card sends its text right away", async () => {
     await renderPage();
 
-    const cutto = screen.getByRole("region", { name: "Cutto" });
+    const [first] = screen.getAllByRole("button", { name: /^Enviar sugerencia: / });
+    await act(async () => {
+      fireEvent.click(first!);
+    });
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ text: "¿Qué entregas vencen esta semana?" }));
+  });
+
+  it("draws the Cutto group with its buttons disabled", async () => {
+    await renderPage();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Más ideas/ }));
+    });
+
+    const cutto = await screen.findByRole("region", { name: "Cutto" });
     const buttons = within(cutto).getAllByRole("button");
     expect(buttons.length).toBeGreaterThan(0);
     for (const button of buttons) {

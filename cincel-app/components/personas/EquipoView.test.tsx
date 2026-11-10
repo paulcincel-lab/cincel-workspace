@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({
   drawer: null as null | { show: boolean; positionOptions: unknown[]; canRecheckAccess: boolean; onSave(): void },
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() },
+  params: new URLSearchParams(),
   fetchPositionsAction: vi.fn(async () => [{ id: "p1", name: "Residente", active: true, phases: [] }]),
   getPersonasEquipoPageData: vi.fn(),
   getPersonasCountsAction: vi.fn(),
@@ -19,7 +20,7 @@ const m = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => m.router,
   usePathname: () => "/personas",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => m.params,
 }));
 vi.mock("@/lib/actions/preferences-actions", () => ({
   fetchMyPreferencesAction: vi.fn(),
@@ -38,9 +39,15 @@ vi.mock("@/components/equipo/MemberEditorDrawer", () => ({
     return null;
   },
 }));
-vi.mock("@/components/personas/TeamGrid", () => ({ TeamGrid: () => <div data-testid="team-grid" /> }));
+vi.mock("@/components/personas/TeamGrid", () => ({
+  TeamGrid: () => <div data-testid="team-grid" />,
+  TeamMemberActions: () => null,
+}));
+vi.mock("@/components/widgets/PeopleLoadBoard", () => ({ PeopleLoadBoard: () => <div data-testid="load-board" /> }));
+vi.mock("@/components/personas/EquipoAnalitico", () => ({ EquipoAnalitico: () => <div data-testid="equipo-analitico" /> }));
 vi.mock("@/components/personas/AvailabilityWeek", () => ({ AvailabilityWeek: () => null }));
 
+import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { resetSessionStoreForTests } from "@/lib/stores/session-store";
@@ -58,6 +65,7 @@ beforeEach(() => {
   m.getPersonasEquipoPageData.mockReset();
   m.getPersonasCountsAction.mockReset();
   m.router.refresh.mockReset();
+  m.params = new URLSearchParams();
 });
 
 afterEach(cleanup);
@@ -65,20 +73,20 @@ afterEach(cleanup);
 describe("EquipoView", () => {
   it("reads the signed-in user from the session store (Administrador: recheck and puestos link)", () => {
     seedSessionUser({ member: { id: "s-admin", name: "Ana" }, access: "Administrador" });
-    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate />);
+    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />);
     expect(screen.getByRole("button", { name: "Agregar persona" })).toBeTruthy();
     expect(m.drawer!.canRecheckAccess).toBe(true);
   });
 
   it("gives a Colaborador session no Administrador controls", () => {
     seedSessionUser({ member: { id: "s-colab", name: "Bruno" }, access: "Colaborador" });
-    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate />);
+    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />);
     expect(m.drawer!.canRecheckAccess).toBe(false);
   });
 
   it("reads the puestos catalog only while the editor is open", async () => {
     seedSessionUser({ member: { id: "s-admin", name: "Ana" }, access: "Administrador" });
-    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate />);
+    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />);
     expect(m.drawer!.show).toBe(false);
     expect(m.fetchPositionsAction).not.toHaveBeenCalled();
 
@@ -90,7 +98,7 @@ describe("EquipoView", () => {
 
   it("never refreshes the router", () => {
     seedSessionUser({ member: { id: "s-admin", name: "Ana" }, access: "Administrador" });
-    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate />);
+    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />);
     fireEvent.click(screen.getByRole("button", { name: "Agregar persona" }));
     act(() => m.drawer!.onSave());
     expect(m.router.refresh).not.toHaveBeenCalled();
@@ -104,8 +112,30 @@ describe("PersonasEquipoScreen", () => {
     client.setQueryData(qk.personas.equipo(), { people: PEOPLE, emails: {}, canCreate: false });
     client.setQueryData(qk.personas.counts(), PERSONAS_COUNTS);
     renderWithQueryClient(<PersonasEquipoScreen />, { client });
-    expect(screen.getByTestId("team-grid")).toBeTruthy();
+    expect(screen.getByTestId("load-board")).toBeTruthy();
     expect(m.getPersonasEquipoPageData).not.toHaveBeenCalled();
     expect(m.getPersonasCountsAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("EquipoView styles", () => {
+  it("renders the Visual load board with its description by default", () => {
+    seedSessionUser({ member: { id: "s-admin", name: "Ana" }, access: "Administrador" });
+    renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />);
+    expect(screen.getByTestId("load-board")).toBeTruthy();
+    expect(screen.getByText("El equipo de un vistazo: carga, tramos y quién sale de vacaciones.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Tabla" })).toBeNull();
+  });
+
+  it("keeps the ?estilo= override: ?estilo=analitico renders the Analítico body", () => {
+    seedSessionUser({ member: { id: "s-admin", name: "Ana" }, access: "Administrador" });
+    m.params = new URLSearchParams("estilo=analitico");
+    renderWithQueryClient(
+      <StyleProvider style="visual" scope="staff">
+        <EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />
+      </StyleProvider>,
+    );
+    expect(screen.getByTestId("equipo-analitico")).toBeTruthy();
+    expect(screen.queryByTestId("load-board")).toBeNull();
   });
 });

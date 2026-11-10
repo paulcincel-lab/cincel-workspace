@@ -24,12 +24,27 @@ vi.mock("@/lib/auth/session", () => ({
 const loaders = vi.hoisted(() => ({
   loadProyectoResumen: vi.fn(async () => state.resumen),
   loadProyectoShell: vi.fn(async () => state.shell),
+  loadProyectoTareas: vi.fn(async () => ({ tasks: [{ id: "t1" }], includeAdmin: true })),
+  loadProyectoHistory: vi.fn(async () => ({ events: [{ id: "h1" }], nextCursor: null })),
 }));
-vi.mock("@/lib/loaders/proyectos", () => ({ loadProyectoResumen: loaders.loadProyectoResumen }));
+vi.mock("@/lib/loaders/proyectos", () => ({
+  loadProyectoResumen: loaders.loadProyectoResumen,
+  loadProyectoTareas: loaders.loadProyectoTareas,
+  loadProyectoHistory: loaders.loadProyectoHistory,
+}));
 vi.mock("@/lib/loaders/proyectos-shell", () => ({ loadProyectoShell: loaders.loadProyectoShell }));
 // The client query functions: the first render must never need them.
-const actions = vi.hoisted(() => ({ getProyectoResumenData: vi.fn(), getProyectoShell: vi.fn() }));
-vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectoResumenData: actions.getProyectoResumenData }));
+const actions = vi.hoisted(() => ({
+  getProyectoResumenData: vi.fn(),
+  getProyectoTareasData: vi.fn(),
+  getProyectoHistoryPage: vi.fn(),
+  getProyectoShell: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
+  getProyectoResumenData: actions.getProyectoResumenData,
+  getProyectoTareasData: actions.getProyectoTareasData,
+  getProyectoHistoryPage: actions.getProyectoHistoryPage,
+}));
 vi.mock("@/lib/actions/page-data/proyectos-shell-actions", () => ({ getProyectoShell: actions.getProyectoShell }));
 vi.mock("@/components/proyectos/ProjectTabs", () => ({
   ProjectTabs: (props: {
@@ -53,8 +68,19 @@ vi.mock("@/components/proyectos/ProjectSummary", async () => {
   const { qk } = await import("@/lib/query/keys");
   return {
     ProjectSummary: ({ projectId }: { projectId: string }) => {
-      const data = useQueryClient().getQueryData<{ project: { name: string } } | null>(qk.proyectos.resumen(projectId));
-      return <div data-testid="summary">{data?.project.name ?? "empty"}</div>;
+      const client = useQueryClient();
+      const data = client.getQueryData<{ project: { name: string } } | null>(qk.proyectos.resumen(projectId));
+      const tareas = client.getQueryData<{ tasks: { id: string }[] } | null>(qk.proyectos.tab(projectId, "tareas"));
+      const history = client.getQueryData<{ pages: { events: { id: string }[] }[] }>(qk.proyectos.history(projectId));
+      return (
+        <div
+          data-testid="summary"
+          data-tasks={tareas?.tasks.map((t) => t.id).join(",") ?? ""}
+          data-events={history?.pages[0]?.events.map((e) => e.id).join(",") ?? ""}
+        >
+          {data?.project.name ?? "empty"}
+        </div>
+      );
     },
   };
 });
@@ -96,13 +122,22 @@ describe("/proyectos/[id]", () => {
     expect(screen.getByTestId("summary").textContent).toBe("Local Espinopapa");
   });
 
-  it("makes 1 shell call and 1 Resumen call, both through the loaders, and 0 client action calls", async () => {
+  it("prefetches four keys (shell, Resumen, task list, history) through the loaders, with 0 client action calls", async () => {
     await renderPage();
     expect(loaders.loadProyectoShell).toHaveBeenCalledTimes(1);
     expect(loaders.loadProyectoShell).toHaveBeenCalledWith(state.user, { id: PID });
     expect(loaders.loadProyectoResumen).toHaveBeenCalledTimes(1);
     expect(loaders.loadProyectoResumen).toHaveBeenCalledWith(state.user, { id: PID });
+    expect(loaders.loadProyectoTareas).toHaveBeenCalledTimes(1);
+    expect(loaders.loadProyectoTareas).toHaveBeenCalledWith(state.user, { id: PID });
+    expect(loaders.loadProyectoHistory).toHaveBeenCalledTimes(1);
+    expect(loaders.loadProyectoHistory).toHaveBeenCalledWith(state.user, { id: PID, cursor: null });
+    // The hydrated cache answers the Visual's task list and "Actividad reciente".
+    expect(screen.getByTestId("summary").getAttribute("data-tasks")).toBe("t1");
+    expect(screen.getByTestId("summary").getAttribute("data-events")).toBe("h1");
     expect(actions.getProyectoResumenData).not.toHaveBeenCalled();
+    expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+    expect(actions.getProyectoHistoryPage).not.toHaveBeenCalled();
     expect(actions.getProyectoShell).not.toHaveBeenCalled();
   });
 
@@ -124,6 +159,7 @@ describe("/proyectos/[id]", () => {
     expect(screen.getByRole("heading", { name: "Proyecto no encontrado" })).toBeTruthy();
     expect(loaders.loadProyectoResumen).not.toHaveBeenCalled();
     expect(loaders.loadProyectoShell).not.toHaveBeenCalled();
+    expect(loaders.loadProyectoTareas).not.toHaveBeenCalled();
   });
 
   it("asks to sign in without a session", async () => {

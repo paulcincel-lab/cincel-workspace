@@ -3,6 +3,7 @@
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
 import { StyleView } from "@/components/widgets/StyleView";
+import { statusTone } from "@/components/widgets/esencial-tokens";
 import { statusColorToken, taskStatusLabel, type StatusColorToken } from "@/lib/tasks/status-options";
 import type { TaskStatusRef } from "@/lib/types/redesign";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
  * `components/v2/status/StatusBadge` `{ label, token }`. Visual renders the
  * tinted chip; Esencial and Analítico render the label as plain text (§15.2).
  * `status: null` renders `emptyText`; `loading` renders the list skeleton.
+ * `variant="dot"` renders dot + ink label in every style (`statusTone`).
  */
 export type StatusChipProps = {
   status: TaskStatusRef | null;
@@ -19,6 +21,11 @@ export type StatusChipProps = {
   /** Shown when there is no status. */
   emptyText?: string;
   loading?: boolean;
+  /**
+   * `auto` (default): the per-style rendering above. `dot`: a 7 px status dot
+   * and the label in the status ink, the same in every style (Esencial rows).
+   */
+  variant?: "auto" | "dot";
 };
 
 export const STATUS_CHIP_EMPTY_TEXT = "Sin estatus";
@@ -28,7 +35,13 @@ export function statusChipModel(status: TaskStatusRef): { label: string; token: 
   return { label: taskStatusLabel(status), token: statusColorToken(status) };
 }
 
-export function StatusChip({ status, size = "sm", emptyText = STATUS_CHIP_EMPTY_TEXT, loading = false }: StatusChipProps) {
+export function StatusChip({
+  status,
+  size = "sm",
+  emptyText = STATUS_CHIP_EMPTY_TEXT,
+  loading = false,
+  variant = "auto",
+}: StatusChipProps) {
   if (loading) return <LoadingSkeleton variant="list" rows={1} />;
   if (!status) {
     return (
@@ -38,6 +51,21 @@ export function StatusChip({ status, size = "sm", emptyText = STATUS_CHIP_EMPTY_
     );
   }
   const { label, token } = statusChipModel(status);
+  if (variant === "dot") {
+    const tone = statusTone(status);
+    return (
+      <span
+        data-slot="status-chip"
+        data-token={token}
+        data-variant="dot"
+        className={cn("inline-flex items-center gap-1.5 font-medium whitespace-nowrap", size === "md" && "text-sm")}
+        style={{ color: tone.ink }}
+      >
+        <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full" style={{ backgroundColor: tone.dot }} />
+        {label}
+      </span>
+    );
+  }
   const text = (
     <span data-slot="status-chip" data-token={token} className={cn(size === "md" && "text-sm")}>
       {label}

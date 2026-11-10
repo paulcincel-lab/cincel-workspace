@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/proyectos/p1" }));
 // Custom permission overrides live in localStorage; stub it so the tests use the default matrix.
@@ -18,9 +18,10 @@ vi.mock("@/components/widgets/TramoBadge", () => ({
 }));
 
 import type { SessionAccess } from "@/lib/auth/session";
+import { resetNewTaskUi, useNewTaskUi } from "@/lib/stores/new-task-store";
 import { useSessionStore } from "@/lib/stores/session-store";
 
-import { ProjectTabs, type ProjectTabsProps, newTaskHref, reportHref } from "./ProjectTabs";
+import { ProjectTabs, type ProjectTabsProps, newTaskHref, projectDescription, reportHref } from "./ProjectTabs";
 
 const PROJECT: ProjectTabsProps["project"] = {
   id: "p1",
@@ -48,6 +49,7 @@ function tab(label: string): HTMLAnchorElement | null {
 afterEach(() => {
   cleanup();
   useSessionStore.setState({ access: { status: "guest", user: null } });
+  resetNewTaskUi();
 });
 
 describe("ProjectTabs", () => {
@@ -85,22 +87,39 @@ describe("ProjectTabs", () => {
     expect(tab("Resumen")?.getAttribute("aria-current")).toBeNull();
   });
 
-  it("renders the header: breadcrumb, name, tramo chip, meta line and actions", () => {
-    renderTabs();
+  it("renders the header: back link, name, description and «Nueva tarea» with create permission", () => {
+    useSessionStore.setState({
+      access: {
+        status: "active",
+        user: { id: "s1", name: "Ana", email: "ana@example.test", role: "Administrador", area: null, active: true, access: "Administrador" },
+      } as unknown as SessionAccess,
+    });
+    renderTabs({ project: { ...PROJECT, clientName: "Grupo Espinopapa", endDate: "2027-04-30" } });
     expect(screen.getByRole("heading", { level: 1, name: "Local Espinopapa" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Proyectos" }).getAttribute("href")).toBe("/proyectos");
-    expect(screen.getByTestId("tramo-chip").textContent).toBe("Construcción");
-    expect(screen.getByText("Local comercial · CDMX · Responsable: Paul Langarica")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Reporte" }).getAttribute("href")).toBe(reportHref("p1"));
-    expect(screen.getByRole("link", { name: "Nueva tarea" }).getAttribute("href")).toBe(newTaskHref("p1"));
+    expect(screen.getByRole("link", { name: "← Proyectos" }).getAttribute("href")).toBe("/proyectos");
+    expect(screen.getByText(/Grupo Espinopapa/).closest("p")?.textContent).toBe(
+      "Grupo Espinopapa · CDMX · entrega final 30 abr 2027",
+    );
+    const create = screen.getByRole("button", { name: "Nueva tarea" });
+    act(() => create.click());
+    expect(useNewTaskUi.getState().open).toBe(true);
+    expect(useNewTaskUi.getState().defaults).toMatchObject({ projectId: "p1" });
     expect(reportHref("p1")).toBe("/proyectos/p1/cronograma/reporte");
     expect(newTaskHref("p1")).toBe("/tareas?proyecto=p1&nueva=1");
   });
 
-  it("leaves out the meta line and chip when the project has neither", () => {
+  it("hides «Nueva tarea» without create permission and leaves out missing description parts", () => {
     renderTabs({ project: { id: "p1", name: "Sin datos", tramo: null } });
-    expect(screen.queryByTestId("tramo-chip")).toBeNull();
-    expect(screen.queryByText(/Responsable:/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Nueva tarea" })).toBeNull();
+    expect(screen.queryByText(/entrega final/)).toBeNull();
+    expect(projectDescription({ clientName: null, addressCity: "CDMX", endDate: null }).map((p) => p.text)).toEqual(["CDMX"]);
+  });
+
+  it("keeps the ?estilo= override on the back link", () => {
+    window.history.replaceState(null, "", "/proyectos/p1?estilo=visual");
+    renderTabs();
+    expect(screen.getByRole("link", { name: "← Proyectos" }).getAttribute("href")).toBe("/proyectos?estilo=visual");
+    window.history.replaceState(null, "", "/");
   });
 
   it("renders EstiloSwitch only when asked", () => {

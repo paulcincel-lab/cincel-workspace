@@ -76,6 +76,27 @@ describe("themesCss()", () => {
     expect(light.radius).toBe(`${THEME_PRESETS.azul.shape.radius / 16}rem`);
   });
 
+  it("generated block includes the new tokens", () => {
+    const light = varsOf(ruleBody(generated, ":root {"));
+    const dark = varsOf(ruleBody(generated, ':root[data-theme="dark"] {'));
+    const added = [
+      "tint-primary",
+      "tint-violet",
+      "tint-warning",
+      "tint-cyan",
+      "tint-destructive",
+      "tint-success",
+      "destructive-ink",
+      "foreground-soft",
+    ] as const;
+    for (const name of added) {
+      expect(light[name], name).toBe(THEME_PRESETS.azul.tokens[name].light);
+      expect(dark[name], name).toBe(THEME_PRESETS.azul.tokens[name].dark);
+    }
+    expect(light["tint-primary"]).toBe("#dbeafe");
+    expect(dark["foreground-soft"]).toBe("#c3c9d2");
+  });
+
   it("generates from another preset when asked", () => {
     expect(varsOf(ruleBody(themesCss(THEME_PRESETS.calido), ":root {")).background).toBe("#f7f5f2");
   });

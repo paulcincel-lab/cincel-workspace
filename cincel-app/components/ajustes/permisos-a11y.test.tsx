@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 
 import { buildDefaultPermissionsState, getEnabledModuleNames } from "@/lib/auth/permissionsState";
@@ -12,8 +12,6 @@ import { THEME_IDS } from "@/lib/ui/themes";
 const pageData = vi.hoisted(() => ({ getAjustesPermisosPageData: vi.fn() }));
 vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
 
-vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
-vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
 import { PermisosSettings, peopleSummary } from "./PermisosSettings";
 
@@ -82,26 +80,40 @@ describe("Ajustes › Permisos (read-only, #950)", () => {
     }
   }
 
-  it("lists every access with its people and its default modules", () => {
+  it("shows the matrix with people per access and the default permissions", () => {
     renderPage();
 
-    const people = screen.getByRole("region", { name: "Personas por acceso" });
-    expect(within(people).getByRole("group", { name: "Administrador" })).toBeTruthy();
-    expect(within(people).getByText(/María, Luis, Sofía y 1 más/)).toBeTruthy();
-    expect(within(people).getByText("4 personas")).toBeTruthy();
-    const firstModule = getEnabledModuleNames(DEFAULTS["Colaborador"])[0];
-    if (firstModule) expect(within(people).getAllByText(new RegExp(`Módulos: .*${firstModule}`)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Cada rol usa los permisos por defecto/)).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain("Próximamente: permisos aplicados en el servidor.");
+    const section = screen.getByRole("region", { name: "Permisos por acceso" });
+    const table = within(section).getByRole("table", { name: "Permisos por acceso" });
+    const peopleRow = within(table).getByRole("rowheader", { name: "Personas por acceso" }).closest("tr")!;
+    const cells = within(peopleRow).getAllByRole("cell").map((cell) => cell.textContent);
+    // Administrador first, Colaborador's four people.
+    expect(cells[0]).toBe("1");
+    expect(cells).toContain("4");
+    expect(within(section).getByText("Admin tiene acceso completo y no se puede editar.")).toBeTruthy();
   });
 
-  it("has no editor: no Configurar, Guardar cambios, Restaurar or permission controls", () => {
+  it("expands a module into its capabilities", () => {
     renderPage();
+    const toggle = screen.getAllByRole("button", { expanded: false })[0]!;
+    const moduleName = toggle.textContent ?? "";
+    expect(moduleName).toMatch(/capacidad/);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const firstModule = getEnabledModuleNames(DEFAULTS["Administrador"])[0];
+    expect(firstModule).toBeTruthy();
+    expect(screen.getAllByText("Puede").length).toBeGreaterThan(0);
+  });
+
+  it("has no editor: saving is disabled and there are no permission controls", () => {
+    renderPage();
+    expect((screen.getByRole("button", { name: "Guardar permisos" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Descartar" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: /Configurar/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Guardar cambios" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Restaurar permisos por defecto" })).toBeNull();
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.queryByRole("region", { name: /^Permisos de / })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
   it("removes the browser-only matrix once on mount", () => {

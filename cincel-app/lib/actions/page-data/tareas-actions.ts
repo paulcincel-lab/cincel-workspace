@@ -3,11 +3,23 @@
 import {
   loadTareasBoard,
   loadTareasBoardColumn,
+  loadTareasByProject,
   loadTareasFacets,
   loadTareasListPage,
   loadTareasPage,
+  loadTareasSummary,
+  loadTareasTrend,
 } from "@/lib/loaders/tareas";
-import type { TareasBoardColumn, TareasBoardData, TareasFacets, TareasPageData, TareasRowsPage } from "@/lib/tareas/page-data";
+import type { TareasSummary } from "@/lib/tareas/summary";
+import type {
+  TareasBoardColumn,
+  TareasByProject,
+  TareasBoardData,
+  TareasFacets,
+  TareasPageData,
+  TareasRowsPage,
+  TareasTrend,
+} from "@/lib/tareas/page-data";
 import {
   TareasBoardColumnInput,
   TareasFiltersInput,
@@ -21,7 +33,7 @@ import { requireCapabilityUser } from "@/lib/auth/session";
 import { loadTareasCalendar, loadTareasStartSlot, loadTaskSheet, searchProjectTasks } from "@/lib/loaders/tareas";
 import type { TareasStartSlotData } from "@/lib/types/tareas-start-slot";
 import type { TaskSheetData } from "@/lib/types/task-sheet";
-import { TAREAS_SEARCH_MAX } from "@/lib/tareas/query";
+import { TAREAS_MOSTRAR, TAREAS_SEARCH_MAX } from "@/lib/tareas/query";
 import type { TaskListRow, TaskRef } from "@/lib/types/core";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
@@ -42,9 +54,10 @@ const TareasListFiltersInput = z.object({
     .regex(/^[A-Za-z0-9_-]{1,64}$/)
     .nullable(),
   proyecto: UuidSchema.nullable(),
-  responsable: z.union([z.literal("yo"), UuidSchema]).nullable(),
+  responsable: z.union([z.literal("yo"), z.literal("todos"), UuidSchema]).nullable(),
   estado: z.enum(["pendiente", "en_proceso", "completado", "bloqueado"]).nullable(),
   q: z.string().max(TAREAS_SEARCH_MAX).nullable(),
+  mostrar: z.enum(TAREAS_MOSTRAR).optional(),
 });
 
 const TareasCalendarInput = z
@@ -158,4 +171,40 @@ export async function getTareasBoard(input: z.input<typeof TareasFiltersInput>):
 export async function getTareasFacets(input: z.input<typeof TareasFiltersInput>): Promise<TareasFacets> {
   const parsed = parseInput(TareasFiltersInput, input);
   return loadTareasFacets(await requireCapabilityUser(), parsed);
+}
+
+// ── Visual summary (Estilos, #986) ───────────────────────────────────────────
+
+/**
+ * `qk.tareas.trend(f)`: the Tareas Visual KPI tiles (7-day series, deltas),
+ * the people with a task en proceso and the tasks due per day of the week.
+ * FORBIDDEN without Tareas. Read-only.
+ */
+export async function getTareasTrend(input: z.input<typeof TareasFiltersInput>): Promise<TareasTrend> {
+  const parsed = parseInput(TareasFiltersInput, input);
+  return loadTareasTrend(await requireCapabilityUser(), parsed);
+}
+
+// ── Esencial (Estilos, #987) ─────────────────────────────────────────────────
+
+/**
+ * `qk.tareas.byProject(f)`: the Tareas Esencial cards (counts per project and
+ * the open rows, at most 200). The filters come resolved (a null responsable
+ * is everyone). FORBIDDEN without Tareas. Read-only.
+ */
+export async function getTareasByProject(input: z.input<typeof TareasFiltersInput>): Promise<TareasByProject> {
+  const parsed = parseInput(TareasFiltersInput, input);
+  return loadTareasByProject(await requireCapabilityUser(), parsed);
+}
+
+// ── Analítico summary (Estilos, #988) ────────────────────────────────────────
+
+/**
+ * `qk.tareas.summary(f)`: the Tareas Analítico counts per project and tramo,
+ * per project and in total (one grouping-sets query), plus the same filters
+ * without `mostrar`. FORBIDDEN without Tareas. Read-only.
+ */
+export async function getTareasSummary(input: z.input<typeof TareasFiltersInput>): Promise<TareasSummary> {
+  const parsed = parseInput(TareasFiltersInput, input);
+  return loadTareasSummary(await requireCapabilityUser(), parsed);
 }

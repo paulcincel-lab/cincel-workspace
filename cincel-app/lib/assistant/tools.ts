@@ -161,11 +161,17 @@ export const list_activities_due = tool({
     });
 
     return rows.slice(0, 80).map((t: TaskListItem) => ({
+      id: t.id,
+      projectId: t.project.id,
       description: t.title,
       project: t.project.name,
       workflow: t.workflow?.name ?? null,
+      // Tramo identity for the tramo color (`tramoColorSlot`) of the Analítico data panel.
+      workflowKey: t.workflow?.key ?? null,
+      workflowSortOrder: t.workflow?.sortOrder ?? null,
       phase: t.phase?.name ?? null,
       status: t.status,
+      blocked: t.status === "bloqueado",
       priority: t.priority,
       commitmentDate: t.commitmentDate,
       reviewDate: t.reviewDate,
@@ -174,18 +180,37 @@ export const list_activities_due = tool({
   },
 });
 
+/** The tramo with the most open tasks (first one met on a tie); null without any. */
+function mainWorkflowOf(tramos: Map<string, number> | undefined): string | null {
+  let best: string | null = null;
+  let most = 0;
+  for (const [name, count] of tramos ?? []) {
+    if (count > most) {
+      best = name;
+      most = count;
+    }
+  }
+  return best;
+}
+
 export const team_workload_summary = tool({
   description:
-    "Resumen de carga del equipo: por colaborador activo, su rol, capacidad, número de tareas activas asignadas y porcentaje de ocupación estimado. Útil para ver quién está saturado.",
+    "Resumen de carga del equipo: por colaborador activo, su rol, capacidad, número de tareas activas asignadas, porcentaje de ocupación estimado y su tramo principal (el de más tareas abiertas). Útil para ver quién está saturado.",
   inputSchema: z.object({}),
   execute: async () => {
     const members = await fetchStaffAction();
     const openTasks = await listViewerTasks({ status: ["pendiente", "en_proceso", "bloqueado"] });
 
     const byManager = new Map<string, number>();
+    // Open tasks per person and tramo: the tramo with the most is the person's `mainWorkflow`.
+    const tramosByManager = new Map<string, Map<string, number>>();
     for (const t of openTasks) {
       if (!t.manager) continue;
       byManager.set(t.manager.id, (byManager.get(t.manager.id) ?? 0) + 1);
+      if (!t.workflow) continue;
+      const tramos = tramosByManager.get(t.manager.id) ?? new Map<string, number>();
+      tramos.set(t.workflow.name, (tramos.get(t.workflow.name) ?? 0) + 1);
+      tramosByManager.set(t.manager.id, tramos);
     }
 
     return members.slice(0, 100).map((m) => {
@@ -200,6 +225,7 @@ export const team_workload_summary = tool({
         capacity: m.capacity,
         activeTasks,
         occupancyPct: Math.round((activeTasks / cap) * 100),
+        mainWorkflow: mainWorkflowOf(tramosByManager.get(m.id)),
       };
     });
   },

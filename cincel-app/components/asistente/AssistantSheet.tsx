@@ -12,6 +12,7 @@ import {
 import { ArrowUpIcon, HistoryIcon, Maximize2Icon, MicIcon, PaperclipIcon, XIcon } from "lucide-react";
 
 import { AssistantMessageParts } from "@/components/asistente/AssistantMessageParts";
+import { ToolStepsLiveRegion } from "@/components/widgets/ToolSteps";
 import { AssistantContextStore, createAssistantChatTransport } from "@/components/asistente/assistant-transport";
 import { useAssistantTurnFinished } from "@/components/asistente/use-asistente-cache";
 import { useConfirmedContext } from "@/components/asistente/use-confirmed-context";
@@ -118,7 +119,7 @@ function focusComposerAtEnd(el: HTMLTextAreaElement | null, length: number): voi
 }
 
 /**
- * Assistant sheet (redesign FE §3.9, §4.9): the `AssistantChat` conversation
+ * Assistant sheet (redesign FE §3.9, §4.9): the `/asistente` page conversation
  * (same `useChat`, same message rendering) in a right `Sheet`, 460 px,
  * radius 18, inset 12 px. Sends the client-generated thread id and only the
  * new message or the approval responses, plus the page context.
@@ -410,7 +411,11 @@ function SheetConversation({ threadId, seedMessages, openingError, context, onTu
             <AssistantMessageParts
               message={message}
               userBubble="ink"
-              onToolApproval={(approvalId, approved) => addToolApprovalResponse({ id: approvalId, approved })}
+              stepsVariant="compact"
+              onToolApproval={(approvalIds, approved, reason) => {
+                for (const id of approvalIds) void addToolApprovalResponse({ id, approved, reason });
+              }}
+              onEditDraft={applyPrompt}
             />
           </div>
         ))}
@@ -418,6 +423,7 @@ function SheetConversation({ threadId, seedMessages, openingError, context, onTu
         {status === "submitted" ? <p className="text-sm text-muted-foreground">Pensando…</p> : null}
         <div ref={endRef} />
       </div>
+      <ToolStepsLiveRegion messages={messages} />
 
       <div className="flex flex-col gap-3 border-t px-4 py-3">
         {error ? (

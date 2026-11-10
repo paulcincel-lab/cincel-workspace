@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { core, historyEntity, historyEventKind, soft, stamps } from "./_schema";
 import { staff } from "./people";
+import { projects } from "./projects";
 
 /** The one audit log; append-only (Part C.5, rule 8). */
 export const historyEvents = core.table(
@@ -50,6 +51,8 @@ export const driveFiles = core.table("drive_files", {
   iconLink: text("icon_link"),
   thumbnailLink: text("thumbnail_link"),
   webViewLink: text("web_view_link"),
+  /** Bytes reported by Drive (`size`); null for Google-native documents and folders. */
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
   syncedAt: timestamp("synced_at", { withTimezone: true }),
   ...stamps,
 });
@@ -74,6 +77,8 @@ export const resourceLinks = core.table(
     driveFileId: uuid("drive_file_id").references(() => driveFiles.id, {
       onDelete: "set null",
     }),
+    /** The project a document belongs to (Biblioteca Analítico level 2); null = General (sin proyecto). */
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
     sortOrder: integer("sort_order").notNull().default(0),
     ...stamps,
     ...soft,
@@ -100,6 +105,31 @@ export const resourceLinks = core.table(
     index("idx_resource_links_status").on(t.status),
     index("idx_resource_links_owner_id").on(t.ownerId),
     index("idx_resource_links_personal_for_id").on(t.personalForId),
+    index("idx_resource_links_project_id").on(t.projectId),
+  ]
+);
+
+/**
+ * One row per time a staff member opened a resource link (Biblioteca
+ * Analítico "Aperturas 30 d"), at most one per (staff, link) every 10
+ * minutes. Read only as counts; who opened a document is never shown.
+ * Rows older than 13 months are pruned.
+ */
+export const resourceLinkOpens = core.table(
+  "resource_link_opens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    resourceLinkId: uuid("resource_link_id")
+      .notNull()
+      .references(() => resourceLinks.id, { onDelete: "cascade" }),
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staff.id, { onDelete: "cascade" }),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_resource_link_opens_link_at").on(t.resourceLinkId, t.openedAt),
+    index("idx_resource_link_opens_staff_at").on(t.staffId, t.openedAt),
   ]
 );
 
@@ -147,6 +177,10 @@ export const resourceLinksRelations = relations(resourceLinks, ({ one }) => ({
   driveFile: one(driveFiles, {
     fields: [resourceLinks.driveFileId],
     references: [driveFiles.id],
+  }),
+  project: one(projects, {
+    fields: [resourceLinks.projectId],
+    references: [projects.id],
   }),
 }));
 

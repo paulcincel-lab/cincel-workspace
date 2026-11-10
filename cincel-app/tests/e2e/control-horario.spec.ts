@@ -1,7 +1,7 @@
 /**
  * E2E: Control de horario (redesign Phase 6; FE §3.8, §3.10, §3.13; BE §7.7).
  *
- * The admin turns it on in Ajustes › Control de horario ("Guardar cambios"). A staff member then signs
+ * The admin turns it on in Ajustes › Control de horario ("En prueba", then "Guardar cambios"). A staff member then signs
  * in: the optional login prompt closes with "Ahora no", and the sidebar `TimeClock` walks
  * Registrar entrada → Pausa → Reanudar → Salida; the entry is stored closed by the user with one pause.
  *
@@ -26,8 +26,8 @@ import {
 } from "./helpers/redesign";
 
 const SETTINGS_KEY = "time_tracking";
-/** The switch's accessible name (`aria-label` in `HorarioControl`). */
-const SWITCH_NAME = "Activar control de horario";
+/** The mode cards' radiogroup (`HorarioControl`): Desactivado · En prueba · Obligatorio. */
+const MODES_NAME = "Control de horario";
 const PROMPT_COPY = "Registra tu entrada para empezar el día.";
 
 type EntryRow = { source: string; ended: boolean; closedBy: string | null; pauses: number };
@@ -59,8 +59,11 @@ async function workerSession(browser: Browser, worker: E2EUser) {
 
 async function openHorario(page: Page): Promise<void> {
   await page.goto(`${BASE_URL}/ajustes/horario`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("switch", { name: SWITCH_NAME })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("radiogroup", { name: MODES_NAME })).toBeVisible({ timeout: 30_000 });
 }
+
+const modeRadio = (page: Page, name: "Desactivado" | "En prueba" | "Obligatorio") =>
+  page.getByRole("radiogroup", { name: MODES_NAME }).getByRole("radio", { name: new RegExp(`^${name}`) });
 
 async function saveHorario(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Guardar cambios" }).click();
@@ -92,10 +95,10 @@ test.describe("Control de horario", () => {
   test("the admin turns Control de horario on", async ({ page }) => {
     await loginAsAdmin(page, BASE_URL);
     await openHorario(page);
-    const toggle = page.getByRole("switch", { name: SWITCH_NAME });
-    await expect(toggle).not.toBeChecked();
-    await toggle.click();
-    await expect(toggle).toBeChecked();
+    await expect(modeRadio(page, "Desactivado")).toBeChecked();
+    await modeRadio(page, "En prueba").click();
+    await expect(modeRadio(page, "En prueba")).toBeChecked();
+    await expect(page.getByText("Activado · en prueba")).toBeVisible();
     // Saving is one action POST and no `router.refresh()` (no `_rsc` request).
     let rscRequests = 0;
     page.on("request", (request) => {
@@ -113,15 +116,16 @@ test.describe("Control de horario", () => {
     expect(rscRequests, "_rsc requests after saving").toBe(0);
 
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("switch", { name: SWITCH_NAME })).toBeChecked({ timeout: 30_000 });
+    await expect(modeRadio(page, "En prueba")).toBeChecked({ timeout: 30_000 });
   });
 
   test("the team report changes week with one page-data call and no route refresh", async ({ page }) => {
     await loginAsAdmin(page, BASE_URL);
     await openHorario(page);
     await page.waitForLoadState("networkidle");
-    const report = page.getByRole("region", { name: /Horas del equipo · semana del/ });
-    const titleBefore = await report.getByRole("heading").first().textContent();
+    const report = page.getByRole("region", { name: "Horas del equipo" });
+    const range = report.locator('[data-slot="week-range"]');
+    const titleBefore = await range.textContent();
 
     let actionPosts = 0;
     let rscRequests = 0;
@@ -130,12 +134,12 @@ test.describe("Control de horario", () => {
       else if (request.url().includes("_rsc=")) rscRequests += 1;
     });
     await page.getByRole("button", { name: "Semana anterior" }).click();
-    await expect(report.getByRole("heading").first()).not.toHaveText(titleBefore ?? "", { timeout: 15_000 });
+    await expect(range).not.toHaveText(titleBefore ?? "", { timeout: 15_000 });
     await page.waitForLoadState("networkidle");
     expect(actionPosts, "page-data POSTs for the previous week").toBe(1);
 
     await page.getByRole("button", { name: "Semana siguiente" }).click();
-    await expect(report.getByRole("heading").first()).toHaveText(titleBefore ?? "", { timeout: 15_000 });
+    await expect(range).toHaveText(titleBefore ?? "", { timeout: 15_000 });
     await page.waitForLoadState("networkidle");
     // The current week is still cached.
     expect(actionPosts, "page-data POSTs after coming back").toBe(1);

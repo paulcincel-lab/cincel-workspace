@@ -14,13 +14,16 @@ const caps = vi.hoisted(() => ({
   team: { canViewTeam: true, canCreateCollaborator: true },
   clients: { canViewClients: true, canCreateClient: true, canEditClient: false, canDeleteClient: false },
   admin: false,
+  activities: { canCreateActivity: true, canChangeResponsible: true },
 }));
 
 vi.mock("@/lib/db/client", () => ({ db: {} }));
 vi.mock("@/lib/auth/permissions", () => ({
   resolveTeamCapabilities: vi.fn(() => caps.team),
   resolveClientsCapabilities: vi.fn(() => caps.clients),
+  resolveActivitiesCapabilities: vi.fn(() => caps.activities),
   canViewTeamHours: vi.fn(() => false),
+  canDecideVacations: vi.fn(() => false),
 }));
 vi.mock("@/lib/tramos/compat", () => ({ canSeeAdminData: vi.fn(() => caps.admin) }));
 vi.mock("@/lib/time-tracking/settings", () => ({
@@ -56,6 +59,7 @@ vi.mock("@/lib/repositories/contacts-repository", () => ({
 import { EQUIPO_STAFF, EQUIPO_TRAMOS } from "@/components/personas/fixtures/equipo";
 
 import { loadPersonasContacts, loadPersonasCounts, loadPersonasEquipo } from "./personas";
+import { approvedAbsences } from "@/lib/vacations/approved-absences";
 
 const USER = { member: { id: "s-viewer" }, email: "", access: "Colaborador" } as unknown as AuthenticatedUser;
 
@@ -82,6 +86,7 @@ beforeEach(() => {
   caps.team = { canViewTeam: true, canCreateCollaborator: true };
   caps.clients = { canViewClients: true, canCreateClient: true, canEditClient: false, canDeleteClient: false };
   caps.admin = false;
+  caps.activities = { canCreateActivity: true, canChangeResponsible: true };
   reads.listStaff.mockReset().mockResolvedValue(EQUIPO_STAFF);
   reads.listTramosNav.mockReset().mockResolvedValue(EQUIPO_TRAMOS);
   reads.listAssignedOpenTasks.mockReset().mockResolvedValue(new Map());
@@ -107,6 +112,29 @@ describe("loadPersonasEquipo", () => {
     const data = await loadPersonasEquipo(USER);
     expect(data.people).toHaveLength(3);
     expect(data.people.every((p) => p.open === 0 && p.weekHours === null)).toBe(true);
+  });
+
+  it("resolves canAssign / canCreateTask from the activities capabilities", async () => {
+    expect(await loadPersonasEquipo(USER)).toMatchObject({ canAssign: true, canCreateTask: true });
+    caps.activities = { canCreateActivity: false, canChangeResponsible: false };
+    expect(await loadPersonasEquipo(USER)).toMatchObject({ canAssign: false, canCreateTask: false });
+    caps.activities = { canCreateActivity: true, canChangeResponsible: false };
+    expect(await loadPersonasEquipo(USER)).toMatchObject({ canAssign: false, canCreateTask: true });
+  });
+
+  it("sends 4 weeks and the absences over them, with another person's kind masked", async () => {
+    vi.mocked(approvedAbsences).mockResolvedValueOnce([
+      { staffId: EQUIPO_STAFF[0].id, from: "2000-01-03", to: "2000-01-04", kind: "enfermedad" },
+    ]);
+    const data = await loadPersonasEquipo(USER);
+    const range = vi.mocked(approvedAbsences).mock.calls.at(-1)![1];
+    // This Monday through the Sunday of the fourth week.
+    expect(Date.parse(range.to) - Date.parse(range.from)).toBe(27 * 86_400_000);
+    expect(new Date(`${range.from}T00:00:00Z`).getUTCDay()).toBe(1);
+    const [ana] = data.people;
+    expect(ana.weeks).toHaveLength(4);
+    expect(ana.absences).toEqual([{ from: "2000-01-03", to: "2000-01-04", kind: "ausencia" }]);
+    expect(data.tramos).toEqual(EQUIPO_TRAMOS);
   });
 
   it("refuses a viewer without team.canViewTeam", async () => {

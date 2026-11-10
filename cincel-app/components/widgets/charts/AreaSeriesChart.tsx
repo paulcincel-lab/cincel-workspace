@@ -41,6 +41,7 @@ export default function AreaSeriesChart({ config, rows, series }: AreaSeriesChar
             fill={`var(--color-${s.key})`}
             fillOpacity={s.area ? 0.12 : 0}
             dot={false}
+            isAnimationActive={false}
           />
         ))}
       </AreaChart>

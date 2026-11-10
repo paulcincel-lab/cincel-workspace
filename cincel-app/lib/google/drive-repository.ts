@@ -11,7 +11,7 @@ export type DriveCaller = { staffId: string; email: string; accessToken: string 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const FILE_FIELDS =
-  "id,name,mimeType,iconLink,thumbnailLink,webViewLink,modifiedTime,parents";
+  "id,name,mimeType,iconLink,thumbnailLink,webViewLink,modifiedTime,parents,size";
 
 export type DriveEntry = {
   id: string;
@@ -21,6 +21,8 @@ export type DriveEntry = {
   thumbnailLink: string | null;
   webViewLink: string;
   modifiedTime: string | null;
+  /** Bytes; null for folders and Google-native documents (Drive reports no size). */
+  sizeBytes: number | null;
   isFolder: boolean;
 };
 
@@ -37,6 +39,8 @@ type RawFile = {
   thumbnailLink?: string;
   webViewLink?: string;
   modifiedTime?: string;
+  /** Drive sends the size as a decimal string. */
+  size?: string;
 };
 
 function normalize(raw: RawFile): DriveEntry {
@@ -49,6 +53,7 @@ function normalize(raw: RawFile): DriveEntry {
     thumbnailLink: raw.thumbnailLink ?? null,
     webViewLink: raw.webViewLink ?? driveWebViewLink(raw.id, isFolder),
     modifiedTime: raw.modifiedTime ?? null,
+    sizeBytes: raw.size !== undefined && Number.isFinite(Number(raw.size)) ? Number(raw.size) : null,
     isFolder,
   };
 }

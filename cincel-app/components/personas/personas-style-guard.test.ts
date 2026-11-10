@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -10,14 +10,17 @@ import { describe, expect, it } from "vitest";
 const FILES = [
   "components/personas/PersonasTabs.tsx",
   "components/personas/TeamGrid.tsx",
-  "components/personas/TeamTable.tsx",
+  "components/personas/EquipoAnalitico.tsx",
   "components/personas/AvailabilityWeek.tsx",
-  "components/personas/PersonasViewToggle.tsx",
   "components/personas/EquipoView.tsx",
   "app/(staff)/personas/page.tsx",
 ];
 
 describe("Personas · Equipo style guard", () => {
+  it("the Tarjetas / Tabla toggle is gone (the Estilo replaces it, ADR 0004)", () => {
+    expect(existsSync(resolve(__dirname, "PersonasViewToggle.tsx"))).toBe(false);
+  });
+
   it.each(FILES)("%s renders styles only through the widget library", (file) => {
     const source = readFileSync(resolve(__dirname, "../..", file), "utf8");
     expect(source).not.toMatch(/StyleView/);

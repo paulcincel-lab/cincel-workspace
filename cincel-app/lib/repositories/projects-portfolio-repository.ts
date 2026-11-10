@@ -14,6 +14,7 @@ import { TASK_TREND_TIME_ZONE, localIsoDate } from "@/lib/dashboard/task-trend";
 import { db } from "@/lib/db/client";
 import { projectSchedules, projects, schedulePaymentRows, scheduleTasks, tasks } from "@/lib/db/schema";
 import {
+  addDaysIso,
   daysBetweenIso,
   lastDaysIso,
   portfolioProgressFromCounts,
@@ -97,6 +98,55 @@ function openTasksColumn(includeAdminTasks: boolean, extra?: SQL) {
   )`);
 }
 
+/**
+ * Mean days late (one decimal) of the project's open overdue tasks today:
+ * `today − commitment_date` over open tasks committed before today. Null when
+ * none is overdue. Same admin-task rule as `overdue`.
+ */
+function avgDelayColumn(todayIso: string, includeAdminTasks: boolean) {
+  const kindFilter = includeAdminTasks ? sql`` : sql` and ${tasks.kind} <> 'admin'`;
+  return correlated<string | null>(sql`(
+    select round(avg(${todayIso}::date - ${tasks.commitmentDate})::numeric, 1) from ${tasks}
+    where ${tasks.projectId} = ${projects.id}
+      and ${tasks.deletedAt} is null
+      and ${tasks.archived} = false
+      and ${tasks.status} <> 'completado'
+      and ${tasks.commitmentDate} < ${todayIso}::date${kindFilter}
+  )`);
+}
+
+/**
+ * Overdue tasks as of the end of `dayIso` (a week ago): created before the
+ * day ended, not completed by then (same rule as `loadOpenSeries`) and
+ * committed before that day. Commitment-date edits are not historized, so
+ * the current `commitment_date` is used (an approximation). One JSON column:
+ * the count and the mean days late (null when none).
+ */
+function overdueAsOfColumn(dayIso: string, timeZone: string, includeAdminTasks: boolean) {
+  const kindFilter = includeAdminTasks ? sql`` : sql` and ${tasks.kind} <> 'admin'`;
+  const dayEnd = sql`((${dayIso}::date + 1)::timestamp at time zone ${timeZone})`;
+  return correlated<{ count: number; avgDelay: string | number | null }>(sql`(
+    select json_build_object(
+      'count', count(*)::int,
+      'avgDelay', round(avg(${dayIso}::date - ${tasks.commitmentDate})::numeric, 1)
+    )
+    from ${tasks}
+    where ${tasks.projectId} = ${projects.id}
+      and ${tasks.deletedAt} is null
+      and ${tasks.archived} = false
+      and ${tasks.createdAt} < ${dayEnd}
+      and not (${tasks.status} = 'completado' and (${tasks.closedAt} is null or ${tasks.closedAt} < ${dayEnd}))
+      and ${tasks.commitmentDate} < ${dayIso}::date${kindFilter}
+  )`);
+}
+
+/** A numeric SQL value (string or number) as a number, or null. */
+function numberOrNull(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Open = live, unarchived and not completed (same rule as the Proyectos list counts). */
 function openTaskConditions(projectIds: string[], includeAdminTasks: boolean) {
   return and(
@@ -173,8 +223,8 @@ async function loadOpenSeries(
 /**
  * One `PortfolioRow` per live project (the scope of `listProjects` with no
  * filters), by name; with `projectIds`, only those (deleted ones left out).
- * Three statements: the projects with their open counts and schedule
- * aggregates (progress is computed in SQL, so no schedule task or payment
+ * Three statements: the projects with their open and overdue counts, the
+ * mean delay (today and a week ago) and the schedule aggregates (progress is computed in SQL, so no schedule task or payment
  * row is loaded), the next deliveries and the 7-day series.
  */
 export async function listPortfolioRows(opts: PortfolioOptions): Promise<PortfolioRow[]> {
@@ -183,6 +233,7 @@ export async function listPortfolioRows(opts: PortfolioOptions): Promise<Portfol
   const todayIso = localIsoDate(opts.now, timeZone);
   const weekEndIso = currentWeekEndIso(opts.now);
   const dates = lastDaysIso(todayIso, PORTFOLIO_SERIES_DAYS);
+  const weekAgoIso = addDaysIso(todayIso, -7);
 
   const projectRows = await db
     .select({
@@ -191,6 +242,8 @@ export async function listPortfolioRows(opts: PortfolioOptions): Promise<Portfol
       endDate: projects.endDate,
       open: openTasksColumn(opts.includeAdminData),
       overdue: openTasksColumn(opts.includeAdminData, sql` and ${tasks.commitmentDate} < ${todayIso}::date`),
+      avgDelay: avgDelayColumn(todayIso, opts.includeAdminData),
+      weekAgo: overdueAsOfColumn(weekAgoIso, timeZone, opts.includeAdminData),
       schedule: scheduleCountsColumn(weekEndIso),
       paidPct: paidPctColumn(weekEndIso, opts.includeAdminData),
     })
@@ -222,6 +275,9 @@ export async function listPortfolioRows(opts: PortfolioOptions): Promise<Portfol
       budgetSpentPct: opts.includeAdminData ? progress.budgetSpentPct : null,
       open: Number(p.open ?? 0),
       overdue: Number(p.overdue ?? 0),
+      avgDelayDays: numberOrNull(p.avgDelay),
+      overdueWeekAgo: Number(p.weekAgo?.count ?? 0),
+      avgDelayWeekAgo: numberOrNull(p.weekAgo?.avgDelay),
       daysToDelivery: p.endDate ? daysBetweenIso(todayIso, p.endDate) : null,
       nextDelivery: deliveries.get(p.id) ?? null,
       series7: seriesFor(dates, series.get(p.id)),

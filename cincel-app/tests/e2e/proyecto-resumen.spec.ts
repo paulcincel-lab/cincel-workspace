@@ -51,14 +51,17 @@ test.describe("Proyecto · Resumen y pestañas", () => {
     await page.goto(`${BASE_URL}/proyectos/${projectId}`, { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}$`));
     await expect(page.getByRole("heading", { level: 1, name: PROJECT_NAME })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/Local comercial · CDMX · Responsable:/)).toBeVisible();
+    // Header (Estilos): back link and "{client} · {place} · entrega final {date}" (this project: place only).
+    await expect(page.getByRole("link", { name: "← Proyectos" })).toHaveAttribute("href", /^\/proyectos/);
+    await expect(page.getByText("CDMX", { exact: true })).toBeVisible();
 
     const tabs = page.getByRole("navigation", { name: "Secciones del proyecto" });
     await expect(tabs.getByRole("tab", { name: /^Resumen/ })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("link", { name: "Nueva tarea" })).toHaveAttribute(
-      "href",
-      `/tareas?proyecto=${projectId}&nueva=1`
-    );
+    // "Nueva tarea" opens the new-task sheet with this project, without leaving the page.
+    await page.getByRole("button", { name: "Nueva tarea" }).first().click();
+    await expect(page.getByRole("dialog", { name: "Nueva tarea" })).toBeVisible({ timeout: 15_000 });
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}$`));
     // Cutto stays a link that opens in a new tab, never an embed.
     await expect(page.locator("iframe[src*='cutto']")).toHaveCount(0);
 
@@ -207,5 +210,51 @@ test.describe("Proyectos · list, Resumen and Tareas on the query cache (5a, #95
     await page.waitForLoadState("networkidle");
     expect(counts.rsc).toBe(0);
     expect(counts.actions).toBe(0);
+  });
+});
+
+test.describe("Proyecto · Resumen Visual (#995)", () => {
+  test.beforeEach(async ({ page }) => {
+    await seedAuth(page);
+    await loginAsAdmin(page, BASE_URL);
+  });
+
+  test("renders hero, cards and next tasks from the hydrated reads, with no action call", async ({ page }) => {
+    const counts = trackServerRequests(page);
+    await page.goto(`${BASE_URL}/proyectos/${projectId}?estilo=visual`, { waitUntil: "networkidle" });
+    const hero = page.getByRole("region", { name: "Avance del proyecto" });
+    await expect(hero).toBeVisible({ timeout: 30_000 });
+    await expect(hero.getByRole("img", { name: /^Avance \d+ %/ })).toBeVisible();
+    for (const name of ["Tareas por estatus", "Avance por tramo", "Equipo y carga", "Lo que sigue", "Actividad reciente", "Archivos"]) {
+      await expect(page.getByRole("region", { name })).toBeVisible();
+    }
+    // Four reads prefetched and hydrated: the first render needs no action call.
+    expect(counts.actions).toBe(0);
+    // The back link keeps the style override.
+    await expect(page.getByRole("link", { name: "← Proyectos" })).toHaveAttribute("href", "/proyectos?estilo=visual");
+  });
+
+  test("a quick-added task shows in «Lo que sigue» without a reload", async ({ page }) => {
+    await page.goto(`${BASE_URL}/proyectos/${projectId}?estilo=visual`, { waitUntil: "networkidle" });
+    const next = page.getByRole("region", { name: "Lo que sigue" });
+    await expect(next).toBeVisible({ timeout: 30_000 });
+    let documentLoads = 0;
+    page.on("request", (request) => {
+      if (request.resourceType() === "document") documentLoads += 1;
+    });
+    const title = `Rápida E2E ${Date.now()}`;
+    const input = next.getByRole("textbox", { name: /Nueva tarea en/ });
+    await input.fill(title);
+    await input.press("Enter");
+    await expect(next.getByRole("link", { name: new RegExp(title) })).toBeVisible({ timeout: 15_000 });
+    expect(documentLoads).toBe(0);
+  });
+
+  test("390 px: no horizontal scroll", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE_URL}/proyectos/${projectId}?estilo=visual`, { waitUntil: "networkidle" });
+    await expect(page.getByRole("region", { name: "Avance del proyecto" })).toBeVisible({ timeout: 30_000 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 });

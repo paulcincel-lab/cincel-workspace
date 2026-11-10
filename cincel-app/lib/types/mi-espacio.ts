@@ -1,6 +1,7 @@
 /**
  * `/mi-espacio` page data (Query Migration Phase 7, #941). Client-safe types.
  */
+import type { TaskListItem } from "@/lib/types/core";
 import type {
   Checklist,
   GmailAttachment,
@@ -30,9 +31,9 @@ export type GmailThreadView = {
 
 /**
  * `getMiEspacioPageData` → seeds `me.notifications`, `me.gmail.status`,
- * `me.gmail.threads('')`, `me.reminders('today-tomorrow')`, `me.checklists`
- * and `me.notes`. Notes and checklists are their first bounded page; the
- * cursors load the next ones.
+ * `me.gmail.threads('')`, `me.reminders('today-tomorrow')`, `me.checklists`,
+ * `me.notes` and `me.tasks`. Notes and checklists are their first bounded
+ * page; the cursors load the next ones.
  */
 export type MiEspacioPageData = {
   notifications: NotificationsPage;
@@ -43,4 +44,8 @@ export type MiEspacioPageData = {
   checklistsCursor: string | null;
   notes: Note[];
   notesCursor: string | null;
+  /** My open tasks (`fetchMyOpenTasksAction` order). */
+  tasks: TaskListItem[];
+  /** `canCreateActivity`: the quick add of the task lists. Not a query key; the page passes it down. */
+  canCreateTask: boolean;
 };

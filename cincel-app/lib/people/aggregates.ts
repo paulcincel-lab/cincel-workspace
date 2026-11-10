@@ -4,6 +4,7 @@
  * No I/O; `lib/actions/people-actions.ts` feeds it rows.
  */
 import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
+import type { WeekLoad } from "@/lib/types/redesign";
 import type { Availability, AttentionItem, Tone } from "@/lib/types/widgets";
 
 /** ISO date (`YYYY-MM-DD`) of `now` in `timeZone`. */
@@ -36,6 +37,39 @@ export function workWeek(today: string): string[] {
   const weekday = parseIso(today).getUTCDay(); // 0 = Sunday
   const monday = addIsoDays(today, weekday === 0 ? -6 : 1 - weekday);
   return [0, 1, 2, 3, 4].map((offset) => addIsoDays(monday, offset));
+}
+
+/** The 4 ISO Mondays from the week that contains `today`, this week first. */
+export function fourWeeks(today: string): string[] {
+  const monday = workWeek(today)[0]!;
+  return [0, 7, 14, 21].map((offset) => addIsoDays(monday, offset));
+}
+
+/**
+ * Load of the 4 weeks of `fourWeeks(today)`. Week 1 counts overdue, undated
+ * and due this week (through Sunday); weeks 2–4 count the tasks due in that
+ * week (Monday–Sunday). `absentDays` are the Mon–Fri days inside an absence;
+ * they lower that week's capacity: `capacity × (5 − absentDays) ÷ 5`, and a
+ * week with no capacity left (or capacity 0) is 0 %.
+ */
+export function weekLoads(input: {
+  today: string;
+  capacity: number;
+  dueDates: (string | null)[];
+  absences: { from: string; to: string }[];
+}): WeekLoad[] {
+  const mondays = fourWeeks(input.today);
+  return mondays.map((monday, index) => {
+    const sunday = addIsoDays(monday, 6);
+    const open = input.dueDates.filter((due) =>
+      index === 0 ? due === null || due <= sunday : due !== null && due >= monday && due <= sunday,
+    ).length;
+    const absentDays = [0, 1, 2, 3, 4]
+      .map((offset) => addIsoDays(monday, offset))
+      .filter((day) => input.absences.some((a) => a.from <= day && day <= a.to)).length;
+    const effective = (input.capacity * (5 - absentDays)) / 5;
+    return { weekStart: monday, open, occupancyPct: occupancyPct(open, effective), absentDays };
+  });
 }
 
 /**
@@ -183,4 +217,73 @@ export function openCounts(dueDates: Array<string | null>, today: string): { ope
     open: dueDates.length,
     overdue: dueDates.filter((due) => due !== null && due < today).length,
   };
+}
+
+/**
+ * Index (0–3) of the load week a task counts in, from the 4 ISO Mondays
+ * (`fourWeeks`): week 1 takes overdue, undated and due-this-week tasks, weeks
+ * 2–4 the tasks due in that week; a task due after week 4 counts in none (-1).
+ */
+export function loadWeekIndex(due: string | null, mondays: readonly string[]): number {
+  if (due === null || mondays.length === 0) return 0;
+  for (let i = mondays.length - 1; i >= 1; i--) {
+    if (due >= mondays[i]! && due <= addIsoDays(mondays[i]!, 6)) return i;
+  }
+  return due < (mondays[1] ?? addIsoDays(mondays[0]!, 7)) ? 0 : -1;
+}
+
+export type ProjectTaskRow = { projectId: string; projectName: string; tramo: string | null; due: string | null };
+
+export type ProjectLoad = {
+  projectId: string;
+  name: string;
+  tramo: string | null;
+  open: number;
+  overdue: number;
+  weeks: [number, number, number, number];
+};
+
+/**
+ * A person's open tasks grouped per project (Personas Analítico): open,
+ * overdue (`due < today`) and open tasks per load week (`loadWeekIndex`). The
+ * project tramo is the most frequent task tramo. Sorted overdue desc, open
+ * desc, then name.
+ */
+export function projectLoads(tasks: readonly ProjectTaskRow[], today: string, mondays: readonly string[]): ProjectLoad[] {
+  const byProject = new Map<string, ProjectLoad & { tramos: Array<string | null> }>();
+  for (const task of tasks) {
+    let entry = byProject.get(task.projectId);
+    if (!entry) {
+      entry = { projectId: task.projectId, name: task.projectName, tramo: null, open: 0, overdue: 0, weeks: [0, 0, 0, 0], tramos: [] };
+      byProject.set(task.projectId, entry);
+    }
+    entry.open += 1;
+    if (task.due !== null && task.due < today) entry.overdue += 1;
+    const week = loadWeekIndex(task.due, mondays);
+    if (week >= 0 && week < 4) entry.weeks[week] += 1;
+    entry.tramos.push(task.tramo);
+  }
+  return [...byProject.values()]
+    .map(({ tramos, ...load }) => ({ ...load, tramo: dominantTramo(tramos) }))
+    .sort((a, b) => b.overdue - a.overdue || b.open - a.open || a.name.localeCompare(b.name, "es"));
+}
+
+/**
+ * Per staff id: whether the person shares at least one active project with
+ * the viewer. The viewer's own row is true; when the viewer has no entry (not
+ * in the listed team), everyone is false.
+ */
+export function sharesProjectWithViewer(
+  projectsByStaff: ReadonlyMap<string, ReadonlyArray<{ projectId: string }>>,
+  viewerId: string,
+): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  const viewerProjects = projectsByStaff.get(viewerId);
+  const viewerSet = new Set((viewerProjects ?? []).map((p) => p.projectId));
+  for (const [staffId, list] of projectsByStaff) {
+    if (!viewerProjects) out.set(staffId, false);
+    else if (staffId === viewerId) out.set(staffId, true);
+    else out.set(staffId, list.some((p) => viewerSet.has(p.projectId)));
+  }
+  return out;
 }

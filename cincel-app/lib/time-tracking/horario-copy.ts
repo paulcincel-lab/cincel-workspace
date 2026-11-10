@@ -4,7 +4,7 @@
  * es-MX), hours as "8.5 h", the ClockInPrompt text and the trial timeline.
  * Pure and client-safe.
  */
-import { addDays } from "@/lib/time-tracking/local-time";
+import { addDays, dayOfWeek, weekDates } from "@/lib/time-tracking/local-time";
 import type { TeamHoursRow, TimeTrackingSettings } from "@/lib/types/redesign";
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"] as const;
@@ -60,10 +60,62 @@ export function formatHoursDelta(hours: number): string {
 }
 
 export const TEAM_HOURS_STATUS_LABEL: Record<TeamHoursRow["status"], string> = {
-  completo: "Completo",
-  incompleto: "Incompleto",
+  completo: "Al día",
+  incompleto: "Revisar",
   sin_registro: "Sin registro",
 };
+
+/** "Salida sin registrar": a day of the week was closed automatically. */
+export const NEEDS_REVIEW_LABEL = "Salida sin registrar";
+
+export type TeamHoursStatusTone = "success" | "warning" | "destructive" | "neutral";
+
+/**
+ * Estado of one person in "Horas del equipo" (canvas `Ajustes-Horario`): an
+ * auto-closed day wins ("Salida sin registrar", destructive), then
+ * completo → "Al día" (success), incompleto → "Revisar" (warning),
+ * sin_registro → "Sin registro" (neutral).
+ */
+export function teamHoursStatus(row: Pick<TeamHoursRow, "status" | "needsReview">): {
+  label: string;
+  tone: TeamHoursStatusTone;
+} {
+  if (row.needsReview) return { label: NEEDS_REVIEW_LABEL, tone: "destructive" };
+  if (row.status === "completo") return { label: TEAM_HOURS_STATUS_LABEL.completo, tone: "success" };
+  if (row.status === "incompleto") return { label: TEAM_HOURS_STATUS_LABEL.incompleto, tone: "warning" };
+  return { label: TEAM_HOURS_STATUS_LABEL.sin_registro, tone: "neutral" };
+}
+
+/** Hours of a report cell: one decimal, "—" without a record. */
+export function formatHoursCell(hours: number | null | undefined): string {
+  return hours && hours > 0 ? (Math.round(hours * 10) / 10).toFixed(1) : "—";
+}
+
+/** Total − meta, one decimal with its sign ("+1.5", "−4.8" with a minus sign, "0.0"). */
+export function formatHoursDiff(hours: number): string {
+  const rounded = Math.round(hours * 10) / 10;
+  if (rounded === 0) return "0.0";
+  return `${rounded > 0 ? "+" : "−"}${Math.abs(rounded).toFixed(1)}`;
+}
+
+/**
+ * The day columns of "Horas del equipo" for the week starting `weekStart`:
+ * the work days, plus any other day someone has hours on.
+ */
+export function reportDays(weekStart: string, workDays: number[], rows: Pick<TeamHoursRow, "days">[]): string[] {
+  return weekDates(weekStart).filter(
+    (date) =>
+      workDays.includes(dayOfWeek(date)) || rows.some((row) => row.days.some((day) => day.date === date && day.hours > 0)),
+  );
+}
+
+/** "3 – 7 nov", or "29 sep – 3 oct" across months. */
+export function formatDateRange(from: string, to: string): string {
+  const a = parts(from);
+  const b = parts(to);
+  if (a.m === b.m && a.y === b.y) return `${a.d} – ${formatDayMonth(to)}`;
+  return `${formatDayMonth(from)} – ${formatDayMonth(to)}`;
+}
 
 /** True when `date` is a trial day: the feature has no mandatory date yet, or `date` is before it. */
 export function isTrialDay(date: string, requiredFrom: string | null): boolean {
@@ -138,4 +190,48 @@ export function timelineSegments(today: string, requiredFrom: string | null): Ti
     segments.push({ key: "obligatorio", label: `Obligatorio desde el ${formatDayMonthYear(requiredFrom)}` });
   }
   return segments;
+}
+
+// ── Control mode and the login prompt preview (canvas `Ajustes-Horario`) ────
+
+/** Desactivado · En prueba (no mandatory date) · Obligatorio (from a date). */
+export type ControlMode = "off" | "prueba" | "obligatorio";
+
+export function controlMode(settings: Pick<TimeTrackingSettings, "enabled" | "requiredFrom">): ControlMode {
+  if (!settings.enabled) return "off";
+  return settings.requiredFrom ? "obligatorio" : "prueba";
+}
+
+export const CONTROL_MODE_OPTIONS: readonly { value: ControlMode; title: string; description: string }[] = [
+  { value: "off", title: "Desactivado", description: "Nadie registra entrada ni salida." },
+  { value: "prueba", title: "En prueba", description: "Los datos son informativos y no salen en reportes de nómina." },
+  { value: "obligatorio", title: "Obligatorio", description: "Obligatorio a partir de una fecha." },
+];
+
+/** The status pill next to "Activar control de horario". */
+export const CONTROL_MODE_PILL: Record<ControlMode, { label: string; tone: "neutral" | "warning" | "success" }> = {
+  off: { label: "Desactivado", tone: "neutral" },
+  prueba: { label: "Activado · en prueba", tone: "warning" },
+  obligatorio: { label: "Activado · obligatorio", tone: "success" },
+};
+
+/** Work day pills, Monday first: "Lun" … "Dom". */
+export const WORK_DAY_PILLS: readonly { day: number; label: string }[] = WORK_DAY_TOGGLES.map((toggle) => {
+  const short = WEEKDAY_SHORT[toggle.day];
+  return { day: toggle.day, label: short.charAt(0).toUpperCase() + short.slice(1) };
+});
+
+/** Text of the prompt preview: "Buenos días, Ana" / "Son las 09:00. ¿Registramos tu entrada?". */
+export function loginPromptPreview(
+  name: string,
+  dayStart: string,
+  requiredFrom: string | null,
+  today: string,
+): { title: string; body: string; primary: string; dismiss: string | null } {
+  return {
+    title: name ? `Buenos días, ${name}` : "Buenos días",
+    body: `Son las ${dayStart}. ¿Registramos tu entrada?`,
+    primary: "Registrar entrada",
+    dismiss: isTrialDay(today, requiredFrom) ? "Más tarde" : null,
+  };
 }

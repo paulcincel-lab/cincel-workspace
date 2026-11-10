@@ -2,8 +2,8 @@
 /**
  * Assistant thread and audit actions against a real Postgres (redesign BE
  * §7.9, §8.10, §13, §16): owner scoping (another user's thread → NOT_FOUND),
- * soft delete, the 50-thread list cap, audit paging by cursor and the
- * `daily-digest` trim to 50 live threads. Runs only when TEST_DATABASE_URL
+ * soft delete, the 50-thread list cap, pin and read marks, audit paging by
+ * cursor and the `daily-digest` trim to 50 live threads. Runs only when TEST_DATABASE_URL
  * points at a migrated database (`npm run db:migrate`). Every staff row a
  * test creates is deleted afterwards (threads, messages and audit cascade).
  */
@@ -206,6 +206,95 @@ describe.skipIf(!url)("assistant actions (test DB)", async () => {
     await actions.deleteAssistantThreadAction(threadId);
     const audit = await actions.fetchAssistantActionsAction({ threadId });
     expect(audit.map((a) => a.id)).toEqual([actionId]);
+  });
+
+  it("pin is owner-scoped", async () => {
+    const pinnerId = await makeStaff("Fijar");
+    session.memberId = pinnerId;
+    const updatedAt = new Date(Date.now() - 3_600_000);
+    const older = await makeThread(pinnerId, updatedAt, "Viejo");
+    const newer = await makeThread(pinnerId, new Date(), "Nuevo");
+    const foreign = await makeThread(otherId, new Date(), "Ajeno");
+
+    const pinned = await actions.pinAssistantThreadAction({ id: older, pinned: true });
+    expect(pinned).toMatchObject({ id: older, title: "Viejo", pendingApprovals: 0, unread: false });
+    expect(pinned.pinnedAt).not.toBeNull();
+    // Pinning isn't activity: updated_at stays.
+    expect(Date.parse(pinned.updatedAt)).toBe(updatedAt.getTime());
+    // Pinned first, even though it is older.
+    expect((await actions.fetchAssistantThreadsAction()).map((t) => t.id)).toEqual([older, newer]);
+
+    await expect(actions.pinAssistantThreadAction({ id: foreign, pinned: true })).rejects.toThrow("NOT_FOUND");
+    await expect(actions.pinAssistantThreadAction({ id: "no-es-uuid", pinned: true })).rejects.toThrow("NOT_FOUND");
+    const [row] = await db
+      .select({ pinnedAt: schema.assistantThreads.pinnedAt })
+      .from(schema.assistantThreads)
+      .where(eq(schema.assistantThreads.id, foreign));
+    expect(row?.pinnedAt).toBeNull();
+
+    const unpinned = await actions.pinAssistantThreadAction({ id: older, pinned: false });
+    expect(unpinned.pinnedAt).toBeNull();
+    expect((await actions.fetchAssistantThreadsAction()).map((t) => t.id)).toEqual([newer, older]);
+  });
+
+  it("pendingApprovals counts proposed actions", async () => {
+    const approverId = await makeStaff("Confirmar");
+    session.memberId = approverId;
+    const threadId = await makeThread(approverId, new Date(), "Con confirmaciones");
+    const statuses = ["proposed", "proposed", "done", "cancelled"] as const;
+    await db.insert(schema.assistantActions).values(
+      statuses.map((status, n) => ({
+        threadId,
+        staffId: approverId,
+        toolCallId: `pend-${run}-${n}`,
+        tool: "create_task",
+        input: { n },
+        summary: `Acción ${n}`,
+        status,
+      })),
+    );
+
+    const [summary] = await actions.fetchAssistantThreadsAction();
+    expect(summary).toMatchObject({ id: threadId, pendingApprovals: 2 });
+  });
+
+  it("unread after a new assistant message, read after mark", async () => {
+    const readerId = await makeStaff("Lectura");
+    session.memberId = readerId;
+    const threadId = await makeThread(readerId, new Date(), "Por leer");
+    const base = Date.now();
+    await db.insert(schema.assistantMessages).values([
+      { id: "r1", threadId, role: "user", parts: [{ type: "text", text: "Hola" }], createdAt: new Date(base - 2_000) },
+      { id: "r2", threadId, role: "assistant", parts: [{ type: "text", text: "Hola" }], createdAt: new Date(base - 1_000) },
+    ]);
+    const unreadOf = async () => (await actions.fetchAssistantThreadsAction()).find((t) => t.id === threadId)?.unread;
+
+    // Never opened: counts as read.
+    expect(await unreadOf()).toBe(false);
+    await actions.markAssistantThreadReadAction({ id: threadId });
+    expect(await unreadOf()).toBe(false);
+
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+    await tick();
+    // A user message alone is not a new reply.
+    await db
+      .insert(schema.assistantMessages)
+      .values({ id: "r3", threadId, role: "user", parts: [{ type: "text", text: "¿Y?" }], createdAt: new Date() });
+    expect(await unreadOf()).toBe(false);
+    await db
+      .insert(schema.assistantMessages)
+      .values({ id: "r4", threadId, role: "assistant", parts: [{ type: "text", text: "Nueva" }], createdAt: new Date() });
+    expect(await unreadOf()).toBe(true);
+
+    await expect(actions.markAssistantThreadReadAction({ id: randomUUID() })).rejects.toThrow("NOT_FOUND");
+    session.memberId = otherId;
+    await expect(actions.markAssistantThreadReadAction({ id: threadId })).rejects.toThrow("NOT_FOUND");
+    session.memberId = readerId;
+    expect(await unreadOf()).toBe(true);
+
+    await tick();
+    await actions.markAssistantThreadReadAction({ id: threadId });
+    expect(await unreadOf()).toBe(false);
   });
 
   it("daily-digest housekeeping trims each staff to the newest 50 live threads", async () => {

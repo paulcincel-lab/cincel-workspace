@@ -11,7 +11,7 @@
 import type postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { THEME_PRESETS } from "@/lib/ui/themes";
+import { THEME_PRESETS, presetFilledTokens } from "@/lib/ui/themes";
 
 import {
   canCreateDatabases,
@@ -63,7 +63,12 @@ describe.skipIf(!canCreate)("redesign contracts migration (scratch databases)", 
     it("seeds appearance.theme with the Azul preset, v = 1 and the flag defaults", async () => {
       const stored = await seededAppearance(sql);
       expect(stored.version).toBe(1);
-      expect(stored.data).toEqual({ ...THEME_PRESETS.azul, redesignDefault: false, redesignAvailable: true, v: 1 });
+      // The seed is the Azul preset of its migration: tokens added since fill from the preset when read
+      // (`presetFilledTokens`), and the type scale keeps that migration's values (TYPE_SCALE_DEFAULT moved later).
+      const { tokens, typeScale: _seededTypeScale, ...rest } = stored.data as { tokens: Record<string, unknown>; typeScale: unknown };
+      const { tokens: presetTokens, typeScale: _presetTypeScale, ...presetRest } = THEME_PRESETS.azul;
+      expect(rest).toEqual({ ...presetRest, redesignDefault: false, redesignAvailable: true, v: 1 });
+      expect(presetFilledTokens("azul", tokens as Parameters<typeof presetFilledTokens>[1])).toEqual(presetTokens);
       expect(stored.data.baseTheme).toBe("azul");
       expect(stored.data.redesignDefault).toBe(false);
       expect(stored.data.redesignAvailable).toBe(true);

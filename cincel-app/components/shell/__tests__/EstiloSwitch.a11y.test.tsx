@@ -51,7 +51,6 @@ describe("EstiloSwitch and PageHeader accessibility", () => {
                 description="Todos los proyectos activos"
                 breadcrumb={[{ label: "Inicio", href: "/inicio" }, { label: "Proyectos" }]}
                 badge={<span>Admin</span>}
-                actions={<EstiloSwitch />}
               />
             </StyleProvider>
           </main>,

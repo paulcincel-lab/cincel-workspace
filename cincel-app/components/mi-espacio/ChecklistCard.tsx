@@ -6,19 +6,12 @@ import { ChecklistAddItemInput, ChecklistItemRow } from "@/components/tareas/Che
 import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { Progress } from "@/components/ui/shadcn/progress";
 import { RecordTable } from "@/components/widgets/RecordTable";
-import { addChecklistItemAction, toggleChecklistItemAction } from "@/lib/actions/my-space-actions";
 import { IMPLEMENTED } from "@/lib/actions/my-space-actions.flags";
 import { actionErrorText } from "@/lib/errors";
-import { useActionMutation } from "@/lib/query/mutation";
-import {
-  restoreSnapshot,
-  snapshotChecklists,
-  updateCachedChecklist,
-  type ChecklistsData,
-  type Snapshot,
-} from "@/lib/query/options/mi-espacio";
-import type { Checklist, ChecklistItem } from "@/lib/types/redesign";
+import type { Checklist } from "@/lib/types/redesign";
 import type { RecordTableData } from "@/lib/types/widgets";
+
+import { useChecklistMutations } from "./use-checklist-mutations";
 
 /** `checklist` is the row of the `me.checklists` query; the card's writes patch that query. */
 export type ChecklistCardProps = { checklist: Checklist };
@@ -28,13 +21,6 @@ export function checklistProgress(checklist: Checklist): { done: number; total: 
   const total = checklist.items.length;
   const done = checklist.items.filter((item) => item.done).length;
   return { done, total, pct: total === 0 ? 0 : Math.round((done / total) * 100) };
-}
-
-function withItem(checklist: Checklist, itemId: string, patch: Partial<ChecklistItem>): Checklist {
-  return {
-    ...checklist,
-    items: checklist.items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
-  };
 }
 
 /**
@@ -81,27 +67,9 @@ export function ChecklistCard({ checklist: current }: ChecklistCardProps) {
   const [draft, setDraft] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
 
-  const toggleMutation = useActionMutation<{ itemId: string; done: boolean }, ChecklistItem, Snapshot<ChecklistsData>>(
-    ({ itemId, done }) => toggleChecklistItemAction(itemId, done),
-    {
-      optimistic: {
-        async onMutate(qc, { itemId, done }) {
-          const snap = await snapshotChecklists(qc);
-          updateCachedChecklist(qc, checklistId, (c) => withItem(c, itemId, { done }));
-          return snap;
-        },
-        rollback: restoreSnapshot,
-      },
-      setData: (qc, saved, { itemId }) => updateCachedChecklist(qc, checklistId, (c) => withItem(c, itemId, saved)),
-    },
-  );
-
-  const addMutation = useActionMutation<string, ChecklistItem>((text) => addChecklistItemAction(checklistId, text), {
-    setData: (qc, item) => {
-      updateCachedChecklist(qc, checklistId, (c) => ({ ...c, items: [...c.items.filter((i) => i.id !== item.id), item] }));
-      setDraft("");
-    },
-    onFormError: setAddError,
+  const { toggle: toggleMutation, add: addMutation } = useChecklistMutations(checklistId, {
+    onAdded: () => setDraft(""),
+    onAddError: setAddError,
   });
 
   const toggle = (itemId: string) => {

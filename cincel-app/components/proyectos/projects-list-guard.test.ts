@@ -16,6 +16,7 @@ const FILES = [
   "components/proyectos/NewProjectDialog.tsx",
   "components/proyectos/projects-portfolio-data.ts",
   "app/(staff)/proyectos/page.tsx",
+  "app/(staff)/proyectos/loading.tsx",
 ].map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") }));
 
 /** Widgets the list composes (FE §4.10.2: `EntityCardGrid` and `DistributionWidget` through these and `ListPage`). */
@@ -31,6 +32,12 @@ const ALLOWED_WIDGETS = new Set([
   "EsencialCard",
   "EsencialItemRow",
   "QuickAddRow",
+  // Esencial branch of the list (#993).
+  "ProjectsEsencialLayout",
+  // Analítico branch of the list (#994).
+  "ProjectsAnaliticoLayout",
+  // Visual branch of the list (#992).
+  "ProjectsVisualLayout",
 ]);
 
 describe("Proyectos list composition guard", () => {
@@ -54,10 +61,13 @@ describe("Proyectos list composition guard", () => {
     expect(text).not.toMatch(/fontWeight:\s*[7-9]00/);
   });
 
-  it("renders the list through ListPage cards and the dialog on FormDialog", () => {
+  it("renders one layout per Estilo through PageStyleLayout and the dialog on FormDialog", () => {
     const portfolio = FILES.find((f) => f.path.endsWith("ProjectsPortfolio.tsx"))!.text;
-    expect(portfolio).toMatch(/kind: "cards"/);
-    expect(portfolio).toMatch(/from "@\/components\/patterns\/ListPage"/);
+    expect(portfolio).toMatch(/<PageStyleLayout\b/);
+    expect(portfolio).toMatch(/visual=\{\(\) => <ProjectsVisualLayout\b/);
+    expect(portfolio).toMatch(/esencial=\{\(\) => <ProjectsEsencialLayout\b/);
+    expect(portfolio).toMatch(/analitico=\{\(\) => <ProjectsAnaliticoLayout\b/);
+    expect(portfolio).not.toMatch(/from "@\/components\/patterns\/ListPage"/);
     const dialog = FILES.find((f) => f.path.endsWith("NewProjectDialog.tsx"))!.text;
     expect(dialog).toMatch(/from "@\/components\/patterns\/FormDialog"/);
     expect(dialog).toMatch(/from "\.\/project-create-form"/);

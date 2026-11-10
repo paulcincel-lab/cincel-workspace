@@ -8,7 +8,7 @@
  *   revoked, cancelled, deleted).
  * - Visibility is checked once per request: one `findPortalProjectAccess` call, and no later statement joins
  *   `project_portal_access` again.
- * - The project page reads ≤ 6 statements (`countQueries`), session lookup included, and writes nothing:
+ * - The project page reads ≤ 7 statements (`countQueries`), session lookup included, and writes nothing:
  *   the page-data action's session lookup does not slide the session (query functions are side-effect free).
  * - The page data carries DTOs only: no tarea, responsable or staff besides the manager.
  */
@@ -42,6 +42,9 @@ vi.mock("@/lib/portal/session-store", async (importOriginal) => {
 /** No Drive in this test: the projects' folders are not ready, so nothing may list them. */
 vi.mock("@/lib/portal/files", () => ({
   listPortalFolder: vi.fn(async () => {
+    throw new Error("Drive called");
+  }),
+  listPortalFolderGroups: vi.fn(async () => {
     throw new Error("Drive called");
   }),
 }));
@@ -158,13 +161,14 @@ describe.skipIf(!url)("portal page data (test DB)", async () => {
     expect(visibilityJoins).toHaveLength(1);
   });
 
-  it("reads the project page in ≤ 6 statements, session lookup included, and writes nothing", async () => {
+  it("reads the project page in ≤ 7 statements, session lookup included, and writes nothing", async () => {
     const { result, count, statements } = await countQueries(() =>
       getPortalProjectData({ id: p.granted, tab: "resumen" }),
     );
 
     expect(result).not.toBeNull();
-    expect(count).toBeLessThanOrEqual(6);
+    // 6 before Resumen's "Subido por" (the client's own upload events, one read).
+    expect(count).toBeLessThanOrEqual(7);
     for (const s of statements) expect(s.sql.trimStart().toLowerCase()).toMatch(/^(select|with)\b/);
   });
 

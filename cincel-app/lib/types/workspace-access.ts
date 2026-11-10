@@ -53,6 +53,10 @@ export type GroupMapping = {
   positionId: string | null;
   positionName: string | null;
   rank: number;
+  /** Members of the group in the Directory (`members.list`, count only); null = not checked yet. */
+  memberCount: number | null;
+  /** `groups.get` found the group; false → "El grupo no existe"; null = not checked yet. */
+  exists: boolean | null;
 };
 
 export type GroupMappingInput = {
@@ -95,6 +99,11 @@ export type GoogleHealth = {
   /** Active staff who already signed in with Google (`google_sub` set). */
   googleLinkedStaff: number;
   activeStaff: number;
+  /** Active staff who haven't signed in with Google yet (`google_sub` is null), by name. */
+  pendingGoogleStaff: { id: string; name: string }[];
+  /** Live projects without their Drive folders yet (`drive_folder_status` pending or failed), and with them (ready). */
+  projectsWithoutFolder: number;
+  projectsWithFolder: number;
 };
 
 /** `recheckStaffAccessAction` (BE §A.7). */
@@ -111,6 +120,8 @@ export type StaffFileItem = {
   modifiedAt: string;
   iconLink: string | null;
   webViewLink: string | null;
+  /** Drive's preview image (short-lived link); null for folders and files without one. */
+  thumbnailLink: string | null;
   kind: "file" | "folder";
 };
 

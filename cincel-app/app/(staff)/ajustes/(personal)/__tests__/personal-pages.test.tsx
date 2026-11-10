@@ -18,6 +18,7 @@ const m = vi.hoisted(() => ({
     access: "Colaborador",
   },
   serverClient: null as unknown,
+  search: "",
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
@@ -52,7 +53,7 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
   usePathname: () => "/ajustes/notificaciones",
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(m.search),
 }));
 vi.mock("@/lib/auth/session", () => ({
   requireCapabilityUser: vi.fn(async () => m.user),
@@ -83,6 +84,7 @@ vi.mock("@/lib/actions/gmail-actions", () => ({
 }));
 vi.mock("@/components/calendario/CalendarFeedDialog", () => ({
   GoogleCalendarSyncSection: () => <p>Sincronización directa</p>,
+  CalendarFeedLinkSection: () => <p>Enlace de suscripción</p>,
 }));
 // One request-scoped client per test (React `cache` does not memoize outside a server render).
 vi.mock("@/lib/query/server", async (importOriginal) => ({
@@ -104,7 +106,7 @@ import { Hydrate } from "@/lib/query/hydrate";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient } from "@/lib/query/test-utils";
 import { AppearanceStoreProvider } from "@/lib/stores/appearance-store";
-import type { NotificationPreferences, OrgAppearance, PerfilData } from "@/lib/types/redesign";
+import type { NotificationPreferences, OrgAppearance, PerfilData, PresentationStyle, UserPreferences } from "@/lib/types/redesign";
 import { DEFAULT_USER_PREFERENCES, resolveAppearance } from "@/lib/ui/preferences";
 import { THEME_PRESETS } from "@/lib/ui/themes";
 
@@ -134,17 +136,23 @@ const PROFILE: PerfilData = {
 const serverClient = () => m.serverClient as ReturnType<typeof createTestQueryClient>;
 
 /** Renders a page's element in a fresh browser client, as the hydrated HTML would boot. */
-function boot(element: ReactNode) {
+function boot(element: ReactNode, preferences: UserPreferences = DEFAULT_USER_PREFERENCES) {
   const browser = createTestQueryClient();
-  const appearance = resolveAppearance({ ...ORG, v: 1 }, DEFAULT_USER_PREFERENCES);
-  render(
+  const appearance = resolveAppearance({ ...ORG, v: 1 }, preferences);
+  const view = render(
     <QueryClientProvider client={browser}>
-      <AppearanceStoreProvider initial={appearance} preferences={DEFAULT_USER_PREFERENCES}>
+      <AppearanceStoreProvider initial={appearance} preferences={preferences}>
         {element}
       </AppearanceStoreProvider>
     </QueryClientProvider>,
   );
-  return browser;
+  return { browser, container: view.container };
+}
+
+/** The rendered markup with React's per-render ids replaced, so two renders compare equal. */
+function normalizedMarkup(container: HTMLElement): string {
+  // React ids: «r1», :r1: and _r_1_.
+  return container.innerHTML.replace(/(«|:|_)r_?[0-9a-z]+(»|:|_)/g, "«id»");
 }
 
 function expectNoClientCalls() {
@@ -155,6 +163,7 @@ function expectNoClientCalls() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  m.search = "";
   m.serverClient = createTestQueryClient();
   m.loaders.loadAjustesApariencia.mockResolvedValue({ org: ORG, isAdmin: false, overridesAllowed: true });
   m.loaders.loadAjustesNotificaciones.mockResolvedValue({ preferences: NOTIF });
@@ -237,4 +246,35 @@ describe("Ajustes › Integraciones page", () => {
     expect(await screen.findByRole("heading", { name: "Gmail" })).toBeTruthy();
     expectNoClientCalls();
   });
+});
+
+describe("Ajustes personal pages and the presentation style", () => {
+  const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
+  const PAGES = [
+    { name: "Apariencia", page: AjustesAparienciaPage, ready: () => screen.findByRole("radiogroup", { name: "Tema" }) },
+    { name: "Notificaciones", page: AjustesNotificacionesPage, ready: () => screen.findByRole("button", { name: "Guardar" }) },
+    { name: "Perfil", page: AjustesPerfilPage, ready: () => screen.findByRole("button", { name: "Cambiar foto" }) },
+    { name: "Integraciones", page: AjustesIntegracionesPage, ready: () => screen.findByRole("heading", { name: "Google Drive" }) },
+  ];
+
+  for (const { name, page, ready } of PAGES) {
+    it(`same markup for the three styles (${name})`, async () => {
+      const markups: string[] = [];
+      for (const style of STYLES) {
+        m.serverClient = createTestQueryClient();
+        m.search = `estilo=${style}`;
+        document.documentElement.setAttribute("data-style", style);
+        const element = (await page()) as ReactElement;
+        // Apariencia shows the person's own style choice, so there only the preview (`?estilo=`, `data-style`) varies.
+        const preferences = name === "Apariencia" ? DEFAULT_USER_PREFERENCES : { ...DEFAULT_USER_PREFERENCES, style };
+        const { container } = boot(element, preferences);
+        await ready();
+        markups.push(normalizedMarkup(container));
+        cleanup();
+      }
+      document.documentElement.removeAttribute("data-style");
+      expect(markups[1]).toBe(markups[0]);
+      expect(markups[2]).toBe(markups[0]);
+    });
+  }
 });

@@ -1,10 +1,10 @@
 /**
- * E2E: Tareas › Tablero (FE §3.4): a task created from "Nueva tarea" lands in Pendiente and moves to
- * another column by drag and drop; an empty board still shows every column; a card opened in the task
- * sheet changes status there and shows in the new column after closing, without a reload or a server
- * render (Query Migration 4b, #956); a task created from a column's "+ Agregar" lands in that column
- * without a reload and moves by drag and drop, and filters, chips and the search change the URL with no
- * server render (Query Migration 4a, #955).
+ * E2E: Tareas › Visual, the team board (FE §3.4, Estilos #986): a task created from "Nueva tarea" lands
+ * in Pendiente and moves to another column by drag and drop; filters that leave no task show the empty
+ * state with "Quitar filtros"; a card opened in the task sheet changes status there and shows in the new
+ * column after closing, without a reload or a server render (Query Migration 4b, #956); a task written on
+ * a column's quick-add line lands in that column without a reload and moves by drag and drop, and the
+ * filter pills and the search change the URL with no server render (Query Migration 4a, #955).
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -88,7 +88,7 @@ async function seedBlockedTask(projectId: string): Promise<void> {
   });
 }
 
-/** Status of the task created from "+ Agregar", or null while it doesn't exist. */
+/** Status of the task created from a column's quick-add, or null while it doesn't exist. */
 async function quickAddStatus(projectId: string): Promise<string | null> {
   return withSql(async (sql) => {
     const [row] = await sql`
@@ -123,7 +123,7 @@ async function countRscRequests(page: Page, fn: () => Promise<void>): Promise<nu
 
 /** A board column, named by its status (the count may follow the name). */
 function column(page: Page, status: string) {
-  return page.getByRole("group", { name: new RegExp(`^${status}`) }).first();
+  return page.getByRole("region", { name: new RegExp(`^${status}, `) }).first();
 }
 
 /** The draggable card of the created task. */
@@ -138,16 +138,15 @@ test.describe("Tareas", () => {
     await loginAsAdmin(page, BASE_URL);
   });
 
-  test("with no task matching the filters the board still shows every column with 0", async ({ page }) => {
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&q=${encodeURIComponent(`sin coincidencias ${RUN_ID}`)}`, {
+  test("with no task matching the filters the board shows the empty state with Quitar filtros", async ({ page }) => {
+    await page.goto(`${BASE_URL}/tareas?estilo=visual&q=${encodeURIComponent(`sin coincidencias ${RUN_ID}`)}`, {
       waitUntil: "domcontentloaded",
     });
 
-    for (const status of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
-      await expect(page.getByRole("group", { name: `${status} · 0`, exact: true })).toBeVisible({ timeout: 30_000 });
-    }
-    await expect(page.getByTestId("board-column-empty").first()).toBeVisible();
-    await expect(page.getByText("No hay tareas con estos filtros")).toHaveCount(0);
+    await expect(page.getByText("No hay tareas con estos filtros")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("link", { name: "Quitar filtros" })).toBeVisible();
+    // The summary row stays above it.
+    await expect(page.getByRole("region", { name: "Resumen" })).toBeVisible();
   });
 
   test("a task created from Nueva tarea lands in Pendiente and moves to En proceso by drag and drop", async ({
@@ -155,7 +154,7 @@ test.describe("Tareas", () => {
   }) => {
     const projectId = await ensureBoardProject();
     // The project filter prefills Proyecto in the dialog and keeps the board to this project.
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&proyecto=${projectId}&nueva=1`, {
+    await page.goto(`${BASE_URL}/tareas?estilo=visual&proyecto=${projectId}&nueva=1`, {
       waitUntil: "domcontentloaded",
     });
 
@@ -187,7 +186,7 @@ test.describe("Tareas", () => {
   }) => {
     const projectId = await ensureBoardProject();
     const taskId = await seedSheetTask(projectId);
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&proyecto=${projectId}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE_URL}/tareas?estilo=visual&proyecto=${projectId}`, { waitUntil: "domcontentloaded" });
     await expect(column(page, "Pendiente").getByText(SHEET_TASK_TITLE)).toBeVisible({ timeout: 30_000 });
 
     // Open the card: the sheet loads over the board, which keeps its filters.
@@ -196,7 +195,7 @@ test.describe("Tareas", () => {
     await expect(sheet).toBeVisible({ timeout: 30_000 });
     await expect(sheet.getByLabel("Título")).toHaveValue(SHEET_TASK_TITLE, { timeout: 30_000 });
     await expect(page).toHaveURL(new RegExp(`[?&]tarea=${taskId}`));
-    await expect(page).toHaveURL(/[?&]vista=tablero/);
+    await expect(page).toHaveURL(/[?&]estilo=visual/);
 
     // Change the status in the sheet: one mutation, no server render.
     const statusRsc = await countRscRequests(page, async () => {
@@ -217,27 +216,24 @@ test.describe("Tareas", () => {
     await expect(column(page, "Pendiente").getByText(SHEET_TASK_TITLE)).toHaveCount(0);
     await expect(page).toHaveURL(new RegExp(`[?&]proyecto=${projectId}`));
   });
-  test("a task created from “+ Agregar” lands in that column without a reload and moves by drag and drop (Query Migration 4a, #955)", async ({
+  test("a task written on a column's quick-add lands in that column without a reload and moves by drag and drop (Query Migration 4a, #955)", async ({
     page,
   }) => {
     const projectId = await ensureBoardProject();
-    // A blocked task keeps the Bloqueado column open (an empty column collapses to a strip without "+ Agregar").
+    // A blocked task keeps the Bloqueado column open (an empty column collapses to a strip without a quick-add).
     await seedBlockedTask(projectId);
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&proyecto=${projectId}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE_URL}/tareas?estilo=visual&proyecto=${projectId}`, { waitUntil: "domcontentloaded" });
     await expect(column(page, "Bloqueado").getByText(BLOCKED_TITLE).first()).toBeVisible({ timeout: 30_000 });
 
-    // Quick-add in Bloqueado: the shell's dialog opens with that estatus; no server render on the way.
+    // Quick-add in Bloqueado: the column fixes the estatus and the project filter the project; no server render.
     const createRsc = await countRscRequests(page, async () => {
-      await page.getByRole("button", { name: "Agregar tarea en Bloqueado" }).click();
-      const dialog = page.getByRole("dialog", { name: "Nueva tarea" });
-      await expect(dialog).toBeVisible({ timeout: 30_000 });
-      await expect(dialog.getByText("Cargando…")).toHaveCount(0, { timeout: 30_000 });
-      await dialog.getByLabel("Título", { exact: true }).fill(QUICK_ADD_TITLE);
-      await dialog.getByRole("button", { name: "Crear tarea" }).click();
-      await expect(dialog).toBeHidden({ timeout: 15_000 });
+      const line = column(page, "Bloqueado").getByRole("textbox", { name: "Nueva tarea en Bloqueado" });
+      await line.click();
+      await line.fill(QUICK_ADD_TITLE);
+      await line.press("Enter");
       await expect.poll(() => quickAddStatus(projectId), { timeout: 15_000 }).toBe("bloqueado");
-      // The new card shows in its column once the dialog's invalidation refetches the board.
-      await expect(column(page, "Bloqueado").getByText(QUICK_ADD_TITLE)).toBeVisible({ timeout: 15_000 });
+      // The new card shows in its column once the create's invalidation refetches the board.
+      await expect(column(page, "Bloqueado").getByText(QUICK_ADD_TITLE).first()).toBeVisible({ timeout: 15_000 });
     });
     expect(createRsc).toBe(0);
 
@@ -255,17 +251,15 @@ test.describe("Tareas", () => {
     page,
   }) => {
     const projectId = await ensureBoardProject();
-    await page.goto(`${BASE_URL}/tareas?vista=tablero&proyecto=${projectId}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE_URL}/tareas?estilo=visual&proyecto=${projectId}`, { waitUntil: "domcontentloaded" });
     await expect(column(page, "Pendiente")).toBeVisible({ timeout: 30_000 });
 
     const rsc = await countRscRequests(page, async () => {
-      await page.getByRole("group", { name: "Filtros" }).getByText("Presale", { exact: true }).click();
+      await page.getByRole("group", { name: "Filtros" }).getByRole("button", { name: /^Presale/ }).click();
       await expect(page).toHaveURL(/[?&]tramo=presale/);
       await page.getByRole("searchbox", { name: "Buscar tareas" }).fill(`sin coincidencias ${RUN_ID}`);
       await expect(page).toHaveURL(/[?&]q=sin/, { timeout: 5_000 });
-      for (const status of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
-        await expect(page.getByRole("group", { name: `${status} · 0`, exact: true })).toBeVisible({ timeout: 15_000 });
-      }
+      await expect(page.getByText("No hay tareas con estos filtros")).toBeVisible({ timeout: 15_000 });
     });
     expect(rsc).toBe(0);
     await expect(page).toHaveURL(new RegExp(`[?&]proyecto=${projectId}`));

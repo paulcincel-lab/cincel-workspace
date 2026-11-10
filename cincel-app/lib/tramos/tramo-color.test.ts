@@ -10,8 +10,14 @@ describe("tramoColorSlot", () => {
     expect(tramoColorSlot({ key: "construccion", sortOrder: 5 })).toBe(3);
   });
 
-  it("uses sortOrder 1..5 for any other tramo", () => {
+  it("decoracion maps to slot 4", () => {
     expect(tramoColorSlot({ key: "decoracion", sortOrder: 4 })).toBe(4);
+    expect(tramoColorSlot({ key: "decoracion", sortOrder: 0 })).toBe(4);
+    expect(tramoColorSlot({ key: "Decoracion ", sortOrder: 9 })).toBe(4);
+    expect(tramoColorVar({ key: "decoracion", sortOrder: 1 })).toBe("var(--chart-4)");
+  });
+
+  it("uses sortOrder 1..5 for any other tramo", () => {
     expect(tramoColorSlot({ key: "otro", sortOrder: 5 })).toBe(5);
     expect(tramoColorSlot({ key: "otro", sortOrder: 1 })).toBe(1);
   });
@@ -34,5 +40,19 @@ describe("tramoColorClass / tramoColorVar", () => {
     expect(tramoColorClass(null)).toBe("bg-muted-foreground");
     expect(tramoColorVar(undefined)).toBe("var(--muted-foreground)");
     expect(tramoColorVar({ key: "otro", sortOrder: 9 })).toBe("var(--muted-foreground)");
+  });
+});
+
+describe("tramoColorSlot with an explicit color_slot", () => {
+  it("explicit slot wins over key and sortOrder", () => {
+    expect(tramoColorSlot({ key: "presale", sortOrder: 1, colorSlot: 5 })).toBe(5);
+    expect(tramoColorSlot({ key: "otro", sortOrder: 2, colorSlot: 4 })).toBe(4);
+    expect(tramoColorVar({ key: "diseno", sortOrder: 2, colorSlot: 3 })).toBe("var(--chart-3)");
+    expect(tramoColorClass({ key: "construccion", sortOrder: 3, colorSlot: 1 })).toBe("bg-chart-1");
+  });
+
+  it("falls back to the key / sortOrder rule without a valid slot", () => {
+    expect(tramoColorSlot({ key: "presale", sortOrder: 4, colorSlot: null })).toBe(1);
+    expect(tramoColorSlot({ key: "otro", sortOrder: 2, colorSlot: 9 })).toBe(2);
   });
 });

@@ -21,7 +21,25 @@ vi.mock("@/lib/db/client", () => {
   return { db: chain };
 });
 
+/** Three projects; the first has a tramo group and a "Sin tramo" one. */
+const summary = vi.hoisted(() => {
+  const c = { total: 1, open: 1, overdue: 0, blocked: 0, daysLateSum: 0 };
+  const diseno = { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 };
+  const none = { id: null, key: null, name: "Sin tramo", sortOrder: 2147483647 };
+  const project = (id: string, tramos: (typeof diseno | typeof none)[]) => ({
+    project: { id, name: id },
+    ...c,
+    tramos: tramos.map((tramo) => ({ tramo, ...c })),
+  });
+  return {
+    projects: [project("p1", [diseno, none]), project("p2", [diseno]), project("p3", [diseno])],
+    totals: { ...c, projects: 3 },
+    unfiltered: { projects: 3, total: 4, projectList: [] },
+  };
+});
+
 const repo = vi.hoisted(() => ({
+  taskSummary: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => summary),
   taskFacets: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({ total: 0, byTramo: {}, projects: [] })),
   listBoardColumns: vi.fn(async () => ({})),
   listTasksPage: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({ rows: [], nextCursor: null, total: 0 })),
@@ -76,7 +94,7 @@ beforeEach(() => {
 
 describe("loadTareasPage", () => {
   it("hands out staff as {id,name} only (nombre + apellido), never the full Staff", async () => {
-    const data = await loadTareasPage(user("Colaborador"), { vista: "lista", ...NO_FILTERS });
+    const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS });
     expect(data.staff).toEqual([
       { id: "s1", name: "Ana Ruiz" },
       { id: "s2", name: "Luis" },
@@ -85,12 +103,12 @@ describe("loadTareasPage", () => {
   });
 
   it("keeps the tramos with a key", async () => {
-    const data = await loadTareasPage(user("Colaborador"), { vista: "lista", ...NO_FILTERS });
+    const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS });
     expect(data.tramos.map((t) => t.key)).toEqual(["diseno"]);
   });
 
   it("Tablero: every catalog column, the first rows per column; no Lista page", async () => {
-    const data = await loadTareasPage(user("Colaborador"), { vista: "tablero", ...NO_FILTERS });
+    const data = await loadTareasPage(user("Colaborador"), { estilo: "visual", ...NO_FILTERS });
     expect(Object.keys(data.board!.columns).sort()).toEqual(
       ["bloqueado", "completado", "custom:cs1", "en_proceso", "pendiente"].sort(),
     );
@@ -99,23 +117,47 @@ describe("loadTareasPage", () => {
     expect(data.list).toBeUndefined();
   });
 
-  it("Lista: one first page, no board", async () => {
-    const data = await loadTareasPage(user("Colaborador"), { vista: "lista", ...NO_FILTERS });
-    expect(repo.listTasksPage).toHaveBeenCalledWith({}, { staffId: "me", isAdmin: false }, { cursor: null, limit: 50 });
+  it("Analítico: the summary and the first page of the first 3 groups in retraso order, no board", async () => {
+    const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS });
+    expect(repo.taskSummary).toHaveBeenCalledTimes(1);
+    expect(repo.taskSummary.mock.calls[0][0]).toEqual({});
+    expect(repo.taskSummary.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(data.summary).toBe(summary);
+    expect(repo.listTasksPage).toHaveBeenCalledTimes(3);
+    const calls = repo.listTasksPage.mock.calls.map((call) => {
+      const { today, ...f } = call[0] as Record<string, unknown>;
+      expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      return f;
+    });
+    expect(calls).toEqual([
+      { projectId: "p1", workflowId: "w1" },
+      { projectId: "p1", withoutWorkflow: true },
+      { projectId: "p2", workflowId: "w1" },
+    ]);
+    for (const call of repo.listTasksPage.mock.calls) {
+      expect(call[2]).toEqual({ cursor: null, limit: 50, orderBy: "retraso" });
+    }
+    // Each page is keyed by the group's list filters (`tareasGroupFilters`).
+    expect(data.groups?.map((g) => [g.filters.proyecto, g.filters.tramo, g.filters.orderBy])).toEqual([
+      ["p1", "diseno", "retraso"],
+      ["p1", "__sin_tramo", "retraso"],
+      ["p2", "diseno", "retraso"],
+    ]);
     expect(repo.listBoardColumns).not.toHaveBeenCalled();
     expect(data.board).toBeUndefined();
+    expect(data.list).toBeUndefined();
   });
 
   it("maps the filters: tramo key → workflow id, Yo → the viewer (admin kinds for an admin only)", async () => {
     await loadTareasPage(user("Administrador"), {
-      vista: "lista",
+      estilo: "analitico",
       tramo: "diseno",
       proyecto: "p1",
       responsable: "yo",
       estado: "pendiente",
       q: "plano",
     });
-    expect(repo.listTasksPage.mock.calls[0][0]).toEqual({
+    expect(repo.taskSummary.mock.calls[0][0]).toEqual({
       search: "plano",
       status: "pendiente",
       involvesStaffId: "me",
@@ -133,19 +175,21 @@ describe("loadTareasPage", () => {
     expect(repo.taskFacets.mock.calls[0][2]).toEqual({ workflowKey: "diseno", projectId: "p1" });
 
     vi.clearAllMocks();
-    await loadTareasPage(user("Colaborador"), { vista: "lista", ...NO_FILTERS, responsable: "yo" });
-    expect(repo.listTasksPage.mock.calls[0][0]).toEqual({ involvesStaffId: "me" });
+    await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS, responsable: "yo", mostrar: "en_retraso" });
+    expect(repo.taskSummary.mock.calls[0][0]).toEqual({ involvesStaffId: "me", mostrar: "en_retraso" });
   });
 
   it("an unknown tramo loads no rows", async () => {
-    const data = await loadTareasPage(user("Colaborador"), { vista: "lista", ...NO_FILTERS, tramo: "otro" });
+    const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS, tramo: "otro" });
     expect(repo.listTasksPage).not.toHaveBeenCalled();
-    expect(data.list).toEqual({ rows: [], nextCursor: null, total: 0 });
+    expect(repo.taskSummary).not.toHaveBeenCalled();
+    expect(data.summary?.projects).toEqual([]);
+    expect(data.groups).toEqual([]);
   });
 
   it("is FORBIDDEN without the Tareas capability", async () => {
     caps.canViewActivities = false;
-    await expect(loadTareasPage(user("Colaborador"), { vista: "lista", ...NO_FILTERS })).rejects.toThrow("FORBIDDEN");
+    await expect(loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS })).rejects.toThrow("FORBIDDEN");
     await expect(loadTareasListPage(user("Colaborador"), { filters: NO_FILTERS, cursor: null })).rejects.toThrow(
       "FORBIDDEN",
     );

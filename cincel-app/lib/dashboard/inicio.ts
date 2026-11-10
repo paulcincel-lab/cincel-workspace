@@ -16,8 +16,9 @@ import { localIsoDate, TASK_TREND_TIME_ZONE, type TaskTrendBucket } from "@/lib/
 import type { DailyCounter } from "@/lib/metrics/series";
 import { isTaskClosed } from "@/lib/tasks/status-options";
 import type { ProjectListItem, Staff, TaskListItem } from "@/lib/types/core";
-import type { PeopleOverviewRow, PortfolioRow } from "@/lib/types/redesign";
-import type { AgendaItem, TramoKey } from "@/lib/types/widgets";
+import type { InicioData, InicioTramoAssigneeRow, PeopleOverviewRow, PortfolioRow } from "@/lib/types/redesign";
+import { OVERDUE_SHARE_HEAT } from "@/components/tareas/lista-table";
+import type { AgendaItem, AttentionItem, ProgressItem, TramoKey } from "@/lib/types/widgets";
 
 const DAY_MS = 86_400_000;
 
@@ -40,7 +41,13 @@ export const INICIO_KPI = {
   bloqueadas: { key: "bloqueadas", label: "Bloqueadas", href: "/tareas?vista=lista&estado=bloqueado" },
   revisiones: { key: "revisiones_7d", label: "Revisiones · 7 días", href: "/tareas?vista=calendario&cal=semana" },
   completadas: { key: "completadas_semana", label: "Completadas · semana", href: "/tareas?vista=lista&estado=completado" },
+  abiertas: { key: "abiertas", label: "Tareas abiertas", href: "/tareas" },
+  horasSemana: { key: "horas_semana", label: "Horas esta semana", href: "/mi-espacio" },
+  retrasoPromedio: { key: "retraso_promedio", label: "Retraso promedio", href: "/tareas?vista=lista" },
 } as const;
+
+/** The "Horas esta semana" label for a viewer without team workload access (their own hours). */
+export const INICIO_KPI_OWN_HOURS_LABEL = "Mis horas esta semana";
 
 // ── Dates ───────────────────────────────────────────────────────────────────
 
@@ -240,6 +247,7 @@ export const KPI_CONTEXT = {
   noOverdue: "Nada vencido hoy",
   noBlocked: "Nada bloqueado hoy",
   noReview: "Próxima revisión sin agendar",
+  noOpen: "Sin tareas abiertas",
 } as const;
 
 /** A tramo group of a KPI context line, ordered by `rank`, then label. */
@@ -338,6 +346,13 @@ type ScopedTask = Pick<
   "id" | "kind" | "title" | "projectId" | "managerId" | "status" | "customStatus" | "commitmentDate" | "createdAt"
 > & { support?: { id: string }[] };
 
+/** Mean days late (one decimal) of `overdue` as of `day`, or null when empty. */
+function meanDelay(overdue: { commitmentDate: string | null }[], day: string): number | null {
+  if (overdue.length === 0) return null;
+  const total = overdue.reduce((acc, t) => acc + isoDaysBetween(t.commitmentDate!, day), 0);
+  return Math.round((total / overdue.length) * 10) / 10;
+}
+
 /**
  * Portfolio rows of the projects from the tasks the caller can see. There is
  * no plan source yet: `plan`, `deviation` and `budgetSpentPct` are null and
@@ -357,12 +372,15 @@ export function inicioPortfolioRows<T extends ScopedTask>(
     byProject.set(task.projectId, list);
   }
   const last7 = Array.from({ length: 7 }, (_, i) => shiftIsoDate(today, i - 6));
+  const weekAgo = shiftIsoDate(today, -7);
   return projects.map((project) => {
     const own = byProject.get(project.id) ?? [];
     const open = own.filter((t) => !isTaskClosed(t));
     const next = open
       .filter((t) => t.kind !== "admin" && t.commitmentDate !== null && t.commitmentDate >= today)
       .sort((a, b) => a.commitmentDate!.localeCompare(b.commitmentDate!) || a.title.localeCompare(b.title, "es"))[0];
+    const overdueNow = open.filter((t) => t.commitmentDate !== null && t.commitmentDate < today);
+    const overdueWeekAgo = own.filter((t) => openOn(t, weekAgo) && t.commitmentDate !== null && t.commitmentDate < weekAgo);
     return {
       projectId: project.id,
       real: project.progress,
@@ -370,7 +388,10 @@ export function inicioPortfolioRows<T extends ScopedTask>(
       deviation: null,
       budgetSpentPct: null,
       open: open.length,
-      overdue: open.filter((t) => t.commitmentDate !== null && t.commitmentDate < today).length,
+      overdue: overdueNow.length,
+      avgDelayDays: meanDelay(overdueNow, today),
+      overdueWeekAgo: overdueWeekAgo.length,
+      avgDelayWeekAgo: meanDelay(overdueWeekAgo, weekAgo),
       daysToDelivery: project.endDate ? isoDaysBetween(today, project.endDate) : null,
       nextDelivery: next ? { title: next.title, date: next.commitmentDate! } : null,
       series7: last7.map((day) => own.filter((t) => openOn(t, day)).length),
@@ -387,7 +408,7 @@ export function inicioWorkloadRows(
   staff: Pick<Staff, "id" | "name" | "capacity">[],
   tasks: ScopedTask[],
   today: string,
-): PeopleOverviewRow[] {
+): InicioWorkloadRow[] {
   const known = new Map(staff.map((s) => [s.id, s]));
   const byStaff = new Map<string, ScopedTask[]>();
   for (const task of tasks) {
@@ -399,14 +420,22 @@ export function inicioWorkloadRows(
   return [...byStaff]
     .map(([staffId, own]) => {
       const capacity = known.get(staffId)!.capacity;
+      const overdue = own.filter((t) => t.commitmentDate !== null && t.commitmentDate < today);
+      const daysLate = overdue.reduce((sum, t) => sum + isoDaysBetween(t.commitmentDate!, today), 0);
       return {
         staffId,
         open: own.length,
-        overdue: own.filter((t) => t.commitmentDate !== null && t.commitmentDate < today).length,
+        overdue: overdue.length,
         activeProjects: new Set(own.map((t) => t.projectId)).size,
         occupancyPct: capacity > 0 ? Math.round((own.length / capacity) * 100) : 0,
         weekHours: null,
         availability: [],
+        inProgress: own.filter((t) => t.status === "en_proceso").length,
+        avgDaysLate: overdue.length > 0 ? Math.round((daysLate / overdue.length) * 10) / 10 : null,
+        weeks: [],
+        absences: [],
+        projects: [],
+        sharesProjectWithViewer: false,
       };
     })
     .sort(
@@ -415,6 +444,50 @@ export function inicioWorkloadRows(
         b.overdue - a.overdue ||
         known.get(a.staffId)!.name.localeCompare(known.get(b.staffId)!.name, "es"),
     );
+}
+
+/** A workload row plus the Inicio Analítico columns (Carga por persona). */
+export type InicioWorkloadRow = PeopleOverviewRow & {
+  /** Open tasks en proceso. */
+  inProgress: number;
+  /** Mean `isoDaysBetween(commitmentDate, today)` of the overdue tasks, 1 decimal; null without any. */
+  avgDaysLate: number | null;
+};
+
+/**
+ * Inicio Analítico "Retraso promedio" for one day: the mean days late (1
+ * decimal) of the tasks overdue at the end of `day`, 0 without any.
+ */
+export function averageDaysLateOn<T extends { commitmentDate: string | null }>(
+  tasks: T[],
+  day: string,
+  overdueOn: (task: T, day: string) => boolean,
+): number {
+  const late = tasks.filter((t) => t.commitmentDate !== null && overdueOn(t, day));
+  if (late.length === 0) return 0;
+  const days = late.reduce((sum, t) => sum + isoDaysBetween(t.commitmentDate!, day), 0);
+  return Math.round((days / late.length) * 10) / 10;
+}
+
+/**
+ * Open tasks per tramo and responsable (Inicio Analítico filters): one row
+ * per (tramo key, managerId) with open and overdue counts and the summed age
+ * in days (creation → `today`), in tramo order.
+ */
+export function tramoAssigneeRows<T extends Pick<TaskListItem, "kind" | "workflow" | "createdAt" | "commitmentDate"> & {
+  managerId: string | null;
+}>(openTasks: T[], today: string, tz: string = TASK_TREND_TIME_ZONE): InicioTramoAssigneeRow[] {
+  const rows = new Map<string, InicioTramoAssigneeRow>();
+  for (const task of [...openTasks].sort(byTramoOrder)) {
+    const tramo = taskTramoKey(task);
+    const id = `${tramo}|${task.managerId ?? ""}`;
+    const row = rows.get(id) ?? { tramo, assigneeId: task.managerId, open: 0, overdue: 0, ageDays: 0 };
+    row.open += 1;
+    if (task.commitmentDate !== null && task.commitmentDate < today) row.overdue += 1;
+    row.ageDays += Math.max(0, isoDaysBetween(localDayOf(task.createdAt, tz), today));
+    rows.set(id, row);
+  }
+  return [...rows.values()];
 }
 
 /** The caller is the task's responsable or in its support. */
@@ -455,4 +528,92 @@ export function myDayItems(
   return items.sort(
     (a, b) => agendaSortKey(a.start, tz).localeCompare(agendaSortKey(b.start, tz)) || a.title.localeCompare(b.title, "es"),
   );
+}
+
+// ── Inicio Esencial: my week, my attention, projects at risk ───────────────
+
+/** The Sunday that closes the Monday-first week of `day` (a Sunday is its own). */
+export function weekSundayOf(day: string): string {
+  const weekday = new Date(Date.parse(`${day}T00:00:00Z`)).getUTCDay();
+  return shiftIsoDate(day, (7 - weekday) % 7);
+}
+
+/** The task id an agenda item links to (`/tareas?tarea=<id>`), else null (reminders, events). */
+export function agendaTaskId(item: Pick<AgendaItem, "href">): string | null {
+  const match = item.href ? /[?&]tarea=([^&#]+)/.exec(item.href) : null;
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
+/**
+ * `InicioData.myWeek`: `today` is the caller's day (`myDayItems`); `week`
+ * holds the agenda items of the caller's open tasks (`involves`) from
+ * tomorrow to the week's Sunday, by local date and time, then title. On a
+ * Sunday the week section is empty. `total` counts the distinct tasks of both
+ * sections; events and reminders are not tasks.
+ */
+export function myWeekOf<T extends { managerId: string | null; support?: { id: string }[] }>(input: {
+  tasks: T[];
+  viewerId: string;
+  /** The tasks' agenda items (`toAgendaItems({ kind: "tasks" })`). */
+  toItems: (tasks: T[]) => AgendaItem[];
+  today: AgendaItem[];
+  day: string;
+  tz?: string;
+}): InicioData["myWeek"] {
+  const tz = input.tz ?? TASK_TREND_TIME_ZONE;
+  const from = shiftIsoDate(input.day, 1);
+  const to = weekSundayOf(input.day);
+  const mine = input.tasks.filter((t) => involves(t, input.viewerId));
+  const seen = new Set<string>();
+  const week = input
+    .toItems(mine)
+    .filter((item) => {
+      const date = agendaSortKey(item.start, tz).slice(0, 10);
+      if (date < from || date > to || seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    })
+    .sort(
+      (a, b) => agendaSortKey(a.start, tz).localeCompare(agendaSortKey(b.start, tz)) || a.title.localeCompare(b.title, "es"),
+    );
+  const taskIds = new Set(
+    [...input.today, ...week].map(agendaTaskId).filter((id): id is string => id !== null),
+  );
+  return { today: input.today, week, total: taskIds.size };
+}
+
+/** `InicioData.myAttention`: attention items whose task involves the caller (responsable or support). */
+export function myAttentionCount(
+  attention: Pick<AttentionItem, "id" | "assignee">[],
+  tasks: { id: string; managerId: string | null; support?: { id: string }[] }[],
+  viewerId: string,
+): number {
+  const involvesById = new Map(tasks.map((t) => [t.id, involves(t, viewerId)]));
+  return attention.filter((a) => a.assignee?.id === viewerId || involvesById.get(a.id)).length;
+}
+
+/**
+ * "En riesgo" (placeholder rule until one is decided): open tasks and an
+ * overdue share of at least `OVERDUE_SHARE_HEAT.warnAt` (45 %).
+ */
+export function projectAtRisk(row: Pick<PortfolioRow, "open" | "overdue">): boolean {
+  return row.open > 0 && Math.round((row.overdue / row.open) * 100) >= OVERDUE_SHARE_HEAT.warnAt;
+}
+
+/**
+ * `ProgressItem.atRisk` from the portfolio rows (matched by project id),
+ * only when the viewer has `sections.showProjectRisk`; otherwise the items
+ * are returned without the field.
+ */
+export function withProjectRisk(
+  items: ProgressItem[],
+  rows: Pick<PortfolioRow, "projectId" | "open" | "overdue">[],
+  showProjectRisk: boolean,
+): ProgressItem[] {
+  if (!showProjectRisk) return items;
+  const byProject = new Map(rows.map((row) => [row.projectId, row]));
+  return items.map((item) => {
+    const row = byProject.get(item.id);
+    return { ...item, atRisk: row ? projectAtRisk(row) : false };
+  });
 }

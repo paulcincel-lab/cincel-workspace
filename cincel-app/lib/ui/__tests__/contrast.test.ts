@@ -33,6 +33,15 @@ const ROWS: [string, number[]][] = [
   ["chart-3-ink/chart-3-tint", [4.61, 6.6, 5.67, 7.48, 4.64, 6.89]],
   ["chart-4-ink/chart-4-tint", [4.67, 6.37, 5.72, 7.21, 4.98, 7.62]],
   ["chart-5-ink/chart-5-tint", [4.78, 7.23, 5.23, 7.98, 6.75, 6.17]],
+  ["secondary-foreground/tint-primary", [5.49, 5.69, 5.08, 6.76, 13.76, 7.66]],
+  ["chart-2-ink/tint-violet", [5.98, 6.26, 6.55, 7.3, 4.76, 6.15]],
+  ["warning-ink/tint-warning", [4.51, 6.34, 4.56, 5.86, 4.68, 5.69]],
+  ["chart-4-ink/tint-cyan", [4.79, 6.36, 5.71, 7.17, 4.98, 7.65]],
+  ["destructive-ink/tint-destructive", [5.37, 6.29, 4.66, 4.85, 4.78, 4.67]],
+  ["success/tint-success", [4.84, 5.74, 4.98, 5.51, 4.59, 4.96]],
+  ["foreground-soft/card", [10.35, 10.04, 9.92, 9.58, 11.9, 10.17]],
+  ["foreground-soft/background", [9.39, 11.34, 9.11, 10.38, 10.91, 11.24]],
+  ["foreground-soft/muted", [9.45, 8.89, 8.66, 8.59, 10.17, 9.47]],
   ["chart-1/card", [3.68, 6.58, 3.49, 6.43, 4.42, 4.58]],
   ["chart-2/card", [4.23, 6.15, 4.07, 6.62, 3.2, 4.29]],
   ["chart-3/card", [3.06, 10.02, 3.09, 8.92, 3.08, 4.9]],
@@ -47,9 +56,9 @@ for (const [pair, values] of ROWS) {
 }
 
 describe("CONTRAST_PAIRS", () => {
-  it("is the one BE §5.5 list: 17 text pairs at 4.5 and 7 non-text pairs at 3", () => {
+  it("is the one BE §5.5 list plus the Estilos tints: 26 text pairs at 4.5 and 7 non-text pairs at 3", () => {
     expect(CONTRAST_PAIRS.map((p) => p.pair)).toEqual(ROWS.map(([pair]) => pair));
-    expect(CONTRAST_PAIRS.filter((p) => p.min === 4.5)).toHaveLength(17);
+    expect(CONTRAST_PAIRS.filter((p) => p.min === 4.5)).toHaveLength(26);
     expect(CONTRAST_PAIRS.filter((p) => p.min === 3)).toHaveLength(7);
   });
 });
@@ -69,6 +78,41 @@ describe("checkContrast on the presets", () => {
       expect(lowContrastMessage(results)).toBeNull();
     });
   }
+});
+
+const TINT_PAIRS = [
+  "secondary-foreground/tint-primary",
+  "chart-2-ink/tint-violet",
+  "warning-ink/tint-warning",
+  "chart-4-ink/tint-cyan",
+  "destructive-ink/tint-destructive",
+  "success/tint-success",
+];
+const FOREGROUND_SOFT_PAIRS = ["foreground-soft/card", "foreground-soft/background", "foreground-soft/muted"];
+
+describe("Estilos token pairs", () => {
+  it("new tint pairs pass in every preset and mode", () => {
+    for (const combo of COMBOS) {
+      const [theme, mode] = combo.split("-") as [ThemeId, "light" | "dark"];
+      const results = checkContrast(THEME_PRESETS[theme].tokens, mode).filter((r) => TINT_PAIRS.includes(r.pair));
+      expect(results.map((r) => r.pair)).toEqual(TINT_PAIRS);
+      for (const result of results) {
+        expect(result.min).toBe(4.5);
+        expect(result.ok, `${combo} ${result.pair} ${result.ratio}`).toBe(true);
+      }
+    }
+  });
+
+  it("foreground-soft passes on card, background and muted", () => {
+    for (const combo of COMBOS) {
+      const [theme, mode] = combo.split("-") as [ThemeId, "light" | "dark"];
+      const results = checkContrast(THEME_PRESETS[theme].tokens, mode).filter((r) =>
+        FOREGROUND_SOFT_PAIRS.includes(r.pair),
+      );
+      expect(results.map((r) => r.pair)).toEqual(FOREGROUND_SOFT_PAIRS);
+      for (const result of results) expect(result.ok, `${combo} ${result.pair} ${result.ratio}`).toBe(true);
+    }
+  });
 });
 
 describe("checkContrast failures", () => {

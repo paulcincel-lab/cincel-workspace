@@ -11,10 +11,14 @@ import { renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 
-import { bibliotecaFixture, seededBibliotecaClient } from "./biblioteca.fixtures";
+import { bibliotecaFixture, resourcesCapabilities, seededBibliotecaClient } from "./biblioteca.fixtures";
 import { BibliotecaIndex } from "./BibliotecaIndex";
 import { BibliotecaSection } from "./BibliotecaSection";
 import { DocumentReader } from "./DocumentReader";
+import { BibliotecaEsencial } from "@/components/widgets/biblioteca/BibliotecaEsencial";
+import { BibliotecaVisual } from "@/components/widgets/biblioteca/BibliotecaVisual";
+import { BibliotecaAnalitico } from "@/components/widgets/biblioteca/BibliotecaAnalitico";
+import type { BibliotecaLayoutProps } from "@/components/widgets/biblioteca/types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
@@ -24,6 +28,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/actions/resources-actions", () => ({
   createResourceLinkAction: vi.fn(),
   deleteResourceLinkAction: vi.fn(),
+  recordResourceOpenAction: vi.fn().mockResolvedValue({ ok: true, data: { recorded: true } }),
 }));
 vi.mock("@/lib/actions/page-data/biblioteca-actions", () => ({
   getBibliotecaPageData: vi.fn(),
@@ -110,4 +115,166 @@ describe("Biblioteca accessibility", () => {
       });
     }
   }
+});
+
+describe("Biblioteca Esencial accessibility", () => {
+  afterEach(() => cleanup());
+
+  /** What `BibliotecaIndex` hands the Esencial layout for the fixture library. */
+  function esencialProps(): BibliotecaLayoutProps {
+    return {
+      links,
+      capabilities: resourcesCapabilities(),
+      showEmpresa: true,
+      showRecursos: true,
+      query: "",
+      onQueryChange: () => {},
+      recents: [
+        {
+          id: "bitacora",
+          title: "Bitácora de obra",
+          url: "https://docs.google.com/document/d/docbitacora/edit",
+          openedAt: "2026-11-09T17:55:00.000Z",
+          section: "formatos-obra",
+        },
+      ],
+      vacations: { balance: { entitled: 20, taken: 6, pending: 2, available: 12 }, requests: [] },
+      isPending: false,
+      driveEnabled: false,
+      now: new Date("2026-11-09T18:00:00.000Z"),
+      today: "2026-11-09",
+    };
+  }
+
+  for (const mode of MODES) {
+    it(`Esencial has no serious axe violations (${mode})`, async () => {
+      const { container } = renderWithQueryClient(themed("azul", mode, "esencial", <BibliotecaEsencial {...esencialProps()} />));
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+
+  it("cards have names with meta", () => {
+    const { container } = renderWithQueryClient(<BibliotecaEsencial {...esencialProps()} />);
+    const byName = (name: RegExp) => Array.from(container.querySelectorAll("a")).find((a) => name.test(a.textContent ?? ""))!;
+    expect(byName(/^Formatos de obra/).textContent).toBe("Formatos de obra3 documentos · act. 5 nov");
+    expect(byName(/^Mis vacaciones/).textContent).toBe("Mis vacaciones12 días disponibles");
+    expect(byName(/^RFC/).textContent).toBe("RFC1 documento");
+    expect(byName(/^Bitácora de obra/).textContent).toBe("Bitácora de obraFormatos de obrahace 5 min");
+    expect(container.querySelectorAll("a > span[aria-hidden='true']")).toHaveLength(11);
+    for (const icon of container.querySelectorAll("a svg")) {
+      expect(icon.closest("[aria-hidden='true']")).not.toBeNull();
+    }
+  });
+});
+
+describe("Biblioteca Visual accessibility", () => {
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  /** What `BibliotecaIndex` hands the Visual layout for the fixture library. */
+  function visualProps(): BibliotecaLayoutProps {
+    return {
+      links,
+      capabilities: resourcesCapabilities(),
+      showEmpresa: true,
+      showRecursos: true,
+      query: "",
+      onQueryChange: () => {},
+      recents: [
+        {
+          id: "bitacora",
+          title: "Bitácora de obra",
+          url: "https://docs.google.com/document/d/docbitacora/edit",
+          openedAt: "2026-11-09T17:55:00.000Z",
+          section: "formatos-obra",
+        },
+        {
+          id: "manual-2",
+          title: "Cómo abrimos un proyecto",
+          url: "https://docs.google.com/document/d/docmanual2/edit",
+          openedAt: "2026-11-08T15:00:00.000Z",
+          section: "empresa",
+        },
+      ],
+      vacations: { balance: { entitled: 20, taken: 6, pending: 2, available: 12 }, requests: [] },
+      isPending: false,
+      driveEnabled: false,
+      now: new Date("2026-11-09T18:00:00.000Z"),
+      today: "2026-11-09",
+    };
+  }
+
+  for (const mode of MODES) {
+    it(`Visual has no serious axe violations (${mode})`, async () => {
+      const { container } = renderWithQueryClient(themed("azul", mode, "visual", <BibliotecaVisual {...visualProps()} />));
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+
+  it("carousel region has roledescription and label", () => {
+    const { getByRole } = renderWithQueryClient(<BibliotecaVisual {...visualProps()} />);
+    const carousel = getByRole("region", { name: "Abiertos recientemente" });
+    expect(carousel.getAttribute("aria-roledescription")).toBe("carrusel");
+    expect(carousel.querySelector("ul")).not.toBeNull();
+    expect(carousel.querySelectorAll("li")).toHaveLength(2);
+    for (const img of carousel.querySelectorAll("img")) expect(img.getAttribute("alt")).toBe("");
+  });
+});
+
+describe("Biblioteca Analítico accessibility", () => {
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  /** What `BibliotecaIndex` hands the Analítico layout for the fixture library. */
+  function analiticoProps(): BibliotecaLayoutProps {
+    return {
+      links,
+      capabilities: resourcesCapabilities(),
+      showEmpresa: true,
+      showRecursos: true,
+      query: "",
+      onQueryChange: () => {},
+      recents: [
+        {
+          id: "bitacora",
+          title: "Bitácora de obra",
+          url: "https://docs.google.com/document/d/docbitacora/edit",
+          openedAt: "2026-11-09T17:55:00.000Z",
+          section: "formatos-obra",
+        },
+      ],
+      vacations: null,
+      isPending: false,
+      driveEnabled: false,
+      now: new Date("2026-11-09T18:00:00.000Z"),
+      today: "2026-11-09",
+    };
+  }
+
+  for (const mode of MODES) {
+    it(`Analítico has no serious axe violations (${mode})`, async () => {
+      const { container } = renderWithQueryClient(themed("azul", mode, "analitico", <BibliotecaAnalitico {...analiticoProps()} />), {
+        client: seededBibliotecaClient(null, links),
+      });
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+
+  it("group headers expose aria-expanded", () => {
+    const { container } = renderWithQueryClient(<BibliotecaAnalitico {...analiticoProps()} />, {
+      client: seededBibliotecaClient(null, links),
+    });
+    const headers = Array.from(container.querySelectorAll<HTMLButtonElement>("button[aria-controls]"));
+    expect(headers.length).toBeGreaterThanOrEqual(5);
+    for (const header of headers) {
+      expect(["true", "false"]).toContain(header.getAttribute("aria-expanded"));
+      const controlled = header.getAttribute("aria-controls")!;
+      expect(container.querySelector(`[id="${controlled}"]`)).not.toBeNull();
+    }
+    for (const th of container.querySelectorAll("th")) expect(th.getAttribute("scope")).toBe("col");
+  });
 });

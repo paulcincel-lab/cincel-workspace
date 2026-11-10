@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
 import { IMPLEMENTED as ASSISTANT_IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
+import { recordResourceOpenAction } from "@/lib/actions/resources-actions";
 import {
   documentToc,
   empresaDoc,
@@ -76,6 +77,12 @@ export function DocumentReader({ doc, toc, companyDoc }: DocumentReaderProps) {
     remember(doc, companySlug ? { href: empresaDocHref(companySlug, doc.id) } : {});
   }, [remember, doc, companySlug]);
 
+  // Count the open for "Aperturas 30 d" (the server keeps one per person and part every 10 minutes).
+  const docId = doc.id;
+  useEffect(() => {
+    void recordResourceOpenAction({ linkId: docId }).catch(() => undefined);
+  }, [docId]);
+
   const downloadButton = download ? (
     <a href={download.href} className={buttonVariants({ variant: "outline" })}>
       <Download aria-hidden="true" />
@@ -86,6 +93,7 @@ export function DocumentReader({ doc, toc, companyDoc }: DocumentReaderProps) {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
+        estilo={false}
         title={title}
         description={companyDoc?.description}
         breadcrumb={[{ label: "Biblioteca", href: "/biblioteca" }, { label: "Empresa", href: "/biblioteca" }, { label: title }]}
@@ -249,6 +257,7 @@ export function EmpresaDocument({ slug, parte }: EmpresaDocumentProps) {
     return (
       <div className="flex flex-col gap-4">
         <PageHeader
+          estilo={false}
           title={doc.title}
           description={doc.description}
           breadcrumb={[{ label: "Biblioteca", href: "/biblioteca" }, { label: "Empresa", href: "/biblioteca" }, { label: doc.title }]}

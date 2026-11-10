@@ -54,7 +54,7 @@ describe("useInicioDashboard instance", () => {
     expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
   });
 
-  it("persists only the range, collapsed, views and hidden series", () => {
+  it("persists only the range, collapsed, views, hidden series and filters", () => {
     const state = useInicioDashboard.getState();
     state.toggleKpi("bloqueadas");
     state.setRange("4w");
@@ -62,12 +62,13 @@ describe("useInicioDashboard instance", () => {
     state.setWidgetView("visual", "weeklyPace", "table");
     state.toggleSeries("weeklyPace", "created");
     const stored = JSON.parse(localStorage.getItem(KEY) ?? "null") as { state: Record<string, unknown> };
-    expect(Object.keys(stored.state).sort()).toEqual(["collapsed", "hiddenSeries", "range", "views"]);
+    expect(Object.keys(stored.state).sort()).toEqual(["collapsed", "filters", "hiddenSeries", "range", "views"]);
     expect(stored.state).toEqual({
       range: "4w",
       collapsed: { attention: true },
       views: { visual: { weeklyPace: "table" } },
       hiddenSeries: { weeklyPace: ["created"] },
+      filters: { responsable: null, tramo: null },
     });
   });
 
@@ -91,6 +92,45 @@ describe("useInicioDashboard instance", () => {
     expect(state.views).toEqual({ analitico: { workload: "chart" } });
     expect(state.hiddenSeries).toEqual({ weeklyPace: ["completed"] });
     expect(state.selectedKpi).toBeNull();
+  });
+
+  it("filters persist and rehydrate", async () => {
+    const state = useInicioDashboard.getState();
+    expect(state.filters).toEqual({ responsable: null, tramo: null });
+    state.setFilter("responsable", "s-2");
+    state.setFilter("tramo", "diseno");
+    const stored = JSON.parse(localStorage.getItem(KEY) ?? "null") as { state: Record<string, unknown> };
+    expect(stored.state.filters).toEqual({ responsable: "s-2", tramo: "diseno" });
+
+    useInicioDashboard.getState().reset();
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, tramo: null });
+    localStorage.setItem(KEY, JSON.stringify({ state: stored.state, version: 1 }));
+    await useInicioDashboard.persist.rehydrate();
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-2", tramo: "diseno" });
+
+    useInicioDashboard.getState().clearFilters();
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, tramo: null });
+  });
+
+  it("unknown keys dropped", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        state: {
+          range: "8w",
+          collapsed: {},
+          views: {},
+          hiddenSeries: {},
+          filters: { responsable: "s-3", tramo: 4, otro: "x" },
+        },
+        version: 1,
+      }),
+    );
+    await useInicioDashboard.persist.rehydrate();
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-3", tramo: null });
+    // A key the instance does not declare is ignored.
+    (useInicioDashboard.getState().setFilter as (key: string, value: string | null) => void)("otro", "y");
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-3", tramo: null });
   });
 
   it("keeps the per-style fallbacks equal to today's rendering", () => {

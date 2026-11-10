@@ -62,6 +62,23 @@ export function generalLinkErrors(settings: GeneralSettings, headerLinks: boolea
   return headerLinks ? headerLinkErrors(settings.company) : {};
 }
 
+/**
+ * How many fields differ between the saved settings and the draft (one per
+ * changed leaf of company, regional, appearance and system): the save bar's
+ * "{n} cambios sin guardar".
+ */
+export function changedFieldCount(saved: GeneralSettings, draft: GeneralSettings): number {
+  let count = 0;
+  for (const group of ["company", "regional", "appearance", "system"] as const) {
+    const a = saved[group] as Record<string, unknown>;
+    const b = draft[group] as Record<string, unknown>;
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if ((a[key] ?? null) !== (b[key] ?? null)) count += 1;
+    }
+  }
+  return count;
+}
+
 export type GeneralSettingsEditorOptions = {
   canManage: boolean;
   /** Ajustes › General only: validate the avatar-menu link fields before saving. */
@@ -127,7 +144,8 @@ export function useGeneralSettingsEditor({ canManage, headerLinks = false }: Gen
     onFormError: () => form.getState().setError(RESTORE_ERROR),
   });
 
-  const isDirty = useMemo(() => JSON.stringify(settings) !== JSON.stringify(general.settings), [general.settings, settings]);
+  const dirtyCount = useMemo(() => changedFieldCount(general.settings, settings), [general.settings, settings]);
+  const isDirty = dirtyCount > 0;
 
   const linkErrors: HeaderLinkErrors = useMemo(() => generalLinkErrors(settings, headerLinks), [headerLinks, settings]);
   const hasLinkErrors = Object.keys(linkErrors).length > 0;
@@ -189,6 +207,12 @@ export function useGeneralSettingsEditor({ canManage, headerLinks = false }: Gen
     save.mutate(toSave());
   };
 
+  /** Back to the saved settings (the save bar's "Descartar"). */
+  const discardChanges = () => {
+    form.getState().replace(general.settings);
+    setLogoError(null);
+  };
+
   const restoreDefaults = () => {
     form.getState().setError(null);
     restore.mutate(undefined);
@@ -199,6 +223,7 @@ export function useGeneralSettingsEditor({ canManage, headerLinks = false }: Gen
     savedAt: general.savedAt,
     hasCustomConfig: general.hasCustom,
     isDirty,
+    dirtyCount,
     pending: save.isPending || restore.isPending,
     error,
     logoError,
@@ -212,6 +237,7 @@ export function useGeneralSettingsEditor({ canManage, headerLinks = false }: Gen
     updateSystemField: setSystemField,
     handleLogoUpload,
     saveChanges,
+    discardChanges,
     restoreDefaults,
   };
 }

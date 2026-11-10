@@ -149,6 +149,8 @@ describe("Inbox while the actions are stubs", () => {
       checklistsCursor: null,
       notes: [],
       notesCursor: null,
+      tasks: [],
+      canCreateTask: true,
     });
     renderWithQueryClient(<Inbox />, { client });
 

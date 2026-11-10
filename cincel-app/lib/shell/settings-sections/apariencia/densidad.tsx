@@ -10,7 +10,7 @@ import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
 export const aparienciaDensidadSection: SettingsSectionEntry = {
   page: "apariencia",
   name: "densidad",
-  order: 40,
+  order: 50,
   visible: () => IMPLEMENTED.updateMyPreferencesAction,
   Component: AparienciaDensidadSection,
 };

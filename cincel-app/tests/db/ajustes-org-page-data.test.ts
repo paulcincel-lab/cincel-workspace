@@ -9,7 +9,8 @@
  *   viewer without it (and for a guest); Google is Administrador only.
  * - Horario: `rows` is empty unless `canViewTeamHours`; the loader reads the
  *   time-tracking setting once.
- * - Google: mappings, puestos and Estado in ≤ 9 statements, and the health
+ * - Google: mappings, puestos and Estado in ≤ 11 statements (Estado reads who still has to sign in with
+ *   Google and the project folder counts too), and the health
  *   read writes nothing.
  */
 import { randomUUID } from "node:crypto";
@@ -142,16 +143,17 @@ describe.skipIf(!url)("Ajustes org page data (test DB)", async () => {
       await asViewer(admin, async () => {
         const { rows } = await actions.getAjustesHorarioPageData({ weekStart });
         for (const row of rows) {
-          expect(Object.keys(row).sort()).toEqual(["days", "lateCount", "name", "staffId", "status", "target", "total"]);
+          expect(Object.keys(row).sort()).toEqual(["days", "lateCount", "name", "needsReview", "staffId", "status", "target", "total"]);
         }
       });
     });
   });
 
   describe("Google", () => {
-    it("loads mappings, puestos and Estado in ≤ 9 statements, all reads", async () => {
+    it("loads mappings, puestos and Estado in ≤ 11 statements, all reads", async () => {
       const { result, count, statements } = await countQueries(() => loadAjustesGoogle(admin));
-      expect(count).toBeLessThanOrEqual(9);
+      // 9 before Acceso con Google's pending staff and the Drive folder counts (two reads in the health).
+      expect(count).toBeLessThanOrEqual(11);
       expect(statements.every((statement) => /^\s*(select|with)\b/i.test(statement.sql))).toBe(true);
       expect(Array.isArray(result.mappings)).toBe(true);
       for (const position of result.positions) expect(Object.keys(position).sort()).toEqual(["id", "name"]);

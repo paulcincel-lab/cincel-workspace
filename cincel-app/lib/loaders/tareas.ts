@@ -38,7 +38,29 @@ import type { QueryClient } from "@tanstack/react-query";
 import { calendarFetchRange, fromDayKey, startOfDay } from "@/lib/calendar/calendar-agenda";
 import { STALE, qk } from "@/lib/query/keys";
 import { prefetch } from "@/lib/query/server";
-import type { TareasQuery } from "@/lib/tareas/query";
+import { esencialResponsable, type TareasQuery } from "@/lib/tareas/query";
+import { EMPTY_TAREAS_SUMMARY, SIN_TRAMO_KEY, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
+import {
+  currentTaskStatus,
+  inMemoryCounter,
+  isoDateRange,
+  localDayOf,
+  shiftIsoDate,
+  statusResolver,
+  taskDayState,
+} from "@/lib/dashboard/inicio";
+import { TASK_TREND_TIME_ZONE, localIsoDate } from "@/lib/dashboard/task-trend";
+import { dailySeries, deltaTone, formatSignedDelta, kpiFromDaily, type DailyPoint } from "@/lib/metrics/series";
+import * as inicioRepository from "@/lib/repositories/inicio-repository";
+import type { TareasTrend, TareasTrendKey } from "@/lib/tareas/page-data";
+import { sortListaTasks } from "@/components/tareas/lista-table";
+import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
+import {
+  TAREAS_BY_PROJECT_LIMIT,
+  listItemOfRow,
+  type TareasByProject,
+  type TareasProjectGroup,
+} from "@/lib/tareas/page-data";
 
 // ── Calendario (Query Migration 4c, #957) ────────────────────────────────────
 
@@ -58,9 +80,13 @@ async function calendarTaskFilters(
     out.workflowId = tramo.id;
   }
   if (filters.proyecto) out.projectId = filters.proyecto;
-  if (filters.responsable) out.involvesStaffId = filters.responsable === "yo" ? user.member.id : filters.responsable;
+  // "todos" (Esencial's Solo mías off) filters nothing.
+  if (filters.responsable && filters.responsable !== "todos") {
+    out.involvesStaffId = filters.responsable === "yo" ? user.member.id : filters.responsable;
+  }
   if (filters.estado) out.status = filters.estado as TaskStatus;
   if (filters.q) out.search = filters.q;
+  if (filters.mostrar && filters.mostrar !== "todas") out.mostrar = filters.mostrar;
   return out;
 }
 
@@ -99,6 +125,7 @@ export async function prefetchTareasCalendar(
     responsable: query.responsable,
     estado: (query.estado as TaskStatus | null) ?? null,
     q: query.q,
+    ...(query.mostrar && query.mostrar !== "todas" ? { mostrar: query.mostrar } : {}),
   };
   const cursor = query.fecha ? fromDayKey(query.fecha) : startOfDay(today);
   const { from, to } = calendarFetchRange(query.cal, cursor);
@@ -251,9 +278,10 @@ function tareasBaseFilters(user: AuthenticatedUser, viewer: ViewerScope, filters
   if (filters.responsable === "yo") {
     out.involvesStaffId = user.member.id;
     if (viewer.isAdmin) out.kind = ALL_KINDS_FOR_ADMIN;
-  } else if (filters.responsable) {
+  } else if (filters.responsable && filters.responsable !== "todos") {
     out.involvesStaffId = filters.responsable;
   }
+  if (filters.mostrar && filters.mostrar !== "todas") out.mostrar = filters.mostrar;
   return out;
 }
 
@@ -265,7 +293,9 @@ function tareasViewFilters(
   tramos: WorkflowRef[],
 ): TaskFilters | null {
   const out = tareasBaseFilters(user, viewer, filters);
-  if (filters.tramo) {
+  if (filters.tramo === SIN_TRAMO_KEY) {
+    out.withoutWorkflow = true;
+  } else if (filters.tramo) {
     const tramo = tramos.find((t) => t.key === filters.tramo);
     if (!tramo) return null;
     out.workflowId = tramo.id;
@@ -346,7 +376,7 @@ const EMPTY_PAGE: TareasRowsPage = { rows: [], nextCursor: null, total: 0 };
 /** `qk.tareas.list(f)` page loader (`useInfiniteQuery`, the cursor is the page param). FORBIDDEN without Tareas. */
 export async function loadTareasListPage(
   user: AuthenticatedUser,
-  input: { filters: TareasListFilters; cursor: string | null; limit?: number },
+  input: { filters: TareasListFilters; cursor: string | null; limit?: number; orderBy?: "retraso" },
 ): Promise<TareasRowsPage> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
@@ -355,6 +385,7 @@ export async function loadTareasListPage(
   return tasksRepository.listTasksPage(filters, viewer, {
     cursor: input.cursor,
     limit: input.limit ?? TAREAS_LIST_PAGE_SIZE,
+    ...(input.orderBy ? { orderBy: input.orderBy } : {}),
   });
 }
 
@@ -374,45 +405,351 @@ export async function loadTareasBoardColumn(
   );
 }
 
+// ── Analítico (Estilos, #988) ────────────────────────────────────────────────
+
+/** Expanded tramo groups whose first page the Analítico bundle seeds. */
+export const TAREAS_ANALITICO_SEEDED_GROUPS = 3;
+
+/**
+ * `qk.tareas.summary(f)` loader (`getTareasSummary`): the Analítico counts
+ * over every task the filters match, per project and tramo, per project and
+ * in total, plus the same filters without `mostrar`. One grouping-sets
+ * statement (and one more with `mostrar`). Overdue is
+ * `coalesce(commitment, delivery)` before today in America/Mexico_City.
+ * `ViewerScope` applies as for the rows (admin tasks only in an
+ * administrator's "Responsable: Yo"). FORBIDDEN without Tareas.
+ */
+export async function loadTareasSummary(
+  user: AuthenticatedUser,
+  input: { filters: TareasListFilters },
+  now: Date = new Date(),
+): Promise<TareasSummary> {
+  requireTareasView(user);
+  const viewer = viewerScopeOf(user);
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  if (!filters) return EMPTY_TAREAS_SUMMARY;
+  return tasksRepository.taskSummary(filters, viewer, todayInAppTimeZone(now));
+}
+
+/**
+ * The Analítico part of the page bundle: the summary, then the first page
+ * ("retraso" order) of the first `TAREAS_ANALITICO_SEEDED_GROUPS` tramo
+ * groups in display order (every group starts expanded).
+ */
+async function analiticoBundle(
+  user: AuthenticatedUser,
+  viewer: ViewerScope,
+  filters: TareasListFilters,
+  viewFilters: TaskFilters | null,
+  tramos: WorkflowRef[],
+): Promise<{ summary: TareasSummary; groups: { filters: TareasListFilters; page: TareasRowsPage }[] }> {
+  if (!viewFilters) return { summary: EMPTY_TAREAS_SUMMARY, groups: [] };
+  const today = todayInAppTimeZone();
+  const summary = await tasksRepository.taskSummary(viewFilters, viewer, today);
+  const first = summary.projects
+    .flatMap((p) => p.tramos.map((t) => ({ projectId: p.project.id, tramo: t.tramo })))
+    .slice(0, TAREAS_ANALITICO_SEEDED_GROUPS);
+  const groups = await Promise.all(
+    first.map(async ({ projectId, tramo }) => {
+      const groupFilters = tareasGroupFilters(filters, projectId, tramo.key);
+      const repoFilters = tareasViewFilters(user, viewer, groupFilters, tramos);
+      const page = repoFilters
+        ? await tasksRepository.listTasksPage({ ...repoFilters, today }, viewer, {
+            cursor: null,
+            limit: TAREAS_LIST_PAGE_SIZE,
+            orderBy: "retraso",
+          })
+        : EMPTY_PAGE;
+      return { filters: groupFilters, page };
+    }),
+  );
+  return { summary, groups };
+}
+
 /**
  * `qk.tareas.page(q)` loader: `(user, input) => data`. `getTareasPageData`
  * calls it after the session check and parsing; the `/tareas` page prefetches
  * through it directly. FORBIDDEN without the Tareas capability.
  *
- * One call per view, in ≤ 6 statements: the tramos, then at once the staff
- * options, the facets and the view's first page (Lista) or every board
- * column plus the status catalog (Tablero). Calendario loads its own range
- * (`tareas.calendar`). Rows are slim (`TaskListRow`), scoped by the
+ * One call per layout (the resolved style), in ≤ 6 statements (7 for
+ * Analítico): the tramos, then at once the staff options, the facets and
+ * every board column plus the status catalog (Visual), the cards per project
+ * (Esencial) or the summary and the first page of the first 3 tramo groups
+ * (Analítico). Rows are slim (`TaskListRow`), scoped by the
  * repository: admin tasks only in an administrator's "Responsable: Yo",
  * client names only for administrators. Staff are `{id,name}`.
  */
 export async function loadTareasPage(
   user: AuthenticatedUser,
-  input: Pick<TareasPageKeyInput, "vista"> & TareasListFilters,
+  input: Pick<TareasPageKeyInput, "estilo"> & TareasListFilters,
 ): Promise<TareasPageData> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
   const filters: TareasListFilters = {
     tramo: input.tramo,
     proyecto: input.proyecto,
-    responsable: input.responsable,
+    // Esencial reads a missing responsable as "yo" (Solo mías on by default).
+    responsable: input.estilo === "esencial" ? esencialResponsable(input.responsable) : input.responsable,
     estado: input.estado,
     q: input.q,
+    ...(input.mostrar && input.mostrar !== "todas" ? { mostrar: input.mostrar } : {}),
   };
   const tramos = await loadTareasTramos();
   const viewFilters = tareasViewFilters(user, viewer, filters, tramos);
-  const [staffOptions, facets, list, board] = await Promise.all([
+  const [staffOptions, facets, analitico, board, byProject] = await Promise.all([
     loadTareasStaffOptions(),
     tareasFacets(user, viewer, filters),
-    input.vista === "lista"
-      ? viewFilters
-        ? tasksRepository.listTasksPage(viewFilters, viewer, { cursor: null, limit: TAREAS_LIST_PAGE_SIZE })
-        : Promise.resolve(EMPTY_PAGE)
-      : Promise.resolve(undefined),
-    input.vista === "tablero" ? tareasBoard(user, viewer, viewFilters) : Promise.resolve(undefined),
+    input.estilo === "analitico" ? analiticoBundle(user, viewer, filters, viewFilters, tramos) : Promise.resolve(undefined),
+    input.estilo === "visual" ? tareasBoard(user, viewer, viewFilters) : Promise.resolve(undefined),
+    input.estilo === "esencial" ? loadTareasByProject(user, { filters }) : Promise.resolve(undefined),
   ]);
   const data: TareasPageData = { facets, tramos, staff: staffOptions };
-  if (list) data.list = list;
+  if (analitico) {
+    data.summary = analitico.summary;
+    data.groups = analitico.groups;
+  }
   if (board) data.board = board;
+  if (byProject) data.byProject = byProject;
   return data;
+}
+
+// ── Visual summary (Estilos, #986) ───────────────────────────────────────────
+
+/** Days of status history the trend reads: this week and the same span last week. */
+const TREND_DAYS = 14;
+
+/** Monday of the week that holds the ISO date `day`. */
+function mondayOf(day: string): string {
+  const weekday = (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7;
+  return shiftIsoDate(day, -weekday);
+}
+
+/** "1 persona trabajando", "5 personas trabajando". */
+export function activeAssigneesCaption(n: number): string {
+  return `${n.toLocaleString("es-MX")} ${n === 1 ? "persona trabajando" : "personas trabajando"}`;
+}
+
+type TrendKpi = TareasTrend["kpis"][number];
+
+function trendKpi(
+  key: TareasTrendKey,
+  label: string,
+  daily: DailyPoint[],
+  delta: { change: number; goodWhen: "up" | "down"; suffix: string } | null,
+  value?: number,
+): TrendKpi {
+  const base = kpiFromDaily(key, label, daily, { goodWhen: delta?.goodWhen ?? "up" });
+  const kpi: TrendKpi = { key, label, value: value ?? base.value, series7: base.series7 };
+  if (delta) {
+    const tone = deltaTone(delta.change, delta.goodWhen);
+    kpi.delta = {
+      value: delta.change,
+      good: tone !== "bad",
+      caption: delta.suffix,
+      label: `${formatSignedDelta(delta.change)} ${delta.suffix}`,
+      tone,
+    };
+  }
+  return kpi;
+}
+
+/** The trend of a filter that matches nothing (an unknown tramo key): no tiles, an empty week. */
+function emptyTrend(monday: string): TareasTrend {
+  const sunday = shiftIsoDate(monday, 6);
+  const days = isoDateRange(monday, sunday).map((date) => ({ date, due: 0, tramoKey: null }));
+  return { kpis: [], activeAssignees: 0, week: { from: monday, to: sunday, total: 0, days } };
+}
+
+/**
+ * `qk.tareas.trend(f)` loader (`getTareasTrend`): the Tareas Visual summary
+ * over the same tasks as the board (every URL filter, `ViewerScope`, admin
+ * tasks only where the board shows them). FORBIDDEN without Tareas.
+ *
+ * - Abiertas, Vencidas, En proceso: the count at the end of each of the last
+ *   7 days, from the rows as they are now plus their status history
+ *   (`taskDayState`); Abiertas and Vencidas compare today with the end of the
+ *   day before Monday.
+ * - Completadas: tasks moved to completado per day; the value is Monday to
+ *   today, compared with the same span last week.
+ * - `activeAssignees`: distinct responsables of the tasks en proceso.
+ * - `week`: open tasks due per day, Monday to Sunday, with the dominant tramo.
+ */
+export async function loadTareasTrend(
+  user: AuthenticatedUser,
+  input: { filters: TareasListFilters },
+  now: Date = new Date(),
+): Promise<TareasTrend> {
+  requireTareasView(user);
+  const viewer = viewerScopeOf(user);
+  const tz = TASK_TREND_TIME_ZONE;
+  const today = localIsoDate(now, tz);
+  const monday = mondayOf(today);
+  const sunday = shiftIsoDate(monday, 6);
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  if (!filters) return emptyTrend(monday);
+
+  const firstDay = shiftIsoDate(today, -(TREND_DAYS - 1));
+  // Status changes since a day before the first day (a margin for the UTC offset).
+  const historySince = new Date(Date.parse(`${shiftIsoDate(firstDay, -1)}T00:00:00Z`));
+  const [rows, events, dueDays] = await Promise.all([
+    tasksRepository.listTaskRows({ ...filters, archived: false }, viewer),
+    inicioRepository.listStatusEvents("task", historySince),
+    tasksRepository.taskDueByDay({ ...filters, archived: false }, viewer, { from: monday, to: sunday }),
+  ]);
+  const ids = new Set(rows.map((r) => r.id));
+  const scopedEvents = events.filter((e) => ids.has(e.entityId));
+  const statusAt = statusResolver(scopedEvents, tz);
+  const state = taskDayState(statusAt, tz);
+  const inProgressOn = (t: TaskListRow, day: string) =>
+    localDayOf(t.createdAt, tz) <= day && statusAt(t.id, currentTaskStatus(t), day) === "en_proceso";
+
+  const completedOn = new Map<string, Set<string>>();
+  for (const e of scopedEvents) {
+    if (e.after !== "completado") continue;
+    const day = localDayOf(e.at, tz);
+    const set = completedOn.get(day) ?? new Set<string>();
+    set.add(e.entityId);
+    completedOn.set(day, set);
+  }
+  const completedBetween = (from: string, to: string) => {
+    const set = new Set<string>();
+    for (const day of isoDateRange(from, to)) for (const id of completedOn.get(day) ?? []) set.add(id);
+    return set.size;
+  };
+
+  const daily = (countOn: (day: string) => number) => dailySeries(inMemoryCounter(countOn), TREND_DAYS, now, tz);
+  const [openDaily, overdueDaily, inProgressDaily, completedDaily] = await Promise.all([
+    daily((day) => rows.filter((t) => state.open(t, day)).length),
+    daily((day) => rows.filter((t) => state.overdue(t, day)).length),
+    daily((day) => rows.filter((t) => inProgressOn(t, day)).length),
+    daily((day) => completedOn.get(day)?.size ?? 0),
+  ]);
+  const valueOn = (series: DailyPoint[], day: string) => series.find((p) => p.date === day)?.value ?? 0;
+  const beforeMonday = shiftIsoDate(monday, -1);
+  const lastOf = (series: DailyPoint[]) => series.at(-1)?.value ?? 0;
+
+  const thisWeekDone = completedBetween(monday, today);
+  const lastWeekDone = completedBetween(shiftIsoDate(monday, -7), shiftIsoDate(today, -7));
+
+  const inProgress = rows.filter((t) => currentTaskStatus(t) === "en_proceso");
+  const activeAssignees = new Set(inProgress.map((t) => t.manager?.id).filter((id): id is string => !!id)).size;
+
+  const kpis: TrendKpi[] = [
+    trendKpi("abiertas", "Abiertas", openDaily, {
+      change: lastOf(openDaily) - valueOn(openDaily, beforeMonday),
+      goodWhen: "down",
+      suffix: "esta semana",
+    }),
+    trendKpi("vencidas", "Vencidas", overdueDaily, {
+      change: lastOf(overdueDaily) - valueOn(overdueDaily, beforeMonday),
+      goodWhen: "down",
+      suffix: "desde el lunes",
+    }),
+    { ...trendKpi("en_proceso", "En proceso", inProgressDaily, null), caption: activeAssigneesCaption(activeAssignees) },
+    trendKpi(
+      "completadas",
+      "Completadas",
+      completedDaily,
+      { change: thisWeekDone - lastWeekDone, goodWhen: "up", suffix: "vs. semana pasada" },
+      thisWeekDone,
+    ),
+  ];
+
+  const byDay = new Map(dueDays.map((d) => [d.date, d]));
+  const days = isoDateRange(monday, sunday).map((date) => ({
+    date,
+    due: byDay.get(date)?.due ?? 0,
+    tramoKey: byDay.get(date)?.tramoKey ?? null,
+  }));
+  return {
+    kpis,
+    activeAssignees,
+    week: { from: monday, to: sunday, total: days.reduce((sum, d) => sum + d.due, 0), days },
+  };
+}
+
+// ── Esencial: cards per project (Estilos, #987) ──────────────────────────────
+
+/** The due date of a row: commitment, else delivery. */
+function rowDue(row: TaskListRow): string | null {
+  const due = row.commitmentDate ?? row.deliveryDate ?? null;
+  return due ? due.slice(0, 10) : null;
+}
+
+/** Rows in `sortListaTasks` order (the rows themselves, never the list items it sorts). */
+function sortRows(rows: TaskListRow[], today: string): TaskListRow[] {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return sortListaTasks(rows.map(listItemOfRow), today).map((item) => byId.get(item.id)!);
+}
+
+/** Most overdue first, then the nearest due date (none last), then the name (es). */
+function compareGroups(a: TareasProjectGroup, b: TareasProjectGroup): number {
+  if (a.overdue !== b.overdue) return b.overdue - a.overdue;
+  const dueA = a.rows.map(rowDue).filter((d): d is string => d !== null).sort()[0] ?? null;
+  const dueB = b.rows.map(rowDue).filter((d): d is string => d !== null).sort()[0] ?? null;
+  if (dueA !== dueB) {
+    if (!dueA) return 1;
+    if (!dueB) return -1;
+    return dueA < dueB ? -1 : 1;
+  }
+  return a.project.name.localeCompare(b.project.name, "es");
+}
+
+/**
+ * `qk.tareas.byProject(f)` loader (`getTareasByProject`): the Esencial cards,
+ * one per project with a matching task. FORBIDDEN without Tareas. Two
+ * statements at once, both over the same filters and `ViewerScope` (admin
+ * tasks only in an administrator's "Responsable: Yo"):
+ *
+ * - the counts per project (`taskProjectCounts`, `mostrar` left out): open,
+ *   overdue (before today in America/Mexico_City) and closed;
+ * - the open rows (`mostrar` abiertas, or en_retraso when asked), at most
+ *   `TAREAS_BY_PROJECT_LIMIT`; past it `truncated` is true.
+ *
+ * `open` is what the card shows: the overdue count with `mostrar=en_retraso`.
+ * `completed` only counts with `mostrar=todas`: the other two show open work
+ * only, so the cards then have no "N completadas". The filters come resolved:
+ * a null responsable here is everyone (Esencial's "yo" default is applied by
+ * the caller, `esencialResponsable`).
+ */
+export async function loadTareasByProject(
+  user: AuthenticatedUser,
+  input: { filters: TareasListFilters },
+  now: Date = new Date(),
+): Promise<TareasByProject> {
+  requireTareasView(user);
+  const viewer = viewerScopeOf(user);
+  const today = todayInAppTimeZone(now);
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  if (!filters) return { groups: [], truncated: false };
+  const mostrar = input.filters.mostrar ?? "todas";
+  const openFilters: TaskFilters = { ...filters, mostrar: mostrar === "en_retraso" ? "en_retraso" : "abiertas", today };
+
+  const [counts, page] = await Promise.all([
+    tasksRepository.taskProjectCounts({ ...filters, mostrar: undefined }, viewer, today),
+    tasksRepository.listTasksPage(openFilters, viewer, { cursor: null, limit: TAREAS_BY_PROJECT_LIMIT }),
+  ]);
+
+  const rowsByProject = new Map<string, TaskListRow[]>();
+  for (const row of page.rows) {
+    const list = rowsByProject.get(row.projectId) ?? [];
+    list.push(row);
+    rowsByProject.set(row.projectId, list);
+  }
+
+  const groups: TareasProjectGroup[] = [];
+  for (const c of counts) {
+    const open = mostrar === "en_retraso" ? c.overdue : c.open;
+    const completed = mostrar === "todas" ? c.completed : 0;
+    if (open === 0 && completed === 0) continue;
+    groups.push({
+      project: { id: c.projectId, name: c.projectName },
+      open,
+      overdue: c.overdue,
+      completed,
+      rows: sortRows(rowsByProject.get(c.projectId) ?? [], today),
+    });
+  }
+  groups.sort(compareGroups);
+  return { groups, truncated: page.nextCursor !== null };
 }

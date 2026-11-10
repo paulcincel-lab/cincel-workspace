@@ -24,7 +24,7 @@ export function miEspacioAvailable(): boolean {
 export const miEspacioNavItem: NavItemSource = {
   key: "mi-espacio",
   section: "items",
-  order: 20,
+  order: 55,
   resolve: async () => {
     if (!miEspacioAvailable()) return null;
     return { key: "mi-espacio", label: "Mi espacio", href: "/mi-espacio", icon: Inbox };

@@ -71,10 +71,11 @@ test.describe("Tema de la organización — publicar para todos", () => {
       await page.goto(`${BASE_URL}/ajustes/tema`, { waitUntil: "domcontentloaded" });
       const publish = page.getByRole("button", { name: "Publicar para todos" });
       await expect(publish).toBeVisible({ timeout: 30_000 });
-      await page.getByRole("button", { name: "Cálido", exact: true }).first().click();
-      // Every seeded preset passes the shared contrast list, so publishing is allowed.
+      await page.getByRole("radiogroup", { name: "Partir de un tema" }).getByRole("radio", { name: "Cálido" }).click();
+      // Every seeded preset passes the shared contrast list, so publishing goes straight through (no confirmation).
       await expect(page.getByText(/cumple 4\.5:1/).first()).toBeVisible();
-      await expect(publish).toBeEnabled();
+      await expect(page.getByText("Cambios sin publicar")).toBeVisible();
+      await expect(publish).not.toHaveAttribute("aria-disabled", "true");
       const before = await readSettingData<OrgAppearanceData>(THEME_KEY);
       // Publishing is one action POST (its response carries the layout re-render) and no `router.refresh()`.
       let actionPosts = 0;

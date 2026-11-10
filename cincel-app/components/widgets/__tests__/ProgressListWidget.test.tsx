@@ -74,10 +74,10 @@ describe("ProgressListWidget", () => {
       const li = container.querySelector(`[data-item="${item.id}"]`) as HTMLElement;
       expect(within(li).getByText(REAL[i])).toBeTruthy();
       expect(within(li).getByText(item.label)).toBeTruthy();
-      const ring = li.querySelector('[style*="conic-gradient"]') as HTMLElement | null;
+      const ring = li.querySelector('[data-slot="progress-ring"]') as HTMLElement | null;
       expect(ring).not.toBeNull();
       expect(ring?.getAttribute("style")).toContain(`width: ${PROGRESS_RING_SIZE}px`);
-      expect(ring?.getAttribute("style")).toContain(`${item.colorVar}`);
+      expect(ring?.querySelector('[data-slot="progress-ring-fill"]')?.getAttribute("stroke")).toBe(item.colorVar);
     }
   });
 

@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
 
 import PortalProjectView from "@/components/portal/PortalProjectView";
-import { loadPortalProjectData } from "@/lib/loaders/portal";
+import { loadPortalHomeData, loadPortalProjectData } from "@/lib/loaders/portal";
 import { parsePortalProjectTab } from "@/lib/portal/project-tabs";
 import { requirePortalUser } from "@/lib/portal/session";
 import { Hydrate } from "@/lib/query/hydrate";
-import { portalProjectOptions } from "@/lib/query/options/portal";
+import { portalHomeOptions, portalProjectOptions } from "@/lib/query/options/portal";
 import { getQueryClient, prefetch } from "@/lib/query/server";
 
 type PageProps = {
@@ -29,7 +29,11 @@ export default async function PortalProjectPage({ params, searchParams }: PagePr
   if (!data) notFound();
 
   const qc = getQueryClient();
-  await prefetch(qc, portalProjectOptions(id, active), async () => data);
+  await Promise.all([
+    prefetch(qc, portalProjectOptions(id, active), async () => data),
+    // The top bar's project menu lists the client's projects (`portal.projects()`).
+    prefetch(qc, portalHomeOptions(), () => loadPortalHomeData(user)),
+  ]);
 
   return (
     <Hydrate qc={qc}>

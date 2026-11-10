@@ -10,7 +10,8 @@ import { listSubtasksAction, listTaskDependenciesAction } from "@/lib/actions/ta
 import { previewStartTramoAction } from "@/lib/actions/tramo-start-actions";
 import { fetchWorkflowAction } from "@/lib/actions/workflows-actions";
 import { STALE, qk, type TareasListFilters } from "@/lib/query/keys";
-import type { TareasQuery } from "@/lib/tareas/query";
+import { esencialResponsable, type TareasQuery } from "@/lib/tareas/query";
+import type { PresentationStyle } from "@/lib/types/redesign";
 import type {
   StartTramoPreview,
   TaskDetail,
@@ -26,17 +27,23 @@ import { infiniteQueryOptions, type InfiniteData } from "@tanstack/react-query";
 import {
   getTareasBoard,
   getTareasBoardColumn,
+  getTareasByProject,
   getTareasFacets,
   getTareasListPage,
   getTareasPageData,
+  getTareasTrend,
 } from "@/lib/actions/page-data/tareas-actions";
 import type { TareasPageKeyInput } from "@/lib/query/keys";
+import { getTareasSummary } from "@/lib/actions/page-data/tareas-actions";
+import type { TareasSummary } from "@/lib/tareas/summary";
 import type {
   TareasBoardColumn,
   TareasBoardData,
+  TareasByProject,
   TareasFacets,
   TareasPageData,
   TareasRowsPage,
+  TareasTrend,
 } from "@/lib/tareas/page-data";
 
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
@@ -95,6 +102,7 @@ export function tareasListFiltersOf(query: TareasQuery): TareasListFilters {
     responsable: query.responsable,
     estado: (query.estado as TaskStatus | null) ?? null,
     q: query.q,
+    ...(query.mostrar && query.mostrar !== "todas" ? { mostrar: query.mostrar } : {}),
   };
 }
 
@@ -128,9 +136,12 @@ export function taskDeleteInvalidations(projectId: string | null | undefined): Q
     [...qk.tareas.all, "board"],
     [...qk.tareas.all, "facets"],
     [...qk.tareas.all, "page"],
+    [...qk.tareas.all, "by-project"],
+    [...qk.tareas.all, "summary"],
     ...(projectId ? [qk.proyectos.tab(projectId, "tareas")] : []),
     qk.inicio(),
     qk.shell.badges(),
+    qk.me.tasks(),
   ];
 }
 
@@ -240,11 +251,14 @@ const TAREAS_VIEW_KEYS: readonly QueryKey[] = [
   [...qk.tareas.all, "board"],
   [...qk.tareas.all, "calendar"],
   [...qk.tareas.all, "facets"],
+  [...qk.tareas.all, "trend"],
+  [...qk.tareas.all, "by-project"],
+  [...qk.tareas.all, "summary"],
 ];
 
 /** `updateTaskAction` (plan §3): every Tareas view, the project's Tareas tab and Inicio; the detail is set from the result. */
 export function taskUpdateInvalidations(projectId: string): QueryKey[] {
-  return [...TAREAS_VIEW_KEYS, qk.proyectos.tab(projectId, "tareas"), qk.inicio()];
+  return [...TAREAS_VIEW_KEYS, qk.proyectos.tab(projectId, "tareas"), qk.inicio(), qk.me.tasks()];
 }
 
 /**
@@ -259,12 +273,13 @@ export function taskStatusInvalidations(projectId: string): QueryKey[] {
     qk.proyectos.cronograma(projectId),
     qk.inicio(),
     qk.shell.badges(),
+    qk.me.tasks(),
   ];
 }
 
-/** `assignTaskAction`: every Tareas view, Inicio (workload) and the shell badges. */
+/** `assignTaskAction`: every Tareas view, Inicio (workload), the shell badges and Mi espacio's tasks. */
 export function taskAssignInvalidations(): QueryKey[] {
-  return [...TAREAS_VIEW_KEYS, qk.inicio(), qk.shell.badges()];
+  return [...TAREAS_VIEW_KEYS, qk.inicio(), qk.shell.badges(), qk.me.tasks()];
 }
 
 /** Checklist add / update / remove / reorder: the views that show checklist progress. */
@@ -300,13 +315,24 @@ export function taskDependencyInvalidations(taskId: string, otherId: string): Qu
 
 // ── Lista y Tablero (Query Migration 4a, #955) ───────────────────────────────
 
-/** `qk.tareas.page` input of a `/tareas` query: the view, the calendar mode and the filters (never `nueva` or `fecha`). */
-export function tareasPageKeyInputOf(query: TareasQuery): TareasPageKeyInput {
-  return { vista: query.vista, cal: query.cal, ...tareasListFiltersOf(query) };
+/**
+ * `qk.tareas.page` input of a `/tareas` query: the resolved style (the
+ * server prefetch and the client pass the same one), the calendar mode and
+ * the filters (never `nueva` or `fecha`).
+ */
+export function tareasPageKeyInputOf(query: TareasQuery, estilo: PresentationStyle = "visual"): TareasPageKeyInput {
+  return { estilo, cal: query.cal, ...tareasListFiltersOf(query) };
 }
 
 function filtersOfPageKey(q: TareasPageKeyInput): TareasListFilters {
-  return { tramo: q.tramo, proyecto: q.proyecto, responsable: q.responsable, estado: q.estado, q: q.q };
+  return {
+    tramo: q.tramo,
+    proyecto: q.proyecto,
+    responsable: q.responsable,
+    estado: q.estado,
+    q: q.q,
+    ...(q.mostrar ? { mostrar: q.mostrar } : {}),
+  };
 }
 
 /** Every `tareas.list` entry (any filters). */
@@ -325,10 +351,16 @@ export type TareasListPages = InfiniteData<TareasRowsPage, string | null>;
  * the rows live once, in their own keys (and once in the dehydrated page).
  */
 export function seedTareasPage(client: QueryClient, q: TareasPageKeyInput, data: TareasPageData): TareasPageData {
-  const f = filtersOfPageKey(q);
+  // Esencial's bundle counts with its own responsable default ("yo"), so it seeds the resolved keys.
+  const f = q.estilo === "esencial" ? tareasEsencialFilters(filtersOfPageKey(q)) : filtersOfPageKey(q);
   client.setQueryData(qk.tareas.facets(f), data.facets);
+  if (data.byProject) client.setQueryData(qk.tareas.byProject(f), data.byProject);
   if (data.board) client.setQueryData(qk.tareas.board(f), data.board);
   if (data.list) client.setQueryData<TareasListPages>(qk.tareas.list(f), { pages: [data.list], pageParams: [null] });
+  if (data.summary) client.setQueryData(qk.tareas.summary(f), data.summary);
+  for (const group of data.groups ?? []) {
+    client.setQueryData<TareasListPages>(qk.tareas.list(group.filters), { pages: [group.page], pageParams: [null] });
+  }
   return { facets: data.facets, tramos: data.tramos, staff: data.staff };
 }
 
@@ -344,7 +376,7 @@ export function tareasPageOptions(q: TareasPageKeyInput) {
     queryKey: qk.tareas.page(q),
     queryFn: async ({ client }) => {
       const data = await getTareasPageData({
-        vista: q.vista,
+        estilo: q.estilo,
         cal: q.cal,
         ...filtersOfPageKey(q),
       });
@@ -388,7 +420,8 @@ export function tareasBoardOptions(f: TareasListFilters) {
 export function tareasListInfiniteOptions(f: TareasListFilters) {
   return infiniteQueryOptions<TareasRowsPage, Error, TareasListPages, readonly unknown[], string | null>({
     queryKey: qk.tareas.list(f),
-    queryFn: ({ pageParam }) => getTareasListPage({ filters: f, cursor: pageParam }),
+    queryFn: ({ pageParam }) =>
+      getTareasListPage({ filters: f, cursor: pageParam, ...(f.orderBy ? { orderBy: f.orderBy } : {}) }),
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
     staleTime: STALE.screen,
@@ -418,7 +451,7 @@ export function tareasBoardColumnOptions(f: TareasListFilters, columnId: string,
 /**
  * What a Tablero drag invalidates once it settles (plan §3, §4.4): the
  * facets and every Lista (and calendar) entry, the project's Tareas tab,
- * resumen and cronograma, Inicio and the shell badges. Not the board it just
+ * resumen and cronograma, Inicio, the shell badges and my tasks. Not the board it just
  * patched: the optimistic move already matches the server.
  */
 export function tableroMoveInvalidations(projectId: string | null): QueryKey[] {
@@ -426,10 +459,92 @@ export function tableroMoveInvalidations(projectId: string | null): QueryKey[] {
     TAREAS_FACETS_PREFIX,
     TAREAS_LIST_PREFIX,
     TAREAS_CALENDAR_PREFIX,
+    [...qk.tareas.all, "trend"],
+    [...qk.tareas.all, "summary"],
     ...(projectId
       ? [qk.proyectos.tab(projectId, "tareas"), qk.proyectos.resumen(projectId), qk.proyectos.cronograma(projectId)]
       : []),
     qk.inicio(),
     qk.shell.badges(),
+    qk.me.tasks(),
   ];
+}
+
+// ── Visual summary (Estilos, #986) ───────────────────────────────────────────
+
+/** Every `tareas.trend` entry (any filters). */
+export const TAREAS_TREND_PREFIX: QueryKey = [...qk.tareas.all, "trend"];
+
+/**
+ * The Tareas Visual summary (`qk.tareas.trend(f)`): KPI tiles with their
+ * 7-day series and deltas, the people at work and the week strip. 30 s
+ * stale; the previous filters' summary stays on screen while the next loads.
+ */
+export function tareasTrendOptions(f: TareasListFilters) {
+  return queryOptions<TareasTrend>({
+    queryKey: qk.tareas.trend(f),
+    queryFn: () => getTareasTrend({ filters: f }),
+    staleTime: STALE.screen,
+    placeholderData: keepPreviousData,
+  });
+}
+
+// ── Esencial (Estilos, #987) ─────────────────────────────────────────────────
+
+/**
+ * The filters Tareas Esencial reads with: a missing responsable is "yo"
+ * (Solo mías on by default) and "todos" is everyone (null), so the keys of
+ * "everyone" are the ones the other styles use.
+ */
+export function tareasEsencialFilters(f: TareasListFilters): TareasListFilters {
+  return { ...f, responsable: esencialResponsable(f.responsable) };
+}
+
+/** Every `tareas.byProject` entry (any filters). */
+export const TAREAS_BY_PROJECT_PREFIX: QueryKey = [...qk.tareas.all, "by-project"];
+
+/**
+ * The Esencial cards (`qk.tareas.byProject(f)`, `f` resolved with
+ * `tareasEsencialFilters`): counts per project and the open rows (cap 200).
+ * Seeded by the Esencial page bundle; 30 s stale, the previous filters'
+ * cards stay on screen while the next load.
+ */
+export function tareasByProjectOptions(f: TareasListFilters) {
+  return queryOptions<TareasByProject>({
+    queryKey: qk.tareas.byProject(f),
+    queryFn: () => getTareasByProject({ filters: f }),
+    staleTime: STALE.screen,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The closed rows of one Esencial card, fetched on its first expand: the
+ * Lista pages (`tareasListInfiniteOptions`) of the card's project with
+ * `estado: completado`, without `mostrar` (it only narrows open work).
+ */
+export function tareasCompletedFilters(f: TareasListFilters, projectId: string): TareasListFilters {
+  const { mostrar: _mostrar, ...rest } = f;
+  void _mostrar;
+  return { ...rest, proyecto: projectId, estado: "completado" };
+}
+
+// ── Analítico summary (Estilos, #988) ────────────────────────────────────────
+
+/** Every `tareas.summary` entry (any filters). */
+export const TAREAS_SUMMARY_PREFIX: QueryKey = [...qk.tareas.all, "summary"];
+
+/**
+ * The Tareas Analítico counts (`qk.tareas.summary(f)`): per project and
+ * tramo, per project and in total, over every matching task. Seeded by the
+ * Analítico page bundle; 30 s stale, the previous filters' counts stay on
+ * screen while the next load.
+ */
+export function tareasSummaryOptions(f: TareasListFilters) {
+  return queryOptions<TareasSummary>({
+    queryKey: qk.tareas.summary(f),
+    queryFn: () => getTareasSummary({ filters: f }),
+    staleTime: STALE.screen,
+    placeholderData: keepPreviousData,
+  });
 }

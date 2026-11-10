@@ -5,7 +5,9 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { inicioPageOptions } from "@/lib/query/options/inicio";
 import { tareasPageKeyInputOf, tareasPageOptions } from "@/lib/query/options/tareas";
+import { useAppearanceStoreApiOrNull } from "@/lib/stores/appearance-store";
 import { DEFAULT_TAREAS_QUERY } from "@/lib/tareas/query";
+import type { PresentationStyle } from "@/lib/types/redesign";
 import type { NavItemKey } from "@/lib/ui/nav";
 
 /**
@@ -14,17 +16,21 @@ import type { NavItemKey } from "@/lib/ui/nav";
  * that page's page-data action, debounced `NAV_PREFETCH_DEBOUNCE_MS` so a
  * pointer passing over the sidebar calls nothing. `prefetchQuery` skips a
  * query that is still fresh. `next/link` keeps prefetching the RSC shell.
+ * The Tareas bundle is keyed by the style it seeds (`tareas.page(q).estilo`),
+ * so the prefetch uses the viewer's style from the appearance store (the
+ * style `/tareas` resolves without an `?estilo=` override); Visual outside
+ * any store.
  */
 export const NAV_PREFETCH_DEBOUNCE_MS = 100;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- each page's options carry their own data type.
 type AnyFetchOptions = FetchQueryOptions<any, any, any, any>;
 
-/** The page-data query each prefetched nav item warms, with the page's default input. */
-export const NAV_PREFETCH: Partial<Record<NavItemKey, () => AnyFetchOptions>> = {
+/** The page-data query each prefetched nav item warms, with the page's default input in the viewer's style. */
+export const NAV_PREFETCH: Partial<Record<NavItemKey, (style?: PresentationStyle) => AnyFetchOptions>> = {
   inicio: () => inicioPageOptions(),
-  // The default view `/tareas` opens with (no filters).
-  tareas: () => tareasPageOptions(tareasPageKeyInputOf(DEFAULT_TAREAS_QUERY)),
+  // The default view `/tareas` opens with (no filters), in the style the page will resolve.
+  tareas: (style = "visual") => tareasPageOptions(tareasPageKeyInputOf(DEFAULT_TAREAS_QUERY, style)),
 };
 
 export type NavPrefetchHandlers = {
@@ -40,6 +46,7 @@ export type NavPrefetchHandlers = {
  */
 export function useNavPrefetch(): (key: NavItemKey) => NavPrefetchHandlers | undefined {
   const qc = useQueryClient();
+  const appearance = useAppearanceStoreApiOrNull();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancel = useCallback(() => {
@@ -59,11 +66,11 @@ export function useNavPrefetch(): (key: NavItemKey) => NavPrefetchHandlers | und
         cancel();
         timer.current = setTimeout(() => {
           timer.current = null;
-          void qc.prefetchQuery(options());
+          void qc.prefetchQuery(options(appearance?.getState().appearance.style ?? "visual"));
         }, NAV_PREFETCH_DEBOUNCE_MS);
       };
       return { onMouseEnter: schedule, onFocus: schedule, onMouseLeave: cancel, onBlur: cancel };
     },
-    [qc, cancel],
+    [qc, appearance, cancel],
   );
 }

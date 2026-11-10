@@ -80,6 +80,16 @@ const fakeDirectory: DirectoryClient = {
     const group = current().groups?.find((candidate) => lower(candidate.email) === lower(email));
     return group ? { id: group.id, email: group.email, name: group.name ?? group.email } : null;
   },
+
+  async countMembers(groupId) {
+    failIfConfigured();
+    const group = current().groups?.find((candidate) => candidate.id === groupId);
+    if (!group) {
+      if (current().unknownGroups === "empty") return 0;
+      throw new DirectoryError(`El grupo ${groupId} no existe`, "http", 404);
+    }
+    return (group.members ?? []).length;
+  },
 };
 
 export function getFakeDirectory(): DirectoryClient {

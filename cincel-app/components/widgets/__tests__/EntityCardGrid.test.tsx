@@ -236,3 +236,20 @@ describe("EntityCardGrid", () => {
     expect(formatProgress(-3)).toBe("0%");
   });
 });
+
+describe("EntityCardGrid · Visual progress ring", () => {
+  it("ring offset equals 100 minus percent", () => {
+    const { container } = renderGrid("visual");
+    for (const item of entityCardProjectsFixture.filter((i) => i.progress !== undefined)) {
+      const pct = Math.max(0, Math.min(100, Math.round(item.progress!)));
+      const ring = container.querySelector(`[data-item="${item.id}"] [data-slot="entity-progress"]`)!;
+      expect(ring.getAttribute("role")).toBe("img");
+      expect(ring.getAttribute("aria-label")).toBe(`${pct} % de avance`);
+      const fill = ring.querySelector('[data-slot="progress-ring-fill"]')!;
+      expect(fill.getAttribute("pathLength")).toBe("100");
+      expect(fill.getAttribute("class")).toBe("ring");
+      expect(fill.getAttribute("stroke-dashoffset")).toBe(String(100 - pct));
+      expect((fill as SVGElement).style.getPropertyValue("--ring-offset")).toBe(String(100 - pct));
+    }
+  });
+});

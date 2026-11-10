@@ -10,7 +10,7 @@ import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
 export const aparienciaModoSection: SettingsSectionEntry = {
   page: "apariencia",
   name: "modo",
-  order: 30,
+  order: 20,
   visible: () => IMPLEMENTED.updateMyPreferencesAction,
   Component: AparienciaModoSection,
 };

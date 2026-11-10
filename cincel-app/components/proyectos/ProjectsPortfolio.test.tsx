@@ -1,11 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { renderToString } from "react-dom/server";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 
-import type { ListPageProps } from "@/components/patterns/ListPage";
 import type { NewProjectDialogProps } from "./NewProjectDialog";
 
 const nav = vi.hoisted(() => ({
@@ -15,7 +11,7 @@ const nav = vi.hoisted(() => ({
 }));
 const submitProjectCreateAction = vi.hoisted(() => vi.fn());
 const updateProjectAction = vi.hoisted(() => vi.fn(async () => undefined));
-const captured = vi.hoisted(() => ({ list: null as ListPageProps | null, dialog: null as NewProjectDialogProps | null }));
+const captured = vi.hoisted(() => ({ dialog: null as NewProjectDialogProps | null }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, refresh: vi.fn() }),
@@ -43,48 +39,26 @@ vi.mock("@/lib/tramos/compat", () => ({
   tramoColorVar: (key: string) => `var(--chart-${key === "presale" ? 1 : key === "diseno" ? 2 : 3})`,
 }));
 
-// The pattern and the dialog have their own tests; here they expose what the
-// page hands them, so the assertions are about the data and not the markup.
-vi.mock("@/components/patterns/ListPage", () => ({
-  ListPage: (props: ListPageProps) => {
-    captured.list = props;
-    const spec = props.spec.kind === "cards" ? props.spec : null;
-    const isEmpty = spec ? spec.items.length === 0 : true;
-    return (
-      <main>
-        <h1>{props.header.title}</h1>
-        <p data-testid="description">{props.header.description}</p>
-        <div data-testid="actions">{props.header.actions as ReactNode}</div>
-        {props.filters as ReactNode}
-        {isEmpty && props.empty ? (
-          <div data-testid="empty">
-            <span>{props.empty.title}</span>
-            {props.empty.action ? (
-              <button type="button" onClick={() => props.empty?.action?.onClick?.()}>
-                {props.empty.action.label}
-              </button>
-            ) : null}
-          </div>
-        ) : (
-          <ul data-testid="items">
-            {spec?.items.map((item) => (
-              <li key={item.id}>{item.title}</li>
-            ))}
-          </ul>
-        )}
-      </main>
-    );
+// Each layout and the dialog have their own tests; here the layouts only show which one the Estilo picked
+// and hand over their "Nuevo proyecto" callback.
+const layouts = vi.hoisted(() => ({ onNewProject: null as (() => void) | null }));
+vi.mock("@/components/widgets/ProjectsVisualLayout", () => ({
+  ProjectsVisualLayout: (props: { onNewProject?(): void }) => {
+    layouts.onNewProject = props.onNewProject ?? null;
+    return <div data-testid="layout-visual" />;
   },
 }));
-vi.mock("@/components/patterns/FiltersBar", () => ({
-  FiltersBar: (props: { search?: { value: string; placeholder: string; onChange(v: string): void } }) =>
-    props.search ? (
-      <input
-        aria-label={props.search.placeholder}
-        value={props.search.value}
-        onChange={(e) => props.search?.onChange(e.target.value)}
-      />
-    ) : null,
+vi.mock("@/components/widgets/ProjectsEsencialLayout", () => ({
+  ProjectsEsencialLayout: (props: { onNewProject?(): void }) => {
+    layouts.onNewProject = props.onNewProject ?? null;
+    return <div data-testid="layout-esencial" />;
+  },
+}));
+vi.mock("@/components/widgets/ProjectsAnaliticoLayout", () => ({
+  ProjectsAnaliticoLayout: (props: { onNewProject?(): void }) => {
+    layouts.onNewProject = props.onNewProject ?? null;
+    return <div data-testid="layout-analitico" />;
+  },
 }));
 vi.mock("./NewProjectDialog", () => ({
   NewProjectDialog: (props: NewProjectDialogProps) => {
@@ -102,18 +76,9 @@ import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from
 import { useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import {
-  CLEAR_TRAMO_LABEL,
-  COLLAPSE_STRIP_LABEL,
-  EXPAND_STRIP_LABEL,
-  PORTFOLIO_VIEW_LABEL,
-  ProjectsPortfolio,
-  SEARCH_DEBOUNCE_MS,
-  STRIP_VIEW_LABEL,
-} from "./ProjectsPortfolio";
+import { ProjectsPortfolio } from "./ProjectsPortfolio";
 import { PORTFOLIO, PROJECTS, TRAMOS, portfolioPageData } from "./projects-portfolio.fixtures";
 import {
-  BUDGET_COLUMN_LABEL,
   NO_TRAMO_KEY,
   buildTramoSegments,
   filterByTramo,
@@ -123,8 +88,11 @@ import {
   tramoSteps,
 } from "./projects-portfolio-data";
 
-/** Renders the portfolio over a seeded `qk.proyectos.list()`, as the page's hydration leaves it. */
-function renderPortfolio(patch: Partial<ProyectosPageData> = {}, style: PresentationStyle = "visual") {
+/**
+ * Renders the portfolio over a seeded `qk.proyectos.list()`, as the page's
+ * hydration leaves it. Analítico by default.
+ */
+function renderPortfolio(patch: Partial<ProyectosPageData> = {}, style: PresentationStyle = "analitico") {
   const client = createTestQueryClient();
   client.setQueryData(qk.proyectos.list(), portfolioPageData(patch));
   return renderWithQueryClient(
@@ -133,12 +101,6 @@ function renderPortfolio(patch: Partial<ProyectosPageData> = {}, style: Presenta
     </StyleProvider>,
     { client },
   );
-}
-
-function cardsSpec() {
-  const spec = captured.list?.spec;
-  if (!spec || spec.kind !== "cards") throw new Error("expected a cards spec");
-  return spec;
 }
 
 /** The URL of the last `history.replaceState` call. */
@@ -156,8 +118,9 @@ beforeEach(() => {
   pageData.getProyectosPageData.mockReset();
   catalog.fetchCatalogContacts.mockClear();
   catalog.fetchCatalogStaff.mockClear();
-  captured.list = null;
   captured.dialog = null;
+  layouts.onNewProject = null;
+  useProyectosDashboard.getState().reset();
   window.history.replaceState(null, "", "/proyectos");
 });
 
@@ -168,137 +131,45 @@ afterEach(() => {
 });
 
 describe("ProjectsPortfolio", () => {
-  it("lists active and paused projects with the header copy", () => {
-    renderPortfolio();
-    expect(screen.getByRole("heading", { name: "Proyectos" })).toBeTruthy();
-    expect(screen.getByTestId("description").textContent).toBe("3 activos · avance, fase y entregas de cada obra.");
-    expect(cardsSpec().items.map((i) => i.title)).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
-    expect(screen.queryByText("Casa Antigua")).toBeNull();
-  });
-
   it("renders from the hydrated query with 0 client action calls", async () => {
     const { client, state } = await hydrationRoundtrip((server) =>
       prefetch(server, proyectosPageOptions(), async () => portfolioPageData()),
     );
-    renderWithQueryClient(<ProjectsPortfolio />, { client, hydrate: state });
-    expect(cardsSpec().items.map((i) => i.title)).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
+    renderWithQueryClient(
+      <StyleProvider style="analitico" scope="staff">
+        <ProjectsPortfolio />
+      </StyleProvider>,
+      { client, hydrate: state },
+    );
+    expect(screen.getByTestId("layout-analitico")).toBeTruthy();
     expect(pageData.getProyectosPageData).not.toHaveBeenCalled();
     expect(submitProjectCreateAction).not.toHaveBeenCalled();
     expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
     expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
   });
 
-  it("hands the same data to every style (the widgets decide the look)", () => {
-    const snapshots = (["visual", "esencial", "analitico"] as const).map((style) => {
-      renderPortfolio({}, style);
-      const spec = cardsSpec();
-      const snapshot = JSON.stringify({ items: spec.items, table: spec.table, header: captured.list?.header.description });
-      cleanup();
-      return snapshot;
-    });
-    expect(snapshots[1]).toBe(snapshots[0]);
-    expect(snapshots[2]).toBe(snapshots[0]);
+  it("renders the layout of the active Estilo (PageStyleLayout)", () => {
+    renderPortfolio({}, "visual");
+    expect(screen.getByTestId("layout-visual")).toBeTruthy();
+    cleanup();
+    renderPortfolio({}, "esencial");
+    expect(screen.getByTestId("layout-esencial")).toBeTruthy();
+    cleanup();
+    renderPortfolio({}, "analitico");
+    expect(screen.getByTestId("layout-analitico")).toBeTruthy();
+    expect(screen.queryByTestId("layout-visual")).toBeNull();
   });
 
-  it("leaves the Presup. ejercido column out for non-admins", () => {
-    renderPortfolio({ canSeeAdminData: false });
-    const { table } = cardsSpec();
-    expect(table.columns.map((c) => c.label)).not.toContain(BUDGET_COLUMN_LABEL);
-    for (const row of table.rows) expect(row).not.toHaveProperty("presupuesto");
-    expect(JSON.stringify(table)).not.toContain(BUDGET_COLUMN_LABEL);
-  });
-
-  it("adds the Presup. ejercido column for admins, Analítico only", () => {
-    renderPortfolio({ canSeeAdminData: true, portfolio: PORTFOLIO });
-    const { table } = cardsSpec();
-    const column = table.columns.find((c) => c.label === BUDGET_COLUMN_LABEL);
-    expect(column).toMatchObject({ key: "presupuesto", format: "percent", hideOn: ["visual", "esencial"] });
-    expect(table.rows.find((r) => r.id === "p-lomas")?.presupuesto).toBe(55);
-  });
-
-  it("builds the Analítico portfolio columns and the totals row", () => {
-    renderPortfolio();
-    const { table } = cardsSpec();
-    const analitico = table.columns.filter((c) => !c.hideOn?.includes("analitico")).map((c) => c.label);
-    expect(analitico).toEqual([
-      "Proyecto",
-      "Tramo",
-      "Real",
-      "Plan",
-      "Desv.",
-      "Abiertas",
-      "Vencidas",
-      "Días a entrega",
-      "Próxima entrega",
-      "Tendencia",
-    ]);
-    const esencial = table.columns.filter((c) => !c.hideOn?.includes("esencial")).map((c) => c.label);
-    expect(esencial).toEqual(["Proyecto", "Lugar", "Tramo", "Avance", "Próxima entrega"]);
-    expect(table.totals).toMatchObject({ name: "Total (3)", abiertas: 12, vencidas: 2 });
-  });
-
-  it("shows the next delivery only from the portfolio row (never an admin task of the project)", () => {
-    renderPortfolio();
-    const { items, table } = cardsSpec();
-    const lomas = items.find((i) => i.id === "p-lomas");
-    expect(lomas?.meta).toContainEqual({ label: "Próxima entrega", value: "Plano de acabados · 12 nov" });
-    expect(items.find((i) => i.id === "p-andares")?.meta).toContainEqual({ label: "Próxima entrega", value: "Sin entregas" });
-    expect(table.rows.find((r) => r.id === "p-lomas")?.proxima).toBe("Plano de acabados · 12 nov");
-    expect(lomas?.meta).toContainEqual({ label: "Tareas", value: "4 abiertas · 2 vencidas" });
-  });
-
-  it("uses the portfolio's real progress and falls back to the project's own", () => {
-    renderPortfolio();
-    const { items } = cardsSpec();
-    expect(items.find((i) => i.id === "p-lomas")?.progress).toBe(62);
-    expect(items.find((i) => i.id === "p-pausado")?.progress).toBe(0);
-    expect(items.find((i) => i.id === "p-pausado")?.badges).toContainEqual({ label: "Pausado", tone: "warn" });
-  });
-
-  it("filters by the search box right away", () => {
-    renderPortfolio();
-    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapopan" } });
-    expect(cardsSpec().items.map((i) => i.title)).toEqual(["Depto Andares"]);
-  });
-
-  it("writes the search to ?q= with history.replaceState after the debounce, never router.push", () => {
-    vi.useFakeTimers();
-    const replaceState = vi.spyOn(window.history, "replaceState");
-    renderPortfolio();
-    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapo" } });
-    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapopan" } });
-    expect(replaceState).not.toHaveBeenCalled();
-    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
-    expect(replaceState).toHaveBeenCalledTimes(1);
-    expect(lastReplacedUrl(replaceState)).toBe("/proyectos?q=zapopan");
-    // Clearing the box drops the param.
-    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "" } });
-    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
-    expect(lastReplacedUrl(replaceState)).toBe("/proyectos");
-    expect(nav.push).not.toHaveBeenCalled();
-    expect(nav.replace).not.toHaveBeenCalled();
-  });
-
-  it("restores the search from ?q= (back from a project)", () => {
-    nav.params = new URLSearchParams("q=zapopan");
-    renderPortfolio();
-    expect((screen.getByLabelText("Buscar proyecto o lugar") as HTMLInputElement).value).toBe("zapopan");
-    expect(cardsSpec().items.map((i) => i.title)).toEqual(["Depto Andares"]);
-  });
-
-  it("shows the empty state with the Nuevo proyecto action", () => {
-    renderPortfolio({ projects: PROJECTS.filter((p) => p.status === "completado"), portfolio: [] });
-    expect(captured.list?.empty?.title).toBe("Aún no hay proyectos");
-    expect(captured.list?.empty?.action?.label).toBe("Nuevo proyecto");
-    fireEvent.click(within(screen.getByTestId("empty")).getByRole("button", { name: "Nuevo proyecto" }));
+  it.each(["visual", "esencial", "analitico"] as const)("the %s layout's Nuevo proyecto opens the create dialog", (style) => {
+    renderPortfolio({}, style);
+    act(() => layouts.onNewProject?.());
     expect(screen.getByRole("dialog", { name: "Nuevo proyecto" })).toBeTruthy();
   });
 
-  it("hides every create entry point without projects.canCreateProject", () => {
+  it("hides the dialog without projects.canCreateProject, even with ?nuevo=1", () => {
     nav.params = new URLSearchParams("nuevo=1");
     renderPortfolio({ canCreateProject: false, projects: [] });
-    expect(captured.list?.empty?.action).toBeUndefined();
-    expect(screen.queryByRole("button", { name: "Nuevo proyecto" })).toBeNull();
+    act(() => layouts.onNewProject?.());
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -331,7 +202,7 @@ describe("ProjectsPortfolio", () => {
     expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
     expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
 
-    fireEvent.click(within(screen.getByTestId("actions")).getByRole("button", { name: "Nuevo proyecto" }));
+    act(() => layouts.onNewProject?.());
     await waitFor(() =>
       expect(captured.dialog?.adminOptions).toEqual({
         clients: [{ id: "c1", name: "Familia Gómez" }],
@@ -395,192 +266,6 @@ describe("ProjectsPortfolio", () => {
     submitProjectCreateAction.mockRejectedValue(stripped);
     renderPortfolio();
     await expect(captured.dialog!.onConfirm({ name: "Casa Lomas" })).rejects.toThrow(/^$/);
-  });
-});
-
-describe("ProjectsPortfolio dashboard interactions", () => {
-  const dashboard = () => useProyectosDashboard.getState();
-  const titles = () => cardsSpec().items.map((i) => i.title);
-  const tableIds = () => cardsSpec().table.rows.map((r) => r.id);
-  const stripRegion = () => screen.queryByRole("region", { name: "Proyectos por tramo" });
-
-  it("without any choice: no view handed to the widgets, the strip expanded, every project listed", () => {
-    for (const style of ["visual", "esencial", "analitico"] as const) {
-      renderPortfolio({}, style);
-      expect(cardsSpec().view).toBeUndefined();
-      expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
-      expect(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }).getAttribute("aria-expanded")).toBe("true");
-      cleanup();
-    }
-  });
-
-  it("Visual: a tramo segment is a toggle; it filters the cards, the table and the header count, and clears on a second press", () => {
-    renderPortfolio();
-    const diseno = screen.getByRole("button", { name: /Diseño/ });
-    expect(diseno.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(diseno);
-    expect(screen.getByRole("button", { name: /Diseño/ }).getAttribute("aria-pressed")).toBe("true");
-    expect(titles()).toEqual(["Casa Lomas"]);
-    expect(tableIds()).toEqual(["p-lomas"]);
-    expect(cardsSpec().table.totals).toMatchObject({ name: "Total (1)" });
-    expect(screen.getByTestId("description").textContent).toBe("1 activo · avance, fase y entregas de cada obra.");
-    // The strip keeps every tramo, so another one can be picked.
-    expect(screen.getByRole("button", { name: /Presale/ })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: /Diseño/ }));
-    expect(dashboard().selectedKpi).toBeNull();
-    expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
-    expect(screen.getByTestId("description").textContent).toBe("3 activos · avance, fase y entregas de cada obra.");
-  });
-
-  it("Analítico: the segment toggles under the table filter the portfolio table", () => {
-    renderPortfolio({}, "analitico");
-    const group = screen.getByRole("group", { name: "Filtrar: Proyectos por tramo" });
-    fireEvent.click(within(group).getByRole("button", { name: /Presale/ }));
-    expect(tableIds()).toEqual(["p-andares"]);
-    expect(within(group).getByRole("button", { name: /Presale/ }).getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("selects Sin tramo for the projects without a tramo", () => {
-    renderPortfolio();
-    fireEvent.click(screen.getByRole("button", { name: /Sin tramo/ }));
-    expect(dashboard().selectedKpi).toBe(NO_TRAMO_KEY);
-    expect(titles()).toEqual(["Oficina Centro"]);
-  });
-
-  it("keeps a seeded selection (back from a project) and clears one whose tramo has no listed project", async () => {
-    dashboard().selectKpi("presale");
-    renderPortfolio();
-    expect(titles()).toEqual(["Depto Andares"]);
-    cleanup();
-
-    // Construcción has no listed project in the loaded data.
-    dashboard().selectKpi("construccion");
-    renderPortfolio();
-    expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
-    await waitFor(() => expect(dashboard().selectedKpi).toBeNull());
-  });
-
-  it("offers to drop the tramo when the search leaves it without results", () => {
-    dashboard().selectKpi("diseno");
-    renderPortfolio();
-    fireEvent.change(screen.getByLabelText("Buscar proyecto o lugar"), { target: { value: "zapopan" } });
-    expect(titles()).toEqual([]);
-    expect(captured.list?.empty?.title).toBe("Sin resultados");
-    expect(captured.list?.empty?.action?.label).toBe(CLEAR_TRAMO_LABEL);
-    act(() => captured.list?.empty?.action?.onClick?.());
-    expect(dashboard().selectedKpi).toBeNull();
-    expect(titles()).toEqual(["Depto Andares"]);
-  });
-
-  it("collapses the strip (aria-expanded) and keeps the choice in the store", () => {
-    renderPortfolio();
-    expect(stripRegion()).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }));
-    expect(stripRegion()).toBeNull();
-    const expand = screen.getByRole("button", { name: EXPAND_STRIP_LABEL });
-    expect(expand.getAttribute("aria-expanded")).toBe("false");
-    expect(dashboard().collapsed.tramoStrip).toBe(true);
-    // The cards stay.
-    expect(titles()).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
-    fireEvent.click(expand);
-    expect(stripRegion()).toBeTruthy();
-  });
-
-  it("renders a seeded collapsed strip collapsed", () => {
-    dashboard().setCollapsed("tramoStrip", true);
-    renderPortfolio();
-    expect(stripRegion()).toBeNull();
-    expect(screen.getByRole("button", { name: EXPAND_STRIP_LABEL })).toBeTruthy();
-  });
-
-  it("a cards/table pick in Visual does not change Esencial or Analítico", () => {
-    renderPortfolio({}, "visual");
-    const group = screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL });
-    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
-    expect(dashboard().views.visual?.portfolio).toBe("table");
-    expect(cardsSpec().view).toBe("table");
-    expect(within(group).getByRole("button", { name: "Tabla" }).getAttribute("aria-pressed")).toBe("true");
-    cleanup();
-
-    renderPortfolio({}, "esencial");
-    expect(cardsSpec().view).toBeUndefined();
-    cleanup();
-    renderPortfolio({}, "analitico");
-    expect(cardsSpec().view).toBeUndefined();
-  });
-
-  it("Analítico can pick the cards; picking its default again hands no view down", () => {
-    dashboard().setWidgetView("analitico", "portfolio", "chart");
-    renderPortfolio({}, "analitico");
-    expect(cardsSpec().view).toBe("chart");
-    const group = screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL });
-    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
-    expect(cardsSpec().view).toBeUndefined();
-  });
-
-  it("the strip view override is per style too", () => {
-    renderPortfolio({}, "visual");
-    const group = screen.getByRole("group", { name: STRIP_VIEW_LABEL });
-    fireEvent.click(within(group).getByRole("button", { name: "Tabla" }));
-    expect(dashboard().views.visual?.tramoStrip).toBe("table");
-    // Visual now shows the table, not the strip.
-    expect(document.querySelector("[data-slot=distribution-strip]")).toBeNull();
-    cleanup();
-
-    renderPortfolio({}, "esencial");
-    expect(dashboard().views.esencial).toBeUndefined();
-    expect(document.querySelector("[data-slot=distribution-esencial]")).toBeTruthy();
-  });
-
-  it("shows no range or series control", () => {
-    renderPortfolio();
-    expect(screen.queryByText(/\b(4|8|12) ?(sem|w)\b/i)).toBeNull();
-    expect(screen.queryByRole("group", { name: /rango|serie/i })).toBeNull();
-  });
-
-  it("store changes cause no server call", () => {
-    renderPortfolio();
-    fireEvent.click(screen.getByRole("button", { name: /Diseño/ }));
-    fireEvent.click(screen.getByRole("button", { name: COLLAPSE_STRIP_LABEL }));
-    fireEvent.click(within(screen.getByRole("group", { name: PORTFOLIO_VIEW_LABEL })).getByRole("button", { name: "Tabla" }));
-    expect(pageData.getProyectosPageData).not.toHaveBeenCalled();
-    expect(catalog.fetchCatalogContacts).not.toHaveBeenCalled();
-    expect(catalog.fetchCatalogStaff).not.toHaveBeenCalled();
-    expect(nav.push).not.toHaveBeenCalled();
-    expect(nav.replace).not.toHaveBeenCalled();
-  });
-
-  it("the server render equals the first client render with a persisted value present; it applies after mount", async () => {
-    const html = () => {
-      const client = createTestQueryClient();
-      client.setQueryData(qk.proyectos.list(), portfolioPageData());
-      return renderToString(
-        <QueryClientProvider client={client}>
-          <StyleProvider style="visual" scope="staff">
-            <ProjectsPortfolio />
-          </StyleProvider>
-        </QueryClientProvider>,
-      );
-    };
-    const withoutValue = html();
-    localStorage.setItem(
-      "cincel.ui.dashboard.proyectos.v1",
-      JSON.stringify({
-        state: { range: "8w", collapsed: { tramoStrip: true }, views: { visual: { portfolio: "table" } }, hiddenSeries: {} },
-        version: 1,
-      }),
-    );
-    // skipHydration: nothing is read from storage before the hydrator runs.
-    expect(html()).toBe(withoutValue);
-    expect(dashboard().collapsed).toEqual({});
-
-    await act(async () => {
-      await useProyectosDashboard.persist.rehydrate();
-    });
-    renderPortfolio();
-    expect(stripRegion()).toBeNull();
-    expect(cardsSpec().view).toBe("table");
   });
 });
 

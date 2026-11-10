@@ -22,7 +22,7 @@ export function ProjectShellTabs({ projectId, active, showEstilo = false }: Proj
   if (!shell) return null;
   return (
     <ProjectTabs
-      project={shell.project}
+      project={{ ...shell.project, clientName: shell.detail?.client?.name ?? null, endDate: shell.detail?.endDate ?? null }}
       active={active}
       counts={shell.counts}
       canManagePortal={shell.canManagePortal}

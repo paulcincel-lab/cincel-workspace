@@ -9,9 +9,15 @@ import {
   countUnreadNotifications,
   markNotificationsRead,
   saveQuietHours,
+  summarizeNotifications,
   upsertNotificationPreferences,
 } from "@/lib/repositories/notifications-repository";
-import type { NotificationKind, NotificationPreferences, NotificationsPage } from "@/lib/types/redesign";
+import type {
+  NotificationKind,
+  NotificationKindSummary,
+  NotificationPreferences,
+  NotificationsPage,
+} from "@/lib/types/redesign";
 import type { ActionResult } from "@/lib/types/schedule";
 import {
   MarkNotificationsReadSchema,
@@ -42,6 +48,11 @@ export async function fetchNotificationsAction(input: {
   cursor?: string;
 }): Promise<NotificationsPage> {
   return listNotificationsPage(await sessionStaffId(), input);
+}
+
+/** Unread and total in-app rows of the caller per kind, with the newest date (Mi espacio Analítico). Read-only. */
+export async function fetchNotificationsSummaryAction(): Promise<NotificationKindSummary[]> {
+  return summarizeNotifications(db, await sessionStaffId());
 }
 
 /**

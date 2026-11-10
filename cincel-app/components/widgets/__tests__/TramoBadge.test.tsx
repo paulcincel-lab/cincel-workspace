@@ -65,6 +65,19 @@ describe("TramoBadge per style and variant", () => {
     expect(container.querySelector(".bg-chart-2")).not.toBeNull();
   });
 
+  it("Decoración renders chart-4", () => {
+    const chip = renderIn("visual", <TramoBadge tramo={TRAMO_FIXTURE.decoracion} />);
+    expect(mark(chip.container).getAttribute("data-color-slot")).toBe("4");
+    const badge = chip.container.querySelector('[data-slot="badge"]')!;
+    expect(badge.className).toContain("bg-chart-4/14");
+    expect(badge.className).toContain("--chart-4-ink");
+    expect(chip.container.querySelector(".bg-chart-4")).not.toBeNull();
+    chip.unmount();
+    const dot = renderIn("analitico", <TramoBadge tramo={TRAMO_FIXTURE.decoracion} />);
+    expect(dot.container.querySelector(".bg-chart-4")).not.toBeNull();
+    expect(dot.container.textContent).toBe("Decoración");
+  });
+
   it("Visual renders a neutral chip for an unknown tramo", () => {
     const { container } = renderIn("visual", <TramoBadge tramo={TRAMO_FIXTURE.otro} />);
     expect(container.querySelector('[data-slot="badge"]')!.className).toContain("bg-muted");

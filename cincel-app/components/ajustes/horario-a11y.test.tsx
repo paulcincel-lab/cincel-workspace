@@ -26,7 +26,6 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), use
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/horario"));
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/horario"));
-vi.mock("@/components/widgets/RecordTable", () => import("@/tests/unit/fixtures/horario"));
 
 import { HorarioClient } from "./HorarioClient";
 import { StyleProvider } from "@/components/shell/StyleProvider";
@@ -93,12 +92,24 @@ describe("Ajustes › Control de horario a11y", () => {
 
   it("every form control has a name", () => {
     renderPage(true, "esencial");
-    for (const label of ["Obligatorio a partir de", "Entrada", "Salida", "Horas esperadas por día", "Tolerancia de retardo"]) {
+    for (const label of [
+      "Obligatorio a partir de",
+      "Entrada",
+      "Salida",
+      "Horas esperadas por día",
+      "Tolerancia de retardo",
+      "Minutos de comida",
+      "Hora de cierre",
+      "Excluir roles",
+    ]) {
       expect(screen.getByLabelText(label)).toBeTruthy();
     }
-    expect(screen.getByRole("switch", { name: "Activar control de horario" })).toBeTruthy();
-    for (const day of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]) {
-      expect(screen.getByRole("button", { name: day })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Control de horario" })).toBeTruthy();
+    for (const name of ["Descontar tiempo de comida", "Cerrar la jornada automáticamente", "Pedir registro de entrada al iniciar sesión"]) {
+      expect(screen.getByRole("switch", { name })).toBeTruthy();
+    }
+    for (const day of ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]) {
+      expect(screen.getByRole("button", { name: day }).hasAttribute("aria-pressed")).toBe(true);
     }
   });
 });

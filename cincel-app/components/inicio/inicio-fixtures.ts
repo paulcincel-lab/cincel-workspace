@@ -74,6 +74,18 @@ export const INICIO_NON_ADMIN: InicioData = {
     { id: "e-1", title: "Visita de obra", start: "2026-11-06T16:00:00Z", end: "2026-11-06T17:00:00Z", project: "Casa Lomas", tramo: "construccion" },
     { id: "e-2", title: "Junta de diseño", start: "2026-11-06T19:00:00Z", project: "Depto Roma", tramo: "diseno" },
   ],
+  myWeek: {
+    today: [
+      { id: "e-1", title: "Visita de obra", start: "2026-11-06T16:00:00Z", end: "2026-11-06T17:00:00Z", project: "Casa Lomas", tramo: "construccion" },
+      { id: "e-2", title: "Junta de diseño", start: "2026-11-06T19:00:00Z", project: "Depto Roma", tramo: "diseno" },
+    ],
+    week: [
+      { id: "c-diseno-t-7-2026-11-07", title: "Entregar renders de fachada", start: "2026-11-07T09:00", estimated: true, project: "Casa Lomas", tramo: "diseno", href: "/tareas?tarea=t-7" },
+      { id: "c-construccion-t-8-2026-11-08", title: "Cotizar acabados", start: "2026-11-08T09:00", estimated: true, project: "Depto Roma", tramo: "construccion", href: "/tareas?tarea=t-8" },
+    ],
+    total: 2,
+  },
+  myAttention: 1,
   projectsProgress: [
     { id: "p-1", label: "Casa Lomas", real: 64, plan: null, budgetPct: null, href: "/proyectos/p-1", next: { title: "Entrega de planos", date: "2026-11-12" } },
     { id: "p-2", label: "Depto Roma", real: 28, plan: null, budgetPct: null, href: "/proyectos/p-2", next: null },
@@ -81,6 +93,32 @@ export const INICIO_NON_ADMIN: InicioData = {
   workload: [
     { id: "s-2", name: "Luis Pérez", initials: "LP", open: 8, overdue: 2 },
     { id: "s-3", name: "Marta Ruiz", initials: "MR", open: 5, overdue: 0 },
+  ],
+  hero: {
+    dueToday: 2,
+    overdue: 26,
+    overdueProjects: 3,
+    focusProject: { id: "p-1", name: "Casa Lomas", href: "/proyectos/p-1" },
+  },
+  openShifts: {
+    count: 2,
+    people: [
+      { id: "s-2", initials: "LP", tramo: "diseno" },
+      { id: "s-3", initials: "MR", tramo: "construccion" },
+    ],
+  },
+  todayAgenda: [
+    {
+      id: "c-diseno-t-9-2026-11-06",
+      title: "Entrega de fachada",
+      start: "2026-11-06T09:00",
+      estimated: true,
+      project: "Casa Lomas",
+      tramo: "diseno",
+      href: "/tareas?tarea=t-9",
+      kind: "entrega",
+      assignee: { id: "s-2", name: "Luis Pérez", initials: "LP" },
+    },
   ],
 };
 
@@ -112,6 +150,11 @@ export const INICIO_EMPTY: InicioData = {
   weeklyPace: [],
   attention: [],
   myDay: [],
+  myWeek: { today: [], week: [], total: 0 },
+  myAttention: 0,
   projectsProgress: [],
   workload: [],
+  hero: { dueToday: 0, overdue: 0, overdueProjects: 0, focusProject: null },
+  openShifts: null,
+  todayAgenda: [],
 };

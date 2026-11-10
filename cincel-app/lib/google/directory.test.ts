@@ -35,6 +35,24 @@ describe("directory client", () => {
     expect(DIRECTORY_TIMEOUT_MS).toBe(5000);
   });
 
+  it("counts a group's members across pages with members.list", async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(200, { members: [{ id: "1" }, { id: "2" }], nextPageToken: "p2" }))
+      .mockResolvedValueOnce(reply(200, { members: [{ id: "3" }] }));
+    await expect(client().countMembers("g1")).resolves.toBe(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(0).url.pathname).toBe("/admin/directory/v1/groups/g1/members");
+    expect(call(0).url.searchParams.get("maxResults")).toBe("200");
+    expect(call(1).url.searchParams.get("pageToken")).toBe("p2");
+  });
+
+  it("counts an empty group as 0 and fails on a missing one", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, {}));
+    await expect(client().countMembers("g1")).resolves.toBe(0);
+    fetchMock.mockResolvedValueOnce(reply(404));
+    await expect(client().countMembers("nope")).rejects.toMatchObject({ kind: "http", status: 404 });
+  });
+
   it("gets a user's status by sub as the service account", async () => {
     fetchMock.mockResolvedValue(reply(200, { primaryEmail: "ana@example.test", suspended: false, archived: false }));
     await expect(client().getUserStatus("1234")).resolves.toEqual({
@@ -129,6 +147,7 @@ describe("lookupMembership", () => {
       getUserStatus: vi.fn(async () => ({ status: "active" as const, primaryEmail: "ana@example.test" })),
       hasMember: vi.fn(async (groupId: string) => groupId !== "g2"),
       getGroup: vi.fn(async () => null),
+      countMembers: vi.fn(async () => 0),
       ...overrides,
     };
   }

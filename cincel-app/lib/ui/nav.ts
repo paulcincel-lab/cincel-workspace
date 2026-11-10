@@ -65,7 +65,9 @@ async function resolveSource(source: NavItemSource, session: NavSession): Promis
   }
 }
 
-function colorVarOf(key: string, sortOrder: number): string {
+function colorVarOf(key: string, sortOrder: number, colorSlot?: number | null): string {
+  // The color an admin chose in Ajustes › Tramos y fases wins over the key / sortOrder rule.
+  if (typeof colorSlot === "number" && colorSlot >= 1 && colorSlot <= 5) return `var(--chart-${colorSlot})`;
   try {
     return tramoColorVar(key, sortOrder) || NEUTRAL_TRAMO_COLOR;
   } catch {
@@ -81,7 +83,7 @@ async function loadTramos(): Promise<NavModel["tramos"]> {
       .map((row) => ({
         key: row.key,
         name: row.name,
-        colorVar: colorVarOf(row.key, row.sortOrder),
+        colorVar: colorVarOf(row.key, row.sortOrder, row.colorSlot),
         href: `/tareas?tramo=${encodeURIComponent(row.key)}`,
       }));
   } catch {

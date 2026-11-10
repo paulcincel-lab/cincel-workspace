@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Mail, MessageCircle, Phone } from "lucide-react";
 
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
 import { buttonVariants } from "@/components/ui/shadcn/button";
@@ -87,13 +86,11 @@ export function PersonaDetail({ detail }: PersonaDetailProps) {
         </Avatar>
         <div className="min-w-0 flex-1">
           <PageHeader
-            estilo={false}
             title={name}
             description={headerDescription(person)}
             breadcrumb={[{ label: "Personas", href: "/personas" }, { label: name }]}
             actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <EstiloSwitch />
+              <>
                 {phone ? (
                   <a href={`tel:${phone}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
                     <Phone aria-hidden="true" />
@@ -118,7 +115,7 @@ export function PersonaDetail({ detail }: PersonaDetailProps) {
                     Abrir chat en Cutto
                   </a>
                 ) : null}
-              </div>
+              </>
             }
           />
         </div>

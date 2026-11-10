@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CSSProperties } from "react";
 import { cleanup, render } from "@testing-library/react";
 import axe from "axe-core";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/ajustes/perfil", useRouter: () => ({ push: vi.fn() }) }));
 
 import { AjustesNav } from "../AjustesNav";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";

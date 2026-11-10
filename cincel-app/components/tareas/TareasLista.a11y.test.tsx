@@ -103,11 +103,15 @@ const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "lista", tramo: "di
 /** The cache `/tareas?vista=lista&tramo=diseno` hydrates. */
 function seededClient() {
   const client = createTestQueryClient();
-  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY)), {
+  // The bundle is keyed by the style; seed it for every one the tests render.
+  const page = {
     facets: { total: LISTA_TASKS.length, byTramo: {}, projects: [] },
     tramos: LISTA_TRAMOS,
     staff: [],
-  });
+  };
+  for (const estilo of ["visual", "esencial", "analitico"] as const) {
+    client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY, estilo)), page);
+  }
   const rows = LISTA_TASKS.map(
     (t) =>
       ({

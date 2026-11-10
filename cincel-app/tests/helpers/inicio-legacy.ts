@@ -54,7 +54,13 @@ import type { TaskKind } from "@/lib/types/core";
 import type { InicioData } from "@/lib/types/redesign";
 import type { KpiDatum } from "@/lib/types/widgets";
 
-export async function legacyFetchInicio(user: AuthenticatedUser): Promise<InicioData> {
+/** The fields the pre-migration action returned (Inicio Visual, #989, added more). */
+export type LegacyInicioData = Pick<
+  InicioData,
+  "kpis" | "tasksByTramo" | "weeklyPace" | "attention" | "myDay" | "projectsProgress" | "workload"
+>;
+
+export async function legacyFetchInicio(user: AuthenticatedUser): Promise<LegacyInicioData> {
   const { dataScope } = resolveDashboardCapabilities(user);
   const viewerId = user.member.id;
   const isAdmin = canSeeAdminData(user);

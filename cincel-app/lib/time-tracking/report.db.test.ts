@@ -146,6 +146,23 @@ describe.skipIf(!url)("time tracking report and auto-close (test DB)", async () 
     });
   });
 
+  describe("needsReview", () => {
+    it("needsReview when an entry was auto-closed", async () => {
+      const dani = await makeStaff("Dani Horario");
+      const eli = await makeStaff("Eli Horario");
+      const forgot = await makeEntry(dani, "2020-01-06", "09:00", "20:00");
+      await db.update(schema.timeEntries).set({ closedBy: "auto_close", flagged: true }).where(eq(schema.timeEntries.id, forgot));
+      await makeEntry(dani, "2020-01-07", "09:00", "18:00", [["13:00", "14:00"]]);
+      await makeEntry(eli, "2020-01-06", "09:00", "18:00", [["13:00", "14:00"]]);
+
+      const rows = await teamHoursReport(db, WEEK, settings, NOW);
+      const mine = new Map(rows.filter((row) => staffIds.includes(row.staffId)).map((row) => [row.staffId, row]));
+
+      expect(mine.get(dani)?.needsReview).toBe(true);
+      expect(mine.get(eli)?.needsReview).toBe(false);
+    });
+  });
+
   describe("autoCloseOpenEntries", () => {
     it("closes at autoCloseAt with the open pause closed, flagged, and notifies once", async () => {
       const staffId = await makeStaff("Auto Horario");

@@ -26,6 +26,9 @@ const healthy: GoogleHealth = {
   lastDriveError: null,
   googleLinkedStaff: 0,
   activeStaff: 1,
+  pendingGoogleStaff: [],
+  projectsWithoutFolder: 0,
+  projectsWithFolder: 0,
 };
 
 const empty: GoogleHealth = { ...healthy, workspaceDomain: null, oauthClientConfigured: false, serviceAccountEmail: null };
@@ -38,6 +41,8 @@ const adminGroup: GroupMapping = {
   positionId: null,
   positionName: null,
   rank: ADMIN_GROUP_RANK,
+  memberCount: null,
+  exists: null,
 };
 
 const otherGroup: GroupMapping = { ...adminGroup, id: "22222222-2222-4222-8222-222222222222", role: "Colaborador" };

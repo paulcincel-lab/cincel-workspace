@@ -7,8 +7,10 @@ import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
 
 import { notificacionesCanalesSection } from "./canales";
 import { notificacionesHorasSilencioSection } from "./horas-silencio";
+import { notificacionesResumenDiarioSection } from "./resumen-diario";
 
 export const NOTIFICACIONES_SECTIONS: readonly SettingsSectionEntry[] = [
   notificacionesCanalesSection,
   notificacionesHorasSilencioSection,
+  notificacionesResumenDiarioSection,
 ];

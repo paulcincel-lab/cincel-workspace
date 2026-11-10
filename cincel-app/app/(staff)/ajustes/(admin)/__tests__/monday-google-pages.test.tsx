@@ -70,6 +70,8 @@ vi.mock("@/lib/repositories/positions-repository", async (importOriginal) => ({
   listPositions: googleReads.listPositions,
 }));
 vi.mock("@/lib/auth/google-health", () => ({ loadGoogleHealth: googleReads.loadGoogleHealth }));
+// No Directory in these tests: the mappings come back as listed.
+vi.mock("@/lib/google/group-stats", () => ({ withGroupStats: async (rows: unknown[]) => rows }));
 const positions = vi.hoisted(() => ({ fetchPositionsAction: vi.fn() }));
 vi.mock("@/lib/actions/positions-actions", () => positions);
 const workflows = vi.hoisted(() => ({ fetchWorkflowsAction: vi.fn() }));
@@ -271,6 +273,9 @@ describe("/ajustes/google", () => {
     lastDriveError: null,
     googleLinkedStaff: 4,
     activeStaff: 9,
+    pendingGoogleStaff: [],
+    projectsWithoutFolder: 0,
+    projectsWithFolder: 0,
   };
 
   beforeEach(() => {
@@ -324,7 +329,12 @@ describe("/ajustes/google/primeros-pasos", () => {
   beforeEach(() => {
     googleReads.listGroupMappings.mockResolvedValue([{ id: "m-1" }]);
     googleReads.listPositions.mockResolvedValue([]);
-    googleReads.loadGoogleHealth.mockResolvedValue({ sharedDriveId: "drive" });
+    googleReads.loadGoogleHealth.mockResolvedValue({
+      sharedDriveId: "drive",
+      pendingGoogleStaff: [],
+      projectsWithoutFolder: 0,
+      projectsWithFolder: 0,
+    });
   });
 
   it("renders the unchanged wizard for the bootstrap admin, with the Google page data hydrated", async () => {

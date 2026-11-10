@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { ResourcesCapabilities } from "@/lib/auth/permissions";
-import type { BibliotecaLinksSection } from "@/lib/biblioteca/catalog";
+import type { BibliotecaLinksSection, BibliotecaUsage } from "@/lib/biblioteca/catalog";
 import type { BibliotecaData } from "@/lib/biblioteca/load";
 import type { DriveStatus } from "@/lib/google/use-drive-status";
 import { qk } from "@/lib/query/keys";
@@ -28,6 +28,7 @@ export function makeLink(overrides: Partial<ResourceLink> = {}): ResourceLink {
     personalFor: null,
     sortOrder: 0,
     drive: null,
+    project: null,
     createdAt: "2026-10-01T16:00:00.000Z",
     updatedAt: "2026-11-04T16:00:00.000Z",
     ...overrides,
@@ -67,13 +68,20 @@ export function resourcesCapabilities(overrides: { canViewEmpresa?: boolean; can
 /** A `biblioteca.links(section)` value, as `getBibliotecaPageData` returns it. */
 export function bibliotecaData(
   links: ResourceLink[],
-  options: { viewerId?: string; canViewEmpresa?: boolean; canManageFavorites?: boolean; driveEnabled?: boolean } = {},
+  options: {
+    viewerId?: string;
+    canViewEmpresa?: boolean;
+    canManageFavorites?: boolean;
+    driveEnabled?: boolean;
+    usage?: BibliotecaUsage | null;
+  } = {},
 ): BibliotecaData {
   return {
     viewerId: options.viewerId ?? "staff-ana",
     capabilities: resourcesCapabilities(options),
     links,
     driveEnabled: options.driveEnabled ?? false,
+    usage: options.usage ?? null,
   };
 }
 

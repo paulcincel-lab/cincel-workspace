@@ -28,7 +28,7 @@ const project = (id: string, name: string): PortalProjectDTO => ({
 
 describe("/portal", () => {
   beforeEach(() => {
-    requirePortalUser.mockReset().mockResolvedValue({ id: "u1", name: "Ana", email: "ana@example.com", contactId: "c1" });
+    requirePortalUser.mockReset().mockResolvedValue({ id: "u1", name: "Ana", email: "ana@example.com", contactId: "c1", companyName: null });
     listPortalProjects.mockReset();
   });
   afterEach(cleanup);

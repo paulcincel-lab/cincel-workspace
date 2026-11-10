@@ -187,3 +187,19 @@ export function gmailSyncLabel(lastSyncedAt: string | null, now: Date = new Date
   const hours = Math.floor(minutes / 60);
   return `Gmail conectado · sincronizado hace ${hours} h`;
 }
+
+/**
+ * Esencial Bandeja card: the newest `limit` unread rows of both sources,
+ * notifications (`readAt === null`) and Gmail threads (`unread`), by date.
+ */
+export function mergeUnread(
+  notifications: readonly NotificationItem[],
+  threads: readonly GmailThreadSummary[],
+  limit: number,
+): InboxRow[] {
+  const rows = [
+    ...notifications.filter((n) => n.readAt === null).map(notificationRow),
+    ...threads.filter((t) => t.unread).map(gmailRow),
+  ];
+  return rows.sort(byNewest).slice(0, Math.max(0, limit));
+}

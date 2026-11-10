@@ -1,7 +1,6 @@
 "use client";
 
-import { createDashboardStore, type WidgetView } from "@/lib/stores/dashboard-store";
-import type { PresentationStyle } from "@/lib/types/redesign";
+import { createDashboardStore } from "@/lib/stores/dashboard-store";
 import type { Availability } from "@/lib/types/widgets";
 
 /**
@@ -12,23 +11,13 @@ import type { Availability } from "@/lib/types/widgets";
  *   semana" legend; filters the team to the people with that availability on
  *   at least one day. Session only (survives navigation, not a reload).
  * - `collapsed.availability`: "Disponibilidad esta semana" collapsed.
- * - `views[style].availability | team`: grid/cards vs table, per style.
- * - `range` and `hiddenSeries` are unused here: the page has no weekly series.
+ * - `views`, `range` and `hiddenSeries` are unused here: the Estilo is the
+ *   only layout choice (ADR 0004) and the page has no weekly series.
  *
- * Persisted under `cincel.ui.dashboard.personas.v1` (only widget ids, view
- * names and the unused range/series), rehydrated after mount.
+ * Persisted under `cincel.ui.dashboard.personas.v1` (only widget ids and the
+ * unused views/range/series), rehydrated after mount.
  */
 export type PersonasWidget = "availability" | "team";
 export type PersonasKpiKey = Availability;
 
 export const usePersonasDashboard = createDashboardStore<PersonasWidget, PersonasKpiKey>("personas");
-
-/**
- * Per-style fallbacks, equal to the render without overrides: Visual rows /
- * cards and the Esencial list are the "chart" views; Analítico shows tables.
- */
-export const PERSONAS_VIEW_FALLBACK: Record<PresentationStyle, WidgetView> = {
-  visual: "chart",
-  esencial: "chart",
-  analitico: "table",
-};

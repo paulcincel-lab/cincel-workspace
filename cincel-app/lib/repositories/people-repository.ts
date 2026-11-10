@@ -30,6 +30,7 @@ export type AssignedOpenTask = {
   title: string;
   status: string;
   due: string | null;
+  projectId: string;
   projectName: string;
   tramo: string | null;
 };
@@ -71,6 +72,7 @@ const taskColumns = {
   title: tasks.title,
   status: tasks.status,
   due: tasks.commitmentDate,
+  projectId: projects.id,
   projectName: projects.name,
   tramo: workflows.key,
 };
@@ -114,6 +116,7 @@ export async function listAssignedOpenTasks(
       title: row.title,
       status: row.status,
       due: row.due,
+      projectId: row.projectId,
       projectName: row.projectName,
       tramo: row.tramo ?? null,
     });

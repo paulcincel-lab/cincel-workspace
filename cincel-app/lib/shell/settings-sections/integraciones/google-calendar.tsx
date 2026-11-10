@@ -1,8 +1,9 @@
 /**
- * Settings section "Google Calendar (controles existentes)" of /ajustes/integraciones (redesign FE §3.8, §21.1).
+ * Settings section "Google Calendar" of /ajustes/integraciones (redesign FE §3.8, §21.1).
  *
- * The existing direct-sync controls of Calendario, for whoever can see the
- * calendar. Renders inside `IntegracionesClient`.
+ * The direct-sync controls of Calendario and the subscription link
+ * (`CalendarFeedLinkSection`, inline), for whoever can see the calendar.
+ * Renders inside `IntegracionesClient`.
  */
 import { IntegracionesGoogleCalendar } from "@/components/ajustes/IntegracionesClient";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";

@@ -344,6 +344,7 @@ describe("NewTaskDialog", () => {
       ["proyectos", "list"],
       ["inicio"],
       ["shell", "badges"],
+      ["me", "tasks"],
       ["tasks", "task-1"],
       ["tasks", "task-1", "subtasks"],
     ]);

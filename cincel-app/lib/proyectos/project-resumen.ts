@@ -1,23 +1,25 @@
 import "server-only";
 
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveActivitiesCapabilities, resolveProjectsCapabilities, resolveTeamCapabilities } from "@/lib/auth/permissions";
 import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
 import { db } from "@/lib/db/client";
-import { staff } from "@/lib/db/schema";
+import { staff, workflowPhases } from "@/lib/db/schema";
 import { getStaffFilesProject, listStaffProjectFiles } from "@/lib/google/staff-files-app";
 import { getProjectForViewer } from "@/lib/projects/project-tab-shell";
-import { projectTaskStats, type ProjectStaffInfo, type ProjectSummaryInput } from "@/lib/proyectos/project-summary";
+import { occupancyPct } from "@/lib/people/aggregates";
+import { projectTaskStats, type ProjectStaffInfo, type ProjectSummaryInput, type TeamLoad } from "@/lib/proyectos/project-summary";
 import { canSeeClientContacts, scopeProjectForResumen } from "@/lib/proyectos/resumen-visibility";
+import * as peopleRepository from "@/lib/repositories/people-repository";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import { listPortfolioRows } from "@/lib/repositories/projects-portfolio-repository";
 import { getScheduleForProject } from "@/lib/repositories/schedule-repository";
 import { listTaskRows } from "@/lib/repositories/tasks-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
-import type { ProjectDetail, TaskListRow, WorkflowRef } from "@/lib/types/core";
+import type { ProjectDetail, TaskListRow, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { StaffFileItem } from "@/lib/types/workspace-access";
 
 /** The project's timezone for "today" (same as the Cronograma). */
@@ -42,12 +44,41 @@ export async function tramoCatalog(): Promise<WorkflowRef[]> {
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-/** Root items of the project's Drive folder: the Resumen's only Drive call. Null when it can't be read. */
-async function rootFiles(staffId: string, projectId: string): Promise<StaffFileItem[] | null> {
+/**
+ * Root items of the project's Drive folder (the Resumen's only Drive call)
+ * and the folder's link. `items` is null when the folder can't be read.
+ */
+async function rootFiles(staffId: string, projectId: string): Promise<{ items: StaffFileItem[] | null; folderUrl: string | null }> {
   const project = await getStaffFilesProject(projectId);
-  if (!project) return null;
+  if (!project) return { items: null, folderUrl: null };
+  const folderUrl =
+    project.driveFolderStatus === "ready" && project.driveFolderId
+      ? `https://drive.google.com/drive/folders/${encodeURIComponent(project.driveFolderId)}`
+      : null;
   const result = await listStaffProjectFiles(staffId, project, null);
-  return result.status === "ok" ? result.items : null;
+  return { items: result.status === "ok" ? result.items : null, folderUrl };
+}
+
+/**
+ * Active catalog fases of every tramo, by workflow id, in `sort_order`: one
+ * statement. The Esencial tramo line reads "fase {i} de {n}" from it.
+ */
+async function phasesByTramo(): Promise<Record<string, WorkflowPhaseRef[]>> {
+  const rows = await db
+    .select({
+      id: workflowPhases.id,
+      workflowId: workflowPhases.workflowId,
+      name: workflowPhases.name,
+      sortOrder: workflowPhases.sortOrder,
+    })
+    .from(workflowPhases)
+    .where(eq(workflowPhases.active, true))
+    .orderBy(asc(workflowPhases.workflowId), asc(workflowPhases.sortOrder));
+  const byTramo: Record<string, WorkflowPhaseRef[]> = {};
+  for (const row of rows) {
+    (byTramo[row.workflowId] ??= []).push({ id: row.id, name: row.name, sortOrder: row.sortOrder });
+  }
+  return byTramo;
 }
 
 /** The ids of the project's own staff: responsable, coordinación and active miembros. */
@@ -84,6 +115,27 @@ async function teamStaff(
   );
 }
 
+/**
+ * Load of the project's team ("Equipo y carga"): each person's open tasks
+ * across every project (responsable or support, admin tasks only with
+ * `includeAdmin`) against `staff.capacity`, as on Personas. Two statements,
+ * none without a team.
+ */
+async function teamLoadOf(project: ProjectDetail, includeAdmin: boolean): Promise<TeamLoad> {
+  const ids = teamIds(project);
+  if (ids.length === 0) return {};
+  const [assigned, caps] = await Promise.all([
+    peopleRepository.listAssignedOpenTasks(ids, { includeAdmin }),
+    db.select({ id: staff.id, capacity: staff.capacity }).from(staff).where(inArray(staff.id, ids)),
+  ]);
+  const load: TeamLoad = {};
+  for (const row of caps) {
+    const openTotal = assigned.get(row.id)?.length ?? 0;
+    load[row.id] = { openTotal, capacity: row.capacity, loadPct: occupancyPct(openTotal, row.capacity) };
+  }
+  return load;
+}
+
 /** The project's tasks for the counts, in the slim projection; none without `canViewActivities`. */
 async function projectTasks(projectId: string, user: AuthenticatedUser): Promise<TaskListRow[]> {
   if (!resolveActivitiesCapabilities(user).canViewActivities) return [];
@@ -103,7 +155,8 @@ async function projectTasks(projectId: string, user: AuthenticatedUser): Promise
  * Reads: the project (deduped with the shell per request), one portfolio
  * row (`listPortfolioRows({ projectIds: [id] })`), the schedule (the
  * Cronograma's source), the slim task rows, spaces, the team's staff rows,
- * tramos and the root Drive listing.
+ * tramos, the root Drive listing and the team load (`teamLoad`: open tasks
+ * across all projects against capacity, two statements).
  */
 export async function loadProjectResumen(projectId: string, user: AuthenticatedUser): Promise<ProjectSummaryInput | null> {
   if (!resolveProjectsCapabilities(user).canViewProjects) return null;
@@ -121,7 +174,7 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
   const now = new Date();
   const today = zonedIsoDate(now, PROJECT_TIMEZONE);
 
-  const [tasks, portfolio, schedule, files, spaces, team, tramos] = await Promise.all([
+  const [tasks, portfolio, schedule, drive, spaces, team, tramos, phases, teamLoad] = await Promise.all([
     orFallback(projectTasks(detail.id, user), [], "tasks"),
     orFallback(
       listPortfolioRows({ includeAdminData: isAdmin, now, projectIds: [detail.id] }).then((rows) => rows[0] ?? null),
@@ -129,7 +182,7 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
       "portfolio",
     ),
     orFallback(getScheduleForProject(detail.id, viewer), null, "schedule"),
-    orFallback(rootFiles(user.member.id, detail.id), null, "files"),
+    orFallback(rootFiles(user.member.id, detail.id), { items: null, folderUrl: null }, "files"),
     orFallback(projectSpacesRepository.listSpaces(detail.id), [], "spaces"),
     orFallback(
       teamStaff(detail, { includeEmail: isAdmin, includePuesto: resolveTeamCapabilities(user).canViewTeam }),
@@ -137,6 +190,8 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
       "staff",
     ),
     orFallback(tramoCatalog(), [], "tramos"),
+    orFallback(phasesByTramo(), {}, "fases"),
+    orFallback(teamLoadOf(detail, isAdmin), {}, "team load"),
   ]);
 
   // Subtasks live inside their parent task; "n de m tareas" counts top-level tasks.
@@ -150,11 +205,14 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
     taskStats,
     // `getScheduleForProject` never reads payments for non-admins; `[]` keeps the rule here as well.
     schedule: schedule ? { tasks: schedule.tasks, payments: isAdmin ? schedule.payments : [] } : null,
-    files,
+    files: drive.items,
+    driveFolderUrl: drive.folderUrl,
     spaces: spaces.map((space) => ({ id: space.id, name: space.name })),
     staff: team,
     showBudget: isAdmin,
     showClientContacts,
     today,
+    phasesByTramo: phases,
+    teamLoad,
   };
 }

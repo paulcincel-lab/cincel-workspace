@@ -16,13 +16,19 @@ const actions = vi.hoisted(() => ({
   createTaskStatusAction: vi.fn(),
   updateTaskStatusAction: vi.fn(),
   deleteTaskStatusAction: vi.fn(),
+  reorderTaskStatusesAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/task-statuses-actions", () => actions);
 
 const pageData = vi.hoisted(() => ({ getAjustesEstatusPageData: vi.fn() }));
 vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
 
-import { TASK_STATUS_INVALIDATIONS, useTaskStatusesEditor } from "./useTaskStatusesEditor";
+import {
+  parseInlineStatus,
+  reorderCachedStatuses,
+  TASK_STATUS_INVALIDATIONS,
+  useTaskStatusesEditor,
+} from "./useTaskStatusesEditor";
 
 const REVISION: TaskStatusOption = { id: "s1", name: "En revisión", closes: false, countsAsCompleted: false, sortOrder: 0 };
 const ENTREGADO: TaskStatusOption = { id: "s2", name: "Entregado", closes: true, countsAsCompleted: true, sortOrder: 1 };
@@ -130,5 +136,58 @@ describe("useTaskStatusesEditor", () => {
     expect(hook.result.current.showEditor).toBe(true);
     expect(hook.result.current.formError).toBe("Ya existe un estatus con ese nombre.");
     expect(client.getQueryData(qk.ajustes.page("estatus"))).toEqual({ statuses: [REVISION, ENTREGADO] });
+  });
+
+  it("createQuick sends #completado to Completado and appends the status", async () => {
+    const created: TaskStatusOption = { id: "s3", name: "Listo", closes: true, countsAsCompleted: true, sortOrder: 2 };
+    actions.createTaskStatusAction.mockResolvedValue({ ok: true, data: created });
+    const { client, hook } = setup();
+
+    await act(async () => {
+      await hook.result.current.createQuick("Listo #completado");
+    });
+
+    expect(actions.createTaskStatusAction).toHaveBeenCalledWith({
+      name: "Listo",
+      closes: true,
+      countsAsCompleted: true,
+      sortOrder: 2,
+    });
+    expect(client.getQueryData(qk.ajustes.page("estatus"))).toEqual({ statuses: [REVISION, ENTREGADO, created] });
+  });
+
+  it("reorder persists the new order", async () => {
+    actions.reorderTaskStatusesAction.mockResolvedValue({ ok: true, data: undefined });
+    const { hook } = setup();
+    act(() => hook.result.current.reorder(["s2", "s1"]));
+    await waitFor(() => expect(actions.reorderTaskStatusesAction).toHaveBeenCalledWith(["s2", "s1"]));
+  });
+});
+
+describe("parseInlineStatus", () => {
+  it("creates in En proceso by default and in Completado with #completado", () => {
+    expect(parseInlineStatus("  Revisión cliente ")).toEqual({ name: "Revisión cliente", closes: false });
+    expect(parseInlineStatus("Entregado #completado")).toEqual({ name: "Entregado", closes: true });
+    expect(parseInlineStatus("#Completado Firmado")).toEqual({ name: "Firmado", closes: true });
+    expect(parseInlineStatus("Pago#completado")).toEqual({ name: "Pago#completado", closes: false });
+  });
+});
+
+describe("reorderCachedStatuses", () => {
+  it("reorders the cached statuses, renumbers sortOrder and returns the previous data", async () => {
+    const client = createTestQueryClient();
+    const before = { statuses: [REVISION, ENTREGADO], baseCounts: { pendiente: 0, en_proceso: 0, completado: 0, bloqueado: 0 }, customUsage: {} };
+    client.setQueryData(qk.ajustes.page("estatus"), before);
+
+    const previous = await reorderCachedStatuses(client, ["s2", "s1"]);
+
+    expect(previous).toBe(before);
+    expect(client.getQueryData(qk.ajustes.page("estatus"))).toEqual({
+      ...before,
+      statuses: [
+        { ...ENTREGADO, sortOrder: 0 },
+        { ...REVISION, sortOrder: 1 },
+      ],
+    });
   });
 });

@@ -137,7 +137,11 @@ export function orderedTramos(tramos: WorkflowRef[]): WorkflowRef[] {
  */
 export function tramoColorVarFor(key: string | null | undefined, tramos: WorkflowRef[]): string {
   if (!key) return NEUTRAL_COLOR_VAR;
-  const index = orderedTramos(tramos).findIndex((t) => t.key === key);
+  const ordered = orderedTramos(tramos);
+  const index = ordered.findIndex((t) => t.key === key);
+  // The color an admin chose in Ajustes › Tramos y fases wins.
+  const chosen = index >= 0 ? ordered[index].colorSlot : null;
+  if (typeof chosen === "number" && chosen >= 1 && chosen <= 5) return `var(--chart-${chosen})`;
   if (index < 0 || index > 2) return NEUTRAL_COLOR_VAR;
   return `var(--chart-${index + 1})`;
 }

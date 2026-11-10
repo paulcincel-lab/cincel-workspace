@@ -26,7 +26,7 @@ import type {
   WeekHours,
 } from "@/lib/types/redesign";
 import { approvedAbsences } from "@/lib/vacations/approved-absences";
-import { parseInput, TeamHoursInputSchema } from "@/lib/validation/redesign";
+import { MyWeekHoursInputSchema, parseInput, TeamHoursInputSchema } from "@/lib/validation/redesign";
 
 /**
  * Control de horario (redesign BE §7.7, §8.7, §9.5). Settings live in
@@ -158,14 +158,19 @@ export async function fetchTeamHoursAction(input: { weekStart: string }): Promis
 }
 
 /**
- * The caller's current week, Mon–Sun (used by Perfil), with the report rules
- * of BE §8.7: hours per day after the lunch rule, and a target of
- * `hoursPerDay` per work day minus the days of approved vacations. Auth: staff.
+ * The caller's week, Mon–Sun, with the report rules of BE §8.7: hours per
+ * day after the lunch rule, and a target of `hoursPerDay` per work day minus
+ * the days of approved vacations. `weekStart` (default: this Monday) must be
+ * a Monday no later than this one; else `INVALID`. Perfil reads this week,
+ * Mi espacio the previous two. Auth: staff.
  */
-export async function fetchMyWeekHoursAction(): Promise<WeekHours> {
+export async function fetchMyWeekHoursAction(input?: { weekStart?: string }): Promise<WeekHours> {
   const caller = await requireCaller();
+  const parsed = parseInput(MyWeekHoursInputSchema, input ?? {});
+  const thisMonday = mondayOf(localDate(new Date()));
+  if (parsed.weekStart && parsed.weekStart > thisMonday) throw new Error("INVALID: weekStart");
   const settings = await getTimeTrackingSettings();
-  const monday = mondayOf(localDate(new Date()));
+  const monday = parsed.weekStart ?? thisMonday;
   const dates = weekDates(monday);
   const [hours, absences] = await Promise.all([
     weekHours(db, [caller.staffId], monday, settings),

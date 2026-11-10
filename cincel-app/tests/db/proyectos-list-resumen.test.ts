@@ -166,7 +166,17 @@ describe.skipIf(!url)("Proyectos list, Resumen and Tareas page data (test DB)", 
   it("getProyectosPageData for a non-admin: no admin fields, canSeeAdminData false, every budget null", async () => {
     const data = await asViewer(colaborador(), () => getProyectosPageData({}));
     expect(Object.keys(data).sort()).toEqual(
-      ["canCreateProject", "canSeeAdminData", "portfolio", "presaleAutoStart", "projects", "tramos"].sort(),
+      [
+        "canChangeProjectStage",
+        "canCreateProject",
+        "canSeeAdminData",
+        "portfolio",
+        "presaleAutoStart",
+        "projects",
+        "today",
+        "tramos",
+        "viewerStaffId",
+      ].sort(),
     );
     expect(data.canSeeAdminData).toBe(false);
     for (const row of data.portfolio) expect(row.budgetSpentPct).toBeNull();

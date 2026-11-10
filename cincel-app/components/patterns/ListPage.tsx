@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader";
 import { EntityCardGrid, type EntityCardGridProps } from "@/components/widgets/EntityCardGrid";
 import { PeopleWidget, type PeopleWidgetProps } from "@/components/widgets/PeopleWidget";
@@ -13,8 +12,8 @@ import type { TaskBoard } from "@/lib/types/redesign";
 import type { EntityCard, PersonDatum, RecordTableData } from "@/lib/types/widgets";
 
 /**
- * List page pattern (redesign FE §4.11): `PageHeader` + `EstiloSwitch` +
- * tabs + filters + one library widget chosen by `spec.kind`. The widget
+ * List page pattern (redesign FE §4.11): `PageHeader` (Estilo switch as its
+ * last action) + tabs + filters + one library widget chosen by `spec.kind`. The widget
  * decides how each presentation style looks; this pattern never branches on
  * the style itself and pages never pass per-style markup.
  */
@@ -105,16 +104,7 @@ export function ListPage({ header, filters, tabs, spec, empty }: ListPageProps) 
   const showEmpty = empty !== undefined && spec.kind !== "board" && isListSpecEmpty(spec);
   return (
     <div className="flex min-w-0 flex-col gap-4" data-list-kind={spec.kind}>
-      <PageHeader
-        estilo={false}
-        {...header}
-        actions={
-          <>
-            {header.actions}
-            <EstiloSwitch scope="staff" />
-          </>
-        }
-      />
+      <PageHeader {...header} />
       {tabs ? <div className="min-w-0">{tabs}</div> : null}
       {filters ? <div className="min-w-0">{filters}</div> : null}
       <div className="min-w-0">{showEmpty ? <EmptyState {...empty} /> : <ListWidget spec={spec} empty={empty} />}</div>

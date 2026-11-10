@@ -29,7 +29,11 @@ const files = TREES.flatMap((tree) => walk(resolve(appRoot, tree))).map((path) =
 
 /** Files this page added or restyled; legacy branches elsewhere keep their weights until cleanup. */
 const REDESIGN_FILES = [
+  "components/portal/PortalProjectMenu.tsx",
   "components/portal/PortalProjectOverview.tsx",
+  "components/portal/PortalProjectTabs.tsx",
+  "components/portal/PortalProjectView.tsx",
+  "components/portal/PortalShell.tsx",
   "components/portal/PortalStyleSwitch.tsx",
   "lib/portal/overview.ts",
   "lib/portal/style.ts",

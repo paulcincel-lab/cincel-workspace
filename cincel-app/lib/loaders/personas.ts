@@ -5,19 +5,30 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { EquipoViewProps } from "@/components/personas/EquipoView";
 import type { PersonasContactsProps } from "@/components/personas/PersonasContacts";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import { canViewTeamHours, resolveClientsCapabilities, resolveTeamCapabilities } from "@/lib/auth/permissions";
+import {
+  canDecideVacations,
+  canViewTeamHours,
+  resolveActivitiesCapabilities,
+  resolveClientsCapabilities,
+  resolveTeamCapabilities,
+} from "@/lib/auth/permissions";
 import { db } from "@/lib/db/client";
 import { staff as staffTable } from "@/lib/db/schema";
 import { toRecentActivity } from "@/lib/people/activity";
 import {
+  addIsoDays,
   displayName,
   dominantTramo,
+  fourWeeks,
   initialsOf,
   localIsoDate,
   occupancyPct,
   openCounts,
+  projectLoads,
+  sharesProjectWithViewer,
   toAttentionItems,
   weekAvailability,
+  weekLoads,
   workWeek,
 } from "@/lib/people/aggregates";
 import {
@@ -35,7 +46,7 @@ import { getTimeTrackingSettings, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tra
 import { weekHours } from "@/lib/time-tracking/week-hours";
 import { canSeeAdminData } from "@/lib/tramos/compat";
 import type { ContactType, ProviderSubtype, Staff, WorkflowRef } from "@/lib/types/core";
-import type { DayHours, PeopleOverviewRow, PersonaDetail } from "@/lib/types/redesign";
+import type { AbsenceRange, DayHours, PeopleOverviewRow, PersonaDetail } from "@/lib/types/redesign";
 import type { KpiDatum, ProgressItem } from "@/lib/types/widgets";
 import { approvedAbsences } from "@/lib/vacations/approved-absences";
 
@@ -77,16 +88,23 @@ function currentWeek(): { today: string; days: string[] } {
   return { today, days: workWeek(today) };
 }
 
+/**
+ * Approved absences overlapping `[from, to]`, per staff id. The stored kind
+ * only for the person themself and `canDecideVacations`; everyone else gets
+ * "ausencia" (BE §8.8), since this is dehydrated into the page.
+ */
 async function absencesByStaff(
+  user: AuthenticatedUser,
   staffIds: string[],
-  days: string[],
-): Promise<Map<string, { from: string; to: string }[]>> {
-  const out = new Map<string, { from: string; to: string }[]>();
+  range: { from: string; to: string },
+): Promise<Map<string, AbsenceRange[]>> {
+  const out = new Map<string, AbsenceRange[]>();
   if (staffIds.length === 0) return out;
-  const rows = await approvedAbsences(db, { from: days[0]!, to: days[days.length - 1]!, staffIds });
+  const decider = canDecideVacations(user);
+  const rows = await approvedAbsences(db, { from: range.from, to: range.to, staffIds });
   for (const row of rows) {
     const list = out.get(row.staffId) ?? [];
-    list.push({ from: row.from, to: row.to });
+    list.push({ from: row.from, to: row.to, kind: decider || row.staffId === user.member.id ? row.kind : "ausencia" });
     out.set(row.staffId, list);
   }
   return out;
@@ -124,21 +142,28 @@ export async function loadPeopleOverview(user: AuthenticatedUser, staff: Staff[]
   if (staffIds.length === 0) return [];
 
   const { today, days } = currentWeek();
+  const mondays = fourWeeks(today);
   const includeAdmin = canSeeAdminData(user);
   const hoursIds = hoursVisibleIds(user, staffIds);
   const hoursVisible = new Set(hoursIds);
 
+  // One absences read over the 4 weeks; `weekAvailability` still reads only this week's days.
   const [tasksByStaff, projectsByStaff, absences, hours] = await Promise.all([
     peopleRepository.listAssignedOpenTasks(staffIds, { includeAdmin }),
     peopleRepository.listActiveProjectsByStaff(staffIds),
-    absencesByStaff(staffIds, days),
+    absencesByStaff(user, staffIds, { from: mondays[0]!, to: addIsoDays(mondays[3]!, 6) }),
     hoursByStaff(hoursIds, days[0]!),
   ]);
+  const shares = sharesProjectWithViewer(projectsByStaff, user.member.id);
 
   return rows.map((row) => {
-    const dueDates = (tasksByStaff.get(row.id) ?? []).map((t) => t.due);
+    const openTasks = tasksByStaff.get(row.id) ?? [];
+    const dueDates = openTasks.map((t) => t.due);
     const { open, overdue } = openCounts(dueDates, today);
+    const personAbsences = absences.get(row.id) ?? [];
     return {
+      weeks: weekLoads({ today, capacity: row.capacity, dueDates, absences: personAbsences }),
+      absences: personAbsences,
       staffId: row.id,
       open,
       overdue,
@@ -149,8 +174,10 @@ export async function loadPeopleOverview(user: AuthenticatedUser, staff: Staff[]
         days,
         capacity: row.capacity,
         dueDates,
-        absences: absences.get(row.id) ?? [],
+        absences: personAbsences,
       }),
+      projects: projectLoads(openTasks, today, mondays),
+      sharesProjectWithViewer: shares.get(row.id) ?? false,
     };
   });
 }
@@ -170,7 +197,15 @@ export async function loadPersonasEquipo(user: AuthenticatedUser): Promise<Perso
   ]);
   const overview = await loadPeopleOverview(user, staff).catch((): PeopleOverviewRow[] => []);
   const { people, emails } = buildTeamPeople(staff, overview, tramos);
-  return { people, emails, canCreate: teamCaps.canCreateCollaborator };
+  const activityCaps = resolveActivitiesCapabilities(user);
+  return {
+    people,
+    emails,
+    tramos,
+    canCreate: teamCaps.canCreateCollaborator,
+    canAssign: activityCaps.canChangeResponsible,
+    canCreateTask: activityCaps.canCreateActivity,
+  };
 }
 
 /** Live, active staff: the Equipo tab count. */
@@ -271,7 +306,7 @@ export async function loadPersonasDetail(
     peopleRepository.listAssignedOpenTasks([staffId], { includeAdmin }),
     peopleRepository.listActiveProjectsByStaff([staffId]),
     peopleRepository.staffIdsWithPhoto([staffId]),
-    absencesByStaff([staffId], days),
+    absencesByStaff(user, [staffId], { from: days[0]!, to: days[days.length - 1]! }),
     hoursByStaff(showHours ? [staffId] : [], days[0]!),
     peopleRepository.listRecentActivity(staffId, { includeAdmin }),
   ]);

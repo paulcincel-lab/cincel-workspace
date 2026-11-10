@@ -36,6 +36,18 @@ export function GroupTargetsTable({
   onBoardChange: (update: (board: BoardDraft) => BoardDraft) => void;
 }) {
   const suggest = suggestsGroupAsProject(board, source, choices);
+  const itemsByGroup = new Map<string, number>();
+  for (const item of source.items) {
+    if (item.groupId) itemsByGroup.set(item.groupId, (itemsByGroup.get(item.groupId) ?? 0) + 1);
+  }
+  /** "{Tramo} · {Fase}" of a fase target. */
+  const phaseLabel = (phaseId: string): string | null => {
+    for (const workflow of choices.workflows) {
+      const phase = workflow.phases.find((candidate) => candidate.id === phaseId);
+      if (phase) return `${workflow.name} · ${phase.name}`;
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-3">
@@ -60,7 +72,9 @@ export function GroupTargetsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-1/2">Grupo de monday</TableHead>
+            <TableHead>Grupo de monday</TableHead>
+            <TableHead className="text-right">Elementos</TableHead>
+            <TableHead>a</TableHead>
             <TableHead className="w-1/2">En Cincel</TableHead>
           </TableRow>
         </TableHeader>
@@ -70,7 +84,13 @@ export function GroupTargetsTable({
             return (
               <TableRow key={group.id}>
                 <TableCell className="align-top">{group.title}</TableCell>
-                <TableCell className="space-y-2 whitespace-normal">
+                <TableCell className="text-right align-top font-mono tabular-nums">
+                  {itemsByGroup.get(group.id) ?? 0}
+                </TableCell>
+                <TableCell aria-hidden="true" className="align-top text-muted-foreground">
+                  →
+                </TableCell>
+                <TableCell className="min-w-[190px] space-y-2 whitespace-normal">
                   <ChoiceSelect
                     label={`Equivalente de ${group.title}`}
                     value={encodeGroupTarget(target)}
@@ -99,8 +119,14 @@ export function GroupTargetsTable({
                       }
                     />
                   ) : null}
+                  {target.kind === "phase" && phaseLabel(target.phaseId) ? (
+                    <p className="text-sm text-foreground">{phaseLabel(target.phaseId)}</p>
+                  ) : null}
                   {target.kind === "ignore" ? (
-                    <p className="text-sm text-muted-foreground">Los elementos de este grupo no se importan.</p>
+                    <>
+                      <p className="text-sm font-medium text-foreground">No importar</p>
+                      <p className="text-sm text-muted-foreground">Los elementos de este grupo no se importan.</p>
+                    </>
                   ) : null}
                 </TableCell>
               </TableRow>

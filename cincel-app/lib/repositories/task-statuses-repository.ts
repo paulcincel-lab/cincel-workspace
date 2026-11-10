@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { taskStatuses, tasks } from "@/lib/db/schema";
@@ -13,6 +13,7 @@ function toOption(row: TaskStatusRow): TaskStatusOption {
     closes: row.closes,
     countsAsCompleted: row.countsAsCompleted,
     sortOrder: row.sortOrder,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -104,6 +105,49 @@ export async function updateTaskStatus(
         .where(eq(tasks.customStatusId, id));
     }
     return toOption(after);
+  });
+}
+
+/**
+ * Live tasks per base status (`tasks.status`), every base present (0 when
+ * none). A task in a custom status counts under the status stored beneath it.
+ */
+export async function countTasksByBaseStatus(): Promise<Record<TaskStatus, number>> {
+  const rows = await db
+    .select({ status: tasks.status, n: count() })
+    .from(tasks)
+    .where(isNull(tasks.deletedAt))
+    .groupBy(tasks.status);
+  const out: Record<TaskStatus, number> = { pendiente: 0, en_proceso: 0, completado: 0, bloqueado: 0 };
+  for (const row of rows) out[row.status] = Number(row.n);
+  return out;
+}
+
+/** Per custom status id: its live tasks and the distinct projects they belong to. */
+export async function countCustomStatusUsage(): Promise<Record<string, { tasks: number; projects: number }>> {
+  const rows = await db
+    .select({
+      id: tasks.customStatusId,
+      tasks: count(),
+      projects: sql<number>`count(distinct ${tasks.projectId})::int`,
+    })
+    .from(tasks)
+    .where(and(isNull(tasks.deletedAt), isNotNull(tasks.customStatusId)))
+    .groupBy(tasks.customStatusId);
+  const out: Record<string, { tasks: number; projects: number }> = {};
+  for (const row of rows) if (row.id) out[row.id] = { tasks: Number(row.tasks), projects: Number(row.projects) };
+  return out;
+}
+
+/** One transaction, `sort_order` = index (0..n), live statuses only. */
+export async function reorderTaskStatuses(orderedIds: string[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const [i, id] of orderedIds.entries()) {
+      await tx
+        .update(taskStatuses)
+        .set({ sortOrder: i })
+        .where(and(eq(taskStatuses.id, id), isNull(taskStatuses.deletedAt)));
+    }
   });
 }
 

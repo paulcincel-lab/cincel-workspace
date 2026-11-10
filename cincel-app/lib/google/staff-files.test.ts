@@ -146,6 +146,7 @@ describe("toStaffFileItem", () => {
         modifiedTime: "2026-11-01T10:00:00.000Z",
         iconLink: "https://icon",
         webViewLink: "https://view",
+        thumbnailLink: "https://thumb",
       })
     ).toEqual({
       id: "f1",
@@ -155,12 +156,14 @@ describe("toStaffFileItem", () => {
       modifiedAt: "2026-11-01T10:00:00.000Z",
       iconLink: "https://icon",
       webViewLink: "https://view",
+      thumbnailLink: "https://thumb",
       kind: "file",
     });
     expect(toStaffFileItem({ id: "d1", name: "Renders", mimeType: FOLDER_MIME_TYPE })).toMatchObject({
       sizeBytes: null,
       iconLink: null,
       webViewLink: null,
+      thumbnailLink: null,
       kind: "folder",
     });
   });
@@ -233,7 +236,7 @@ describe("loadStaffFiles", () => {
     expect(openStaffDrive).toHaveBeenCalledWith("staff-token");
     expect(listAll).toHaveBeenCalledWith({
       parentId: "proj-a",
-      fields: "id,name,mimeType,modifiedTime,size,iconLink,webViewLink",
+      fields: "id,name,mimeType,modifiedTime,size,iconLink,webViewLink,thumbnailLink",
     });
     expect(result).toMatchObject({
       status: "ok",

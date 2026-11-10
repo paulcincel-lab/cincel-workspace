@@ -1,9 +1,11 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   foreignKey,
   index,
   integer,
+  smallint,
   text,
   unique,
   uniqueIndex,
@@ -29,10 +31,15 @@ export const workflows = core.table(
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     autoStart: workflowAutoStart("auto_start").notNull().default("manual"),
+    /** Chart color slot an admin chose (1–5, `--chart-N`); null = derived from key / sortOrder (`tramoColorSlot`). */
+    colorSlot: smallint("color_slot"),
     ...stamps,
     ...soft,
   },
-  (t) => [uniqueIndex("workflows_key_uq").on(t.key).where(sql`${t.deletedAt} is null`)]
+  (t) => [
+    uniqueIndex("workflows_key_uq").on(t.key).where(sql`${t.deletedAt} is null`),
+    check("workflows_color_slot_check", sql`${t.colorSlot} is null or ${t.colorSlot} between 1 and 5`),
+  ]
 );
 
 /**

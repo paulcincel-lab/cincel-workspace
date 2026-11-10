@@ -44,12 +44,16 @@ export type DashboardId = "inicio" | "proyectos" | "personas";
 /** Version of the persisted value; anything else migrates to the defaults. */
 export const DASHBOARD_STORE_VERSION = 1;
 
-/** The `localStorage` key of a dashboard instance. */
-export function dashboardStorageKey(id: DashboardId): string {
-  return `cincel.ui.dashboard.${id}.v1`;
+/**
+ * The `localStorage` key of a dashboard instance. A new `keyVersion` drops
+ * whatever an older shape stored (e.g. Proyectos `v2` after its per-widget
+ * views went away).
+ */
+export function dashboardStorageKey(id: DashboardId, keyVersion = 1): string {
+  return `cincel.ui.dashboard.${id}.v${keyVersion}`;
 }
 
-export type DashboardUiState<W extends string, K extends string> = {
+export type DashboardUiState<W extends string, K extends string, F extends string = never> = {
   /** Session only (not persisted). */
   selectedKpi: K | null;
   /** Client window over the loaded data, default "8w". */
@@ -58,6 +62,12 @@ export type DashboardUiState<W extends string, K extends string> = {
   /** Per-style overrides: what the user picked while in that style. */
   views: Partial<Record<PresentationStyle, Partial<Record<W, WidgetView>>>>;
   hiddenSeries: Partial<Record<W, string[]>>;
+  /**
+   * Client-side table filters of an Analítico page, one value per key of
+   * `defaults.filters` (null = all). Persisted like `range`; empty for an
+   * instance without filter keys.
+   */
+  filters: Record<F, string | null>;
   selectKpi(key: K | null): void;
   /** The same key again → null. */
   toggleKpi(key: K): void;
@@ -71,31 +81,39 @@ export type DashboardUiState<W extends string, K extends string> = {
    * the widget's series; a toggle that would hide all of them is ignored.
    */
   toggleSeries(widget: W, series: string, available?: readonly string[]): void;
+  /** Sets one filter (ignored for a key the instance does not declare). */
+  setFilter(key: F, value: string | null): void;
+  /** Every filter back to null. */
+  clearFilters(): void;
   reset(): void;
 };
 
-/** The persisted part (`partialize`): exactly these four keys. */
-export type DashboardPersisted<W extends string> = Pick<
+/** The persisted part (`partialize`): these four keys, plus `filters` when the instance declares filter keys. */
+export type DashboardPersisted<W extends string, F extends string = never> = Pick<
   DashboardUiState<W, string>,
   "range" | "collapsed" | "views" | "hiddenSeries"
->;
+> & { filters?: Record<F, string | null> };
 
 export type DashboardData<W extends string, K extends string> = Pick<
   DashboardUiState<W, K>,
   "selectedKpi" | "range" | "collapsed" | "views" | "hiddenSeries"
 >;
 
-export type DashboardStoreDefaults<W extends string, K extends string> = Partial<
+export type DashboardStoreDefaults<W extends string, K extends string, F extends string = never> = Partial<
   Pick<DashboardUiState<W, K>, "range" | "collapsed">
 > & {
+  /** Filter keys (`filters`); stored keys of other names are dropped on rehydrate. */
+  filters?: readonly F[];
   /** The dashboard's widget ids; stored keys of other widgets are dropped on rehydrate. */
   widgets?: readonly W[];
   /** Each widget's series keys, for the last-visible-series guard of `toggleSeries`. */
   series?: Partial<Record<W, readonly string[]>>;
+  /** The `.v<n>` of the storage key (`dashboardStorageKey`); default 1. */
+  storageKeyVersion?: number;
 };
 
-export type DashboardStore<W extends string, K extends string> = UseBoundStore<
-  Mutate<StoreApi<DashboardUiState<W, K>>, [["zustand/persist", DashboardPersisted<W>]]>
+export type DashboardStore<W extends string, K extends string, F extends string = never> = UseBoundStore<
+  Mutate<StoreApi<DashboardUiState<W, K, F>>, [["zustand/persist", DashboardPersisted<W, F>]]>
 >;
 
 /** The defaults of an instance created without `defaults`. */
@@ -157,8 +175,8 @@ export function selectSeriesHidden<W extends string>(widget: W, series: string) 
 }
 
 /** Style-dependent view, without putting the style in the store. */
-export function useWidgetView<W extends string, K extends string>(
-  store: DashboardStore<W, K>,
+export function useWidgetView<W extends string, K extends string, F extends string = never>(
+  store: DashboardStore<W, K, F>,
   widget: W,
   fallback: Record<PresentationStyle, WidgetView>,
 ): WidgetView {
@@ -215,15 +233,19 @@ const dashboardLocalStorage: StateStorage = {
 
 // ── Factory ─────────────────────────────────────────────────────────────────
 
-export function createDashboardStore<W extends string, K extends string>(
+export function createDashboardStore<W extends string, K extends string, F extends string = never>(
   id: DashboardId,
-  defaults: DashboardStoreDefaults<W, K> = {},
-): DashboardStore<W, K> {
+  defaults: DashboardStoreDefaults<W, K, F> = {},
+): DashboardStore<W, K, F> {
   const defaultRange: DashboardRange = isDashboardRange(defaults.range) ? defaults.range : DASHBOARD_INITIAL.range;
   const widgetIds = defaults.widgets ? new Set<string>(defaults.widgets) : null;
   const knownSeries: Partial<Record<string, readonly string[]>> = defaults.series ?? {};
 
   const isWidget = (key: string): key is W => (widgetIds ? widgetIds.has(key) : true);
+  const filterKeys: readonly F[] = defaults.filters ?? [];
+  const isFilterKey = (key: string): key is F => (filterKeys as readonly string[]).includes(key);
+  const emptyFilters = (): Record<F, string | null> =>
+    Object.fromEntries(filterKeys.map((key) => [key, null])) as Record<F, string | null>;
 
   const initialData = (): DashboardData<W, K> => ({
     selectedKpi: null,
@@ -233,13 +255,15 @@ export function createDashboardStore<W extends string, K extends string>(
     hiddenSeries: {},
   });
 
-  const persistedDefaults = (): DashboardPersisted<W> => {
+  const persistedDefaults = (): DashboardPersisted<W, F> => {
     const { range, collapsed, views, hiddenSeries } = initialData();
-    return { range, collapsed, views, hiddenSeries };
+    return filterKeys.length > 0
+      ? { range, collapsed, views, hiddenSeries, filters: emptyFilters() }
+      : { range, collapsed, views, hiddenSeries };
   };
 
   /** Keeps only current widget ids, known styles, views and ranges. */
-  const sanitize = (value: unknown): DashboardPersisted<W> => {
+  const sanitize = (value: unknown): DashboardPersisted<W, F> => {
     const fallback = persistedDefaults();
     if (!isRecord(value)) return fallback;
 
@@ -250,7 +274,7 @@ export function createDashboardStore<W extends string, K extends string>(
       }
     }
 
-    const views: DashboardPersisted<W>["views"] = {};
+    const views: DashboardPersisted<W, F>["views"] = {};
     if (isRecord(value.views)) {
       for (const style of PRESENTATION_STYLES) {
         const picks = value.views[style];
@@ -275,18 +299,29 @@ export function createDashboardStore<W extends string, K extends string>(
       }
     }
 
-    return {
+    const sanitized: DashboardPersisted<W, F> = {
       range: isDashboardRange(value.range) ? value.range : fallback.range,
       collapsed: isRecord(value.collapsed) ? collapsed : fallback.collapsed,
       views,
       hiddenSeries,
     };
+    if (filterKeys.length > 0) {
+      const filters = emptyFilters();
+      if (isRecord(value.filters)) {
+        for (const [key, picked] of Object.entries(value.filters)) {
+          if (isFilterKey(key) && typeof picked === "string" && picked !== "") filters[key] = picked;
+        }
+      }
+      sanitized.filters = filters;
+    }
+    return sanitized;
   };
 
-  const store: DashboardStore<W, K> = create<DashboardUiState<W, K>>()(
+  const store: DashboardStore<W, K, F> = create<DashboardUiState<W, K, F>>()(
     persist(
       (set) => ({
         ...initialData(),
+        filters: emptyFilters(),
         selectKpi: (key) => set({ selectedKpi: key }),
         toggleKpi: (key) => set((s) => ({ selectedKpi: s.selectedKpi === key ? null : key })),
         setRange: (range) => {
@@ -311,14 +346,21 @@ export function createDashboardStore<W extends string, K extends string>(
             if (available && available.length > 0 && available.every((name) => next.includes(name))) return s;
             return { hiddenSeries: { ...s.hiddenSeries, [widget]: next } };
           }),
-        reset: () => set(initialData()),
+        setFilter: (key, value) => {
+          if (isFilterKey(key)) set((s) => ({ filters: { ...s.filters, [key]: value || null } }));
+        },
+        clearFilters: () => set({ filters: emptyFilters() }),
+        reset: () => set({ ...initialData(), filters: emptyFilters() }),
       }),
       {
-        name: dashboardStorageKey(id),
+        name: dashboardStorageKey(id, defaults.storageKeyVersion),
         version: DASHBOARD_STORE_VERSION,
-        storage: createJSONStorage<DashboardPersisted<W>>(() => dashboardLocalStorage),
+        storage: createJSONStorage<DashboardPersisted<W, F>>(() => dashboardLocalStorage),
         skipHydration: true,
-        partialize: ({ range, collapsed, views, hiddenSeries }) => ({ range, collapsed, views, hiddenSeries }),
+        partialize: ({ range, collapsed, views, hiddenSeries, filters }) =>
+          filterKeys.length > 0
+            ? { range, collapsed, views, hiddenSeries, filters }
+            : { range, collapsed, views, hiddenSeries },
         // Version 0 or unknown: the defaults.
         migrate: () => persistedDefaults(),
         merge: (persisted, current) => (persisted == null ? current : { ...current, ...sanitize(persisted) }),

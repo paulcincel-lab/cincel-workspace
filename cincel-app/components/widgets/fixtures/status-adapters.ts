@@ -36,7 +36,8 @@ export const TRAMO_FIXTURE = {
   presale: { id: "wf-presale", key: "presale", name: "Presale", sortOrder: 1 },
   diseno: { id: "wf-diseno", key: "diseno", name: "Diseño", sortOrder: 2 },
   construccion: { id: "wf-construccion", key: "construccion", name: "Construcción", sortOrder: 3 },
-  /** A tramo outside the known three: own name, neutral color. */
+  decoracion: { id: "wf-decoracion", key: "decoracion", name: "Decoración", sortOrder: 4 },
+  /** A tramo outside the known four: own name, neutral color. */
   otro: { id: "wf-otro", key: "mantenimiento", name: "Mantenimiento", sortOrder: 9 },
 } satisfies Record<string, WorkflowRef>;
 
@@ -45,5 +46,6 @@ export const TRAMO_EXPECTED: Record<keyof typeof TRAMO_FIXTURE, { label: string;
   presale: { label: "Presale", slot: 1 },
   diseno: { label: "Diseño", slot: 2 },
   construccion: { label: "Construcción", slot: 3 },
+  decoracion: { label: "Decoración", slot: 4 },
   otro: { label: "Mantenimiento", slot: null },
 };

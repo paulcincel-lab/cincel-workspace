@@ -41,6 +41,8 @@ export type ResourceLink = {
   sortOrder: number;
   /** Populated when the link was picked from the Drive browser. */
   drive: DriveFileMeta | null;
+  /** The project the document belongs to; null = General (sin proyecto). */
+  project: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -58,4 +60,6 @@ export type ResourceLinkInput = {
   personalForId?: string | null;
   sortOrder?: number;
   drive?: Omit<DriveFileMeta, "id"> | null;
+  /** The project the document belongs to; null or absent = General (sin proyecto). */
+  projectId?: string | null;
 };

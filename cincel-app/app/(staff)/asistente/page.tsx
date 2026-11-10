@@ -14,8 +14,8 @@ type AsistentePageProps = {
 };
 
 /**
- * `/asistente` (redesign FE §3.9): the full page with server history and the
- * Herramientas panel, inside `AppShell`. 404 while any assistant thread
+ * `/asistente` (redesign FE §3.9): the full page with server history, one
+ * layout per presentation style, inside `AppShell`. 404 while any assistant thread
  * action is still a stub (FE §9 stubs rule; its nav item is hidden too).
  *
  * One page-data load (Query Migration Phase 10, #944) seeds
@@ -35,6 +35,10 @@ export default async function AsistentePage({ searchParams }: AsistentePageProps
   // A `?thread=` that isn't a uuid can't name a thread: missing, without a read.
   const threadId = requested && UuidSchema.safeParse(requested).success ? requested.toLowerCase() : null;
 
+  // `?proyecto=<id>` prefills the project chip; the client drops it when the project isn't visible.
+  const rawProject = typeof params.proyecto === "string" ? params.proyecto.trim() : "";
+  const projectId = rawProject && UuidSchema.safeParse(rawProject).success ? rawProject.toLowerCase() : null;
+
   const user = await requireCapabilityUser();
   const data = await loadAsistentePageData(user, { threadId });
 
@@ -47,6 +51,7 @@ export default async function AsistentePage({ searchParams }: AsistentePageProps
       <AsistentePageClient
         threadId={data.initialThread?.id ?? null}
         missingThread={requested !== null && data.initialThread === null}
+        initialProjectId={projectId}
       />
     </Hydrate>
   );

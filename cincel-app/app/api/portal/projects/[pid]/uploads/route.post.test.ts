@@ -26,7 +26,7 @@ type Access = {
 
 const state = vi.hoisted(() => ({
   cookie: undefined as string | undefined,
-  user: null as null | { id: string; name: string; email: string; contactId: string },
+  user: null as null | { id: string; name: string; email: string; contactId: string; companyName: string | null },
   access: new Map<string, Access>(),
   afterTasks: [] as (() => unknown)[],
 }));
@@ -118,7 +118,7 @@ function call(pid: string) {
 describe("POST /api/portal/projects/[pid]/uploads", () => {
   beforeEach(() => {
     state.cookie = "tok";
-    state.user = { id: "u-me", name: "Ana López", email: "ana@cliente.example", contactId: "c-9" };
+    state.user = { id: "u-me", name: "Ana López", email: "ana@cliente.example", contactId: "c-9", companyName: null };
     state.access = new Map([[`u-me:${PID}`, readyAccess()]]);
     state.afterTasks = [];
     for (const mock of Object.values(mocks)) mock.mockReset();

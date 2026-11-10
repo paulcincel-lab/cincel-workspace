@@ -31,7 +31,11 @@ import { ESTILO_PARAM, writePortalStyleCookie } from "@/lib/ui/style-override";
  *
  * Renders no per-style markup (guard allowlist, FE §17).
  */
-export type EstiloSwitchProps = { scope?: "staff" | "portal" };
+export type EstiloSwitchProps = {
+  scope?: "staff" | "portal";
+  /** `segmented`: no visible "Estilo" label (kept for screen readers), active option in `primary` (portal top bar). */
+  variant?: "default" | "segmented";
+};
 
 const OPTIONS: { value: PresentationStyle; label: string; icon: LucideIcon }[] = [
   { value: "visual", label: "Visual", icon: ChartPie },
@@ -54,6 +58,7 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
   const labelId = useId();
   const hintId = useId();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const segmented = props.variant === "segmented";
   const current = ctx.style;
   const currentIndex = Math.max(
     0,
@@ -124,7 +129,7 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
 
   return (
     <div className="flex items-center gap-2" data-slot="estilo-switch">
-      <span id={labelId} className="text-xs text-muted-foreground">
+      <span id={labelId} className={segmented ? "sr-only" : "text-xs text-muted-foreground"}>
         Estilo
       </span>
       <div
@@ -133,7 +138,11 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
         aria-describedby={disabledCopy ? hintId : undefined}
         aria-disabled={disabled || undefined}
         title={disabledCopy ?? undefined}
-        className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5"
+        className={
+          segmented
+            ? "inline-flex items-center gap-0.5 rounded-[10px] border border-border bg-muted/50 p-0.5"
+            : "inline-flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5"
+        }
       >
         {OPTIONS.map((option, index) => {
           const checked = index === currentIndex;
@@ -150,9 +159,13 @@ export function EstiloSwitch(props: EstiloSwitchProps) {
               aria-disabled={disabled || undefined}
               data-value={option.value}
               tabIndex={checked ? 0 : -1}
-              variant={checked ? "secondary" : "ghost"}
+              variant={checked ? (segmented ? "default" : "secondary") : "ghost"}
               size="sm"
-              className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              className={
+                segmented
+                  ? "rounded-lg px-3 text-[13px] font-medium aria-disabled:cursor-not-allowed aria-disabled:opacity-50 [&_svg]:hidden"
+                  : "aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              }
               onClick={() => select(option.value)}
               onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => onKeyDown(event, index)}
             >

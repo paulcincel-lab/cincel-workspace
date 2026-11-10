@@ -26,7 +26,12 @@ const isoDate = z.iso.date();
 const name = z.string().trim().min(1, "EMPTY").max(120);
 
 export const WorkflowPhaseInputSchema = z.object({ name, active: z.boolean().optional() });
-export const PositionInputSchema = z.object({ name, active: z.boolean().optional() });
+/** `weeklyCapacityHours`: whole hours 0–80, or null for no capacity (`positions_weekly_capacity_hours_check`). */
+export const PositionInputSchema = z.object({
+  name,
+  active: z.boolean().optional(),
+  weeklyCapacityHours: z.number().int().min(0).max(80).nullable().optional(),
+});
 export const ProjectCreateInputSchema = z.object({ name });
 export const ProjectSpaceNameSchema = name;
 export const OrderedIdsSchema = z.array(uuid).max(500);

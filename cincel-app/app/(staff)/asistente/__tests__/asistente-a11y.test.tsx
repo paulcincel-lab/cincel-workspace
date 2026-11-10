@@ -15,6 +15,8 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/lib/actions/assistant-actions", () => ({
   fetchAssistantThreadsAction: vi.fn(async () => []),
   deleteAssistantThreadAction: vi.fn(async () => ({ ok: true, data: undefined })),
+  pinAssistantThreadAction: vi.fn(),
+  markAssistantThreadReadAction: vi.fn(async () => undefined),
   importLegacyAssistantThreadAction: vi.fn(async () => ({ id: "t-legacy" })),
   fetchAssistantActionsAction: vi.fn(async () => []),
 }));
@@ -22,6 +24,15 @@ vi.mock("@/lib/actions/page-data/asistente-actions", () => ({
   fetchAssistantThreadAction: vi.fn(async () => null),
   lookupAssistantContextAction: vi.fn(async () => null),
   getAsistentePageData: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
+  fetchCatalogProjectOptions: vi.fn(async () => []),
+  fetchCatalogAssignableStaff: vi.fn(async () => []),
+  fetchCatalogContacts: vi.fn(async () => []),
+  fetchCatalogProjectSpaces: vi.fn(async () => []),
+  fetchCatalogStaff: vi.fn(async () => []),
+  fetchCatalogTaskStatuses: vi.fn(async () => []),
+  fetchCatalogWorkflows: vi.fn(async () => []),
 }));
 vi.mock("@ai-sdk/react", () => ({
   useChat: (opts: { messages?: UIMessage[] }) => {
@@ -37,10 +48,24 @@ import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-u
 import type { AssistantThreadSummary } from "@/lib/types/redesign";
 
 const now = Date.now();
+const STATUS = { pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0 };
 const THREADS: AssistantThreadSummary[] = [
-  { id: "t1", title: "Avance de Local Espinopapa", updatedAt: new Date(now - 60_000).toISOString() },
-  { id: "t2", title: "Cuantificar porcelanato 60×60", updatedAt: new Date(now - 3 * 86_400_000).toISOString() },
-  { id: "t3", title: "Cronograma remodelación Ensenada", updatedAt: new Date(now - 40 * 86_400_000).toISOString() },
+  { ...STATUS, id: "t1", title: "Avance de Local Espinopapa", updatedAt: new Date(now - 60_000).toISOString() },
+  {
+    ...STATUS,
+    id: "t2",
+    title: "Cuantificar porcelanato 60×60",
+    updatedAt: new Date(now - 3 * 86_400_000).toISOString(),
+    pinnedAt: new Date(now - 86_400_000).toISOString(),
+    pendingApprovals: 1,
+  },
+  {
+    ...STATUS,
+    id: "t3",
+    title: "Cronograma remodelación Ensenada",
+    updatedAt: new Date(now - 40 * 86_400_000).toISOString(),
+    unread: true,
+  },
 ];
 
 function seeded(threads: AssistantThreadSummary[], thread?: { id: string }) {

@@ -262,8 +262,8 @@ describe("inicioWorkloadRows", () => {
       TODAY,
     );
     expect(rows).toEqual([
-      { staffId: "beto", open: 2, overdue: 1, activeProjects: 2, occupancyPct: 0, weekHours: null, availability: [] },
-      { staffId: "ana", open: 1, overdue: 0, activeProjects: 1, occupancyPct: 25, weekHours: null, availability: [] },
+      { staffId: "beto", open: 2, overdue: 1, activeProjects: 2, occupancyPct: 0, weekHours: null, availability: [], inProgress: 0, avgDaysLate: 6, weeks: [], absences: [], projects: [], sharesProjectWithViewer: false },
+      { staffId: "ana", open: 1, overdue: 0, activeProjects: 1, occupancyPct: 25, weekHours: null, availability: [], inProgress: 0, avgDaysLate: null, weeks: [], absences: [], projects: [], sharesProjectWithViewer: false },
     ]);
   });
 });

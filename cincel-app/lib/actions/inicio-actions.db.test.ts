@@ -7,7 +7,7 @@
  * and no client / origin data for a caller without `canSeeAdminData`), a
  * guest → FORBIDDEN, Mi día limited to the caller, the #917 regression
  * (equal to the pre-migration `fetchInicioAction` output), the slim task
- * read (`listTaskRows` only) and the loader's statement count (≤ 18).
+ * read (`listTaskRows` only) and the loader's statement count (≤ 22).
  * Runs only when TEST_DATABASE_URL points at a migrated database
  * (`npm run db:migrate`). Every row a test creates carries a per-run marker
  * and is deleted afterwards.
@@ -226,7 +226,23 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
   it("returns every InicioData field", async () => {
     const data = await fetchInicio();
     expect(Object.keys(data).sort()).toEqual(
-      ["attention", "kpis", "myDay", "projectsProgress", "tasksByTramo", "weeklyPace", "workload"].sort()
+      [
+        "attention",
+        "kpis",
+        "hero",
+        "myAttention",
+        "myDay",
+        "myWeek",
+        "openShifts",
+        "paceScope",
+        "projectsProgress",
+        "sections",
+        "tasksByTramo",
+        "tasksByTramoAssignee",
+        "todayAgenda",
+        "weeklyPace",
+        "workload",
+      ].sort()
     );
   });
 
@@ -238,6 +254,9 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       "bloqueadas",
       "revisiones_7d",
       "completadas_semana",
+      "abiertas",
+      "horas_semana",
+      "retraso_promedio",
     ]);
     const value = Object.fromEntries(kpis.map((k) => [k.key, k.value]));
     expect(value).toEqual({
@@ -246,6 +265,9 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       bloqueadas: 1,
       revisiones_7d: 1,
       completadas_semana: 1,
+      abiertas: 4,
+      horas_semana: 0,
+      retraso_promedio: 3,
     });
     for (const kpi of kpis) {
       expect(kpi.series7).toHaveLength(7);
@@ -255,7 +277,9 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       expect(kpi.delta?.label).toMatch(/^(sin cambio|[+−]\d.* (vs\. semana|este mes))$/);
       expect(["good", "bad", "neutral"]).toContain(kpi.delta?.tone);
       expect(kpi.caption).toBeTruthy();
-      if (kpi.key === "completadas_semana") expect(kpi.visibleIn).toEqual(["analitico"]);
+      if (kpi.key === "completadas_semana" || kpi.key === "retraso_promedio") expect(kpi.visibleIn).toEqual(["analitico"]);
+      else if (kpi.key === "abiertas") expect(kpi.visibleIn).toEqual(["visual", "analitico"]);
+      else if (kpi.key === "horas_semana") expect(kpi.visibleIn).toEqual(["visual"]);
       else expect(kpi.visibleIn).toBeUndefined();
     }
   });
@@ -372,7 +396,16 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
       session.dataScope = who === "admin" ? "global" : "managed_projects";
       const user = await requireCapabilityUser();
       const before = await legacyFetchInicio(user);
-      const after = (await loadInicioPage(user)).inicio;
+      const loaded = (await loadInicioPage(user)).inicio;
+      // Only the fields the frozen reference has: Inicio Visual (#989), Esencial (#990) and Analítico (#991)
+      // added fields and KPIs later (the reference shares the widget builders, so their new fields are on both sides).
+      const legacyKeys = new Set(before.kpis.map((k) => k.key));
+      const after = {
+        ...Object.fromEntries(Object.keys(before).map((key) => [key, loaded[key as keyof typeof loaded]])),
+        kpis: loaded.kpis.filter((k) => legacyKeys.has(k.key)),
+        attention: loaded.attention.map(({ subtasks: _s, progressPct: _p, ...item }) => item),
+        projectsProgress: loaded.projectsProgress.map(({ deliveryDate: _d, team: _t, atRisk: _r, ...item }) => item),
+      } as typeof before;
       expect(after).toEqual(before);
       // The parts #917 lost: delta chips, context lines and sparklines.
       expect(after.kpis.map((k) => [k.key, k.delta, k.caption, k.series7])).toEqual(
@@ -396,11 +429,11 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
     expect(listTaskRows).toHaveBeenCalledTimes(1);
   });
 
-  it("runs at most 18 statements per load", async () => {
+  it("runs at most 22 statements per load", async () => {
     const user = await requireCapabilityUser();
     const { count, statements } = await countQueries(() => loadInicioPage(user));
-    // Recorded in the PR; today's fetchInicioAction runs ≤ 18.
+    // Recorded in the PR; fetchInicioAction ran ≤ 18, Inicio Visual (#989) adds open shifts, the hours settings and two week-hours reads.
     console.info(`[inicio] loadInicioPage statements: ${count}`);
-    expect(count, statements.map((st) => st.sql).join("\n")).toBeLessThanOrEqual(18);
+    expect(count, statements.map((st) => st.sql).join("\n")).toBeLessThanOrEqual(22);
   });
 });

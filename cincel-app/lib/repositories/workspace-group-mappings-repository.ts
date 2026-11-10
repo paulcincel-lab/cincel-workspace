@@ -28,17 +28,25 @@ function selectMappings() {
   return db.select(columns).from(workspaceGroupMappings).leftJoin(positions, eq(positions.id, workspaceGroupMappings.positionId));
 }
 
+type MappingRow = Omit<GroupMapping, "memberCount" | "exists">;
+
+/** The Directory facts are filled by the Google page loader (`withGroupStats`); a row read here is unchecked. */
+function unchecked(row: MappingRow): GroupMapping {
+  return { ...row, memberCount: null, exists: null };
+}
+
 export async function listGroupMappings(): Promise<GroupMapping[]> {
-  return selectMappings().orderBy(
+  const rows = await selectMappings().orderBy(
     asc(workspaceGroupMappings.kind),
     desc(workspaceGroupMappings.rank),
     asc(workspaceGroupMappings.groupEmail),
   );
+  return rows.map(unchecked);
 }
 
 export async function getGroupMapping(id: string): Promise<GroupMapping | null> {
   const [row] = await selectMappings().where(eq(workspaceGroupMappings.id, id)).limit(1);
-  return row ?? null;
+  return row ? unchecked(row) : null;
 }
 
 /** Whether another mapping already uses this group for this kind. */

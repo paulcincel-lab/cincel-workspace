@@ -6,15 +6,16 @@
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
 
 import { aparienciaTemaSection } from "./tema";
-import { aparienciaEstiloSection } from "./estilo";
 import { aparienciaModoSection } from "./modo";
-import { aparienciaDensidadSection } from "./densidad";
+import { aparienciaEstiloSection } from "./estilo";
 import { aparienciaTamanoTextoSection } from "./tamano-texto";
+import { aparienciaDensidadSection } from "./densidad";
 
+/** Canvas `Ajustes-Apariencia` order: Tema, Modo, Estilo, Tamaño de texto, then Densidad (not in the frame; kept last). */
 export const APARIENCIA_SECTIONS: readonly SettingsSectionEntry[] = [
   aparienciaTemaSection,
-  aparienciaEstiloSection,
   aparienciaModoSection,
-  aparienciaDensidadSection,
+  aparienciaEstiloSection,
   aparienciaTamanoTextoSection,
+  aparienciaDensidadSection,
 ];

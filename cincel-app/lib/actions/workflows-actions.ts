@@ -70,12 +70,33 @@ export async function createWorkflowAction(input: WorkflowInput): Promise<Workfl
   return workflowsRepository.createWorkflow(input, user.member.id);
 }
 
+/** The tramo color picker: 1–5, or null for the derived color. */
+const ColorSlotSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).nullable();
+
+/** Partial patch; `colorSlot` is 1–5 or null (INVALID otherwise). Errors: FORBIDDEN, WORKFLOW_NOT_FOUND, INVALID. */
 export async function updateWorkflowAction(id: string, patch: Partial<WorkflowInput>): Promise<Workflow> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: workflow edit");
   }
-  return workflowsRepository.updateWorkflow(id, patch, user.member.id);
+  const clean: Partial<WorkflowInput> = { ...patch };
+  if (patch.colorSlot !== undefined) clean.colorSlot = parseInput(ColorSlotSchema, patch.colorSlot);
+  return workflowsRepository.updateWorkflow(id, clean, user.member.id);
+}
+
+/**
+ * Tramo order (Ajustes › Tramos y fases): `sort_order` = index in one
+ * transaction. `canManageWorkflows`. Errors: FORBIDDEN, INVALID.
+ */
+export async function reorderWorkflowsAction(
+  ...args: Parameters<typeof reorderWorkflowsActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderWorkflowsActionImpl>>>> {
+  return toActionResult(() => reorderWorkflowsActionImpl(...args));
+}
+
+async function reorderWorkflowsActionImpl(orderedIds: string[]): Promise<void> {
+  await requireWorkflowsManager();
+  await workflowsRepository.reorderWorkflows(parseInput(OrderedIdsSchema, orderedIds));
 }
 
 export async function deleteWorkflowAction(id: string): Promise<void> {

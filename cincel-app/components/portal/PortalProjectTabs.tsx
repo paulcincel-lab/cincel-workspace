@@ -26,9 +26,9 @@ export function pushPortalHref(event: MouseEvent<HTMLAnchorElement> | null, href
  */
 export default function PortalProjectTabs({ projectId, active }: { projectId: string; active: PortalProjectTab }) {
   return (
-    <nav aria-label="Secciones del proyecto" className="overflow-x-auto">
+    <nav aria-label="Secciones del proyecto" className="min-w-0 overflow-x-auto border-b">
       <Tabs value={active}>
-        <TabsList variant="line">
+        <TabsList variant="line" className="h-auto gap-1 p-0">
           {PORTAL_PROJECT_TABS.map(({ tab, label }) => {
             const href = portalProjectTabHref(projectId, tab);
             return (
@@ -36,6 +36,7 @@ export default function PortalProjectTabs({ projectId, active }: { projectId: st
                 key={tab}
                 value={tab}
                 nativeButton={false}
+                className="h-auto flex-none px-3.5 py-2.5 text-[13.5px] font-normal text-muted-foreground after:bg-primary group-data-horizontal/tabs:after:bottom-[-1px] data-active:font-semibold data-active:text-secondary-foreground dark:text-muted-foreground"
                 render={
                   <a
                     href={href}

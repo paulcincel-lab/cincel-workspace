@@ -272,6 +272,12 @@ export type ProyectosPageData = {
   presaleAutoStart: boolean;
   canSeeAdminData: boolean;
   canCreateProject: boolean;
+  /** The board may move projects between tramos (`setProjectCurrentTramoAction` checks it again). */
+  canChangeProjectStage: boolean;
+  /** The viewer's staff id ("Solo míos": manager, coordinator or member). */
+  viewerStaffId: string;
+  /** Today in the project timezone (`scheduleToday`), `YYYY-MM-DD`: the delivery timeline's first day. */
+  today: string;
 };
 
 /** `qk.proyectos.tab(id, 'tareas')`: the project Tareas tab. */
@@ -289,14 +295,27 @@ const ADMIN_TAREAS_KINDS: TaskKind[] = ["workflow", "usuario", "admin"];
  * `/proyectos` for `user`: the projects, their portfolio rows, the tramos and
  * the create dialog's flags. Without `canViewProjects`, empty lists. The
  * create dialog's client and staff options are not here: they are lazy
- * `catalog.contacts('cliente')` / `catalog.staff()` queries. At most 7
- * statements: projects (2), portfolio (3), tramos (1), Presale auto-start (1).
+ * `catalog.contacts('cliente')` / `catalog.staff()` queries. At most 8
+ * statements: projects (3: rows, tramos, members), portfolio (3), tramos (1),
+ * Presale auto-start (1).
  */
 export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new Date()): Promise<ProyectosPageData> {
   const capabilities = resolveProjectsCapabilities(user);
   const isAdmin = canSeeAdminData(user);
+  const viewerStaffId = viewerScopeOf(user).staffId;
+  const today = scheduleToday(now);
   if (!capabilities.canViewProjects) {
-    return { projects: [], portfolio: [], tramos: [], presaleAutoStart: false, canSeeAdminData: isAdmin, canCreateProject: false };
+    return {
+      projects: [],
+      portfolio: [],
+      tramos: [],
+      presaleAutoStart: false,
+      canSeeAdminData: isAdmin,
+      canCreateProject: false,
+      canChangeProjectStage: false,
+      viewerStaffId,
+      today,
+    };
   }
   const [projects, portfolio, tramos, presaleAutoStart] = await Promise.all([
     projectsRepository.listProjects({}, viewerScopeOf(user)),
@@ -312,6 +331,9 @@ export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new
     presaleAutoStart,
     canSeeAdminData: isAdmin,
     canCreateProject: capabilities.canCreateProject,
+    canChangeProjectStage: capabilities.canChangeProjectStage,
+    viewerStaffId,
+    today,
   };
 }
 

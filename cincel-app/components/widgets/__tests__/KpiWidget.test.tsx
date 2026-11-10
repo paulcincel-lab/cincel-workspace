@@ -153,8 +153,8 @@ describe("KpiWidget · Visual chip, sparkline and context line (frame Dashboard)
     const lines = Array.from(container.querySelectorAll('[data-slot="sparkline"]'));
     // Only the two cards with a non-zero series draw a line; none is flat.
     expect(lines).toHaveLength(2);
-    expect(lines[0].getAttribute("width")).toBe("120");
-    expect(lines[0].getAttribute("height")).toBe("36");
+    expect(lines[0].getAttribute("height")).toBe("28");
+    expect(lines[0].getAttribute("class")).toContain("w-full");
     expect(lines[0].querySelector('[data-slot="sparkline-area"]')).toBeTruthy();
     expect(lines[0].getAttribute("class")).toContain("text-success");
     expect(lines[1].getAttribute("class")).toContain("text-destructive");

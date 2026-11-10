@@ -125,6 +125,8 @@ export interface MondayBoardSource {
   /** Status columns' labels: columnId → labels. `items`: active items and subitems with the label (the status map's «Elementos»). */
   statusLabels: Record<string, { id: string; name: string; isDone: boolean; items?: number }[]>;
   itemCount: number;
+  /** "Con dato": columnId → share (0..1) of the board's items with a value in that column (board and subitem columns). */
+  columnFill?: Record<string, number>;
   /** Active top-level items, for template matches and project names by item. */
   items: { id: string; name: string; groupId: string | null }[];
   /** monday people in the people columns of the board's items and subitems, for the card avatars (#685). */

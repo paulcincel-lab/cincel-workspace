@@ -1,42 +1,76 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader } from "@/components/v2/layout/PageHeader";
-import { createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
-import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
-import { Badge } from "@/components/ui/shadcn/badge";
-import { Button } from "@/components/ui/shadcn/button";
-import { Switch } from "@/components/ui/shadcn/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
-import { PhaseEditorDrawer } from "@/components/configuracion/PhaseEditorDrawer";
+import { CatalogEditorPanel, CatalogLayout } from "@/components/ajustes/CatalogEditorPanel";
+import {
+  CatalogCreateButton,
+  CatalogInlineAdd,
+  CatalogListHeader,
+  CatalogPanelFooter,
+  CatalogRowMenu,
+  catalogActionTrigger,
+  MonoCount,
+  rowNewClass,
+  useFlashedRows,
+} from "@/components/ajustes/catalog-parts";
+import { PhaseListEditor } from "@/components/configuracion/PhaseEditorDrawer";
 import {
   emptyTemplateDraft,
   TemplateTaskDrawer,
   type TemplateDraft,
 } from "@/components/configuracion/TemplateTaskDrawer";
+import { DataTable } from "@/components/ui/DataTable";
+import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/shadcn/alert-dialog";
+import { Badge } from "@/components/ui/shadcn/badge";
+import { Input } from "@/components/ui/shadcn/input";
+import { Label } from "@/components/ui/shadcn/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { Switch } from "@/components/ui/shadcn/switch";
+import { unwrapActionResult } from "@/lib/actions/action-result";
 import {
   createTemplateAction,
-  deactivateTemplateAction,
-  reorderTemplatesAction,
+  createWorkflowAction,
+  createWorkflowPhaseAction,
+  deleteWorkflowAction,
   reorderWorkflowPhasesAction,
+  reorderWorkflowsAction,
   setWorkflowAutoStartAction,
   updateTemplateAction,
+  updateWorkflowAction,
   updateWorkflowPhaseAction,
 } from "@/lib/actions/workflows-actions";
-import { useActionMutation } from "@/lib/query/mutation";
-import { ajustesTramosOptions } from "@/lib/query/options/ajustes";
-import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
-import { tramosErrorText } from "@/lib/tramos/tramos-error-text";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
+import { ajustesTramosOptions, type AjustesTramosPageData } from "@/lib/query/options/ajustes";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import {
   AUTO_START_INVALIDATIONS,
   PHASE_INVALIDATIONS,
   TEMPLATE_INVALIDATIONS,
+  TRAMO_INVALIDATIONS,
 } from "@/lib/tramos/invalidations";
+import {
+  TRAMO_COLOR_NAMES,
+  TRAMO_COLOR_SLOTS,
+  tramoColorClass,
+  tramoColorSlot,
+  type TramoColorSlot,
+} from "@/lib/tramos/tramo-color";
+import { tramosErrorText, type TramosErrorContext } from "@/lib/tramos/tramos-error-text";
 import type {
   WorkflowDetail,
   WorkflowPhase,
@@ -44,12 +78,21 @@ import type {
   WorkflowTaskTemplate,
   WorkflowTaskTemplateInput,
 } from "@/lib/types/core";
+import { cn } from "@/lib/utils";
 
-const PRIORITY_LABEL: Record<string, string> = {
-  alta: "Alta",
-  media: "Media",
-  baja: "Baja",
+/** Swatch / dot background per slot. Literal strings so Tailwind picks them up. */
+const COLOR_BG: Record<TramoColorSlot, string> = {
+  1: "bg-chart-1",
+  2: "bg-chart-2",
+  3: "bg-chart-3",
+  4: "bg-chart-4",
+  5: "bg-chart-5",
 };
+
+/** The "Nueva tarea de plantilla" option of the template picker. */
+const NEW_TEMPLATE = "__new__";
+
+const PAGE_KEY = qk.ajustes.page("tramos");
 
 function toDraft(template: WorkflowTaskTemplate): TemplateDraft {
   const offset = (value: number | null) => (value === null ? "" : String(value));
@@ -102,9 +145,80 @@ export function sortTemplatesByPhase(
   return [...templates].sort((a, b) => rank(a) - rank(b) || a.sortOrder - b.sortOrder);
 }
 
+/**
+ * The `workflows.key` of a new tramo: its name without accents, lowercase,
+ * every run of other characters as "-"; "-2", "-3"… when `taken` has it.
+ */
+export function tramoKeyFor(name: string, taken: ReadonlySet<string>): string {
+  const base =
+    name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "tramo";
+  let key = base;
+  for (let i = 2; taken.has(key); i++) key = `${base}-${i}`;
+  return key;
+}
+
+/** "Azul" for the tramo's color slot; "Sin color" when it has none. */
+function colorName(workflow: WorkflowDetail): string {
+  const slot = tramoColorSlot(workflow);
+  return slot ? TRAMO_COLOR_NAMES[slot] : "Sin color";
+}
+
 /** The mutation options every Tramos write shares: its invalidations, and the copy shown by the caller (`tramosErrorText`). */
 function tramosMutation(invalidate: readonly (readonly unknown[])[]) {
   return { invalidate, onFormError: () => undefined } as const;
+}
+
+/** Reorders the cached tramos to `orderedIds` (sortOrder = index) and returns the previous page data for the rollback. */
+export async function reorderCachedTramos(
+  qc: QueryClient,
+  orderedIds: string[],
+): Promise<AjustesTramosPageData | undefined> {
+  await qc.cancelQueries({ queryKey: PAGE_KEY });
+  const previous = qc.getQueryData<AjustesTramosPageData>(PAGE_KEY);
+  if (previous) {
+    const byId = new Map(previous.workflows.map((w) => [w.id, w]));
+    const listed = orderedIds.map((id) => byId.get(id)).filter((w): w is WorkflowDetail => Boolean(w));
+    const rest = previous.workflows.filter((w) => !orderedIds.includes(w.id));
+    qc.setQueryData<AjustesTramosPageData>(PAGE_KEY, {
+      ...previous,
+      workflows: [...listed.map((w, i) => ({ ...w, sortOrder: i })), ...rest],
+    });
+  }
+  return previous;
+}
+
+/** Reorders one tramo's cached fases (sortOrder = index) and returns the previous page data. */
+async function reorderCachedPhases(
+  qc: QueryClient,
+  workflowId: string,
+  orderedIds: string[],
+): Promise<AjustesTramosPageData | undefined> {
+  await qc.cancelQueries({ queryKey: PAGE_KEY });
+  const previous = qc.getQueryData<AjustesTramosPageData>(PAGE_KEY);
+  if (previous) {
+    qc.setQueryData<AjustesTramosPageData>(PAGE_KEY, {
+      ...previous,
+      workflows: previous.workflows.map((w) => {
+        if (w.id !== workflowId) return w;
+        const byId = new Map(w.phases.map((p) => [p.id, p]));
+        const phases = orderedIds
+          .map((id) => byId.get(id))
+          .filter((p): p is WorkflowPhase => Boolean(p))
+          .map((p, i) => ({ ...p, sortOrder: i }));
+        return { ...w, phases };
+      }),
+    });
+  }
+  return previous;
+}
+
+function rollback(qc: QueryClient, previous: AjustesTramosPageData | undefined) {
+  if (previous) qc.setQueryData(PAGE_KEY, previous);
 }
 
 type TemplateSaveVars = { workflowId: string; templateId: string | null; input: WorkflowTaskTemplateInput };
@@ -113,419 +227,614 @@ function saveTemplateAction({ workflowId, templateId, input }: TemplateSaveVars)
   return templateId === null ? createTemplateAction(workflowId, input) : updateTemplateAction(templateId, input);
 }
 
+type SaveTramoVars = {
+  workflowId: string;
+  /** Only the fields that changed. */
+  patch: { name?: string; colorSlot?: TramoColorSlot | null };
+  renames: { phaseId: string; name: string }[];
+};
+
+/** The tramo's own fields, then each renamed fase, in sequence. */
+async function saveTramo({ workflowId, patch, renames }: SaveTramoVars): Promise<void> {
+  if (Object.keys(patch).length > 0) await updateWorkflowAction(workflowId, patch);
+  for (const rename of renames) {
+    unwrapActionResult(await updateWorkflowPhaseAction(rename.phaseId, { name: rename.name }));
+  }
+}
+
 /**
- * Ajustes › Tramos y fases. Reads `qk.ajustes.page('tramos')`, hydrated by
- * the page (no fetch on mount). Each write is one POST plus the targeted
- * invalidations in `lib/tramos/invalidations.ts`; the active page query
- * refetches once.
+ * Ajustes › Tramos y fases (frame `Ajustes-Tramos`): the tramos in flow
+ * order with their color, fases, templates and active projects, and the
+ * editor of one tramo beside the list (`CatalogEditorPanel`). Reads
+ * `qk.ajustes.page('tramos')`, hydrated by the page (no fetch on mount).
+ * Reorders are optimistic with rollback; every write invalidates the keys in
+ * `lib/tramos/invalidations.ts`. One layout for every presentation style.
  */
 export function TramosClient() {
-  const { workflows } = useSuspenseQuery(ajustesTramosOptions()).data;
-  // The first tramo in flow order starts selected (`selectedWorkflow` falls back to it).
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
-  const [pageError, setPageError] = useState("");
-  const autoStartInFlight = useRef(false);
+  const { workflows, activeProjects = {}, phaseTaskCounts = {} } = useSuspenseQuery(ajustesTramosOptions()).data;
+  const authenticatedUser = useSessionStore(selectCurrentUser);
+  const capabilities = useMemo(() => resolveWorkflowsCapabilities(authenticatedUser), [authenticatedUser]);
+  const canManage = capabilities.canManageWorkflows;
 
-  const [phaseEditorOpen, setPhaseEditorOpen] = useState(false);
-  const [editingPhase, setEditingPhase] = useState<WorkflowPhase | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<WorkflowDetail | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const { flashed, flash } = useFlashedRows();
+  const addRow = useRef<HTMLDivElement>(null);
 
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TemplateDraft>(emptyTemplateDraft);
-  const [formError, setFormError] = useState("");
+  const [templateError, setTemplateError] = useState("");
 
-  const autoStartMutation = useActionMutation(
-    ({ workflowId, autoStart }: { workflowId: string; autoStart: boolean }) =>
-      setWorkflowAutoStartAction(workflowId, autoStart),
-    tramosMutation(AUTO_START_INVALIDATIONS),
+  const sortedWorkflows = useMemo(() => [...workflows].sort((a, b) => a.sortOrder - b.sortOrder), [workflows]);
+  const editing = sortedWorkflows.find((w) => w.id === editingId) ?? null;
+  const editingPhases = useMemo(
+    () => [...(editing?.phases ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+    [editing],
+  );
+
+  const reorderMutation = useActionMutation((orderedIds: string[]) => reorderWorkflowsAction(orderedIds), {
+    optimistic: { onMutate: (client, ids) => reorderCachedTramos(client, ids), rollback },
+    ...tramosMutation(TRAMO_INVALIDATIONS),
+  });
+  const createMutation = useActionMutation(
+    (input: { key: string; name: string; sortOrder: number }) => createWorkflowAction(input),
+    {
+      setData: (client, created) =>
+        client.setQueryData<AjustesTramosPageData>(PAGE_KEY, (current) =>
+          current && !current.workflows.some((w) => w.id === created.id)
+            ? {
+                ...current,
+                workflows: [...current.workflows, { ...created, phases: [], templates: [], readiness: null }],
+              }
+            : current,
+        ),
+      ...tramosMutation(TRAMO_INVALIDATIONS),
+    },
+  );
+  const deleteMutation = useActionMutation((id: string) => deleteWorkflowAction(id), tramosMutation(TRAMO_INVALIDATIONS));
+  const templateSaveMutation = useActionMutation(saveTemplateAction, tramosMutation(TEMPLATE_INVALIDATIONS));
+
+  function reorder(orderedIds: string[]) {
+    setPageError("");
+    reorderMutation.mutateAsync(orderedIds).catch((err: unknown) => setPageError(tramosErrorText(err)));
+  }
+
+  async function createTramo(name: string) {
+    setPageError("");
+    const taken = new Set(workflows.map((w) => w.key));
+    const sortOrder = workflows.reduce((max, w) => Math.max(max, w.sortOrder), -1) + 1;
+    try {
+      const created = await createMutation.mutateAsync({ key: tramoKeyFor(name, taken), name, sortOrder });
+      flash(created.id);
+    } catch (err) {
+      setPageError(tramosErrorText(err));
+      throw err;
+    }
+  }
+
+  function askDelete(workflow: WorkflowDetail) {
+    setDeleteError("");
+    setDeleting(workflow);
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteError("");
+    try {
+      await deleteMutation.mutateAsync(deleting.id);
+      if (editingId === deleting.id) setEditingId(null);
+      setDeleting(null);
+    } catch (err) {
+      setDeleteError(tramosErrorText(err));
+    }
+  }
+
+  // ── Tareas de plantilla ─────────────────────────────────────────────────
+  /** Active fases for the drawer select; keeps the edited template's own fase if it was deactivated. */
+  const drawerPhases = useMemo<WorkflowPhaseRef[]>(
+    () => editingPhases.filter((p) => p.active || p.id === draft.phaseId),
+    [editingPhases, draft.phaseId],
+  );
+
+  function pickTemplate(value: string) {
+    if (!editing) return;
+    setTemplateError("");
+    if (value === NEW_TEMPLATE) {
+      setEditingTemplateId(null);
+      setDraft(emptyTemplateDraft);
+    } else {
+      const template = editing.templates.find((t) => t.id === value);
+      if (!template) return;
+      setEditingTemplateId(template.id);
+      setDraft(toDraft(template));
+    }
+    setShowTemplateEditor(true);
+  }
+
+  async function saveTemplate() {
+    if (!editing) return;
+    if (!draft.title.trim()) {
+      setTemplateError("Escribe un nombre.");
+      return;
+    }
+    if (!draft.phaseId) {
+      setTemplateError("Elige una fase.");
+      return;
+    }
+    const phaseName = editingPhases.find((p) => p.id === draft.phaseId)?.name ?? "";
+    setTemplateError("");
+    try {
+      await templateSaveMutation.mutateAsync({
+        workflowId: editing.id,
+        templateId: editingTemplateId,
+        input: toInput(draft),
+      });
+      setShowTemplateEditor(false);
+    } catch (err) {
+      setTemplateError(tramosErrorText(err, { kind: "template", phaseName }));
+    }
+  }
+
+  const columns = useMemo<ColumnDef<WorkflowDetail, unknown>[]>(() => {
+    const base: ColumnDef<WorkflowDetail, unknown>[] = [
+      {
+        accessorKey: "name",
+        header: "Tramo",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2">
+            <span className="font-medium text-foreground">{row.original.name}</span>
+            {!row.original.active ? <Badge variant="outline">Inactivo</Badge> : null}
+          </span>
+        ),
+      },
+      {
+        id: "color",
+        header: "Color",
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2">
+            <span aria-hidden="true" className={cn("size-3 shrink-0 rounded-full", tramoColorClass(row.original))} />
+            <span className="font-mono text-[13px]">{colorName(row.original)}</span>
+          </span>
+        ),
+      },
+      {
+        id: "phases",
+        header: () => <span className="block text-right">Fases</span>,
+        cell: ({ row }) => <MonoCount>{row.original.phases.length}</MonoCount>,
+      },
+      {
+        id: "templates",
+        header: () => <span className="block text-right">Plantillas</span>,
+        cell: ({ row }) => <MonoCount>{row.original.templates.filter((t) => t.active).length}</MonoCount>,
+      },
+      {
+        id: "activeProjects",
+        header: () => <span className="block text-right">Proyectos activos</span>,
+        cell: ({ row }) => <MonoCount>{activeProjects[row.original.id] ?? 0}</MonoCount>,
+      },
+    ];
+    if (!canManage) return base;
+    const actions: ColumnDef<WorkflowDetail, unknown> = {
+      id: "actions",
+      header: () => <span className="sr-only">Acciones</span>,
+      cell: ({ row }) => (
+        <CatalogRowMenu
+          name={row.original.name}
+          actionId={`tramo-${row.original.id}`}
+          actions={[
+            { label: "Editar", onSelect: () => setEditingId(row.original.id) },
+            {
+              label: "Eliminar",
+              destructive: true,
+              disabledReason: (activeProjects[row.original.id] ?? 0) > 0 ? "Lo usan proyectos activos." : null,
+              onSelect: () => askDelete(row.original),
+            },
+          ]}
+        />
+      ),
+    };
+    return [...base, actions];
+    // `askDelete` only sets state; the columns change with the capability and the counts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage, activeProjects]);
+
+  if (!capabilities.canViewWorkflows) {
+    return (
+      <section className="rounded-[14px] border border-border bg-card p-6 text-sm text-muted-foreground shadow-xs">
+        No tienes permiso para ver los tramos.
+      </section>
+    );
+  }
+
+  const panel = editing ? (
+    <TramoEditor
+      key={editing.id}
+      workflow={editing}
+      phases={editingPhases}
+      isFirst={sortedWorkflows[0]?.id === editing.id}
+      phaseTaskCounts={phaseTaskCounts}
+      canManage={canManage}
+      onClose={() => setEditingId(null)}
+      onPickTemplate={pickTemplate}
+    />
+  ) : null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {pageError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{pageError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <CatalogLayout panel={panel}>
+        <section
+          aria-labelledby="tramos-lista"
+          className="flex flex-col gap-4 rounded-[14px] border border-border bg-card p-5 text-card-foreground shadow-xs"
+        >
+          <CatalogListHeader
+            id="tramos-lista"
+            title="Tramos y fases"
+            count={sortedWorkflows.length}
+            description="El orden define el flujo de cada proyecto. Arrastra para reordenar."
+            action={
+              canManage ? (
+                <CatalogCreateButton
+                  label="Nuevo tramo"
+                  onClick={() => addRow.current?.querySelector<HTMLInputElement>("input")?.focus()}
+                />
+              ) : undefined
+            }
+          />
+          <div className="min-w-0 overflow-x-auto">
+            <DataTable
+              columns={columns}
+              data={sortedWorkflows}
+              getRowId={(row) => row.id}
+              getRowLabel={(row) => row.name}
+              reorderHeader="Orden"
+              onReorderRows={canManage ? reorder : undefined}
+              onRowClick={canManage ? (row) => setEditingId(row.id) : undefined}
+              rowClassName={(row) => rowNewClass(row.id, flashed)}
+              emptyMessage="Aún no hay tramos."
+            />
+          </div>
+          {canManage ? (
+            <div ref={addRow}>
+              <CatalogInlineAdd label="Agregar tramo" placeholder="Agregar tramo…" onCreate={createTramo} />
+            </div>
+          ) : null}
+        </section>
+      </CatalogLayout>
+
+      <TemplateTaskDrawer
+        show={showTemplateEditor}
+        onClose={() => setShowTemplateEditor(false)}
+        editingId={editingTemplateId}
+        workflowName={editing?.name ?? ""}
+        phases={drawerPhases}
+        draft={draft}
+        onChangeDraft={setDraft}
+        formError={templateError}
+        onSave={() => void saveTemplate()}
+        canSave={canManage}
+        isSaving={templateSaveMutation.isPending}
+      />
+
+      <AlertDialog open={deleting !== null} onOpenChange={(next) => (next ? undefined : setDeleting(null))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar el tramo «{deleting?.name}»?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sus fases y tareas de plantilla dejan de usarse en proyectos nuevos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {deleteError}
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => void confirmDelete()}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** The 5 color swatches of a tramo (`role="radiogroup"` "Color del tramo"; arrow keys move the choice). */
+function ColorPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: TramoColorSlot | null;
+  onChange: (slot: TramoColorSlot) => void;
+  disabled: boolean;
+}) {
+  const refs = useRef(new Map<TramoColorSlot, HTMLButtonElement>());
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, slot: TramoColorSlot) {
+    const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+    const back = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    if (!forward && !back) return;
+    event.preventDefault();
+    const count = TRAMO_COLOR_SLOTS.length;
+    const next = TRAMO_COLOR_SLOTS[(TRAMO_COLOR_SLOTS.indexOf(slot) + (forward ? 1 : -1) + count) % count];
+    onChange(next);
+    refs.current.get(next)?.focus();
+  }
+  return (
+    <div role="radiogroup" aria-label="Color del tramo" className="flex flex-wrap gap-3">
+      {TRAMO_COLOR_SLOTS.map((slot) => {
+        const checked = value === slot;
+        return (
+          <button
+            key={slot}
+            ref={(node) => {
+              if (node) refs.current.set(slot, node);
+              else refs.current.delete(slot);
+            }}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            aria-label={TRAMO_COLOR_NAMES[slot]}
+            tabIndex={checked || (value === null && slot === 1) ? 0 : -1}
+            disabled={disabled}
+            onClick={() => onChange(slot)}
+            onKeyDown={(event) => onKeyDown(event, slot)}
+            className={cn(
+              "size-7 rounded-full ring-offset-2 ring-offset-card outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+              COLOR_BG[slot],
+              checked && "ring-2 ring-ring",
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The editor of one tramo ("Editar tramo · {nombre}"): name, color, its
+ * fases (reorder, rename, add, activate), "Iniciar automáticamente" and the
+ * template picker. "Guardar cambios" saves the name, the color and the
+ * renamed fases; reorders, new fases, the fase state and the switch save at
+ * once.
+ */
+function TramoEditor({
+  workflow,
+  phases,
+  isFirst,
+  phaseTaskCounts,
+  canManage,
+  onClose,
+  onPickTemplate,
+}: {
+  workflow: WorkflowDetail;
+  phases: WorkflowPhase[];
+  isFirst: boolean;
+  phaseTaskCounts: Readonly<Record<string, number>>;
+  canManage: boolean;
+  onClose: () => void;
+  onPickTemplate: (value: string) => void;
+}) {
+  const [name, setName] = useState(workflow.name);
+  const [colorSlot, setColorSlot] = useState<TramoColorSlot | null>(tramoColorSlot(workflow));
+  const [colorTouched, setColorTouched] = useState(false);
+  const [phaseNames, setPhaseNames] = useState<Record<string, string>>({});
+  const [newPhaseIds, setNewPhaseIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [error, setError] = useState("");
+  const autoStartInFlight = useRef(false);
+
+  const saveMutation = useActionMutation(saveTramo, tramosMutation(TRAMO_INVALIDATIONS));
+  const phaseCreateMutation = useActionMutation(
+    (phaseName: string) => createWorkflowPhaseAction(workflow.id, { name: phaseName }),
+    tramosMutation(PHASE_INVALIDATIONS),
   );
   const phaseActiveMutation = useActionMutation(
     ({ phaseId, active }: { phaseId: string; active: boolean }) => updateWorkflowPhaseAction(phaseId, { active }),
     tramosMutation(PHASE_INVALIDATIONS),
   );
   const phaseOrderMutation = useActionMutation(
-    ({ workflowId, orderedIds }: { workflowId: string; orderedIds: string[] }) =>
-      reorderWorkflowPhasesAction(workflowId, orderedIds),
-    tramosMutation(PHASE_INVALIDATIONS),
+    (orderedIds: string[]) => reorderWorkflowPhasesAction(workflow.id, orderedIds),
+    {
+      optimistic: { onMutate: (client, ids) => reorderCachedPhases(client, workflow.id, ids), rollback },
+      ...tramosMutation(PHASE_INVALIDATIONS),
+    },
   );
-  const templateSaveMutation = useActionMutation(saveTemplateAction, tramosMutation(TEMPLATE_INVALIDATIONS));
-  const templateDeactivateMutation = useActionMutation(
-    (templateId: string) => deactivateTemplateAction(templateId),
-    tramosMutation(TEMPLATE_INVALIDATIONS),
-  );
-  const templateOrderMutation = useActionMutation(
-    ({ workflowId, orderedIds }: { workflowId: string; orderedIds: string[] }) =>
-      reorderTemplatesAction(workflowId, orderedIds),
-    tramosMutation(TEMPLATE_INVALIDATIONS),
+  const autoStartMutation = useActionMutation(
+    (autoStart: boolean) => setWorkflowAutoStartAction(workflow.id, autoStart),
+    tramosMutation(AUTO_START_INVALIDATIONS),
   );
 
-  const authenticatedUser = useSessionStore(selectCurrentUser);
-  const capabilities = useMemo(
-    () => resolveWorkflowsCapabilities(authenticatedUser),
-    [authenticatedUser],
-  );
-  const canManage = capabilities.canManageWorkflows;
-
-  const sortedWorkflows = useMemo(
-    () => [...workflows].sort((a, b) => a.sortOrder - b.sortOrder),
-    [workflows],
-  );
-
-  const selectedWorkflow = useMemo(
-    () => sortedWorkflows.find((w) => w.id === selectedWorkflowId) ?? sortedWorkflows[0] ?? null,
-    [sortedWorkflows, selectedWorkflowId],
-  );
-  const isFirstTramo = selectedWorkflow !== null && sortedWorkflows[0]?.id === selectedWorkflow.id;
-
-  const phases = useMemo(
-    () => [...(selectedWorkflow?.phases ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
-    [selectedWorkflow],
-  );
-
-  const templates = useMemo(
-    () => sortTemplatesByPhase(selectedWorkflow?.templates ?? [], phases),
-    [selectedWorkflow, phases],
-  );
-
-  /** Active fases for the drawer select; keeps the edited template's own fase if it was deactivated. */
-  const drawerPhases = useMemo<WorkflowPhaseRef[]>(() => {
-    return phases.filter((p) => p.active || p.id === draft.phaseId);
-  }, [phases, draft.phaseId]);
-
-  /** Runs one write; its error shows in the page alert with the Tramos copy. */
-  async function runPageAction(action: () => Promise<unknown>) {
-    setPageError("");
+  /** Runs one write; its error shows in the editor footer with the Tramos copy. */
+  async function run(action: () => Promise<unknown>, context: TramosErrorContext = { kind: "other" }) {
+    setError("");
     try {
       await action();
+      return true;
     } catch (err) {
-      setPageError(tramosErrorText(err));
+      setError(tramosErrorText(err, context));
+      return false;
     }
   }
 
-  // ── Inicio ──────────────────────────────────────────────────────────────
+  async function save() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Escribe un nombre.");
+      return;
+    }
+    const renames: SaveTramoVars["renames"] = [];
+    for (const phase of phases) {
+      const next = phaseNames[phase.id]?.trim();
+      if (next === undefined || next === phase.name) continue;
+      if (!next) {
+        setError("Escribe un nombre.");
+        return;
+      }
+      renames.push({ phaseId: phase.id, name: next });
+    }
+    const patch: SaveTramoVars["patch"] = {};
+    if (trimmed !== workflow.name) patch.name = trimmed;
+    if (colorTouched && colorSlot !== (workflow.colorSlot ?? null)) patch.colorSlot = colorSlot;
+    const ok = await run(() => saveMutation.mutateAsync({ workflowId: workflow.id, patch, renames }), {
+      kind: "phase",
+      workflowName: trimmed,
+    });
+    if (ok) onClose();
+  }
+
+  async function createPhase(phaseName: string) {
+    setError("");
+    try {
+      const created = await phaseCreateMutation.mutateAsync(phaseName);
+      setNewPhaseIds((current) => new Set(current).add(created.id));
+    } catch (err) {
+      setError(tramosErrorText(err, { kind: "phase", workflowName: workflow.name }));
+      throw err;
+    }
+  }
+
   async function toggleAutoStart(next: boolean) {
     // The switch sits in a <label>, so one click can report twice before `isPending` renders: send one POST.
-    if (!selectedWorkflow || autoStartInFlight.current) return;
-    const workflowId = selectedWorkflow.id;
+    if (autoStartInFlight.current) return;
     autoStartInFlight.current = true;
     try {
-      await runPageAction(() => autoStartMutation.mutateAsync({ workflowId, autoStart: next }));
+      await run(() => autoStartMutation.mutateAsync(next));
     } finally {
       autoStartInFlight.current = false;
     }
   }
 
-  // ── Fases ───────────────────────────────────────────────────────────────
-  function openNewPhase() {
-    setEditingPhase(null);
-    setPhaseEditorOpen(true);
-  }
-
-  function openEditPhase(phase: WorkflowPhase) {
-    setEditingPhase(phase);
-    setPhaseEditorOpen(true);
-  }
-
-  /** The drawer already saved and invalidated; only close it. */
-  function onPhaseSaved() {
-    setPhaseEditorOpen(false);
-  }
-
-  function setPhaseActive(phase: WorkflowPhase, active: boolean) {
-    void runPageAction(() => phaseActiveMutation.mutateAsync({ phaseId: phase.id, active }));
-  }
-
-  function reorderPhases(orderedIds: string[]) {
-    if (!selectedWorkflow) return;
-    const workflowId = selectedWorkflow.id;
-    void runPageAction(() => phaseOrderMutation.mutateAsync({ workflowId, orderedIds }));
-  }
-
-  // ── Tareas de plantilla ─────────────────────────────────────────────────
-  function openNewTemplate() {
-    setEditingTemplateId(null);
-    setDraft(emptyTemplateDraft);
-    setFormError("");
-    setShowTemplateEditor(true);
-  }
-
-  function openEditTemplate(template: WorkflowTaskTemplate) {
-    setEditingTemplateId(template.id);
-    setDraft(toDraft(template));
-    setFormError("");
-    setShowTemplateEditor(true);
-  }
-
-  async function saveTemplate() {
-    if (!selectedWorkflow) return;
-    if (!draft.title.trim()) {
-      setFormError("Escribe un nombre.");
-      return;
-    }
-    if (!draft.phaseId) {
-      setFormError("Elige una fase.");
-      return;
-    }
-
-    const phaseName = phases.find((p) => p.id === draft.phaseId)?.name ?? "";
-    setFormError("");
-    try {
-      await templateSaveMutation.mutateAsync({
-        workflowId: selectedWorkflow.id,
-        templateId: editingTemplateId,
-        input: toInput(draft),
-      });
-      setShowTemplateEditor(false);
-    } catch (err) {
-      setFormError(tramosErrorText(err, { kind: "template", phaseName }));
-    }
-  }
-
-  function deactivateTemplate(template: WorkflowTaskTemplate) {
-    if (
-      !window.confirm(
-        `¿Desactivar la tarea de plantilla "${template.title}"? Seguirá visible en el historial.`,
-      )
-    )
-      return;
-    void runPageAction(() => templateDeactivateMutation.mutateAsync(template.id));
-  }
-
-  function moveTemplate(template: WorkflowTaskTemplate, direction: "up" | "down") {
-    if (!selectedWorkflow) return;
-    const index = templates.findIndex((t) => t.id === template.id);
-    const swapWith = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || swapWith < 0 || swapWith >= templates.length) return;
-    if (templates[swapWith].phaseId !== template.phaseId) return;
-
-    const reordered = [...templates];
-    [reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]];
-    const workflowId = selectedWorkflow.id;
-    void runPageAction(() =>
-      templateOrderMutation.mutateAsync({ workflowId, orderedIds: reordered.map((t) => t.id) }),
-    );
-  }
-
-  const phaseColumns = useMemo<ColumnDef<WorkflowPhase, unknown>[]>(
-    () => [
-      {
-        id: "orden",
-        header: "Orden",
-        size: 60,
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.index + 1}</span>,
-      },
-      { accessorKey: "name", header: "Fase" },
-      {
-        id: "templateCount",
-        header: "Tareas de plantilla",
-        cell: ({ row }) => row.original.templateCount,
-      },
-      {
-        id: "active",
-        header: "Estado",
-        cell: ({ row }) => (
-          <Badge variant={row.original.active ? "success" : "outline"}>
-            {row.original.active ? "Activa" : "Inactiva"}
-          </Badge>
-        ),
-      },
-      ...(canManage
-        ? [
-            createRowActionsColumn<WorkflowPhase>((phase) => [
-              { label: "Editar", onSelect: (p) => openEditPhase(p) },
-              phase.active
-                ? {
-                    label: "Desactivar",
-                    onSelect: (p) => setPhaseActive(p, false),
-                    variant: "destructive",
-                    separatorBefore: true,
-                  }
-                : { label: "Activar", onSelect: (p) => setPhaseActive(p, true), separatorBefore: true },
-            ]),
-          ]
-        : []),
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canManage, selectedWorkflow?.id],
-  );
-
-  const templateColumns = useMemo<ColumnDef<WorkflowTaskTemplate, unknown>[]>(
-    () => [
-      {
-        id: "orden",
-        header: "#",
-        size: 40,
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.index + 1}</span>,
-      },
-      { accessorKey: "title", header: "Tarea" },
-      {
-        id: "phase",
-        header: "Fase",
-        cell: ({ row }) =>
-          row.original.phaseName || <span className="text-muted-foreground">—</span>,
-      },
-      {
-        id: "priority",
-        header: "Prioridad",
-        cell: ({ row }) => (
-          <Badge variant="outline">
-            {PRIORITY_LABEL[row.original.defaultPriority] ?? row.original.defaultPriority}
-          </Badge>
-        ),
-      },
-      {
-        id: "active",
-        header: "Estado",
-        cell: ({ row }) => (
-          <Badge variant={row.original.active ? "success" : "outline"}>
-            {row.original.active ? "Activa" : "Inactiva"}
-          </Badge>
-        ),
-      },
-      ...(canManage
-        ? [
-            createRowActionsColumn<WorkflowTaskTemplate>((template) => {
-              const index = templates.findIndex((t) => t.id === template.id);
-              const actions: RowAction<WorkflowTaskTemplate>[] = [
-                { label: "Editar", onSelect: (t) => openEditTemplate(t) },
-              ];
-              if (index > 0 && templates[index - 1].phaseId === template.phaseId) {
-                actions.push({ label: "Mover arriba", onSelect: (t) => moveTemplate(t, "up") });
-              }
-              if (index >= 0 && index < templates.length - 1 && templates[index + 1].phaseId === template.phaseId) {
-                actions.push({ label: "Mover abajo", onSelect: (t) => moveTemplate(t, "down") });
-              }
-              if (template.active) {
-                actions.push({
-                  label: "Desactivar",
-                  onSelect: (t) => deactivateTemplate(t),
-                  variant: "destructive",
-                  separatorBefore: true,
-                });
-              }
-              return actions;
-            }),
-          ]
-        : []),
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canManage, templates],
-  );
-
-  const autoStartOn = selectedWorkflow ? selectedWorkflow.autoStart !== "manual" : false;
+  const templateCount = workflow.templates.filter((t) => t.active).length;
+  const sortedTemplates = sortTemplatesByPhase(workflow.templates, phases);
+  const templateItems: Record<string, string> = {
+    [NEW_TEMPLATE]: "Nueva tarea de plantilla",
+    ...Object.fromEntries(sortedTemplates.map((t) => [t.id, `${t.phaseName || "Sin fase"} · ${t.title}`])),
+  };
+  const canAddTemplate = phases.some((p) => p.active);
+  const dotSlot = colorTouched ? colorSlot : tramoColorSlot(workflow);
 
   return (
-    <div>
-      <PageHeader
-        title="Tramos y fases"
-        description="Fases, tareas de plantilla e inicio automático de cada tramo."
-      />
-
-      <div className="space-y-6">
-        {pageError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{pageError}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {!capabilities.canViewWorkflows ? (
-          <section className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground shadow-sm">
-            No tienes permiso para ver los tramos.
-          </section>
-        ) : sortedWorkflows.length === 0 ? (
-          <section className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground shadow-sm">
-            <p className="font-medium text-foreground">Todavía no hay tramos.</p>
-            <p className="mt-2">
-              Los tramos (Presale, Diseño y Construcción) se crean al desplegar la aplicación. Si esta lista sigue
-              vacía, pide a soporte que vuelva a ejecutar la migración de la base de datos.
-            </p>
-          </section>
-        ) : selectedWorkflow ? (
-          <>
-            <Tabs value={selectedWorkflow.id} onValueChange={(value) => setSelectedWorkflowId(value as string)}>
-              <TabsList>
-                {sortedWorkflows.map((workflow) => (
-                  <TabsTrigger key={workflow.id} value={workflow.id}>
-                    {workflow.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-
-            <section className="rounded-2xl border border-border bg-card p-6 shadow-sm" aria-labelledby="tramo-inicio">
-              <h2 id="tramo-inicio" className="text-base font-semibold text-foreground">Inicio</h2>
-              <label className="mt-3 flex items-start gap-3 text-sm">
-                <Switch
-                  checked={autoStartOn}
-                  disabled={!canManage || autoStartMutation.isPending}
-                  onCheckedChange={(checked) => void toggleAutoStart(Boolean(checked))}
-                />
-                <span>
-                  Iniciar automáticamente
-                  <span className="block text-muted-foreground">
-                    {autoStartHelpText(selectedWorkflow, isFirstTramo)}
-                  </span>
-                </span>
-              </label>
-            </section>
-
-            <section className="space-y-3" aria-labelledby="tramo-fases">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 id="tramo-fases" className="text-base font-semibold text-foreground">Fases</h2>
-                {canManage ? <Button onClick={openNewPhase}>+ Nueva fase</Button> : null}
-              </div>
-              <DataTable
-                columns={phaseColumns}
-                data={phases}
-                getRowId={(row) => row.id}
-                onReorderRows={canManage ? reorderPhases : undefined}
-                emptyMessage="Este tramo aún no tiene fases."
-              />
-            </section>
-
-            <section className="space-y-3" aria-labelledby="tramo-plantillas">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 id="tramo-plantillas" className="text-base font-semibold text-foreground">Tareas de plantilla</h2>
-                {canManage ? (
-                  <Button onClick={openNewTemplate} disabled={!phases.some((p) => p.active)}>
-                    + Nueva tarea de plantilla
-                  </Button>
-                ) : null}
-              </div>
-              <DataTable
-                columns={templateColumns}
-                data={templates}
-                getRowId={(row) => row.id}
-                emptyMessage="Este tramo todavía no tiene tareas de plantilla."
-              />
-            </section>
-          </>
-        ) : null}
+    <CatalogEditorPanel
+      title={`Editar tramo · ${workflow.name}`}
+      open
+      width={360}
+      onClose={onClose}
+      returnFocus={() => catalogActionTrigger(`tramo-${workflow.id}`)}
+      titleAdornment={
+        <span
+          aria-hidden="true"
+          className={cn("size-2.5 shrink-0 rounded-full", dotSlot ? COLOR_BG[dotSlot] : "bg-muted-foreground")}
+        />
+      }
+      footer={
+        <CatalogPanelFooter
+          onCancel={onClose}
+          saveLabel="Guardar cambios"
+          saving={saveMutation.isPending}
+          canSave={canManage}
+          onSave={() => void save()}
+          error={error || null}
+        />
+      }
+    >
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="tramo-name">Nombre</Label>
+        <Input
+          id="tramo-name"
+          value={name}
+          maxLength={120}
+          disabled={!canManage}
+          onChange={(event) => setName(event.target.value)}
+        />
       </div>
 
-      {selectedWorkflow ? (
-        <PhaseEditorDrawer
-          open={phaseEditorOpen}
-          workflow={selectedWorkflow}
-          phase={editingPhase}
-          onClose={() => setPhaseEditorOpen(false)}
-          onSaved={onPhaseSaved}
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium text-foreground">Color</span>
+        <ColorPicker
+          value={colorSlot}
+          disabled={!canManage}
+          onChange={(slot) => {
+            setColorSlot(slot);
+            setColorTouched(true);
+          }}
         />
-      ) : null}
+      </div>
 
-      <TemplateTaskDrawer
-        show={showTemplateEditor}
-        onClose={() => setShowTemplateEditor(false)}
-        editingId={editingTemplateId}
-        workflowName={selectedWorkflow?.name ?? ""}
-        phases={drawerPhases}
-        draft={draft}
-        onChangeDraft={setDraft}
-        formError={formError}
-        onSave={() => void saveTemplate()}
-        canSave={canManage}
-        isSaving={templateSaveMutation.isPending}
-      />
-    </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-foreground">Fases</span>
+          <Badge variant="count">{phases.length}</Badge>
+        </div>
+        <PhaseListEditor
+          workflowName={workflow.name}
+          phases={phases}
+          taskCounts={phaseTaskCounts}
+          names={phaseNames}
+          onNameChange={(phaseId, value) => setPhaseNames((current) => ({ ...current, [phaseId]: value }))}
+          newIds={newPhaseIds}
+          canManage={canManage}
+          onReorder={(ids) => void run(() => phaseOrderMutation.mutateAsync(ids))}
+          onCreate={createPhase}
+          onSetActive={(phase, active) => void run(() => phaseActiveMutation.mutateAsync({ phaseId: phase.id, active }))}
+        />
+      </div>
+
+      <label className="flex items-start gap-3 text-sm">
+        <Switch
+          checked={workflow.autoStart !== "manual"}
+          disabled={!canManage || autoStartMutation.isPending}
+          onCheckedChange={(checked) => void toggleAutoStart(Boolean(checked))}
+        />
+        <span>
+          Iniciar automáticamente
+          <span className="block text-muted-foreground">{autoStartHelpText(workflow, isFirst)}</span>
+        </span>
+      </label>
+
+      <div className="flex flex-col gap-2">
+        <span id="tramo-plantillas-label" className="text-sm font-medium text-foreground">
+          Plantilla de tareas
+        </span>
+        <Select
+          items={templateItems}
+          value={null}
+          onValueChange={(next) => {
+            if (typeof next === "string") onPickTemplate(next);
+          }}
+        >
+          <SelectTrigger className="w-full" aria-labelledby="tramo-plantillas-label">
+            <SelectValue placeholder={`${workflow.name} (${templateCount} plantillas)`} />
+          </SelectTrigger>
+          <SelectContent>
+            {canManage ? (
+              <SelectItem value={NEW_TEMPLATE} disabled={!canAddTemplate}>
+                Nueva tarea de plantilla
+              </SelectItem>
+            ) : null}
+            {sortedTemplates.map((template) => (
+              <SelectItem key={template.id} value={template.id}>
+                {templateItems[template.id]}
+                {template.active ? null : " (inactiva)"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </CatalogEditorPanel>
   );
 }

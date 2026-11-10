@@ -82,6 +82,7 @@ import {
   findBoardRow,
   moveTaskToColumnAction,
 } from "@/components/tareas/TareasTablero";
+import { boardColumnLabel } from "@/components/widgets/TaskBoardWidget";
 import { qk } from "@/lib/query/keys";
 import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
@@ -160,7 +161,10 @@ const PAGE: TareasPageData = { facets: { total: TOTAL, byTramo: {}, projects: []
 /** A client seeded as `/tareas` hydrates it: the page bundle and the board it seeded. */
 function seededClient(board: TareasBoardData = boardData()): QueryClient {
   const client = createTestQueryClient();
-  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY)), PAGE);
+  // The bundle is keyed by the style; seed it for every one the tests render.
+  for (const estilo of ["visual", "esencial", "analitico"] as const) {
+    client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY, estilo)), PAGE);
+  }
   client.setQueryData(qk.tareas.board(F), board);
   return client;
 }
@@ -218,10 +222,10 @@ describe("TareasTablero · three styles from tareas.board(f)", () => {
     const { container } = renderTablero("visual");
 
     expect(container.querySelectorAll("[data-task-id]").length).toBe(TOTAL);
-    expect(screen.getByRole("group", { name: "Pendiente · 2" })).toBeTruthy();
-    expect(screen.getByRole("group", { name: "En proceso · 1" })).toBeTruthy();
-    expect(screen.getByRole("group", { name: "Completado · 1" })).toBeTruthy();
-    expect(screen.getByRole("group", { name: "Bloqueado · 0" }).getAttribute("data-collapsed")).toBe("true");
+    expect(screen.getByRole("region", { name: boardColumnLabel("Pendiente", 2) })).toBeTruthy();
+    expect(screen.getByRole("region", { name: boardColumnLabel("En proceso", 1) })).toBeTruthy();
+    expect(screen.getByRole("region", { name: boardColumnLabel("Completado", 1) })).toBeTruthy();
+    expect(screen.getByRole("region", { name: boardColumnLabel("Bloqueado", 0) }).getAttribute("data-collapsed")).toBe("true");
     expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe(
       "/tareas?vista=tablero&tramo=diseno&estado=pendiente&tarea=t2",
     );
@@ -231,8 +235,8 @@ describe("TareasTablero · three styles from tareas.board(f)", () => {
     const board = boardData();
     board.columns.pendiente = { ...board.columns.pendiente, total: 57, nextCursor: "c-1" };
     renderTablero("visual", seededClient(board));
-    const column = screen.getByRole("group", { name: "Pendiente · 57" });
-    expect(within(column).getByRole("button", { name: "Cargar más en Pendiente" })).toBeTruthy();
+    const column = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 57) });
+    expect(within(column).getByRole("button", { name: /^Ver \d+ más en Pendiente$/ })).toBeTruthy();
   });
 
   it("Esencial: groups by estatus with the same counts and Completado collapsed", () => {
@@ -264,14 +268,14 @@ describe("TareasTablero · three styles from tareas.board(f)", () => {
 
     expect(screen.queryByTestId("empty-state")).toBeNull();
     for (const label of ["Pendiente", "En proceso", "Completado", "Bloqueado"]) {
-      expect(screen.getByRole("group", { name: `${label} · 0` })).toBeTruthy();
+      expect(screen.getByRole("region", { name: boardColumnLabel(label, 0) })).toBeTruthy();
     }
     expect(screen.getAllByText("Sin tareas")).toHaveLength(4);
   });
 
   it("Visual: shows a column for every configured custom status, even when empty", () => {
     renderTablero("visual", seededClient({ columns: emptyBoardColumns([QA]), statuses: [QA] }));
-    expect(screen.getByRole("group", { name: "QA en revisión · 0" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: boardColumnLabel("QA en revisión", 0) })).toBeTruthy();
   });
 
   it.each<PresentationStyle>(["esencial", "analitico"])("shows the filters empty state in %s", (style) => {
@@ -296,13 +300,13 @@ describe("TareasTablero · drag (optimistic on tareas.board(f))", () => {
     const { container } = renderTablero("visual", client);
 
     fireEvent.dragStart(card(container, "t2"));
-    const target = screen.getByRole("group", { name: "En proceso · 1" });
+    const target = screen.getByRole("region", { name: boardColumnLabel("En proceso", 1) });
     fireEvent.dragOver(target);
     fireEvent.drop(target);
 
     await waitFor(() => expect(actions.setTaskStatusAction).toHaveBeenCalledWith("t2", "en_proceso"));
     // Moved before the server answers.
-    expect(screen.getByRole("group", { name: "En proceso · 2" }).contains(card(container, "t2"))).toBe(true);
+    expect(screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) }).contains(card(container, "t2"))).toBe(true);
     const board = client.getQueryData<TareasBoardData>(qk.tareas.board(F))!;
     expect(board.columns.pendiente.total).toBe(1);
     expect(board.columns.en_proceso.total).toBe(2);
@@ -336,13 +340,13 @@ describe("TareasTablero · drag (optimistic on tareas.board(f))", () => {
     const { container } = renderTablero("visual", client);
 
     fireEvent.dragStart(card(container, "t1"));
-    const strip = screen.getByRole("group", { name: "Bloqueado · 0" });
+    const strip = screen.getByRole("region", { name: boardColumnLabel("Bloqueado", 0) });
     fireEvent.dragOver(strip);
     fireEvent.drop(strip);
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith("No tienes permiso para realizar esta acción."));
-    expect(screen.getByRole("group", { name: "Pendiente · 2" }).contains(card(container, "t1"))).toBe(true);
-    expect(screen.getByRole("group", { name: "Bloqueado · 0" }).getAttribute("data-collapsed")).toBe("true");
+    expect(screen.getByRole("region", { name: boardColumnLabel("Pendiente", 2) }).contains(card(container, "t1"))).toBe(true);
+    expect(screen.getByRole("region", { name: boardColumnLabel("Bloqueado", 0) }).getAttribute("data-collapsed")).toBe("true");
     expect(client.getQueryData<TareasBoardData>(qk.tareas.board(F))).toEqual(boardData());
     expect(nav.refresh).not.toHaveBeenCalled();
   });
@@ -379,7 +383,7 @@ describe("TareasTablero · drag (optimistic on tareas.board(f))", () => {
 
     expect(actions.setTaskStatusAction).toHaveBeenCalledWith("t3", "completado");
     await waitFor(() =>
-      expect(screen.getByRole("group", { name: "Completado · 2" }).contains(card(container, "t3"))).toBe(true),
+      expect(screen.getByRole("region", { name: boardColumnLabel("Completado", 2) }).contains(card(container, "t3"))).toBe(true),
     );
   });
 
@@ -388,7 +392,7 @@ describe("TareasTablero · drag (optimistic on tareas.board(f))", () => {
     const { container } = renderTablero("visual", client);
 
     fireEvent.dragStart(card(container, "t2"));
-    const strip = screen.getByRole("group", { name: "QA en revisión · 0" });
+    const strip = screen.getByRole("region", { name: boardColumnLabel("QA en revisión", 0) });
     fireEvent.dragOver(strip);
     await act(async () => {
       fireEvent.drop(strip);
@@ -396,7 +400,7 @@ describe("TareasTablero · drag (optimistic on tareas.board(f))", () => {
 
     expect(actions.setTaskCustomStatusAction).toHaveBeenCalledWith("t2", "cs-qa");
     await waitFor(() =>
-      expect(screen.getByRole("group", { name: "QA en revisión · 1" }).contains(card(container, "t2"))).toBe(true),
+      expect(screen.getByRole("region", { name: boardColumnLabel("QA en revisión", 1) }).contains(card(container, "t2"))).toBe(true),
     );
     const moved = findBoardRow(client, F, "t2");
     expect(moved?.customStatus?.id).toBe("cs-qa");
@@ -422,7 +426,7 @@ describe("TareasTablero · quick-add", () => {
   it("shows “+ Agregar” at the end of every open column", () => {
     renderTablero("visual");
     for (const label of ["Pendiente", "En proceso", "Completado"]) {
-      const column = screen.getByRole("group", { name: new RegExp(`^${label} · `) });
+      const column = screen.getByRole("region", { name: new RegExp(`^${label}, `) });
       expect(within(column).getByRole("button", { name: `Agregar tarea en ${label}` }).textContent).toBe("+ Agregar");
     }
   });
@@ -465,7 +469,7 @@ describe("TareasTablero · quick-add", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("group", { name: "En proceso · 2" }).contains(card(container, "t9"))).toBe(true),
+      expect(screen.getByRole("region", { name: boardColumnLabel("En proceso", 2) }).contains(card(container, "t9"))).toBe(true),
     );
     expect(nav.refresh).not.toHaveBeenCalled();
   });

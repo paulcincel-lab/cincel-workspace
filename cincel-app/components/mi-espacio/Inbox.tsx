@@ -205,6 +205,8 @@ export function Inbox({ onOpenThread }: InboxProps) {
         },
       },
       setData: (qc, { unreadCount: count }, ids) => markCachedNotificationsRead(qc, ids, count),
+      // "Bandeja por tipo" (Analítico) counts per kind on the server: refetch it after the write.
+      invalidate: [qk.me.notificationsSummary()],
     },
   );
   const { mutate: markReadIds } = markReadMutation;

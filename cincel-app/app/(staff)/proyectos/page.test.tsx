@@ -26,6 +26,9 @@ function pageData(user: { access?: string }): ProyectosPageData {
     presaleAutoStart: true,
     canSeeAdminData: user.access === "Administrador",
     canCreateProject: true,
+    canChangeProjectStage: true,
+    viewerStaffId: "s1",
+    today: "2026-11-10",
   };
 }
 const loaders = vi.hoisted(() => ({ loadProyectosPage: vi.fn() }));
@@ -88,7 +91,17 @@ describe("/proyectos page", () => {
     await renderPage();
     expect(seen.data?.canSeeAdminData).toBe(false);
     expect(Object.keys(seen.data ?? {}).sort()).toEqual(
-      ["canCreateProject", "canSeeAdminData", "portfolio", "presaleAutoStart", "projects", "tramos"].sort(),
+      [
+        "canChangeProjectStage",
+        "canCreateProject",
+        "canSeeAdminData",
+        "portfolio",
+        "presaleAutoStart",
+        "projects",
+        "today",
+        "tramos",
+        "viewerStaffId",
+      ].sort(),
     );
   });
 

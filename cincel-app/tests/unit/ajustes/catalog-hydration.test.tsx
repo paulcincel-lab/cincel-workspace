@@ -103,14 +103,15 @@ afterEach(() => {
 describe("Ajustes catalog hydration", () => {
   it("estatus: renders the prefetched statuses and seeds catalog.taskStatuses", async () => {
     const { client, state, serverClient } = await hydrationRoundtrip(async (qc) => {
-      await prefetch(qc, ajustesEstatusOptions(), async () => ({ statuses: [STATUS] }));
-      seedAjustesCatalogs(qc, { seg: "estatus", data: { statuses: [STATUS] } });
+      const data = { statuses: [STATUS], baseCounts: { pendiente: 0, en_proceso: 0, completado: 0, bloqueado: 0 }, customUsage: {} };
+      await prefetch(qc, ajustesEstatusOptions(), async () => data);
+      seedAjustesCatalogs(qc, { seg: "estatus", data });
     });
     expect(serverClient.getQueryData(qk.catalog.taskStatuses())).toEqual([STATUS]);
 
     renderWithQueryClient(<EstatusSettings />, { client, hydrate: state });
 
-    expect(screen.getByRole("group", { name: "En revisión" })).toBeTruthy();
+    expect(screen.getByRole("row", { name: /En revisión/ })).toBeTruthy();
     expect(client.getQueryData(qk.catalog.taskStatuses())).toEqual([STATUS]);
     noPageDataCalls();
   });
@@ -132,7 +133,7 @@ describe("Ajustes catalog hydration", () => {
   });
 
   it("tramos: renders the prefetched tramos; the catalog seed keeps only active ones", async () => {
-    const data = { workflows: [INACTIVE_TRAMO, TRAMO] };
+    const data = { workflows: [INACTIVE_TRAMO, TRAMO], activeProjects: {}, phaseTaskCounts: {} };
     const { client, state } = await hydrationRoundtrip(async (qc) => {
       await prefetch(qc, ajustesTramosOptions(), async () => data);
       seedAjustesCatalogs(qc, { seg: "tramos", data });
@@ -140,7 +141,11 @@ describe("Ajustes catalog hydration", () => {
 
     renderWithQueryClient(<TramosClient />, { client, hydrate: state });
 
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Viejo", "Diseño"]);
+    // One row per tramo, in flow order.
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent?.startsWith("Viejo")).toBe(true);
+    expect(rows[1].textContent?.startsWith("Diseño")).toBe(true);
     expect(client.getQueryData(qk.catalog.workflows())).toEqual([
       { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 },
     ]);
@@ -158,8 +163,9 @@ describe("Ajustes catalog hydration", () => {
 
     renderWithQueryClient(<PermisosSettings />, { client, hydrate: state });
 
-    expect(screen.getByRole("region", { name: "Personas por acceso" })).toBeTruthy();
-    expect(screen.getByText(/Alejandro/)).toBeTruthy();
+    expect(screen.getByRole("rowheader", { name: "Personas por acceso" })).toBeTruthy();
+    // Each access count names its people in the cell's title.
+    expect(screen.getByTitle(/Alejandro/)).toBeTruthy();
     noPageDataCalls();
   });
 });

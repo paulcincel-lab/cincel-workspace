@@ -4,12 +4,12 @@ import { cleanup, render } from "@testing-library/react";
 import axe from "axe-core";
 import type { CSSProperties } from "react";
 
-import { ConfirmationCard, type ConfirmationCardProps } from "../ConfirmationCard";
+import { ConfirmationCard, type ConfirmationPart } from "../ConfirmationCard";
 import { THEME_IDS, THEME_PRESETS, TOKEN_NAMES } from "@/lib/ui/themes";
 
 afterEach(cleanup);
 
-const STATES: ConfirmationCardProps["part"]["state"][] = [
+const STATES: ConfirmationPart["state"][] = [
   "approval-requested",
   "output-available",
   "output-denied",

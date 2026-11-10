@@ -25,8 +25,18 @@ export function isProjectArchivosQuery(query: Pick<Query, "queryKey">): boolean 
 export const PROJECT_FOLDERS_TITLE = "Carpetas de proyectos";
 export const PROJECT_FOLDERS_DESCRIPTION = "Crea en Google Drive las carpetas de los proyectos que todavía no tienen una.";
 
+/** "3 proyectos sin carpeta" / "1 proyecto sin carpeta". */
+export function projectsWithoutFolderText(count: number): string {
+  return `${count === 1 ? "proyecto" : "proyectos"} sin carpeta`;
+}
+
 export type ProjectFoldersBackfillProps = {
   sharedDriveConfigured?: boolean;
+  /**
+   * Live projects without / with their Drive folders (`GoogleHealth`). With
+   * them the summary line shows and the button is disabled at 0 missing.
+   */
+  folderCounts?: { withoutFolder: number; withFolder: number } | null;
   /**
    * Without the card and its "Carpetas de proyectos" heading: Ajustes › Google
    * renders it inside a `SettingsSection`.
@@ -38,7 +48,7 @@ export type ProjectFoldersBackfillProps = {
  * Configuración → Google, section 3 "Carpetas de proyectos" (FE §2.5). The page is Administrador only.
  * Without a Shared Drive there is nowhere to create folders, so the button stays disabled with a hint.
  */
-export function ProjectFoldersBackfill({ sharedDriveConfigured = true, bare = false }: ProjectFoldersBackfillProps) {
+export function ProjectFoldersBackfill({ sharedDriveConfigured = true, bare = false, folderCounts = null }: ProjectFoldersBackfillProps) {
   // New folders show on Ajustes › Google (Estado) and in every project's Archivos.
   const backfill = useActionMutation(ensureMissingProjectFoldersAction, {
     invalidate: [qk.ajustes.page("google")],
@@ -68,10 +78,17 @@ export function ProjectFoldersBackfill({ sharedDriveConfigured = true, bare = fa
       )}
 
       <div className="space-y-2">
+        {folderCounts ? (
+          <p className="text-[13px] text-sidebar-foreground">
+            <strong className="font-semibold text-foreground">{folderCounts.withoutFolder}</strong>{" "}
+            {projectsWithoutFolderText(folderCounts.withoutFolder)} · {folderCounts.withFolder} con carpeta en la unidad
+            compartida
+          </p>
+        ) : null}
         <Button
           type="button"
           onClick={run}
-          disabled={isPending || !sharedDriveConfigured}
+          disabled={isPending || !sharedDriveConfigured || folderCounts?.withoutFolder === 0}
           aria-describedby={sharedDriveConfigured ? undefined : "project-folders-shared-drive-hint"}
         >
           {isPending ? "Creando carpetas…" : "Crear carpetas faltantes"}

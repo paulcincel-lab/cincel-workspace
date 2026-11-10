@@ -1,6 +1,5 @@
 import { CronogramaProjectTabs } from "@/components/cronograma/cronograma-project-tabs";
 import CronogramaView from "@/components/cronograma/cronograma-view";
-import { EstiloSwitch } from "@/components/shell/EstiloSwitch";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { loadProyectoCronograma } from "@/lib/loaders/proyectos";
 import { loadProyectoShell } from "@/lib/loaders/proyectos-shell";
@@ -45,15 +44,12 @@ export default async function CronogramaPage({ params }: { params: Promise<{ id:
   const shell = qc.getQueryData<ProjectTabShell | null>(qk.proyectos.shell(projectId)) ?? null;
 
   // Redesign FE §3.5: `AppShell` comes from the staff layout; the page renders
-  // the project header + tabs and the Cronograma tab, whose three styles live
-  // in `CronogramaWidget`.
+  // the project header + tabs (Estilo switch under them) and the Cronograma
+  // tab, whose three styles live in `CronogramaWidget`.
   return (
     <Hydrate qc={qc}>
       <div className="flex flex-col gap-4">
         <CronogramaProjectTabs projectId={projectId} />
-        <div className="flex justify-end">
-          <EstiloSwitch />
-        </div>
         <CronogramaView projectId={projectId} contractEnd={shell?.detail.endDate ?? null} />
       </div>
     </Hydrate>

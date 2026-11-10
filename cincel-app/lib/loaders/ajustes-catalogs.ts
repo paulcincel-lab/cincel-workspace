@@ -43,11 +43,20 @@ function requireSegment(user: AuthenticatedUser, segment: CatalogSegment): void 
   if (!AJUSTES_SEGMENT_CAPABILITY[segment](user)) throw new Error(`FORBIDDEN: ajustes ${segment}`);
 }
 
-/** Estatus: the custom task statuses (1 q). */
+const NO_BASE_COUNTS: AjustesEstatusPageData["baseCounts"] = { pendiente: 0, en_proceso: 0, completado: 0, bloqueado: 0 };
+
+/** Estatus: the custom task statuses, tasks per base status and per custom status (3 q in one wave). */
 export async function loadAjustesEstatus(user: AuthenticatedUser): Promise<AjustesEstatusPageData> {
   requireSegment(user, "estatus");
-  if (!resolveTaskStatusesCapabilities(user).canViewTaskStatuses) return { statuses: [] };
-  return { statuses: await taskStatusesRepository.listTaskStatuses() };
+  if (!resolveTaskStatusesCapabilities(user).canViewTaskStatuses) {
+    return { statuses: [], baseCounts: { ...NO_BASE_COUNTS }, customUsage: {} };
+  }
+  const [statuses, baseCounts, customUsage] = await Promise.all([
+    taskStatusesRepository.listTaskStatuses(),
+    taskStatusesRepository.countTasksByBaseStatus(),
+    taskStatusesRepository.countCustomStatusUsage(),
+  ]);
+  return { statuses, baseCounts, customUsage };
 }
 
 /**
@@ -64,17 +73,25 @@ export async function loadAjustesPuestos(user: AuthenticatedUser): Promise<Ajust
   return { positions, workflows };
 }
 
-/** Tramos y fases: every tramo, fase and template, inactive ones included for a manager (as `fetchWorkflowsAction`). */
+/**
+ * Tramos y fases: every tramo, fase and template, inactive ones included for
+ * a manager (as `fetchWorkflowsAction`), plus active projects per tramo and
+ * tasks per fase, in one wave.
+ */
 export async function loadAjustesTramos(user: AuthenticatedUser): Promise<AjustesTramosPageData> {
   requireSegment(user, "tramos");
-  const workflows = resolveWorkflowsCapabilities(user).canManageWorkflows
-    ? await workflowsRepository.listWorkflows({
-        includeInactive: true,
-        includeInactiveTemplates: true,
-        includeInactivePhases: true,
-      })
-    : await workflowsRepository.listWorkflows({});
-  return { workflows };
+  const [workflows, activeProjects, phaseTaskCounts] = await Promise.all([
+    resolveWorkflowsCapabilities(user).canManageWorkflows
+      ? workflowsRepository.listWorkflows({
+          includeInactive: true,
+          includeInactiveTemplates: true,
+          includeInactivePhases: true,
+        })
+      : workflowsRepository.listWorkflows({}),
+    workflowsRepository.countActiveProjectsByWorkflow(),
+    workflowsRepository.countTasksByPhase(),
+  ]);
+  return { workflows, activeProjects, phaseTaskCounts };
 }
 
 /**

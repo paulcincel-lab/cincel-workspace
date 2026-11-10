@@ -101,6 +101,8 @@ export const positions = core.table(
     name: text("name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     active: boolean("active").notNull().default(true),
+    /** Hours per week one person in this puesto can take; null = not set. Feeds Personas load (hours ÷ capacity). */
+    weeklyCapacityHours: integer("weekly_capacity_hours"),
     ...stamps,
     ...soft,
   },
@@ -108,6 +110,10 @@ export const positions = core.table(
     uniqueIndex("positions_name_lower_uq")
       .on(sql`lower(${t.name})`)
       .where(sql`${t.deletedAt} is null`),
+    check(
+      "positions_weekly_capacity_hours_check",
+      sql`${t.weeklyCapacityHours} is null or ${t.weeklyCapacityHours} between 0 and 80`
+    ),
   ]
 );
 

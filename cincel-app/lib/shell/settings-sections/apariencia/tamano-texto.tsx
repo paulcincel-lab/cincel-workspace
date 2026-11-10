@@ -10,7 +10,7 @@ import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
 export const aparienciaTamanoTextoSection: SettingsSectionEntry = {
   page: "apariencia",
   name: "tamano-texto",
-  order: 50,
+  order: 40,
   visible: () => IMPLEMENTED.updateMyPreferencesAction,
   Component: AparienciaTamanoTextoSection,
 };

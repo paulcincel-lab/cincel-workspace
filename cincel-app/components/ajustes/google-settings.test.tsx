@@ -25,7 +25,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
 import { GoogleGroupMappings } from "@/components/configuracion/GoogleGroupMappings";
-import { GoogleHealthStatus } from "@/components/configuracion/GoogleHealthStatus";
+import { GoogleHealthStatus, pendingStaffText } from "@/components/configuracion/GoogleHealthStatus";
 import { ProjectFoldersBackfill } from "@/components/configuracion/ProjectFoldersBackfill";
 
 import { GoogleSettings } from "./GoogleSettings";
@@ -36,12 +36,19 @@ const HEALTH: GoogleHealth = {
   groupMappingCount: 1,
   roleGroupMappingCount: 1,
   serviceAccountEmail: "cincel@proyecto.iam.gserviceaccount.com",
-  sharedDriveId: "0AbCdEf",
+  sharedDriveId: "0AJk3abcdefghijUk9PVA",
   tokenKeyConfigured: true,
   lastDirectoryError: null,
   lastDriveError: null,
-  googleLinkedStaff: 4,
-  activeStaff: 9,
+  googleLinkedStaff: 11,
+  activeStaff: 14,
+  pendingGoogleStaff: [
+    { id: "s1", name: "Jorge Mena" },
+    { id: "s2", name: "Sofía León" },
+    { id: "s3", name: "Raúl Ortega" },
+  ],
+  projectsWithoutFolder: 3,
+  projectsWithFolder: 21,
 };
 
 const MAPPING: GroupMapping = {
@@ -52,7 +59,11 @@ const MAPPING: GroupMapping = {
   positionId: null,
   positionName: null,
   rank: 70,
+  memberCount: 12,
+  exists: true,
 };
+
+const SENTENCE = "11 de 14 colaboradores activos ya entraron con Google";
 
 type GooglePage = { mappings: GroupMapping[]; positions: { id: string; name: string }[]; health: GoogleHealth | null };
 
@@ -83,6 +94,8 @@ function applyTheme(theme: string, mode: "light" | "dark") {
   root.classList.toggle("dark", mode === "dark");
 }
 
+const region = (name: string) => screen.getByRole("region", { name });
+
 beforeEach(() => {
   vi.clearAllMocks();
   client = createTestQueryClient();
@@ -97,45 +110,124 @@ afterEach(() => {
 });
 
 describe("Ajustes › Google", () => {
-  it("renders Estado, Grupos de Google and Carpetas de proyectos as settings sections, one heading each", () => {
+  it("renders the admin heading and the four sections of the frame, one heading each", () => {
     renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
 
-    expect(screen.getByText("Los roles y las áreas se administran en grupos de Google Workspace.")).toBeTruthy();
-
-    const estado = screen.getByRole("region", { name: "Estado" });
-    expect(within(estado).getByText("cincel.mx")).toBeTruthy();
-    expect(within(estado).getByText("4 de 9 colaboradores activos ya entraron con Google")).toBeTruthy();
-
-    const grupos = screen.getByRole("region", { name: "Grupos de Google" });
-    expect(within(grupos).getByText("cincel-direccion@example.test")).toBeTruthy();
-    expect(within(grupos).getByRole("button", { name: "Agregar grupo" })).toBeTruthy();
-
-    const carpetas = screen.getByRole("region", { name: "Carpetas de proyectos" });
-    expect(within(carpetas).getByRole("button", { name: "Crear carpetas faltantes" })).toBeTruthy();
-
-    // The bare components leave the headings to the sections: no duplicates.
-    for (const name of ["Estado", "Grupos de Google", "Carpetas de proyectos"]) {
+    expect(screen.getByRole("heading", { name: /^Google/ })).toBeTruthy();
+    expect(screen.getByText(/Los roles y las áreas se administran en grupos de Google Workspace\./)).toBeTruthy();
+    for (const name of ["Acceso con Google", "Estado", "Grupos de Google", "Carpetas de proyectos"]) {
       expect(screen.getAllByRole("heading", { name })).toHaveLength(1);
     }
+    expect(within(region("Estado")).getByText("cincel.mx")).toBeTruthy();
+    expect(within(region("Grupos de Google")).getByText(MAPPING.groupEmail)).toBeTruthy();
   });
 
-  it("keeps the Estado error state when the health could not be loaded", () => {
-    renderSettings({ mappings: [], positions: [], health: null });
-    const estado = screen.getByRole("region", { name: "Estado" });
-    expect(within(estado).getByText("No se pudo cargar el estado de Google.")).toBeTruthy();
-    // Health unknown: the backfill button stays enabled, as before.
-    const button = within(screen.getByRole("region", { name: "Carpetas de proyectos" })).getByRole("button", {
-      name: "Crear carpetas faltantes",
+  it("ring label reads the progress sentence", () => {
+    renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
+    const acceso = region("Acceso con Google");
+    expect(within(acceso).getByRole("img", { name: SENTENCE })).toBeTruthy();
+    expect(within(acceso).getByText("79 %")).toBeTruthy();
+    expect(within(acceso).getByText(SENTENCE)).toBeTruthy();
+    expect(within(acceso).getByRole("link", { name: "Primeros pasos →" }).getAttribute("href")).toBe(
+      "/ajustes/google/primeros-pasos",
+    );
+  });
+
+  it("lists pending people, truncates after 5", () => {
+    renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
+    expect(within(region("Acceso con Google")).getByText("Faltan: Jorge Mena, Sofía León, Raúl Ortega.")).toBeTruthy();
+
+    const many = ["Ana", "Beto", "Carla", "Diego", "Elena", "Fer", "Gabi"].map((name, i) => ({ id: `p${i}`, name }));
+    expect(pendingStaffText(many)).toBe("Faltan: Ana, Beto, Carla, Diego, Elena y 2 más.");
+    expect(pendingStaffText([])).toBeNull();
+    cleanup();
+    renderSettings({ mappings: [MAPPING], positions: [], health: { ...HEALTH, pendingGoogleStaff: many, activeStaff: 18 } });
+    expect(within(region("Acceso con Google")).getByText("Faltan: Ana, Beto, Carla, Diego, Elena y 2 más.")).toBeTruthy();
+  });
+
+  it("hides the missing people at 100 %", () => {
+    renderSettings({
+      mappings: [MAPPING],
+      positions: [],
+      health: { ...HEALTH, googleLinkedStaff: 14, pendingGoogleStaff: [] },
     });
+    expect(within(region("Acceso con Google")).getByText("100 %")).toBeTruthy();
+    expect(within(region("Acceso con Google")).queryByText(/^Faltan:/)).toBeNull();
+  });
+
+  it("missing group shows El grupo no existe", () => {
+    const missing: GroupMapping = { ...MAPPING, id: "m-2", groupEmail: "externos@cincel.mx", memberCount: null, exists: false };
+    const unchecked: GroupMapping = { ...MAPPING, id: "m-3", groupEmail: "nuevo@cincel.mx", memberCount: null, exists: null };
+    renderSettings({ mappings: [MAPPING, missing, unchecked], positions: [], health: HEALTH });
+
+    const row = (email: string) => within(screen.getByRole("rowheader", { name: email }).closest("tr") as HTMLElement);
+    expect(row(MAPPING.groupEmail).getByText("12")).toBeTruthy();
+    expect(row(MAPPING.groupEmail).getByText("Dirección")).toBeTruthy();
+    expect(row("externos@cincel.mx").getByText("El grupo no existe").className).toContain("text-destructive");
+    expect(row("nuevo@cincel.mx").getAllByText("—").length).toBeGreaterThan(0);
+    expect(row(MAPPING.groupEmail).getByRole("button", { name: `Editar ${MAPPING.groupEmail}` })).toBeTruthy();
+    expect(within(region("Grupos de Google")).getByText("El grupo se busca en Google Workspace al guardar.")).toBeTruthy();
+  });
+
+  it("shows each Estado row with its pill; the token key never shows", () => {
+    renderSettings({
+      mappings: [MAPPING],
+      positions: [],
+      health: {
+        ...HEALTH,
+        serviceAccountEmail: null,
+        lastDirectoryError: {
+          at: "2026-11-07T18:00:00.000Z",
+          source: "group_mapping",
+          kind: "http",
+          status: 403,
+          message: "El Directorio de Google respondió 403",
+        },
+      },
+    });
+    const estado = region("Estado");
+    expect(within(estado).getByText("••••••••")).toBeTruthy();
+    expect(within(estado).getByText("0AJk3…Uk9PVA")).toBeTruthy();
+    expect(within(estado).getByText("Falta")).toBeTruthy();
+    expect(within(estado).getByText("Error")).toBeTruthy();
+    expect(within(estado).getByText("Sin errores")).toBeTruthy();
+    expect(within(estado).getByText(/^7 nov · El Directorio de Google respondió 403/)).toBeTruthy();
+  });
+
+  it("not configured: the setup banner replaces the ring, Estado says Falta and the groups table is empty", () => {
+    renderSettings({
+      mappings: [],
+      positions: [],
+      health: { ...HEALTH, oauthClientConfigured: false, groupMappingCount: 0, roleGroupMappingCount: 0 },
+    });
+    const acceso = region("Acceso con Google");
+    expect(within(acceso).queryByRole("img")).toBeNull();
+    expect(within(acceso).getByText("Nadie puede entrar con Google todavía")).toBeTruthy();
+    expect(within(region("Estado")).getAllByText("Falta").length).toBeGreaterThan(0);
+    expect(within(region("Grupos de Google")).getByText("Aún no hay grupos.")).toBeTruthy();
+  });
+
+  it("keeps the error state when the health could not be loaded", () => {
+    renderSettings({ mappings: [], positions: [], health: null });
+    expect(within(region("Estado")).getByText("No se pudo cargar el estado de Google.")).toBeTruthy();
+    // Health unknown: the backfill button stays enabled, as before.
+    const button = within(region("Carpetas de proyectos")).getByRole("button", { name: "Crear carpetas faltantes" });
     expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("disables the backfill without a Shared Drive", () => {
+  it("counts the projects with and without a folder; the backfill is disabled at 0 or without a Shared Drive", () => {
+    renderSettings({ mappings: [], positions: [], health: HEALTH });
+    const carpetas = region("Carpetas de proyectos");
+    expect(carpetas.textContent).toContain("3 proyectos sin carpeta · 21 con carpeta en la unidad compartida");
+    expect((within(carpetas).getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement).disabled).toBe(false);
+    cleanup();
+
+    renderSettings({ mappings: [], positions: [], health: { ...HEALTH, projectsWithoutFolder: 0 } });
+    expect((within(region("Carpetas de proyectos")).getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+
     renderSettings({ mappings: [], positions: [], health: { ...HEALTH, sharedDriveId: null } });
-    const button = within(screen.getByRole("region", { name: "Carpetas de proyectos" })).getByRole("button", {
-      name: "Crear carpetas faltantes",
-    });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect((within(region("Carpetas de proyectos")).getByRole("button", { name: "Crear carpetas faltantes" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("runs the same backfill action as before", async () => {
@@ -153,19 +245,18 @@ describe("Ajustes › Google", () => {
     expect(pageData.getAjustesGooglePageData).not.toHaveBeenCalled();
   });
 
-  it("deleting a mapping invalidates Google, Puestos and the staff catalog; the list refetches once, no refresh", async () => {
+  it("deleting a mapping from its sheet invalidates Google, Puestos and the staff catalog; no refresh", async () => {
     actions.deleteGroupMappingAction.mockResolvedValue({ ok: true });
     pageData.getAjustesGooglePageData.mockResolvedValue({ mappings: [], positions: [], health: HEALTH });
     renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
     const invalidate = vi.spyOn(client, "invalidateQueries");
 
-    const row = screen.getByText(MAPPING.groupEmail).closest("tr") as HTMLElement;
-    fireEvent.click(within(row).getByLabelText("Acciones"));
-    fireEvent.click(await screen.findByText("Eliminar"));
-    fireEvent.click(await screen.findByRole("button", { name: "Eliminar" }));
+    fireEvent.click(screen.getByRole("button", { name: `Editar ${MAPPING.groupEmail}` }));
+    fireEvent.click(await screen.findByRole("button", { name: "Eliminar grupo" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Eliminar" }));
 
     await waitFor(() => expect(actions.deleteGroupMappingAction).toHaveBeenCalledWith(MAPPING.id));
-    await waitFor(() => expect(screen.getByText("No hay grupos asignados.")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Aún no hay grupos.")).toBeTruthy());
     for (const queryKey of [qk.ajustes.page("google"), qk.ajustes.page("puestos"), qk.catalog.staff()]) {
       expect(invalidate).toHaveBeenCalledWith({ queryKey });
     }
@@ -174,9 +265,9 @@ describe("Ajustes › Google", () => {
   });
 
   it("opens the same group sheet from Agregar grupo", async () => {
-    renderSettings({ mappings: [], positions: [], health: HEALTH });
-    fireEvent.click(screen.getByRole("button", { name: "Agregar grupo" }));
-    await waitFor(() => expect(screen.getByText("El grupo se busca en Google Workspace al guardar.")).toBeTruthy());
+    renderSettings({ mappings: [MAPPING], positions: [], health: HEALTH });
+    fireEvent.click(within(region("Grupos de Google")).getByRole("button", { name: "Agregar grupo" }));
+    expect(await screen.findByRole("heading", { name: "Agregar grupo" })).toBeTruthy();
   });
 
   it("has no serious axe violations in any theme, light and dark", async () => {
@@ -192,7 +283,7 @@ describe("Ajustes › Google", () => {
 });
 
 describe("legacy Configuración → Google cards", () => {
-  it("keep their own card heading when not bare", () => {
+  it("keep their own card heading outside Ajustes", () => {
     render(
       <>
         <GoogleHealthStatus health={HEALTH} />

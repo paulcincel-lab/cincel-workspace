@@ -66,11 +66,35 @@ function trackRequests(page: Page): { actions: string[]; rsc: string[]; reset():
   };
 }
 
-/** Opens /mi-espacio. */
-async function openMiEspacio(page: Page): Promise<void> {
-  await page.goto(`${BASE_URL}/mi-espacio`, { waitUntil: "load" });
+/** Opens /mi-espacio; `search` picks a style (`?estilo=…`), default Visual. */
+async function openMiEspacio(page: Page, search = ""): Promise<void> {
+  await page.goto(`${BASE_URL}/mi-espacio${search}`, { waitUntil: "load" });
   await expect(page).toHaveURL(/\/mi-espacio/);
-  await expect(page.getByRole("heading", { name: "Mi espacio" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mi espacio", level: 1 })).toBeVisible();
+}
+
+/** Analítico: the quick capture opens from "Captura rápida" in the header; checklists open in a sheet. */
+const CAPTURE_STYLE = "?estilo=analitico";
+
+/** Analítico: opens the header popover and returns the quick-capture field. */
+async function openCapture(page: Page) {
+  await page.getByRole("button", { name: "Captura rápida" }).click();
+  const capture = page.getByLabel("Captura rápida");
+  await expect(capture).toBeVisible();
+  return capture;
+}
+
+/** Analítico: opens a checklist of the Checklists table in its sheet. */
+async function openChecklistSheet(page: Page, title: string): Promise<void> {
+  await page.getByRole("region", { name: /^Checklists/ }).getByRole("button", { name: title }).click();
+  await expect(page.getByRole("dialog", { name: title })).toBeVisible();
+}
+
+/** Visual: "Abrir →" on the Bandeja card expands the full Bandeja (tabs, Gmail). */
+async function openFullInbox(page: Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: "Abrir →" });
+  await toggle.click();
+  await expect(page.getByRole("button", { name: "Cerrar ↑" })).toHaveAttribute("aria-expanded", "true");
 }
 
 test.describe("Mi espacio — nota, checklist y recordatorio", () => {
@@ -85,14 +109,13 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     const checklistTitle = `Comprar material ${stamp}`;
     const reminderText = `Llamar a Juanma ${stamp}`;
 
-    await openMiEspacio(page);
-    const capture = page.getByLabel("Captura rápida");
+    await openMiEspacio(page, CAPTURE_STYLE);
+    const capture = await openCapture(page);
 
-    // Nota
+    // Nota (Analítico lists no notes: the toast confirms it)
     await capture.fill(noteText);
     await capture.press("Enter");
     await expect(page.getByText("Nota guardada")).toBeVisible();
-    await expect(page.getByText(noteText).first()).toBeVisible();
 
     // Checklist
     await capture.fill(`- [ ] ${checklistTitle}`);
@@ -112,8 +135,6 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     await dialog.getByRole("button", { name: "Crear recordatorio" }).click();
     await expect(page.getByText(/^Recordatorio creado para (hoy|mañana) \d{1,2}:\d{2}$/)).toBeVisible();
     await expect(dialog).toBeHidden();
-    // Listed under "Recordatorios" (hoy y mañana) until it fires.
-    await expect(page.getByText(reminderText).first()).toBeVisible();
 
     // Fire it through the cron tick (204 = another tick holds the lease; retry).
     await expect
@@ -128,8 +149,9 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
       )
       .toBe(200);
 
-    // Fired reminders leave the list; the in-app notification row shows it in Bandeja.
-    await page.reload({ waitUntil: "load" });
+    // The in-app notification row shows it in the full Bandeja (Visual).
+    await openMiEspacio(page);
+    await openFullInbox(page);
     await expect(page.getByText("Bandeja").first()).toBeVisible();
     await expect(page.getByText(reminderText).first()).toBeVisible({ timeout: 15_000 });
 
@@ -174,11 +196,13 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     const title = `Visita ${stamp}`;
     const point = `Medir vanos ${stamp}`;
 
-    await openMiEspacio(page);
-    const capture = page.getByLabel("Captura rápida");
+    await openMiEspacio(page, CAPTURE_STYLE);
+    const capture = await openCapture(page);
     await capture.fill(`- [ ] ${title} - [ ] ${point}`);
     await capture.press("Enter");
     await expect(page.getByText("Checklist creado")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await openChecklistSheet(page, title);
     const box = page.getByRole("checkbox", { name: point });
     await expect(box).toBeVisible();
     await expect(box).toHaveAttribute("aria-checked", "false");
@@ -194,11 +218,13 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
 
     // The saved state survives a reload.
     await page.reload({ waitUntil: "load" });
+    await openChecklistSheet(page, title);
     await expect(page.getByRole("checkbox", { name: point })).toHaveAttribute("aria-checked", "true");
   });
 
   test("the Bandeja tab is the URL only: switching tabs sends no request", async ({ page }) => {
     await openMiEspacio(page);
+    await openFullInbox(page);
     const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
     const requests = trackRequests(page);
     await tabs.getByRole("link", { name: /Notificaciones/ }).click();
@@ -211,6 +237,7 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
 
   test("marking a notification read is one action POST and the counts drop at once", async ({ page }) => {
     await openMiEspacio(page);
+    await openFullInbox(page);
     const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
     await tabs.getByRole("link", { name: /Notificaciones/ }).click();
     await expect(page).toHaveURL(/bandeja=notificaciones/);
@@ -232,6 +259,7 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
 
   test("opening an unread email is one read + one mark-read POST, with no RSC request", async ({ page }) => {
     await openMiEspacio(page);
+    await openFullInbox(page);
     const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
     const gmailTab = tabs.getByRole("link", { name: /Gmail/ });
     test.skip((await gmailTab.count()) === 0, "Gmail is not enabled.");
@@ -263,5 +291,42 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     await page.waitForTimeout(1_000);
     expect(requests.actions).toEqual([]);
     expect(requests.rsc).toEqual([]);
+  });
+
+  test("Visual: day hero, Mis tareas board, Bandeja and hours, with no request on load", async ({ page }) => {
+    const requests = trackRequests(page);
+    await openMiEspacio(page);
+    // Seeded on the server: the first render needs no action call.
+    expect(requests.actions).toEqual([]);
+    const hero = page.getByRole("region", { name: "Mi día" });
+    await expect(hero).toBeVisible();
+    await expect(hero.getByRole("heading", { name: /^Buen(os días|as tardes|as noches)/ })).toBeVisible();
+    await expect(hero.getByRole("link", { name: /para hoy$/ })).toBeVisible();
+    for (const column of ["Hoy", "Esta semana", "Después"]) {
+      await expect(page.getByRole("list", { name: column })).toBeVisible();
+    }
+    await expect(page.getByRole("heading", { name: "Bandeja" })).toBeVisible();
+
+    // 390 px: no horizontal scroll.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test("Analítico: KPIs, Mis tareas, Horas and Checklists, with the filters in the URL", async ({ page }) => {
+    await openMiEspacio(page, CAPTURE_STYLE);
+    await expect(page.getByText("Mis abiertas")).toBeVisible();
+    for (const section of [/^Mis tareas/, /^Horas de la semana/, /^Checklists/]) {
+      await expect(page.getByRole("region", { name: section })).toBeVisible();
+    }
+    await page.getByRole("radio", { name: /En retraso/ }).click();
+    await expect(page).toHaveURL(/estado=retraso/);
+    await page.reload({ waitUntil: "load" });
+    await expect(page.getByRole("radio", { name: /En retraso/ })).toHaveAttribute("aria-checked", "true");
+
+    // 390 px: no horizontal page scroll (tables scroll inside their cards).
+    await page.setViewportSize({ width: 390, height: 844 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 });

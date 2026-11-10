@@ -16,6 +16,7 @@ import {
   workspaceGroupMappings,
 } from "@/lib/db/schema";
 import type { FlowExecutor } from "@/lib/project-flow/db";
+import { initialsOf, displayName } from "@/lib/people/aggregates";
 import { flowError } from "@/lib/project-flow/errors";
 import { nameKey } from "@/lib/project-flow/names";
 import type { Position, PositionInput, StaffCandidate } from "@/lib/types/core";
@@ -63,7 +64,7 @@ async function loadPositions(onlyId?: string): Promise<Position[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
 
-  const [phaseRows, countRows, mappingRows] = await Promise.all([
+  const [phaseRows, holderRows, mappingRows] = await Promise.all([
     db
       .select({
         positionId: positionPhases.positionId,
@@ -78,19 +79,27 @@ async function loadPositions(onlyId?: string): Promise<Position[]> {
       .innerJoin(workflows, eq(workflows.id, workflowPhases.workflowId))
       .where(and(inArray(positionPhases.positionId, ids), isNull(workflows.deletedAt)))
       .orderBy(asc(workflows.sortOrder), asc(workflowPhases.sortOrder), asc(workflowPhases.name)),
+    // Every live holder, by name: all of them count in staffCount, the active ones are the members.
     db
-      .select({ positionId: staffPositions.positionId, n: count() })
+      .select({
+        positionId: staffPositions.positionId,
+        id: staff.id,
+        name: staff.name,
+        lastName: staff.lastName,
+        active: staff.active,
+      })
       .from(staffPositions)
       .innerJoin(staff, eq(staff.id, staffPositions.staffId))
       .where(and(inArray(staffPositions.positionId, ids), isNull(staff.deletedAt)))
-      .groupBy(staffPositions.positionId),
+      .orderBy(asc(staff.name), asc(staff.lastName), asc(staff.id)),
     db
       .selectDistinct({ positionId: workspaceGroupMappings.positionId })
       .from(workspaceGroupMappings)
       .where(inArray(workspaceGroupMappings.positionId, ids)),
   ]);
 
-  const counts = new Map(countRows.map((row) => [row.positionId, Number(row.n)]));
+  const counts = new Map<string, number>();
+  for (const row of holderRows) counts.set(row.positionId, (counts.get(row.positionId) ?? 0) + 1);
   const mapped = new Set(mappingRows.map((row) => row.positionId));
   return rows.map((row) => ({
     id: row.id,
@@ -102,6 +111,10 @@ async function loadPositions(onlyId?: string): Promise<Position[]> {
       .map(({ id, name, sortOrder, workflowId, workflowName }) => ({ id, name, sortOrder, workflowId, workflowName })),
     staffCount: counts.get(row.id) ?? 0,
     googleManaged: mapped.has(row.id),
+    weeklyCapacityHours: row.weeklyCapacityHours,
+    members: holderRows
+      .filter((m) => m.positionId === row.id && m.active)
+      .map((m) => ({ id: m.id, name: displayName(m.name, m.lastName), initials: initialsOf(m.name, m.lastName) })),
   }));
 }
 
@@ -129,7 +142,12 @@ export async function createPosition(input: PositionInput): Promise<Position> {
         .where(isNull(positions.deletedAt));
       const [row] = await tx
         .insert(positions)
-        .values({ name, active: input.active ?? true, sortOrder: (last ?? -1) + 1 })
+        .values({
+          name,
+          active: input.active ?? true,
+          sortOrder: (last ?? -1) + 1,
+          weeklyCapacityHours: input.weeklyCapacityHours ?? null,
+        })
         .returning({ id: positions.id });
       return row.id;
     });
@@ -152,6 +170,7 @@ export async function updatePosition(id: string, patch: Partial<PositionInput>):
         set.name = name;
       }
       if (patch.active !== undefined) set.active = patch.active;
+      if (patch.weeklyCapacityHours !== undefined) set.weeklyCapacityHours = patch.weeklyCapacityHours;
       if (Object.keys(set).length > 0) await tx.update(positions).set(set).where(eq(positions.id, id));
     });
   } catch (err) {

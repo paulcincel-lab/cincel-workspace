@@ -12,7 +12,11 @@ import { describe, expect, it } from "vitest";
 
 const ACTIONS_DIR = __dirname;
 
-/** The 62 actions of BE §7 / FE §7, by actions file, plus `markGmailThreadReadAction` (Query Migration #941). */
+/**
+ * The 62 actions of BE §7 / FE §7, by actions file, plus `markGmailThreadReadAction` (Query Migration #941)
+ * and `fetchNotificationsSummaryAction` (Mi espacio Analítico), `pinAssistantThreadAction` and
+ * `markAssistantThreadReadAction` (Asistente Visual).
+ */
 const REDESIGN_ACTIONS: Record<string, readonly string[]> = {
   preferences: ["fetchMyPreferencesAction", "updateMyPreferencesAction"],
   "org-appearance": ["fetchOrgAppearanceAction", "saveOrgAppearanceAction", "resetOrgAppearanceAction"],
@@ -20,6 +24,7 @@ const REDESIGN_ACTIONS: Record<string, readonly string[]> = {
   search: ["searchWorkspaceAction"],
   notifications: [
     "fetchNotificationsAction",
+    "fetchNotificationsSummaryAction",
     "markNotificationsReadAction",
     "fetchNotificationPreferencesAction",
     "updateNotificationPreferencesAction",
@@ -79,6 +84,8 @@ const REDESIGN_ACTIONS: Record<string, readonly string[]> = {
     "fetchAssistantThreadsAction",
     "fetchAssistantThreadAction",
     "deleteAssistantThreadAction",
+    "pinAssistantThreadAction",
+    "markAssistantThreadReadAction",
     "importLegacyAssistantThreadAction",
     "fetchAssistantActionsAction",
   ],
@@ -104,8 +111,8 @@ function exportedNames(mod: Module): string[] {
 }
 
 describe("redesign action flags", () => {
-  it("lists the 63 actions of the contract", () => {
-    expect(Object.values(REDESIGN_ACTIONS).flat()).toHaveLength(63);
+  it("lists the 66 actions of the contract", () => {
+    expect(Object.values(REDESIGN_ACTIONS).flat()).toHaveLength(66);
   });
 
   for (const [domain, names] of Object.entries(REDESIGN_ACTIONS)) {

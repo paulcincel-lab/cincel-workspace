@@ -63,8 +63,8 @@ const generalSettingsSchema = z
       .object({
         language: z.literal("es-MX"),
         timeZone: z.literal("America/Mexico_City"),
-        dateFormat: z.literal("dd/MM/yyyy"),
-        weekStartsOn: z.literal("monday"),
+        dateFormat: z.enum(["d MMM yyyy", "dd/MM/yyyy"]),
+        weekStartsOn: z.enum(["monday", "sunday"]),
       })
       .strict(),
     appearance: z.object({ systemLogoUrl: logo }).strict(),

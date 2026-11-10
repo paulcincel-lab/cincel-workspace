@@ -1,13 +1,16 @@
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
   authCredentials,
   positionPhases,
   positions,
+  projects,
   staff,
   staffPositions,
   staffProfiles,
+  taskStatuses,
+  tasks,
   workflowPhases,
   workflows,
   workspaceGroupMappings,
@@ -220,6 +223,44 @@ export async function listAssignableStaff(
   return all
     .map((s) => ({ ...s, suggested: suggested.has(s.id) }))
     .sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.name.localeCompare(b.name));
+}
+
+/**
+ * Open tasks per responsable in one tramo, and how many of them are overdue
+ * (commitment date, else delivery date, before `todayIso`). Open = live,
+ * unarchived, not completado and no closing custom status, on a live
+ * project. One grouped count; people without open tasks are absent.
+ */
+export async function countOpenTasksInTramo(
+  workflowId: string,
+  todayIso: string
+): Promise<Map<string, { open: number; overdue: number }>> {
+  const rows = await db
+    .select({
+      staffId: tasks.managerId,
+      open: sql<number>`count(*)::int`,
+      overdue: sql<number>`count(*) filter (where coalesce(${tasks.commitmentDate}, ${tasks.deliveryDate}) < ${todayIso}::date)::int`,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(taskStatuses, eq(taskStatuses.id, tasks.customStatusId))
+    .where(
+      and(
+        eq(tasks.workflowId, workflowId),
+        isNotNull(tasks.managerId),
+        isNull(tasks.deletedAt),
+        eq(tasks.archived, false),
+        ne(tasks.status, "completado"),
+        or(isNull(tasks.customStatusId), eq(taskStatuses.closes, false)),
+        isNull(projects.deletedAt)
+      )
+    )
+    .groupBy(tasks.managerId);
+  const out = new Map<string, { open: number; overdue: number }>();
+  for (const r of rows) {
+    if (r.staffId) out.set(r.staffId, { open: Number(r.open), overdue: Number(r.overdue) });
+  }
+  return out;
 }
 
 /** The subset of `ids` that are live, active staff (start-tramo manager check). */

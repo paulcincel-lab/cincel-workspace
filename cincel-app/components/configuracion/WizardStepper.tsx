@@ -34,6 +34,12 @@ export type WizardStepperProps<Id extends string> = {
   canJump?: (step: Id) => boolean;
   onJump?: (step: Id) => void;
   className?: string;
+  /** The list's accessible name ("Pasos" by default; "Pasos de la importación" in Importar de monday). */
+  label?: string;
+  /** The current step's number circle: `secondary` (default) or `primary` (Importar de monday). */
+  currentTone?: "secondary" | "primary";
+  /** `row` (default): flex row; `grid`: one equal column per step. */
+  layout?: "row" | "grid";
 };
 
 const MARKER_BY_STATE: Record<WizardStepState, string> = {
@@ -54,7 +60,19 @@ const LABEL_BY_STATE: Record<WizardStepState, string> = {
   upcoming: "text-muted-foreground",
 };
 
-function StepContent({ state, number, label }: { state: WizardStepState; number: number; label: string }) {
+const CURRENT_PRIMARY_MARKER = "bg-primary text-primary-foreground ring-2 ring-primary/30";
+
+function StepContent({
+  state,
+  number,
+  label,
+  currentTone = "secondary",
+}: {
+  state: WizardStepState;
+  number: number;
+  label: string;
+  currentTone?: "secondary" | "primary";
+}) {
   return (
     <>
       <span aria-hidden="true" className={cn("h-1 w-full rounded-full", BAR_BY_STATE[state])} />
@@ -63,7 +81,7 @@ function StepContent({ state, number, label }: { state: WizardStepState; number:
           aria-hidden="true"
           className={cn(
             "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-            MARKER_BY_STATE[state],
+            state === "current" && currentTone === "primary" ? CURRENT_PRIMARY_MARKER : MARKER_BY_STATE[state],
           )}
         >
           {state === "done" ? <Check className="size-3.5" /> : number}
@@ -83,10 +101,24 @@ function StepContent({ state, number, label }: { state: WizardStepState; number:
  * a numbered marker per step in three states (done ✓, current, upcoming); the current step carries
  * `aria-current="step"`. Colors come only from theme tokens; it ignores the presentation style.
  */
-export function WizardStepper<Id extends string>({ steps, current, canJump, onJump, className }: WizardStepperProps<Id>) {
+export function WizardStepper<Id extends string>({
+  steps,
+  current,
+  canJump,
+  onJump,
+  className,
+  label = "Pasos",
+  currentTone = "secondary",
+  layout = "row",
+}: WizardStepperProps<Id>) {
   const currentIndex = steps.findIndex((step) => step.id === current);
+  const grid = layout === "grid";
   return (
-    <ol aria-label="Pasos" className={cn("flex w-full gap-2", className)}>
+    <ol
+      aria-label={label}
+      className={cn(grid ? "grid w-full gap-2" : "flex w-full gap-2", className)}
+      style={grid ? { gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` } : undefined}
+    >
       {steps.map((step, index) => {
         const state = wizardStepState(index, currentIndex);
         const jumpable = Boolean(onJump && canJump?.(step.id));
@@ -96,7 +128,7 @@ export function WizardStepper<Id extends string>({ steps, current, canJump, onJu
             key={step.id}
             aria-current={isCurrent ? "step" : undefined}
             data-state={state}
-            className={cn("min-w-0", isCurrent ? "flex-[2_1_0%] sm:flex-1" : "flex-1")}
+            className={cn("min-w-0", grid ? null : isCurrent ? "flex-[2_1_0%] sm:flex-1" : "flex-1")}
           >
             {jumpable ? (
               <button
@@ -105,11 +137,11 @@ export function WizardStepper<Id extends string>({ steps, current, canJump, onJu
                 onClick={() => onJump?.(step.id)}
                 className="flex min-h-11 w-full min-w-0 flex-col gap-2 rounded-md text-left outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <StepContent state={state} number={index + 1} label={step.label} />
+                <StepContent state={state} number={index + 1} label={step.label} currentTone={currentTone} />
               </button>
             ) : (
               <div className="flex min-w-0 flex-col gap-2">
-                <StepContent state={state} number={index + 1} label={step.label} />
+                <StepContent state={state} number={index + 1} label={step.label} currentTone={currentTone} />
               </div>
             )}
           </li>

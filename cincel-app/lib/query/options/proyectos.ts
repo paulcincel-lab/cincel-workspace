@@ -25,6 +25,9 @@ import {
 import type { ProyectoTareasData, ProyectosPageData } from "@/lib/loaders/proyectos";
 import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
+// Resumen Analítico quick-add hint (#997)
+import { getProyectoAssigneeSuggestion } from "@/lib/actions/page-data/proyectos-actions";
+import type { AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
 
 /**
  * `queryOptions` for the Proyectos screens (Query Migration Phase 5), 30 s
@@ -173,6 +176,20 @@ export function proyectoTareasOptions(id: string) {
   return queryOptions<ProyectoTareasData | null>({
     queryKey: qk.proyectos.tab(id, "tareas"),
     queryFn: () => getProyectoTareasData({ id }),
+    staleTime: STALE.screen,
+  });
+}
+
+// ── Resumen Analítico quick-add hint (#997) ──────────────────────────────────
+
+/**
+ * `qk.proyectos.assigneeSuggestion(id, phaseId, staffId)`: read on demand
+ * when the quick-add's responsable is at 90 % load or more; 30 s stale.
+ */
+export function proyectoAssigneeSuggestionOptions(id: string, phaseId: string, staffId: string) {
+  return queryOptions<AssigneeSuggestion>({
+    queryKey: qk.proyectos.assigneeSuggestion(id, phaseId, staffId),
+    queryFn: () => getProyectoAssigneeSuggestion({ id, phaseId, staffId }),
     staleTime: STALE.screen,
   });
 }

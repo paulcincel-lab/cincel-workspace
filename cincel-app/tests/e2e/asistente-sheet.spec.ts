@@ -79,7 +79,8 @@ test.describe("Asistente · sheet", () => {
 
     await page.getByPlaceholder(COMPOSER).fill("Crea una nota de compras");
     await page.getByRole("button", { name: "Enviar" }).click();
-    await expect(page.getByText("Crear la nota “Compras de obra”")).toBeVisible();
+    // Exact: the steps live region also reads the summary ("Requiere confirmación: …").
+    await expect(page.getByText("Crear la nota “Compras de obra”", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Confirmar" }).click();
     await expect(page.getByText("Hecho")).toBeVisible();
     await expect(page.getByText("Creé la nota.")).toBeVisible();

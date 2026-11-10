@@ -7,7 +7,7 @@
     "dev:webpack": "next dev --webpack",
     "analyze": "next experimental-analyze",
     "perf:routes": "node scripts/perf/measure-routes.mjs",
-    "build": "next build",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 next build",
     "start": "next start",
     "lint": "eslint",
     "test:unit": "vitest run",

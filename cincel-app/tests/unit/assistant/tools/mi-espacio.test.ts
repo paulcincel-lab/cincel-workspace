@@ -264,8 +264,8 @@ describe("tool runs", () => {
 
   it("team_hours_report uses the Monday of the week and filters people", async () => {
     const rows: TeamHoursRow[] = [
-      { staffId: "s1", name: "Ana López", days: [], total: 40, target: 40, lateCount: 0, status: "completo" },
-      { staffId: "s2", name: "Raúl Pérez", days: [], total: 20, target: 40, lateCount: 2, status: "incompleto" },
+      { staffId: "s1", name: "Ana López", days: [], total: 40, target: 40, lateCount: 0, status: "completo", needsReview: false },
+      { staffId: "s2", name: "Raúl Pérez", days: [], total: 20, target: 40, lateCount: 2, status: "incompleto", needsReview: false },
     ];
     h.fetchTeamHoursAction.mockResolvedValue(rows);
     const out = await byName("team_hours_report").definition.run(runCtx, { weekStart: "2026-11-12", people: ["raul"] } as never);

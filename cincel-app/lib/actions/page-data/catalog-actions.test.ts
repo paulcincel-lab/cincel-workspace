@@ -45,12 +45,20 @@ vi.mock("@/lib/db/client", () => {
 
 const repos = vi.hoisted(() => ({
   listAssignableStaff: vi.fn(),
+  countOpenTasksInTramo: vi.fn(async () => new Map()),
   listTramosNav: vi.fn(),
   listTaskStatuses: vi.fn(),
   projectExists: vi.fn(),
   listSpaces: vi.fn(),
 }));
-vi.mock("@/lib/repositories/staff-repository", () => ({ listAssignableStaff: repos.listAssignableStaff }));
+vi.mock("@/lib/repositories/staff-repository", () => ({
+  listAssignableStaff: repos.listAssignableStaff,
+  countOpenTasksInTramo: repos.countOpenTasksInTramo,
+}));
+vi.mock("@/lib/settings/general-settings-server", async () => {
+  const { GENERAL_SETTINGS_DEFAULTS } = await import("@/lib/settings/general-settings");
+  return { getGeneralSettings: async () => ({ settings: GENERAL_SETTINGS_DEFAULTS }) };
+});
 vi.mock("@/lib/repositories/workflows-repository", () => ({ listTramosNav: repos.listTramosNav }));
 vi.mock("@/lib/repositories/task-statuses-repository", () => ({ listTaskStatuses: repos.listTaskStatuses }));
 vi.mock("@/lib/repositories/projects-repository", () => ({ projectExists: repos.projectExists }));
@@ -132,18 +140,27 @@ describe("fetchCatalogStaff", () => {
 });
 
 describe("fetchCatalogAssignableStaff", () => {
-  it("returns exactly {id,name,suggested}, never the full Staff", async () => {
+  it("returns exactly {id,name,suggested} plus the tramo load, never the full Staff", async () => {
     repos.listAssignableStaff.mockResolvedValue([
       fullStaff(STAFF_A, "Ana", "Ruiz", true),
       fullStaff(STAFF_B, "Luis", null, false),
     ]);
+    repos.countOpenTasksInTramo.mockResolvedValueOnce(new Map([[STAFF_A, { open: 4, overdue: 2 }]]));
     const rows = await fetchCatalogAssignableStaff({ workflowId: WORKFLOW });
     expect(repos.listAssignableStaff).toHaveBeenCalledWith({ workflowId: WORKFLOW });
+    expect(repos.countOpenTasksInTramo).toHaveBeenCalledWith(WORKFLOW, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     expect(rows).toEqual([
-      { id: STAFF_A, name: "Ana Ruiz", suggested: true },
-      { id: STAFF_B, name: "Luis", suggested: false },
+      { id: STAFF_A, name: "Ana Ruiz", suggested: true, openCount: 4, overdueCount: 2 },
+      { id: STAFF_B, name: "Luis", suggested: false, openCount: 0, overdueCount: 0 },
     ]);
-    for (const row of rows) expect(Object.keys(row).sort()).toEqual(["id", "name", "suggested"]);
+    for (const row of rows) expect(Object.keys(row).sort()).toEqual(["id", "name", "openCount", "overdueCount", "suggested"]);
+  });
+
+  it("without a tramo the rows are exactly {id,name,suggested}", async () => {
+    repos.listAssignableStaff.mockResolvedValue([fullStaff(STAFF_A, "Ana", "Ruiz", true)]);
+    const rows = await fetchCatalogAssignableStaff({ workflowId: null });
+    expect(rows).toEqual([{ id: STAFF_A, name: "Ana Ruiz", suggested: true }]);
+    expect(repos.countOpenTasksInTramo).not.toHaveBeenCalled();
   });
 
   it("accepts a null tramo and refuses a malformed id", async () => {

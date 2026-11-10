@@ -12,6 +12,10 @@ import {
 } from "@/lib/tasks/status-options";
 import type { TaskListItem, TaskListRow, TaskStatusOption, WorkflowRef } from "@/lib/types/core";
 import type { TaskBoard } from "@/lib/types/redesign";
+import type { TareasMostrar } from "@/lib/tareas/query";
+import type { TareasSummary } from "@/lib/tareas/summary";
+import type { TareasListFilters } from "@/lib/query/keys";
+import type { KpiDatum } from "@/lib/types/widgets";
 
 /** Rows the board loads per column before "Cargar más". */
 export const TAREAS_BOARD_PER_COLUMN = 20;
@@ -27,6 +31,10 @@ export type TareasFacets = {
   byTramo: Record<string, number>;
   /** The projects with tasks in the selected tramo, by name (the selected one always). */
   projects: { id: string; name: string; count: number }[];
+  /** "Mostrar" counts in the selected tramo and project; they ignore `mostrar` itself. */
+  mostrar?: Record<TareasMostrar, number>;
+  /** Of those tasks, the ones the viewer manages. */
+  mine?: number;
 };
 
 /** One page of slim rows: Lista pages and the per-column pages of the board. */
@@ -57,6 +65,12 @@ export type TareasPageData = {
   list?: TareasRowsPage;
   /** Tablero: the first rows of every column. */
   board?: TareasBoardData;
+  /** Esencial: the cards per project. */
+  byProject?: TareasByProject;
+  /** Analítico: the counts per project and tramo (`qk.tareas.summary(f)`). */
+  summary?: TareasSummary;
+  /** Analítico: the first page of the first expanded tramo groups, keyed by their list filters (`tareasGroupFilters`). */
+  groups?: { filters: TareasListFilters; page: TareasRowsPage }[];
 };
 
 /** A slim row as the list item the views render (`notes` is never loaded for lists). */
@@ -144,3 +158,45 @@ export function moveBoardCard(
   columns[columnKey] = { ...to, rows: [moved, ...to.rows.filter((r) => r.id !== taskId)], total: to.total + 1 };
   return { ...board, columns };
 }
+
+// ── Visual summary (`qk.tareas.trend(f)`) ────────────────────────────────────
+
+/** The four KPI tiles of Tareas Visual. */
+export type TareasTrendKey = "abiertas" | "vencidas" | "en_proceso" | "completadas";
+export const TAREAS_TREND_KEYS: readonly TareasTrendKey[] = ["abiertas", "vencidas", "en_proceso", "completadas"];
+
+/** One day of the "Esta semana" strip: the open tasks due that day and the tramo most of them are in. */
+export type TareasTrendDay = { date: string; due: number; tramoKey: string | null };
+
+/**
+ * `qk.tareas.trend(f)`: the KPI tiles (value, `series7`, `delta {value, good,
+ * label}`), the people with a task in progress and the open tasks due per day
+ * of the current week (Monday to Sunday, America/Mexico_City).
+ */
+export type TareasTrend = {
+  kpis: (KpiDatum & { key: TareasTrendKey })[];
+  /** Distinct responsables of the tasks en proceso. */
+  activeAssignees: number;
+  week: { from: string; to: string; total: number; days: TareasTrendDay[] };
+};
+
+// ── Esencial (`qk.tareas.byProject(f)`) ──────────────────────────────────────
+
+/** Open rows Tareas Esencial loads at most; past it the cards show a note and `truncated` is true. */
+export const TAREAS_BY_PROJECT_LIMIT = 200;
+
+/** One Esencial card: a project with the counts of the filters and its open rows. */
+export type TareasProjectGroup = {
+  project: { id: string; name: string };
+  /** Open tasks matching the filters (with `mostrar=en_retraso`, the overdue ones). */
+  open: number;
+  /** Open and due before today (America/Mexico_City). */
+  overdue: number;
+  /** Closed tasks matching the filters; their rows load when the card expands them. */
+  completed: number;
+  /** Open rows, sorted by `sortListaTasks`. */
+  rows: TaskListRow[];
+};
+
+/** `qk.tareas.byProject(f)`: the projects most overdue first, then the nearest due date, then by name. */
+export type TareasByProject = { groups: TareasProjectGroup[]; truncated: boolean };

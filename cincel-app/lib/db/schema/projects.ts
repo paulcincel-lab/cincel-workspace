@@ -76,6 +76,8 @@ export const projects = core.table(
     driveImportFolderId: text("drive_import_folder_id"),
     driveFolderStatus: driveFolderStatus("drive_folder_status").notNull().default("pending"),
     driveFolderError: text("drive_folder_error"),
+    /** Drive file id of the project's cover photo, an image inside "02 Cliente" (client portal hero); null = gradient. */
+    coverDriveFileId: text("cover_drive_file_id"),
     ...stamps,
     ...soft,
   },

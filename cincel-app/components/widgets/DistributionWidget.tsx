@@ -15,7 +15,7 @@ import type { DistributionSegment, RecordColumn, RecordTableData } from "@/lib/t
  * Distribution in three styles (redesign FE §4.10.1, §15.3 "Tareas por tramo"):
  *
  * - Visual: donut + legend on `components/ui/shadcn/chart.tsx` (replaces
- *   the old dashboard donut).
+ *   the old dashboard donut); the donut scales in (`ring-in`, 0.9 s).
  * - Esencial: text list "label … value".
  * - Analítico: `RecordTable` with the value, `secondary`, `% secondary/value`
  *   heat cell (> 45 % warning, > 60 % destructive, FE §15.2), the
@@ -168,7 +168,8 @@ function VisualDistribution({ title, segments, totalLabel }: DistributionWidgetP
       <div
         role="img"
         aria-label={distributionSummary(title, segments, totalLabel)}
-        className="relative shrink-0"
+        data-slot="distribution-donut"
+        className="ring-in relative shrink-0"
         style={{ width: SIZE, height: SIZE }}
       >
         <LazyDonutChart

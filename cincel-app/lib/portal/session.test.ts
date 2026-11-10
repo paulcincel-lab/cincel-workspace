@@ -61,7 +61,7 @@ import {
 
 const HOUR = 3_600_000;
 const PROJECT_ID = "6f1c2a52-6d3e-4f4b-9c3a-2b1e0d9f8a77";
-const user = { id: "pu-1", name: "Ana López", email: "ana@example.com", contactId: "c-1" };
+const user = { id: "pu-1", name: "Ana López", email: "ana@example.com", contactId: "c-1", companyName: null };
 
 function record(refreshedAgoMs: number) {
   const now = Date.now();

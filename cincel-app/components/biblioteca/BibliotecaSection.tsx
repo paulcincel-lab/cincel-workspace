@@ -10,7 +10,7 @@ import type { DriveBrowserEntry } from "@/components/recursos/DriveBrowser";
 import { DriveFilePreviewSheet, ResourcePreview } from "@/components/recursos/ResourcePreview";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/shadcn/sheet";
-import { createResourceLinkAction, deleteResourceLinkAction } from "@/lib/actions/resources-actions";
+import { createResourceLinkAction, deleteResourceLinkAction, recordResourceOpenAction } from "@/lib/actions/resources-actions";
 import {
   TIPO_LABEL,
   TRAMO_FILTER_LABEL,
@@ -167,6 +167,8 @@ export function BibliotecaSection({ section, tipo = null, tramo = null }: Biblio
 
   const openLink = (link: ResourceLink) => {
     remember(link);
+    // Optimistic favorites are not rows yet; the original link is counted when opened.
+    if (!link.id.startsWith("optimistic:")) void recordResourceOpenAction({ linkId: link.id }).catch(() => undefined);
     setPreview(link);
   };
 

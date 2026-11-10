@@ -14,13 +14,15 @@ type Props = {
   onPick: (entry: DrivePickerEntry) => void;
   /** Starting folder; when omitted the server's GOOGLE_DRIVE_ROOT_FOLDER_ID is used. */
   rootFolderId?: string;
+  /** Search text the browser starts with. */
+  initialQuery?: string;
 };
 
 /**
  * "Elegir de Google Drive": the Drive browser in a sheet. It lists only while
  * the sheet is open and the Drive picker is configured (`useDriveStatus()`).
  */
-export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId }: Props) {
+export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId, initialQuery }: Props) {
   const [selected, setSelected] = useState<DrivePickerEntry | null>(null);
   const { configured } = useDriveStatus();
 
@@ -35,6 +37,8 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId 
         </SheetHeader>
 
         <DriveBrowser
+          key={initialQuery ?? ""}
+          initialSearch={initialQuery}
           active={open && configured}
           rootFolderId={rootFolderId}
           selectedId={selected?.id ?? null}

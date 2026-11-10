@@ -85,6 +85,7 @@ describe("GET /api/proyectos/[id]/archivos", () => {
             sizeBytes: 10,
             modifiedAt: "2026-11-01T00:00:00Z",
             iconLink: null,
+            thumbnailLink: null,
             webViewLink: "https://view",
             kind: "file",
           },

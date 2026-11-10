@@ -143,7 +143,10 @@ const LISTA_ROWS = LISTA_TASKS.map(
 function seededClient(query: TareasQuery, nextCursor: string | null = null) {
   const client = createTestQueryClient();
   const page: TareasPageData = { facets: { total: 5, byTramo: {}, projects: [] }, tramos: LISTA_TRAMOS, staff: [] };
-  client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query)), page);
+  // The bundle is keyed by the style; seed it for every one the tests render.
+  for (const estilo of ["visual", "esencial", "analitico"] as const) {
+    client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query, estilo)), page);
+  }
   client.setQueryData<TareasListPages>(qk.tareas.list(tareasListFiltersOf(query)), {
     pages: [{ rows: LISTA_ROWS, nextCursor, total: nextCursor ? 60 : LISTA_ROWS.length }],
     pageParams: [null],

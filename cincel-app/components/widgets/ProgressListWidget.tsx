@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 
 import { useStyle } from "@/components/shell/StyleProvider";
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
-import { CapacityRing } from "@/components/v2/status/CapacityRing";
 import { LoadBar } from "@/components/v2/status/LoadBar";
+import { ProgressRing } from "@/components/widgets/ProgressRing";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { WidgetCard, type WidgetCardProps } from "@/components/widgets/WidgetCard";
@@ -15,7 +15,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * Progress list in three styles (redesign FE §4.10.1, §15.3 "Avance de
- * proyectos"). Reuses `CapacityRing` and `LoadBar` from `components/v2/status`.
+ * proyectos"). Reuses `LoadBar` from `components/v2/status` and the widgets'
+ * SVG `ProgressRing`. In Visual the bars grow in (`grow-x`) and the rings fill
+ * in (`ring`).
  *
  * - Visual: one bar per item (`variant="bars"`, default) or rings of 52–64 px
  *   (`variant="rings"`), filled with the item's `colorVar`.
@@ -109,7 +111,10 @@ function Bars({ items }: { items: ProgressItem[] }) {
               </span>
             </div>
             <div aria-hidden="true">
-              <LoadBar segments={[{ percent: value, color: item.colorVar, label: `${item.label}: ${value}%` }]} />
+              <LoadBar
+                segments={[{ percent: value, color: item.colorVar, label: `${item.label}: ${value}%` }]}
+                segmentClassName="grow-x"
+              />
             </div>
           </li>
         );
@@ -122,14 +127,24 @@ function Rings({ items }: { items: ProgressItem[] }) {
   return (
     <ul data-slot="progress-rings" className="flex flex-wrap gap-4">
       {items.map((item) => {
+        const value = pct(item.real);
         const ring = (
-          <CapacityRing
-            percent={item.real}
-            label={item.label}
-            sublabel={item.sublabel}
-            size={PROGRESS_RING_SIZE}
-            color={item.colorVar}
-          />
+          <span className="flex w-[76px] flex-col items-center gap-1.5">
+            <ProgressRing
+              data-slot="progress-ring"
+              percent={value}
+              size={PROGRESS_RING_SIZE}
+              stroke={5}
+              color={item.colorVar ?? "var(--foreground)"}
+              animated
+            >
+              <span data-value="real" className="relative text-[11px] font-semibold tabular-nums">
+                {value}%
+              </span>
+            </ProgressRing>
+            <span className="text-center text-[11px] font-medium">{item.label}</span>
+            {item.sublabel ? <span className="font-mono text-[9.5px] text-muted-foreground">{item.sublabel}</span> : null}
+          </span>
         );
         return (
           <li key={item.id} data-item={item.id}>

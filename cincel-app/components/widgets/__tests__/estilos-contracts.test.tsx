@@ -9,6 +9,12 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
+// QuickAddRow reads the org time zone; keep the settings query off the network.
+vi.mock("@/lib/settings/use-general-settings", async () => {
+  const { GENERAL_SETTINGS_DEFAULTS } = await import("@/lib/settings/general-settings");
+  return { useGeneralSettings: () => GENERAL_SETTINGS_DEFAULTS };
+});
+
 import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { EsencialItemRow } from "@/components/widgets/EsencialItemRow";
 import { FilterCard } from "@/components/widgets/FilterCard";
@@ -18,6 +24,7 @@ import { PageHeader, type PageHeaderProps } from "@/components/widgets/PageHeade
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
 import { QuickAddRow, type QuickAddRowProps } from "@/components/widgets/QuickAddRow";
 import { ToolSteps } from "@/components/widgets/ToolSteps";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { parseQuickAdd, type QuickAddParseContext } from "@/lib/quick-add/parse";
 
 const CTX: QuickAddParseContext = { today: "2026-11-09", people: [], tramos: [], meId: null };
@@ -65,7 +72,14 @@ describe("Estilos contracts", () => {
             status={{ kind: "task", value: { status: "pendiente", customStatus: null } }}
           />,
         ),
-      () => render(<QuickAddRow context={{ label: "Nueva tarea", projectId: null }} onCreate={vi.fn()} variant="row" />),
+      () =>
+        renderWithQueryClient(
+          <table>
+            <tbody>
+              <QuickAddRow context={{ label: "Nueva tarea", projectId: null }} onCreate={vi.fn()} variant="row" />
+            </tbody>
+          </table>,
+        ),
       () => render(<ToolSteps parts={[]} />),
     ];
     for (const run of renders) {
@@ -112,8 +126,8 @@ describe("Estilos contracts", () => {
 
   it("QuickAddRow calls onCreate with the parsed title on Enter", () => {
     const onCreate = vi.fn(async () => ({ id: "t1", title: "Revisar" }));
-    render(<QuickAddRow context={{ label: "Nueva tarea", projectId: "p1" }} onCreate={onCreate} variant="card" />);
-    const input = screen.getByLabelText("Nueva tarea");
+    renderWithQueryClient(<QuickAddRow context={{ label: "Nueva tarea", projectId: "p1" }} onCreate={onCreate} variant="card" />);
+    const input = screen.getByLabelText("Nueva tarea en Nueva tarea");
     fireEvent.change(input, { target: { value: "  Revisar  " } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onCreate).toHaveBeenCalledWith({
@@ -134,10 +148,13 @@ describe("Estilos contracts", () => {
     ] as unknown as UIMessage["parts"];
     render(<ToolSteps parts={parts} />);
     const list = screen.getByRole("list", { name: "Pasos del asistente" });
-    expect([...list.querySelectorAll("li")].map((li) => li.textContent)).toEqual(["listTasks", "buscar"]);
+    const items = [...list.querySelectorAll(":scope > li")].map((li) => li.textContent ?? "");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toContain("listTasks");
+    expect(items[1]).toContain("buscar");
   });
 
-  it("parseQuickAdd stub returns the trimmed text as title", () => {
+  it("parseQuickAdd returns the trimmed text as title", () => {
     expect(parseQuickAdd("  Revisar planos  ", CTX)).toEqual({ title: "Revisar planos", tokens: [], slash: null });
   });
 

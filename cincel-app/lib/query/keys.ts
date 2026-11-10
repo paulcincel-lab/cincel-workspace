@@ -7,7 +7,7 @@
  * Rules:
  * - `tareas.page(q)` never carries `cursor` or `limit`; the cursor is the
  *   `useInfiniteQuery` page param.
- * - `estilo` (`?estilo=`) is render-only and never part of a key.
+ * - `estilo` is part of `tareas.page(q)` only (it picks what the bundle seeds); no other key carries it.
  * - Ajustes keys are always `qk.ajustes.page('<seg>', input?)`.
  *
  * Client-safe: type-only imports.
@@ -15,8 +15,9 @@
 import type { AjustesAdminSegment } from "@/lib/auth/ajustes-segments";
 import type { PersonasContactsTab } from "@/lib/personas/contacts";
 import type { ImportDataEntity } from "@/lib/repositories/import-repository";
-import type { TareasQuery, TareasVista } from "@/lib/tareas/query";
+import type { TareasMostrar, TareasQuery } from "@/lib/tareas/query";
 import type { TaskStatus } from "@/lib/types/core";
+import type { PresentationStyle } from "@/lib/types/redesign";
 
 /** The filters every Tareas view shares (the URL filters, without the view and calendar mode). */
 export type TareasListFilters = {
@@ -25,11 +26,16 @@ export type TareasListFilters = {
   responsable: "yo" | string | null;
   estado: TaskStatus | null;
   q: string | null;
+  /** Left out for "todas", so the keys of the other filters stay as they were. */
+  mostrar?: TareasMostrar;
+  /** `tareas.list` only: "retraso" for the Analítico tramo groups (overdue first); left out for the default order. */
+  orderBy?: "retraso";
 };
 
 /** `TareasPageInput` (plan §4.3) without `cursor` and `limit`: the input part of `qk.tareas.page`. */
 export type TareasPageKeyInput = TareasListFilters & {
-  vista: TareasVista;
+  /** The resolved presentation style: it picks what the bundle seeds (Visual: the board). */
+  estilo: PresentationStyle;
   cal: TareasQuery["cal"];
   range?: { from: string; to: string };
 };
@@ -42,10 +48,16 @@ export const qk = {
   org: { general: () => ["org", "general"] as const },
   me: {
     today: () => ["me", "today"] as const,
-    weekHours: () => ["me", "week-hours"] as const,
+    /** One week of my hours; the no-arg form is the prefix of every week (the clock writes invalidate it). */
+    weekHours: (weekStart?: string) =>
+      weekStart ? (["me", "week-hours", weekStart] as const) : (["me", "week-hours"] as const),
+    /** My open tasks (Mi espacio). */
+    tasks: () => ["me", "tasks"] as const,
     preferences: () => ["me", "preferences"] as const,
     profile: () => ["me", "profile"] as const,
     notifications: (f: { unreadOnly?: boolean; kinds?: string[] }) => ["me", "notifications", f] as const,
+    /** Unread and total per kind (Mi espacio Analítico); not under the `me.notifications` prefix. */
+    notificationsSummary: () => ["me", "notifications-summary"] as const,
     gmail: {
       all: ["me", "gmail"] as const,
       status: () => ["me", "gmail", "status"] as const,
@@ -66,9 +78,15 @@ export const qk = {
     page: (q: TareasPageKeyInput) => ["tareas", "page", q] as const,
     list: (f: TareasListFilters) => ["tareas", "list", f] as const,
     facets: (f: TareasListFilters) => ["tareas", "facets", f] as const,
+    /** Analítico counts per project and tramo (one grouping-sets query). */
+    summary: (f: TareasListFilters) => ["tareas", "summary", f] as const,
     board: (f: TareasListFilters, columnId?: string) =>
       (columnId ? ["tareas", "board", f, columnId] : ["tareas", "board", f]) as readonly unknown[],
     calendar: (f: TareasListFilters, from: string, to: string) => ["tareas", "calendar", f, from, to] as const,
+    /** Visual summary: the KPI 7-day series and deltas, people at work and the tasks due per day this week. */
+    trend: (f: TareasListFilters) => ["tareas", "trend", f] as const,
+    /** Esencial: the cards per project (counts and open rows, cap 200); `f` comes resolved (null responsable = everyone). */
+    byProject: (f: TareasListFilters) => ["tareas", "by-project", f] as const,
     startSlot: (tramoId: string | null) => ["tareas", "start-slot", tramoId] as const,
     startPreview: (projectId: string, workflowId: string) => ["tareas", "start-preview", projectId, workflowId] as const,
   },
@@ -92,6 +110,9 @@ export const qk = {
     clientesActivity: (id: string) => ["proyectos", id, "clientes", "activity"] as const,
     /** The ficha's "Reacomodar importación" state (5b), under `detail(id)`. */
     remap: (id: string) => ["proyectos", id, "remap"] as const,
+    /** Resumen Analítico quick-add hint: who could take a task instead of `staffId` in `phaseId`. */
+    assigneeSuggestion: (id: string, phaseId: string, staffId: string) =>
+      ["proyectos", id, "assignee-suggestion", phaseId, staffId] as const,
   },
   personas: {
     equipo: () => ["personas", "equipo"] as const,

@@ -51,6 +51,14 @@ export const TOKEN_NAMES: readonly TokenName[] = [
   "chart-3-ink",
   "chart-4-ink",
   "chart-5-ink",
+  "tint-primary",
+  "tint-violet",
+  "tint-warning",
+  "tint-cyan",
+  "tint-destructive",
+  "tint-success",
+  "destructive-ink",
+  "foreground-soft",
   "sidebar",
   "sidebar-foreground",
   "sidebar-primary",
@@ -63,12 +71,12 @@ export const TOKEN_NAMES: readonly TokenName[] = [
 
 /** BE §5.4 (= FE §14.3). */
 export const TYPE_SCALE_DEFAULT: OrgAppearance["typeScale"] = {
-  pageTitle: { size: 22, weight: 600 },
-  sectionTitle: { size: 16, weight: 600 },
-  cardTitle: { size: 14, weight: 500 },
-  body: { size: 14, weight: 400 },
+  pageTitle: { size: 32, weight: 600 },
+  sectionTitle: { size: 20, weight: 600 },
+  cardTitle: { size: 15, weight: 600 },
+  body: { size: 13.5, weight: 400 },
   label: { size: 12, weight: 500 },
-  kpi: { size: 28, weight: 500 },
+  kpi: { size: 26, weight: 600 },
 };
 
 /** Bounds enforced by `OrgAppearanceSchema` (BE §5.4). */
@@ -123,6 +131,15 @@ const AZUL_TOKENS: Record<TokenName, ThemeTokenValue> = {
   "chart-3-ink": { light: "#af5006", dark: "#f5c56b" },
   "chart-4-ink": { light: "#0e7490", dark: "#67d6e6" },
   "chart-5-ink": { light: "#047857", dark: "#6ee7b7" },
+  // Tints, destructive-ink and foreground-soft: the Estilos frame values.
+  "tint-primary": { light: "#dbeafe", dark: "#29394d" },
+  "tint-violet": { light: "#ede9fe", dark: "#35344d" },
+  "tint-warning": { light: "#fef3c7", dark: "#453e2f" },
+  "tint-cyan": { light: "#cffafe", dark: "#26414b" },
+  "tint-destructive": { light: "#fde8ec", dark: "#473138" },
+  "tint-success": { light: "#d1fae5", dark: "#26413c" },
+  "destructive-ink": { light: "#be123c", dark: "#fda4af" },
+  "foreground-soft": { light: "#334155", dark: "#c3c9d2" },
   "sidebar": { light: "#f8fafc", dark: "#14171c" },
   "sidebar-foreground": { light: "#334155", dark: "#c3c9d2" },
   "sidebar-primary": { light: "#2563eb", dark: "#60a5fa" },
@@ -166,6 +183,16 @@ const CALIDO_TOKENS: Record<TokenName, ThemeTokenValue> = {
   "chart-3-ink": { light: "#7a5810", dark: "#f0d08f" },
   "chart-4-ink": { light: "#365d86", dark: "#b3cbe6" },
   "chart-5-ink": { light: "#3f6b4c", dark: "#bfe0c8" },
+  // Tints = mixTint(primary | chart-2 | warning | chart-4 | destructive | success, card, mode); destructive-ink =
+  // destructive darkened 2 % toward black (light), unchanged in dark (already passes); foreground-soft = muted-foreground 50 % toward foreground.
+  "tint-primary": { light: "#dddcdb", dark: "#453228" },
+  "tint-violet": { light: "#f0eaf3", dark: "#3d343a" },
+  "tint-warning": { light: "#f1ece3", dark: "#453a28" }, // light at 12 % (14 % puts warning-ink at 4.41:1)
+  "tint-cyan": { light: "#e5ebf3", dark: "#34373c" },
+  "tint-destructive": { light: "#f8e5e1", dark: "#48322c" },
+  "tint-success": { light: "#e3e9e4", dark: "#373b32" },
+  "destructive-ink": { light: "#b3412d", dark: "#ef8a78" },
+  "foreground-soft": { light: "#48423b", dark: "#c9c2b8" },
   "sidebar": { light: "#f1ede7", dark: "#1c1815" },
   "sidebar-foreground": { light: "#4a433b", dark: "#d6cec4" },
   "sidebar-primary": { light: "#ffffff", dark: "#e08a62" },
@@ -209,6 +236,16 @@ const GRAFITO_TOKENS: Record<TokenName, ThemeTokenValue> = {
   "chart-3-ink": { light: "#137a55", dark: "#6fd3a8" },
   "chart-4-ink": { light: "#8a5e00", dark: "#f0c76a" },
   "chart-5-ink": { light: "#4b3bb0", dark: "#b9b0f2" },
+  // Tints = mixTint(primary | chart-2 | warning | chart-4 | destructive | success, card, mode); destructive-ink =
+  // destructive mixed 4 % toward black (light) / 20 % toward white (dark); foreground-soft = muted-foreground 50 % toward foreground.
+  "tint-primary": { light: "#d7d7d7", dark: "#444444" },
+  "tint-violet": { light: "#ffebe4", dark: "#442c24" },
+  "tint-warning": { light: "#eee8de", dark: "#433b2b" },
+  "tint-cyan": { light: "#f8eee2", dark: "#3f3323" },
+  "tint-destructive": { light: "#fbe4e1", dark: "#462d29" },
+  "tint-success": { light: "#e7f0e9", dark: "#2c3d33" }, // light at 11 % (14 % puts success at 4.41:1)
+  "destructive-ink": { light: "#bb3328", dark: "#ec7e71" },
+  "foreground-soft": { light: "#373737", dark: "#cacaca" },
   "sidebar": { light: "#0a0a0a", dark: "#1b1b1b" },
   "sidebar-foreground": { light: "#d4d4d4", dark: "#e4e4e4" },
   "sidebar-primary": { light: "#ffffff", dark: "#e4e4e4" },
@@ -244,3 +281,21 @@ export const THEME_PRESETS: Record<ThemeId, OrgAppearance> = {
 
 /** The org default when `appearance.theme` is missing or unreadable (BE §4, §8.1). */
 export const DEFAULT_ORG_APPEARANCE: OrgAppearance = THEME_PRESETS.azul;
+
+/**
+ * `tokens` with every token it lacks taken from the `baseTheme` preset. An org
+ * appearance saved before a token existed (e.g. the tints) keeps its own values
+ * and gets the preset's for the new ones.
+ */
+export function presetFilledTokens(
+  baseTheme: ThemeId,
+  tokens: Partial<Record<TokenName, ThemeTokenValue | undefined>>,
+): Record<TokenName, ThemeTokenValue> {
+  const preset = (THEME_PRESETS[baseTheme] ?? DEFAULT_ORG_APPEARANCE).tokens;
+  const filled = { ...preset };
+  for (const name of TOKEN_NAMES) {
+    const value = tokens[name];
+    if (value) filled[name] = value;
+  }
+  return filled;
+}

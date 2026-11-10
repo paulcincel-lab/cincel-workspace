@@ -6,7 +6,9 @@ import {
   fetchGmailThreadsAction,
 } from "@/lib/actions/gmail-actions";
 import { fetchRemindersAction } from "@/lib/actions/my-space-actions";
-import { fetchNotificationsAction } from "@/lib/actions/notifications-actions";
+import { fetchMyOpenTasksAction } from "@/lib/actions/tasks-actions";
+import { fetchMyWeekHoursAction } from "@/lib/actions/time-tracking-actions";
+import { fetchNotificationsAction, fetchNotificationsSummaryAction } from "@/lib/actions/notifications-actions";
 import {
   fetchMiEspacioChecklistsPage,
   fetchMiEspacioNotesPage,
@@ -15,6 +17,7 @@ import {
 import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
 import { STALE, qk } from "@/lib/query/keys";
 import { setShellBadgesUnread } from "@/lib/query/options/shell";
+import type { TaskListItem } from "@/lib/types/core";
 import type { GmailThreadsPage, GmailThreadView, MiEspacioPageData, MySpaceListPage } from "@/lib/types/mi-espacio";
 import type {
   Checklist,
@@ -22,8 +25,10 @@ import type {
   GmailThreadSummary,
   Note,
   NotificationItem,
+  NotificationKindSummary,
   NotificationsPage,
   Reminder,
+  WeekHours,
 } from "@/lib/types/redesign";
 
 /**
@@ -39,6 +44,9 @@ import type {
  * - `me.reminders('today-tomorrow')`.
  * - `me.notes()`, `me.checklists()`: infinite bounded pages, 5 min stale;
  *   their mutations patch the cache (optimistic where the issue asks).
+ * - `me.tasks()`: my open tasks; the task writes invalidate it.
+ * - `me.weekHours(weekStart)`: one week of my hours (not seeded; the clock
+ *   writes invalidate the `me.weekHours()` prefix).
  */
 
 /** `me.notifications` refetch interval while Mi espacio is mounted. */
@@ -71,6 +79,18 @@ export function meNotificationsOptions() {
     refetchIntervalInBackground: false,
     // Back on the tab: catch up at once (when stale), as the old visibility poll did.
     refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Unread and total per kind (Mi espacio Analítico, "Bandeja por tipo"). The
+ * mark-read mutation invalidates it when it settles.
+ */
+export function meNotificationsSummaryOptions() {
+  return queryOptions<NotificationKindSummary[]>({
+    queryKey: qk.me.notificationsSummary(),
+    queryFn: () => fetchNotificationsSummaryAction(),
+    staleTime: STALE.meNotifications,
   });
 }
 
@@ -130,6 +150,24 @@ export function meChecklistsOptions() {
   });
 }
 
+/** My open tasks (`fetchMyOpenTasksAction`), seeded by the page. */
+export function meTasksOptions() {
+  return queryOptions<TaskListItem[]>({
+    queryKey: qk.me.tasks(),
+    queryFn: () => fetchMyOpenTasksAction(),
+    staleTime: STALE.screen,
+  });
+}
+
+/** One week of my hours; no `weekStart` = this week. */
+export function meWeekHoursOptions(weekStart?: string) {
+  return queryOptions<WeekHours>({
+    queryKey: qk.me.weekHours(weekStart),
+    queryFn: () => fetchMyWeekHoursAction(weekStart ? { weekStart } : undefined),
+    staleTime: STALE.screen,
+  });
+}
+
 // ── Seeding ──────────────────────────────────────────────────────────────────
 
 function firstPage<P>(page: P): InfiniteData<P, PageParam> {
@@ -155,6 +193,7 @@ export function seedMiEspacio(qc: QueryClient, data: MiEspacioPageData, updatedA
   qc.setQueryData(meRemindersOptions().queryKey, data.reminders, at);
   qc.setQueryData(meChecklistsOptions().queryKey, firstPage({ items: data.checklists, nextCursor: data.checklistsCursor }), at);
   qc.setQueryData(meNotesOptions().queryKey, firstPage({ items: data.notes, nextCursor: data.notesCursor }), at);
+  qc.setQueryData(meTasksOptions().queryKey, data.tasks, at);
 }
 
 /**
@@ -249,9 +288,11 @@ export function insertCachedChecklist(qc: QueryClient, checklist: Checklist): vo
   qc.setQueryData<ChecklistsData>(qk.me.checklists(), (old) => insertFirst(old, checklist));
 }
 
+/** Patches one cached checklist; a patched checklist was just changed, so its `updatedAt` becomes now. */
 export function updateCachedChecklist(qc: QueryClient, id: string, fn: (checklist: Checklist) => Checklist): void {
+  const updatedAt = new Date().toISOString();
   qc.setQueryData<ChecklistsData>(qk.me.checklists(), (old) =>
-    mapListPages(old, (items) => items.map((c) => (c.id === id ? fn(c) : c))),
+    mapListPages(old, (items) => items.map((c) => (c.id === id ? { ...fn(c), updatedAt } : c))),
   );
 }
 

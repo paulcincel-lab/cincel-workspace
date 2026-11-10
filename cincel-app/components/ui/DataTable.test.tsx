@@ -133,4 +133,51 @@ describe("DataTable", () => {
       expect(screen.queryAllByTitle("Arrastra para reordenar")).toHaveLength(0);
     });
   });
+
+  describe("keyboard reordering", () => {
+    const getRowId = (row: Row) => row.name;
+    const getRowLabel = (row: Row) => row.name;
+
+    function rowNames() {
+      return screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelectorAll("td")[1]?.textContent);
+    }
+
+    it("keyboard reorder announces the new position", () => {
+      const onReorderRows = vi.fn();
+      render(
+        <DataTable columns={columns} data={data} getRowId={getRowId} getRowLabel={getRowLabel} onReorderRows={onReorderRows} />
+      );
+      const handle = screen.getByRole("button", { name: "Mover Beto" });
+
+      fireEvent.keyDown(handle, { key: " " });
+      fireEvent.keyDown(handle, { key: "ArrowDown" });
+      expect(screen.getByText("Beto movido a la posición 2 de 3")).toBeTruthy();
+      expect(rowNames()).toEqual(["Ana", "Beto", "Cris"]);
+      expect(onReorderRows).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "Mover Beto" }), { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("button", { name: "Mover Beto" }), { key: " " });
+
+      expect(onReorderRows).toHaveBeenCalledTimes(1);
+      expect(onReorderRows).toHaveBeenCalledWith(["Ana", "Cris", "Beto"]);
+      expect(screen.getByText("Beto movido a la posición 3 de 3")).toBeTruthy();
+    });
+
+    it("Escape puts the lifted row back without saving", () => {
+      const onReorderRows = vi.fn();
+      render(
+        <DataTable columns={columns} data={data} getRowId={getRowId} getRowLabel={getRowLabel} onReorderRows={onReorderRows} />
+      );
+      const handle = screen.getByRole("button", { name: "Mover Cris" });
+      fireEvent.keyDown(handle, { key: " " });
+      fireEvent.keyDown(handle, { key: "ArrowUp" });
+      fireEvent.keyDown(screen.getByRole("button", { name: "Mover Cris" }), { key: "Escape" });
+
+      expect(rowNames()).toEqual(["Beto", "Ana", "Cris"]);
+      expect(onReorderRows).not.toHaveBeenCalled();
+    });
+  });
 });

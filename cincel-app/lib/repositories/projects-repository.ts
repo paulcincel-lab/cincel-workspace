@@ -28,6 +28,7 @@ import type {
   ProjectListItem,
   ProjectStatus,
   ProjectTramo,
+  StaffRef,
   ViewerScope,
   WorkflowPhaseRef,
   WorkflowRef,
@@ -123,6 +124,24 @@ async function loadStageRows(projectIds: string[]): Promise<Map<string, StageRow
   return out;
 }
 
+/** Active staff in `project_members` of each project, by name (one statement). */
+async function loadMemberRefs(projectIds: string[]): Promise<Map<string, StaffRef[]>> {
+  const out = new Map<string, StaffRef[]>();
+  if (projectIds.length === 0) return out;
+  const rows = await db
+    .select({ projectId: projectMembers.projectId, id: staff.id, name: staff.name })
+    .from(projectMembers)
+    .innerJoin(staff, eq(staff.id, projectMembers.staffId))
+    .where(and(inArray(projectMembers.projectId, projectIds), eq(staff.active, true), isNull(staff.deletedAt)))
+    .orderBy(asc(staff.name));
+  for (const { projectId, id, name } of rows) {
+    const list = out.get(projectId) ?? [];
+    if (!list.some((m) => m.id === id)) list.push({ id, name });
+    out.set(projectId, list);
+  }
+  return out;
+}
+
 const stageRef = (r: StageRow): WorkflowRef => ({ id: r.id, key: r.key, name: r.name, sortOrder: r.sortOrder });
 
 /** `ProjectTramo`s from stage rows; `current` = the project's `current_workflow_id`. */
@@ -209,7 +228,8 @@ export async function listProjects(filters: ProjectFilters, viewer: ViewerScope)
     )
     .orderBy(asc(projects.name));
 
-  const stagesByProject = await loadStageRows(rows.map((r) => r.project.id));
+  const ids = rows.map((r) => r.project.id);
+  const [stagesByProject, membersByProject] = await Promise.all([loadStageRows(ids), loadMemberRefs(ids)]);
   return rows.map((r) => ({
     ...toProject(r.project, viewer),
     client: viewer.isAdmin ? toClient(r.project.clientId, r.clientName, r.clientType) : null,
@@ -222,6 +242,7 @@ export async function listProjects(filters: ProjectFilters, viewer: ViewerScope)
     stages: (stagesByProject.get(r.project.id) ?? []).map(stageRef),
     manager: r.managerId ? { id: r.managerId, name: r.managerName! } : null,
     coordinator: r.coordinatorId ? { id: r.coordinatorId, name: r.coordinatorName! } : null,
+    members: membersByProject.get(r.project.id) ?? [],
     taskCounts: { total: r.totalTasks, open: r.openTasks, blocked: r.blockedTasks },
   }));
 }
@@ -681,6 +702,8 @@ export async function upsertDriveFile(input: DriveFileInput): Promise<string> {
     iconLink: input.iconLink,
     thumbnailLink: input.thumbnailLink,
     webViewLink: input.webViewLink,
+    // A caller that doesn't know the size leaves the stored one as is.
+    ...(input.sizeBytes !== undefined ? { sizeBytes: input.sizeBytes } : {}),
     syncedAt: input.syncedAt ? new Date(input.syncedAt) : new Date(),
   };
   const [row] = await db

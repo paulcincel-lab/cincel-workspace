@@ -7,12 +7,14 @@ import { resolveResourcesCapabilities, type ResourcesCapabilities } from "@/lib/
 import { requireCapabilityUser } from "@/lib/auth/session";
 import {
   bibliotecaQuerySections,
+  bibliotecaUsage,
   canViewBibliotecaSection,
   visibleBibliotecaLinks,
   type BibliotecaLinksSection,
+  type BibliotecaUsage,
 } from "@/lib/biblioteca/catalog";
 import { isPickerDriveConfigured } from "@/lib/google/picker-drive";
-import { listResourceLinks } from "@/lib/repositories/resources-repository";
+import { countResourceLinkOpens, listResourceLinks } from "@/lib/repositories/resources-repository";
 import type { ResourceLink } from "@/lib/types/resource";
 
 export type BibliotecaData = {
@@ -21,6 +23,12 @@ export type BibliotecaData = {
   /** Already filtered for the viewer (personal links, Empresa access) and for the section. */
   links: ResourceLink[];
   driveEnabled: boolean;
+  /**
+   * Open counts of the last 30 days of the visible links (index only; null on
+   * every other screen). Only counts: who opened a document never leaves the
+   * database.
+   */
+  usage: BibliotecaUsage | null;
 };
 
 /** The Biblioteca pages' viewer; a missing or ended session goes to the login. */
@@ -36,7 +44,8 @@ export async function requireBibliotecaViewer(): Promise<AuthenticatedUser> {
  * The resource links of one Biblioteca screen (redesign FE §3.7, Query
  * Migration Phase 8) for `user`: the viewer's resource capabilities, the
  * links of `section` (null = the index) and whether the Drive picker is
- * configured. The section and the personal links are filtered **in SQL**
+ * configured, plus the 30-day open counts on the index. The section and the
+ * personal links are filtered **in SQL**
  * (`personal_for_id IS NULL OR = viewer`, `bibliotecaQuerySections`), so
  * another person's personal links never leave the database; this data is
  * dehydrated into public page HTML. `FORBIDDEN` when the viewer may not read
@@ -47,11 +56,15 @@ export async function loadBibliotecaData(user: AuthenticatedUser, section: Bibli
   if (!canViewBibliotecaSection(capabilities, section)) throw new Error("FORBIDDEN");
   const viewerId = user.member.id;
   const sections = bibliotecaQuerySections(section, capabilities);
-  const rows = sections.length > 0 ? await listResourceLinks({ section: sections, viewerId }) : [];
+  const [rows, opens] = await Promise.all([
+    sections.length > 0 ? listResourceLinks({ section: sections, viewerId }) : Promise.resolve([]),
+    section === null ? countResourceLinkOpens(viewerId) : Promise.resolve(null),
+  ]);
   // Mis vacaciones lists every document of its section (web links too), as it always did.
   const links =
     section === "mis-vacaciones"
       ? rows
       : visibleBibliotecaLinks(rows, { id: viewerId, canViewEmpresa: capabilities.enterprise.canView });
-  return { viewerId, capabilities, links, driveEnabled: isPickerDriveConfigured() };
+  const usage = opens ? bibliotecaUsage(opens, links) : null;
+  return { viewerId, capabilities, links, driveEnabled: isPickerDriveConfigured(), usage };
 }

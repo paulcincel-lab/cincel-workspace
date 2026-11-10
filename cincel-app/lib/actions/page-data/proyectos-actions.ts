@@ -30,6 +30,7 @@ import {
   type ProyectosPageData,
 } from "@/lib/loaders/proyectos";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
+import { suggestAssignee, type AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 /**
@@ -136,4 +137,24 @@ export async function getProyectoResumenData(
 export async function getProyectoTareasData(input: z.input<typeof ProyectoTareasInput>): Promise<ProyectoTareasData | null> {
   const parsed = parseInput(ProyectoTareasInput, input);
   return loadProyectoTareas(await requireCapabilityUser(), parsed);
+}
+
+// ── Resumen Analítico quick-add hint (#997) ──────────────────────────────────
+
+const ProyectoAssigneeSuggestionInput = z.object({ id: UuidSchema, phaseId: UuidSchema, staffId: UuidSchema });
+
+/**
+ * `qk.proyectos.assigneeSuggestion(id, phaseId, staffId)`: someone under
+ * 60 % load who completed tasks of the fase in other projects, instead of
+ * `staffId`; null when nobody qualifies or the viewer can't create tasks.
+ */
+export async function getProyectoAssigneeSuggestion(
+  input: z.input<typeof ProyectoAssigneeSuggestionInput>,
+): Promise<AssigneeSuggestion> {
+  const parsed = parseInput(ProyectoAssigneeSuggestionInput, input);
+  return suggestAssignee(await requireCapabilityUser(), {
+    projectId: parsed.id,
+    phaseId: parsed.phaseId,
+    excludeStaffId: parsed.staffId,
+  });
 }

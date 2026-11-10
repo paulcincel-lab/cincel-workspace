@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Each `db.select()` chain resolves to the next queued result, in call order:
-// group mappings, last Directory error, last Drive error, staff counts.
+// group mappings, last Directory error, last Drive error, staff counts,
+// staff without google_sub, project folder counts.
 const results = vi.hoisted(() => ({ queue: [] as unknown[][] }));
 vi.mock("@/lib/db/client", () => {
   const chain = (rows: unknown[]) => {
@@ -56,6 +57,16 @@ describe("loadGoogleHealth", () => {
       [{ kind: "group_mapping_error", reason: "http 403", at }],
       [{ message: "No se pudo crear la carpeta", at }],
       [{ active: 7, googleLinked: 4 }],
+      [
+        { id: "s-jorge", name: "Jorge", lastName: "Mena" },
+        { id: "s-sofia", name: "Sofía", lastName: null },
+        { id: "s-raul", name: "Raúl", lastName: "Ortega" },
+      ],
+      [
+        { status: "pending", n: 2 },
+        { status: "failed", n: 1 },
+        { status: "ready", n: 21 },
+      ],
     ];
 
     const health = await loadGoogleHealth(env);
@@ -77,6 +88,13 @@ describe("loadGoogleHealth", () => {
       lastDriveError: { at: at.toISOString(), message: "No se pudo crear la carpeta" },
       googleLinkedStaff: 4,
       activeStaff: 7,
+      pendingGoogleStaff: [
+        { id: "s-jorge", name: "Jorge Mena" },
+        { id: "s-sofia", name: "Sofía" },
+        { id: "s-raul", name: "Raúl Ortega" },
+      ],
+      projectsWithoutFolder: 3,
+      projectsWithFolder: 21,
     });
   });
 

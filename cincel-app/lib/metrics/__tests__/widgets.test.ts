@@ -106,6 +106,7 @@ function makeProject(overrides: Partial<ProjectListItem> = {}): ProjectListItem 
     stages: [],
     manager: null,
     coordinator: null,
+    members: [],
     taskCounts: { total: 0, open: 0, blocked: 0 },
     ...overrides,
   };
@@ -201,6 +202,9 @@ describe("toProgressItems", () => {
       budgetSpentPct: 55,
       open: 4,
       overdue: 1,
+      avgDelayDays: null,
+      overdueWeekAgo: 0,
+      avgDelayWeekAgo: null,
       daysToDelivery: 30,
       nextDelivery: { title: "Planos", date: "2026-11-20" },
       series7: [4, 4, 4, 4, 4, 4, 4],
@@ -218,6 +222,8 @@ describe("toProgressItems", () => {
         colorVar: "var(--chart-2)",
         href: "/proyectos/p1",
         next: { title: "Planos", date: "2026-11-20" },
+        open: 4,
+        overdue: 1,
       },
     ]);
   });
@@ -287,6 +293,8 @@ describe("toAttentionItems", () => {
       assignee: { id: "s2", name: "Ana María López", initials: "AL" },
       due: "2026-11-01",
       daysLate: 5,
+      projectId: "p1",
+      status: { value: "pendiente", label: "Pendiente" },
     });
   });
 
@@ -420,6 +428,10 @@ describe("toPersonDatum", () => {
       occupancyPct: 60,
       weekHours: 32.5,
       availability: ["libre", "ocupado", "ocupado", "saturado", "vacaciones"],
+      weeks: [],
+      absences: [],
+      projects: [],
+      sharesProjectWithViewer: false,
     };
     const person = toPersonDatum(makeStaff({ positions: [{ id: "pos1", name: "Arquitecta" }] }), row);
     expectTypeOf(person).toEqualTypeOf<PersonDatum>();

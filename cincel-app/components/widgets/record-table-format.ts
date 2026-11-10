@@ -100,12 +100,30 @@ export function isNegativeDelta(column: RecordColumn, row: Record<string, unknow
 
 export type HeatLevel = "crit" | "warn" | null;
 
-/** Heat of a cell (FE §15.2): above `critAt` → crit, above `warnAt` → warn; strict comparisons. */
-export function heatLevel(heat: RecordTableData["heat"], key: string, value: unknown): HeatLevel {
+/** Heat cell classes (shared by `RecordTable` and `GroupedTable`): tint background, ink text. */
+export const HEAT_CELL_CLASS: Record<Exclude<HeatLevel, null>, string> = {
+  crit: "bg-tint-destructive text-destructive-ink",
+  warn: "bg-tint-warning text-warning-ink",
+};
+
+/** A heat threshold rule; `direction` defaults to `"above"`. */
+export type HeatThreshold = { key: string; warnAt: number; critAt: number; direction?: "above" | "below" };
+
+/**
+ * Heat of a cell (FE §15.2), strict comparisons. `"above"` (default): above
+ * `critAt` → crit, above `warnAt` → warn. `"below"`: below `critAt` → crit,
+ * below `warnAt` → warn (e.g. plan deviation, warnAt −4, critAt −7).
+ */
+export function heatLevel(heat: readonly HeatThreshold[] | undefined, key: string, value: unknown): HeatLevel {
   const rule = heat?.find((h) => h.key === key);
   if (!rule) return null;
   const n = toNumber(value);
   if (n === null) return null;
+  if (rule.direction === "below") {
+    if (n < rule.critAt) return "crit";
+    if (n < rule.warnAt) return "warn";
+    return null;
+  }
   if (n > rule.critAt) return "crit";
   if (n > rule.warnAt) return "warn";
   return null;

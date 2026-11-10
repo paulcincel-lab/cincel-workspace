@@ -1,3 +1,6 @@
+"use client";
+
+import { useStyleBranch } from "@/components/widgets/StyleView";
 import { cn } from "@/lib/utils";
 
 /**
@@ -6,6 +9,9 @@ import { cn } from "@/lib/utils";
  * Analítico "Tendencia 7 días" column (72 × 18, `foreground` stroke). An
  * image with the points in its label; the numbers are always available as
  * text next to it.
+ *
+ * In a Visual branch the line draws in (`pathLength` 1 + `draw`, 1.2 s after
+ * 0.2 s) and the area fades in (`anim-in`); Esencial and Analítico stay static.
  */
 export type SparklineProps = {
   points: number[];
@@ -58,6 +64,7 @@ export function Sparkline({
   strokeWidth = 1.5,
   className,
 }: SparklineProps) {
+  const animated = useStyleBranch() === "visual";
   if (points.length === 0) return null;
   return (
     <svg
@@ -76,10 +83,14 @@ export function Sparkline({
           fill="currentColor"
           fillOpacity={0.15}
           stroke="none"
+          className={animated ? "anim-in" : undefined}
         />
       ) : null}
       <path
+        data-slot="sparkline-line"
         d={sparklinePath(points, width, height)}
+        pathLength={animated ? 1 : undefined}
+        className={animated ? "draw" : undefined}
         fill="none"
         stroke="currentColor"
         strokeWidth={strokeWidth}

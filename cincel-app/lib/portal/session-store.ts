@@ -5,7 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { portalSessions, portalUsers, projectPortalAccess, projects } from "@/lib/db/schema";
+import { contacts, portalSessions, portalUsers, projectPortalAccess, projects } from "@/lib/db/schema";
 import type { DriveFolderStatus } from "@/lib/db/schema";
 
 /**
@@ -31,8 +31,16 @@ export type PortalSessionRecord = {
   sessionId: string;
   expiresAt: Date;
   refreshedAt: Date;
-  user: { id: string; name: string; email: string; contactId: string };
+  /** `companyName`: `contacts.name` of the user's contact, null when it equals the user's own name. */
+  user: { id: string; name: string; email: string; contactId: string; companyName: string | null };
 };
+
+/** The contact's name as the portal's company line, or null when missing or the same as the person's name. */
+export function portalCompanyName(contactName: string | null | undefined, userName: string): string | null {
+  const company = contactName?.trim() ?? "";
+  if (!company) return null;
+  return company.localeCompare(userName.trim(), "es", { sensitivity: "base" }) === 0 ? null : company;
+}
 
 /** Live session for the token hash: not expired, and its portal user is `active`. */
 export async function findActivePortalSession(tokenHash: string, now: Date): Promise<PortalSessionRecord | null> {
@@ -45,9 +53,11 @@ export async function findActivePortalSession(tokenHash: string, now: Date): Pro
       name: portalUsers.name,
       email: portalUsers.email,
       contactId: portalUsers.contactId,
+      contactName: contacts.name,
     })
     .from(portalSessions)
     .innerJoin(portalUsers, eq(portalUsers.id, portalSessions.portalUserId))
+    .leftJoin(contacts, and(eq(contacts.id, portalUsers.contactId), isNull(contacts.deletedAt)))
     .where(
       and(eq(portalSessions.tokenHash, tokenHash), gt(portalSessions.expiresAt, now), eq(portalUsers.status, "active"))
     )
@@ -57,7 +67,13 @@ export async function findActivePortalSession(tokenHash: string, now: Date): Pro
     sessionId: row.sessionId,
     expiresAt: row.expiresAt,
     refreshedAt: row.refreshedAt,
-    user: { id: row.id, name: row.name, email: row.email, contactId: row.contactId },
+    user: {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      contactId: row.contactId,
+      companyName: portalCompanyName(row.contactName, row.name),
+    },
   };
 }
 

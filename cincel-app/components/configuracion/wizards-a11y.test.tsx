@@ -99,6 +99,9 @@ const health: GoogleHealth = {
   lastDriveError: null,
   googleLinkedStaff: 0,
   activeStaff: 1,
+  pendingGoogleStaff: [],
+  projectsWithoutFolder: 0,
+  projectsWithFolder: 0,
 };
 
 /** An export still running: the wizard opens on Tableros, with Conectar done. */
@@ -142,12 +145,12 @@ async function renderMonday() {
     <MondayImportWizard latestRun={exportingRun} hasServerToken={false} loadError={null} />,
   );
   fireEvent.click(screen.getByRole("button", { name: "Continuar importación" }));
-  await screen.findByRole("list", { name: "Pasos" });
+  await screen.findByRole("list", { name: "Pasos de la importación" });
   return result;
 }
 
-function stepItems() {
-  return within(screen.getByRole("list", { name: "Pasos" })).getAllByRole("listitem");
+function stepItems(name = "Pasos") {
+  return within(screen.getByRole("list", { name })).getAllByRole("listitem");
 }
 
 afterEach(() => {
@@ -172,7 +175,7 @@ describe("first-login wizards: stepper", () => {
       it(`Importar de monday has no serious axe violations (${theme}, ${mode})`, async () => {
         applyTheme(theme, mode);
         const { container } = await renderMonday();
-        const items = stepItems();
+        const items = stepItems("Pasos de la importación");
         expect(items).toHaveLength(7);
         expect(items.map((item) => item.dataset.state)).toEqual([
           "done",

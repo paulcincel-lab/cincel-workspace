@@ -184,6 +184,7 @@ describe("EquivalenciasStep · Cliente (opcional)", () => {
         onStatusCreated={() => {}}
       />,
     );
+    fireEvent.click(screen.getByRole("tab", { name: /Grupos y tramo/ }));
     expect(screen.getByRole("heading", { name: "Cliente (opcional)" })).toBeTruthy();
     expect(
       screen.getByText("Sin cliente, cada proyecto se crea con la tarea de administración «Asignar cliente y origen»."),
@@ -193,7 +194,51 @@ describe("EquivalenciasStep · Cliente (opcional)", () => {
     expect(screen.queryByText(/la Vista previa no dejará importar/)).toBeNull();
     expect(screen.queryByText(/Este tablero no tiene cliente/)).toBeNull();
     const picker = screen.getByRole("combobox", { name: "Tablero" });
-    expect(within(picker).getByRole("option", { name: "Casa Lomas" })).toBeTruthy();
+    expect(within(picker).getByRole("option", { name: "Casa Lomas · Tablero como proyecto" })).toBeTruthy();
     expect(within(picker).queryByRole("option", { name: /sin cliente/ })).toBeNull();
+  });
+});
+
+describe("EquivalenciasStep · tabs", () => {
+  const source: MondayExportSource = {
+    boards: [
+      {
+        ...boardSource([{ id: "g1", title: "Extras" }]),
+        columns: [
+          { id: "fecha", title: "Fecha", type: "date" },
+          { id: "notas", title: "Notas", type: "text" },
+        ],
+        columnFill: { fecha: 0.82 },
+      },
+    ],
+    users: [],
+    hasFiles: false,
+    hasUpdates: false,
+  };
+  const mapping = {
+    version: 1,
+    boards: [draft({ columns: { fecha: "commitment_date", notas: "ignore" } })],
+    people: {},
+    options: { includeUpdates: true, includeFiles: true },
+  } as unknown as MappingInput;
+
+  it("opens on Columnas with each column's type and fill share", () => {
+    renderWithQueryClient(
+      <EquivalenciasStep
+        mapping={mapping}
+        source={source}
+        choices={testChoices}
+        onMappingChange={() => {}}
+        onStatusCreated={() => {}}
+      />,
+    );
+    expect(screen.getByRole("tablist", { name: "Equivalencias" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Columnas 2/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("columnheader", { name: "Con dato" })).toBeTruthy();
+    const fecha = screen.getByRole("cell", { name: "Fecha" }).closest("tr") as HTMLElement;
+    expect(within(fecha).getByText("date")).toBeTruthy();
+    expect(within(fecha).getByText("82 %")).toBeTruthy();
+    const notas = screen.getByRole("cell", { name: "Notas" }).closest("tr") as HTMLElement;
+    expect(within(notas).getByText("—")).toBeTruthy();
   });
 });
