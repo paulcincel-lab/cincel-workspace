@@ -76,7 +76,7 @@ const WIDGETS: { name: string; utility: string; ui: () => ReactNode; query?: boo
     name: "WidgetCard",
     utility: "lift",
     ui: () => (
-      <WidgetCard title="Ritmo semanal" actions={<a href="/tareas">Ver todo</a>}>
+      <WidgetCard title="Ritmo semanal" actions={<button type="button">Ver todo</button>}>
         <p>Cuerpo</p>
       </WidgetCard>
     ),

@@ -158,7 +158,7 @@ const IRREGULAR: Record<string, string> = {
 
 /** "Crear 4 tareas en «X»" → "Creo 4 tareas en «X»"; a sentence not starting with an infinitive stays. */
 export function asFirstPerson(sentence: string): string {
-  const match = /^(\S+)(.*)$/s.exec(sentence.trim());
+  const match = /^(\S+)([\s\S]*)$/.exec(sentence.trim());
   if (!match) return sentence;
   const [, word, rest] = match;
   if (!/^[a-záéíóúñ]+(ar|er|ir)$/i.test(word)) return sentence;

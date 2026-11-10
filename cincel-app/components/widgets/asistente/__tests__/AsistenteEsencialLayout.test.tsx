@@ -31,8 +31,8 @@ function conversation(messages: AssistantUIMessage[], overrides: Partial<Assista
 }
 
 const THREADS: AssistantThreadSummary[] = [
-  { id: "t1", title: "Tareas vencidas de Oficina Polanco", updatedAt: "2026-11-09T16:38:00.000Z", pinnedAt: null, pendingApprovals: 0, unread: false },
-  { id: "t2", title: "Carga del equipo", updatedAt: "2026-11-08T12:00:00.000Z", pinnedAt: null, pendingApprovals: 0, unread: false },
+  { id: "t1", title: "Tareas vencidas de Oficina Polanco", updatedAt: "2026-11-09T16:38:00.000Z", pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0 },
+  { id: "t2", title: "Carga del equipo", updatedAt: "2026-11-08T12:00:00.000Z", pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0 },
 ];
 
 function renderLayout(messages: UIMessage[], props: Partial<AsistenteEsencialLayoutProps> = {}) {

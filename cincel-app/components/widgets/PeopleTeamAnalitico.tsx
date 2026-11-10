@@ -734,7 +734,8 @@ export function PeopleTeamAnalitico({
                             const expanded = state.persona === person.id && person.projects.length > 0;
                             const rowIds = [
                               ...person.projects.map((p) => `p-${person.id}-${p.projectId}`),
-                              `p-${person.id}-asignar`,
+                              // The quick-assign row exists only for those who may create tasks.
+                              ...(canCreateTask && onCreateTask ? [`p-${person.id}-asignar`] : []),
                             ];
                             return (
                               <Fragment key={person.id}>

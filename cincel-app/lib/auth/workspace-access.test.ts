@@ -135,7 +135,7 @@ describe("evaluateAccess", () => {
   });
 
   it("denies a personal Gmail account with domain without calling the Directory", async () => {
-    const directory = { getUserStatus: vi.fn(), hasMember: vi.fn(), getGroup: vi.fn() };
+    const directory = { getUserStatus: vi.fn(), hasMember: vi.fn(), getGroup: vi.fn(), countMembers: vi.fn() };
     const result = await evaluateAccess(SUB, "ana@gmail.com", {
       directory,
       mappings: MAPPINGS,

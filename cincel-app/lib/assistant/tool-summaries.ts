@@ -802,11 +802,13 @@ export function formatPreviewDate(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
   if (!match) return value.trim();
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  return new Intl.DateTimeFormat("es-MX", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
-    .format(date)
-    .replace(/\./g, "")
-    .replace(",", "");
+  // From the parts: es-MX joins day and month with "de" ("vie, 13 de nov.").
+  const parts = PREVIEW_DATE_FORMAT.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value.replace(/\./g, "") ?? "";
+  return `${part("weekday")} ${part("day")} ${part("month")}`;
 }
+
+const PREVIEW_DATE_FORMAT = new Intl.DateTimeFormat("es-MX", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 function previewDate(input: unknown, key: string): string | undefined {
   const value = text(input, key);
@@ -822,7 +824,7 @@ function patchOf(input: unknown): unknown {
 }
 
 /** `preview(input)` per tool with a row preview; a tool without one keeps the summary card. */
-export const toolPreviews: Record<string, ToolPreview> = {
+export const toolPreviews: Partial<Record<string, ToolPreview>> = {
   create_task: (input) => ({
     op: "+",
     title: text(input, "description") || "Tarea nueva",

@@ -27,9 +27,14 @@ export type AssistantThreadListRow = Pick<AssistantThreadRow, "id" | "title" | "
 };
 
 /** `assistant_actions` rows of the thread still waiting for an answer. */
+// Column names fully qualified: a single-table select renders `${column}` bare,
+// and a bare "id" inside these subqueries would be the inner table's.
+const THREAD_ID = sql.raw(`"core"."assistant_threads"."id"`);
+const THREAD_LAST_READ_AT = sql.raw(`"core"."assistant_threads"."last_read_at"`);
+
 const pendingApprovalsSql = sql<number>`(
-  select count(*)::int from ${assistantActions}
-  where ${assistantActions.threadId} = ${assistantThreads.id} and ${assistantActions.status} = 'proposed'
+  select count(*)::int from ${assistantActions} as pending_actions
+  where pending_actions.thread_id = ${THREAD_ID} and pending_actions.status = 'proposed'
 )`;
 
 /**
@@ -38,11 +43,11 @@ const pendingApprovalsSql = sql<number>`(
  * as read.
  */
 const unreadSql = sql<boolean>`(
-  ${assistantThreads.lastReadAt} is not null and exists (
-    select 1 from ${assistantMessages}
-    where ${assistantMessages.threadId} = ${assistantThreads.id}
-      and ${assistantMessages.role} = 'assistant'
-      and ${assistantMessages.createdAt} > ${assistantThreads.lastReadAt}
+  ${THREAD_LAST_READ_AT} is not null and exists (
+    select 1 from ${assistantMessages} as unread_messages
+    where unread_messages.thread_id = ${THREAD_ID}
+      and unread_messages.role = 'assistant'
+      and unread_messages.created_at > ${THREAD_LAST_READ_AT}
   )
 )`;
 

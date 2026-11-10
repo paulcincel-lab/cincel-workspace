@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, Suspense, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -202,13 +202,11 @@ function NextTasksCard({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { create } = useQuickAddCreate();
-  const [pending, setPending] = useState<CreatedTask[]>([]);
+  // Rows created here, tied to the Tareas rows they were added to: a refetch of the
+  // rows replaces them (the list trims back to five).
+  const [created, setCreated] = useState<{ tasks: TaskListRow[]; rows: CreatedTask[] }>(() => ({ tasks, rows: [] }));
+  const pending = created.tasks === tasks ? created.rows : [];
   const [createdIds, setCreatedIds] = useState<ReadonlySet<string>>(() => new Set());
-
-  // A refetch of the Tareas rows replaces the local rows (the list trims back to five).
-  useEffect(() => {
-    setPending([]);
-  }, [tasks]);
 
   const next = useMemo(() => nextTasks(tasks, data.today, RESUMEN_ESENCIAL_NEXT_TASKS), [tasks, data.today]);
   const listed = new Set(next.map((t) => t.id));
@@ -216,11 +214,14 @@ function NextTasksCard({
   const currentKey = data.project.currentWorkflow?.key ?? null;
 
   async function onCreate(draft: QuickAddDraft) {
-    const created = await create(draft);
+    const row = await create(draft);
     const tramoKey = data.tramoCatalog.find((t) => t.id === draft.tramoId)?.key ?? currentKey;
-    setPending((rows) => [{ id: created.id, title: created.title, tramoKey }, ...rows]);
-    setCreatedIds((ids) => new Set(ids).add(created.id));
-    return created;
+    setCreated((prev) => ({
+      tasks,
+      rows: [{ id: row.id, title: row.title, tramoKey }, ...(prev.tasks === tasks ? prev.rows : [])],
+    }));
+    setCreatedIds((ids) => new Set(ids).add(row.id));
+    return row;
   }
 
   const dot = (key: string | null) => (

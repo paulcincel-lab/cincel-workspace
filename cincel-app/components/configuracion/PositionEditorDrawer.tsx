@@ -142,6 +142,8 @@ function PositionEditorForm({
   return (
     <form
       id={formId}
+      // The capacity range shows its own message instead of the browser's.
+      noValidate
       className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault();

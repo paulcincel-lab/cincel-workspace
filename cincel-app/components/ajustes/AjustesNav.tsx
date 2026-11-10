@@ -169,7 +169,7 @@ export function AjustesNav({ active, isAdmin, segments }: AjustesNavProps) {
   return (
     <>
       <AjustesNavSelect active={active} organization={organization} />
-      <nav aria-label="Secciones de ajustes" className="hidden w-[220px] flex-col gap-[18px] md:flex">
+      <nav aria-label="Secciones de ajustes" className="hidden md:flex w-[220px] flex-col gap-[18px]">
         <div className="flex flex-col gap-0.5">
           <h2 id={personalId} className={GROUP_LABEL_CLASS}>
             {PERSONAL_GROUP_LABEL}

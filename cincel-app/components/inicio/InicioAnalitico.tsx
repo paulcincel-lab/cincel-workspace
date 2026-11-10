@@ -235,7 +235,7 @@ function Bar({ pct, color, width, label }: { pct: number; color: string; width: 
 }
 
 function metric(key: string, label: string, value: number | string, tone?: "destructive") {
-  return { key, label, value: String(value), ...(tone ? { tone } : {}) };
+  return { key, label, value: String(value), labelFirst: true, ...(tone ? { tone } : {}) };
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
@@ -436,11 +436,8 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
             </span>
           );
         }
-        return row.href ? (
-          <Link href={row.href} title={row.nombre} className={`${LONG_TEXT} underline decoration-border underline-offset-[3px]`}>
-            {row.nombre}
-          </Link>
-        ) : (
+        // The task link comes from `rowHref` (GroupedTable wraps the first cell).
+        return (
           <span title={row.nombre} className={LONG_TEXT}>
             {row.nombre}
           </span>
@@ -699,6 +696,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
 
       <div className="min-w-0">
         <GroupedTable<AttentionRow>
+          toggleAll={false}
           label="Atención"
           columns={ATTENTION_COLUMNS}
           heat={ATTENTION_HEAT}
@@ -740,6 +738,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
 
       <div className="min-w-0">
         <GroupedTable<PaceRow>
+          toggleAll={false}
           label="Ritmo semanal"
           columns={PACE_COLUMNS}
           heat={PACE_HEAT}
@@ -786,6 +785,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
       {showWorkload ? (
         <div className="min-w-0">
           <GroupedTable<WorkloadRow>
+            toggleAll={false}
             label="Carga por persona"
             columns={WORKLOAD_COLUMNS}
             heat={[SHARE_HEAT_RULE]}
@@ -824,6 +824,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
 
       <div className="min-w-0">
         <GroupedTable<TramoRow>
+          toggleAll={false}
           label="Tareas abiertas por tramo"
           columns={TRAMO_COLUMNS}
           heat={[SHARE_HEAT_RULE]}
@@ -857,6 +858,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
 
       <div className="min-w-0">
         <GroupedTable<AgendaRow>
+          toggleAll={false}
           label="Agenda de hoy"
           columns={AGENDA_COLUMNS}
           groups={[

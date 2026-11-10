@@ -25,7 +25,8 @@ const { ME } = vi.hoisted(() => ({ ME: "11111111-1111-4111-8111-111111111111" })
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({ member: { id: ME, name: "Ana" }, access: "Colaborador" }),
 }));
-vi.mock("@/lib/auth/permissions", () => ({
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: true }),
 }));
 vi.mock("@/lib/actions/page-data/tareas-actions", () => ({

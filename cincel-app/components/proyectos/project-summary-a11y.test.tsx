@@ -24,7 +24,8 @@ vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({ createUserTaskAction: vi.fn() }));
 // The Visual quick-add (#984): created tasks come back through the task list.
-vi.mock("@/components/tareas/quick-add-create", () => ({
+vi.mock("@/components/tareas/quick-add-create", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/tareas/quick-add-create")>()),
   useQuickAddCreate: () => ({ create: vi.fn(async () => ({ id: "t-new", title: "Nueva" })), undo: vi.fn() }),
 }));
 vi.mock("@/lib/stores/quick-add-store", () => ({

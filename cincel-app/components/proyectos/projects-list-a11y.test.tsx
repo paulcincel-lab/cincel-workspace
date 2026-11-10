@@ -286,7 +286,11 @@ describe("Proyectos list accessibility · Analítico (#994)", () => {
         const page = compositeOver(requireColor(tokens.background![mode]), canvas);
         const card = compositeOver(requireColor(tokens.card![mode]), page);
         for (const { fg, tint } of HEAT_PAIRS) {
-          const bg = compositeOver(mixOklab(requireColor(tokens[tint]![mode]), card, TINT_PERCENT[mode]), card);
+          // Heat cells paint `bg-tint-<tone>`: the theme's tint token, else the tone mixed into the card.
+          const tintToken = tokens[`tint-${tint}`];
+          const bg = tintToken
+            ? compositeOver(requireColor(tintToken[mode]), card)
+            : compositeOver(mixOklab(requireColor(tokens[tint]![mode]), card, TINT_PERCENT[mode]), card);
           // `destructive-ink` falls back to `destructive` where a theme has no ink of its own.
           const ink = tokens[fg] ?? tokens[tint]!;
           const ratio = contrastRatio(compositeOver(requireColor(ink[mode]), bg), bg);
@@ -350,6 +354,7 @@ describe("Proyectos list accessibility · Visual (#992)", () => {
       expect(card.tagName).toBe("A");
       expect(card.getAttribute("tabindex")).toBeNull();
     }
-    expect(board.querySelectorAll("[tabindex]:not([tabindex='-1'])")).toHaveLength(0);
+    // No positive tabindex reorders the board (Base UI buttons carry an explicit tabindex="0").
+    expect(board.querySelectorAll("[tabindex]:not([tabindex='-1']):not([tabindex='0'])")).toHaveLength(0);
   });
 });

@@ -396,6 +396,15 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     idSql: "c.id",
     owner: null,
   },
+  // Biblioteca documents filed under a batch project (Biblioteca Analítico):
+  // people filed them in Cincel, so every one blocks.
+  {
+    table: "resource_links",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
   // Into espacios the import created: a task outside the batch in one blocks.
   {
     table: "tasks",

@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ChevronDown, Download, Lock, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type Ref } from "react";
+import { useMemo, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 
 import { ChecklistCard } from "@/components/mi-espacio/ChecklistCard";
 import { Inbox } from "@/components/mi-espacio/Inbox";
@@ -271,7 +271,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   const search = searchParams?.toString() ?? "";
   const q = fold(filters.q.trim());
   const now = new Date();
-  const today = localDate(now);
+  const today = useMemo(() => localDate(new Date()), []);
 
   const user = useSessionStore(selectAuthenticatedUser);
   const viewerId = user?.member.id ?? null;
@@ -370,7 +370,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   // ── Sections, groups and the URL ──
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>(ALL_OPEN);
   const [closedTramos, setClosedTramos] = useState<ReadonlySet<string>>(() => new Set());
-  const headings = useRef(new Map<SectionKey, HTMLButtonElement>());
   const projectIds = groups.map((g) => g.id);
   const openProjects = filters.abiertos === null ? projectIds : projectIds.filter((id) => filters.abiertos!.includes(id));
   const expanded = [
@@ -381,12 +380,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     SECTIONS.every((key) => openSections[key]) && openProjects.length === projectIds.length && closedTramos.size === 0;
 
   const setParam = (key: string, value: string | null) => replaceMiEspacioParam(key, value);
-
-  /** Callback ref that keeps each section's heading button, for "Ir a". */
-  const headingRef = (key: SectionKey) => (el: HTMLButtonElement | null) => {
-    if (el) headings.current.set(key, el);
-    else headings.current.delete(key);
-  };
 
   function onExpandedChange(ids: string[]) {
     const next = new Set(ids);
@@ -406,7 +399,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   function goTo(event: MouseEvent<HTMLAnchorElement>, key: SectionKey) {
     event.preventDefault();
     setOpenSections((s) => ({ ...s, [key]: true }));
-    const heading = headings.current.get(key);
+    const heading = document.getElementById(`s-${key}-titulo`);
     document.getElementById(`s-${key}`)?.scrollIntoView?.({ block: "start" });
     heading?.focus();
   }
@@ -611,7 +604,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
         title="Mis tareas"
         open={openSections.tareas}
         onToggle={() => setOpenSections((s) => ({ ...s, tareas: !s.tareas }))}
-        headingRef={headingRef("tareas")}
         meta={`${shown.open} ${shown.open === 1 ? "abierta" : "abiertas"} · ${shown.projects} ${shown.projects === 1 ? "proyecto" : "proyectos"}`}
         right={
           <>
@@ -670,7 +662,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
           title="Horas de la semana"
           open={openSections.horas}
           onToggle={() => setOpenSections((s) => ({ ...s, horas: !s.horas }))}
-          headingRef={headingRef("horas")}
           meta={tracking && shownWeek.data ? `${weekRangeText(shownMonday)} · meta ${hoursText(shownWeek.data.target)} h` : undefined}
           right={
             tracking && shownWeek.data ? (
@@ -701,7 +692,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
             title="Bandeja por tipo"
             open={openSections.bandeja}
             onToggle={() => setOpenSections((s) => ({ ...s, bandeja: !s.bandeja }))}
-            headingRef={headingRef("bandeja")}
             right={
               summaryQuery.data ? (
                 <span className="text-[12.5px]">
@@ -736,7 +726,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
           title="Checklists"
           open={openSections.checklists}
           onToggle={() => setOpenSections((s) => ({ ...s, checklists: !s.checklists }))}
-          headingRef={headingRef("checklists")}
           meta={`${checklists.length} ${checklists.length === 1 ? "activo" : "activos"}`}
           right={
             <span className="text-[12.5px]">
@@ -870,7 +859,6 @@ function SectionCard({
   right,
   open,
   onToggle,
-  headingRef,
   className,
   children,
 }: {
@@ -880,7 +868,6 @@ function SectionCard({
   right?: ReactNode;
   open: boolean;
   onToggle(): void;
-  headingRef: Ref<HTMLButtonElement>;
   className?: string;
   children: ReactNode;
 }) {
@@ -893,7 +880,6 @@ function SectionCard({
     >
       <h2 className="m-0">
         <button
-          ref={headingRef}
           id={`s-${id}-titulo`}
           type="button"
           aria-expanded={open}

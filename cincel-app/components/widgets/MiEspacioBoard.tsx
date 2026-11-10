@@ -931,13 +931,15 @@ function EmptyChecklist({ headingId }: { headingId: string }) {
 
 // ── Bandeja ──────────────────────────────────────────────────────────────────
 
-const KIND_TILE: Partial<Record<NotificationKind, { icon: LucideIcon; className: string; tint?: string }>> = {
+type KindTile = { icon: LucideIcon; className: string; tint?: string };
+
+const KIND_TILE: Partial<Record<NotificationKind, KindTile>> = {
   mencion: { icon: AtSign, className: "bg-secondary text-secondary-foreground" },
   asignacion: { icon: UserPlus, className: `${TINT_14} text-(--chart-2-ink)`, tint: "chart-2" },
   recordatorio: { icon: Bell, className: `${TINT_14} text-(--chart-3-ink)`, tint: "chart-3" },
   vencimiento: { icon: CalendarClock, className: `${TINT_14} text-(--chart-3-ink)`, tint: "chart-3" },
 };
-const OTHER_TILE = { icon: Info, className: "bg-muted text-muted-foreground" };
+const OTHER_TILE: KindTile = { icon: Info, className: "bg-muted text-muted-foreground" };
 
 function BandejaPanel({
   now,
@@ -1017,7 +1019,7 @@ function BandejaRow({ item, now, onOpen }: { item: NotificationItem; now: Date; 
       <span
         aria-hidden="true"
         className={`flex size-[34px] shrink-0 items-center justify-center rounded-md ${tile.className}`}
-        style={"tint" in tile && tile.tint ? tint(tile.tint) : undefined}
+        style={tile.tint ? tint(tile.tint) : undefined}
       >
         <Icon className="size-4" />
       </span>

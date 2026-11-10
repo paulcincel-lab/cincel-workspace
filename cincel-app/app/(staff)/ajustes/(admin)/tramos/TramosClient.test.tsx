@@ -219,8 +219,12 @@ describe("TramosClient", () => {
 
   it("inline add creates on Enter and flashes the row", async () => {
     const created = { ...PRESALE, id: "w-deco", key: "decoracion", name: "Decoración", sortOrder: 3, autoStart: "manual" as const };
-    actions.createWorkflowAction.mockResolvedValue(created);
     renderTramos();
+    // The refetch after the create reads the new tramo too.
+    actions.createWorkflowAction.mockImplementation(async () => {
+      pageData.getAjustesTramosPageData.mockResolvedValue(pageOf([PRESALE, DISENO, { ...created, phases: [], templates: [], readiness: null }]));
+      return created;
+    });
 
     const input = screen.getByLabelText("Agregar tramo");
     fireEvent.change(input, { target: { value: "Decoración" } });

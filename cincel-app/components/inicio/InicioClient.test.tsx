@@ -19,6 +19,13 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/inicio",
   useSearchParams: () => new URLSearchParams(),
 }));
+// The charts load on demand behind Suspense, which renderToString can't wait for; their box stands in.
+vi.mock("@/components/widgets/charts/lazy", () => ({
+  LazyAreaSeriesChart: () => <div data-slot="chart-placeholder" />,
+  LazyDonutChart: () => <div data-slot="chart-placeholder" />,
+  loadAreaSeriesChart: async () => ({}),
+  loadDonutChart: async () => ({}),
+}));
 vi.mock("@/lib/actions/preferences-actions", () => ({
   fetchMyPreferencesAction: vi.fn(),
   updateMyPreferencesAction: vi.fn(async () => ({ preferences: {}, appearance: {} })),
@@ -35,12 +42,22 @@ import type { InicioData, PresentationStyle } from "@/lib/types/redesign";
 import type { MyProfile } from "@/lib/types/shell";
 
 import { InicioClient } from "./InicioClient";
-import { ADMIN_TASK_TITLE, INICIO_ADMIN, INICIO_EMPTY, INICIO_NON_ADMIN, KPI_VALUES, VENCIDAS_HREF } from "./inicio-fixtures";
+import { ADMIN_TASK_TITLE, INICIO_ADMIN, INICIO_EMPTY, INICIO_NON_ADMIN, KPI_VALUES } from "./inicio-fixtures";
 import { weekLabel } from "./WeeklyPaceChart";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
-/** The styles that render the shared widget layout (Visual is `InicioVisual`, tested in InicioVisual.test.tsx). */
-const SHARED_STYLES: PresentationStyle[] = ["esencial", "analitico"];
+/** Each style's section titles (frames Inicio-Visual, Inicio-Esencial, Inicio-Analitico). */
+const SECTION_TITLES: Record<PresentationStyle, string[]> = {
+  visual: ["Ritmo semanal", "Tareas por tramo", "Requiere atención", "Agenda de hoy", "Proyectos en curso"],
+  esencial: ["Lo que vence esta semana", "Requiere atención", "Ritmo semanal", "Avance de proyectos"],
+  analitico: ["Atención", "Ritmo semanal", "Carga por persona", "Tareas abiertas por tramo", "Agenda de hoy"],
+};
+/** Each style's empty copy with no data. */
+const EMPTY_COPY: Record<PresentationStyle, string[]> = {
+  visual: ["Todo al día", "No hay tareas abiertas.", "Sin eventos hoy", "No hay proyectos activos", "Sin tareas creadas ni completadas."],
+  esencial: ["Nada vence esta semana", "Todo al día", "Sin movimiento en las últimas semanas", "No hay proyectos activos"],
+  analitico: ["Todo al día", "Sin movimiento en el rango", "Sin tareas asignadas", "Sin tareas abiertas", "Sin eventos ni entregas hoy"],
+};
 // 09:00 on Friday 6 November 2026 in Mexico City.
 const NOW = "2026-11-06T15:00:00Z";
 
@@ -112,36 +129,31 @@ describe("InicioClient query", () => {
     expect(screen.getByText("Nadie puede entrar con Google todavía")).toBeTruthy();
   });
 
-  it("reads the photo from me.profile and follows its updates", async () => {
-    const { client } = renderInicio("analitico", INICIO_NON_ADMIN, {
-      profile: { ...PROFILE, photoUrl: "/api/staff/s-1/photo?v=1" },
-    });
-    expect(screen.getByRole("button", { name: "Cambiar foto de perfil" })).toBeTruthy();
-    await act(async () => {
-      client.setQueryData<MyProfile>(qk.me.profile(), { ...PROFILE, photoUrl: null });
-    });
-    // Query observers are notified on the next tick.
-    expect(await screen.findByRole("button", { name: "Subir foto de perfil" })).toBeTruthy();
+  it.each(STYLES)("renders %s before the shell seeds me.profile", (style) => {
+    actions.fetchMyProfileAction.mockReturnValue(new Promise(() => {}));
+    const client = createTestQueryClient();
+    client.setQueryData(qk.inicio(), pageData(INICIO_NON_ADMIN));
+    renderWithQueryClient(ui(style), { client });
+    expect(screen.getByRole("heading", { level: 1, name: "Buenos días, Ana" })).toBeTruthy();
   });
 });
 
 describe("InicioClient header block", () => {
-  it("greets by hour and shows the role and the lowercase es-MX date line", () => {
-    renderInicio("analitico");
+  it.each(STYLES)("greets by hour with the es-MX date in the %s description", (style) => {
+    renderInicio(style);
     expect(screen.getByRole("heading", { level: 1, name: "Buenos días, Ana" })).toBeTruthy();
-    expect(screen.getByText("Arquitecta de proyecto")).toBeTruthy();
-    expect(screen.getByText(`viernes, 6 de noviembre · 2 eventos hoy · ${KPI_VALUES.vencidas} tareas vencidas`)).toBeTruthy();
+    expect(screen.getByText(/^Viernes 6 de noviembre · /)).toBeTruthy();
+  });
+
+  it("follows the range in the Analítico description", () => {
+    useInicioDashboard.setState({ range: "4w" });
+    renderInicio("analitico");
+    expect(screen.getByText("Viernes 6 de noviembre · resumen operativo de las últimas 4 semanas.")).toBeTruthy();
   });
 
   it("links Nueva tarea to the new-task dialog of Tareas", () => {
     renderInicio("visual");
     expect(screen.getByRole("link", { name: "Nueva tarea" }).getAttribute("href")).toBe("/tareas?nueva=1");
-  });
-
-  it("shows the initials when there is no photo", () => {
-    renderInicio("analitico");
-    expect(screen.getByText("AL")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Subir foto de perfil" })).toBeTruthy();
   });
 
   it("renders the Estilo switch, reachable by keyboard", () => {
@@ -157,15 +169,13 @@ describe("InicioClient header block", () => {
 });
 
 describe("InicioClient KPIs across styles", () => {
-  const shared = [KPI_VALUES.proyectos_activos, KPI_VALUES.vencidas, KPI_VALUES.bloqueadas, KPI_VALUES.revisiones_7d];
-
-  it.each(SHARED_STYLES)("renders the same KPI numbers in %s", (style) => {
-    renderInicio(style);
-    for (const value of shared) {
+  it("renders the Analítico KPI strip from the page KPIs", () => {
+    renderInicio("analitico");
+    for (const value of [KPI_VALUES.proyectos_activos, KPI_VALUES.vencidas]) {
       expect(screen.getAllByText(String(value)).length).toBeGreaterThan(0);
     }
-    for (const label of ["Proyectos activos", "Vencidas", "Bloqueadas", "Revisiones · 7 días"]) {
-      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    for (const label of ["Proyectos activos", "Vencidas"]) {
+      expect(screen.getAllByText(new RegExp(`^${label}$`, "i")).length).toBeGreaterThan(0);
     }
   });
 
@@ -181,9 +191,9 @@ describe("InicioClient KPIs across styles", () => {
 });
 
 describe("InicioClient sections", () => {
-  it.each(SHARED_STYLES)("titles every widget in %s", (style) => {
+  it.each(STYLES)("titles every section of %s", (style) => {
     renderInicio(style);
-    for (const title of ["Tareas abiertas por tramo", "Requiere atención", "Mi día", "Avance de proyectos activos", "Carga por persona"]) {
+    for (const title of SECTION_TITLES[style]) {
       expect(screen.getAllByText(title).length).toBeGreaterThan(0);
     }
   });
@@ -203,26 +213,21 @@ describe("InicioClient sections", () => {
 });
 
 describe("InicioClient empty states", () => {
-  it.each(SHARED_STYLES)("gives every widget an empty state in %s", (style) => {
+  it.each(STYLES)("gives every section an empty state in %s", (style) => {
     renderInicio(style, INICIO_EMPTY);
-    expect(screen.getByText("Nada requiere atención hoy")).toBeTruthy();
-    expect(screen.getByText("Aún no hay proyectos activos")).toBeTruthy();
-    expect(screen.getByText("No hay tareas abiertas.")).toBeTruthy();
-    expect(screen.getByText("Nadie tiene tareas abiertas.")).toBeTruthy();
-    expect(screen.getByText("Sin revisiones en los próximos 7 días")).toBeTruthy();
-    if (style !== "esencial") {
-      expect(screen.getByText("Sin tareas creadas ni completadas en las últimas 8 semanas.")).toBeTruthy();
+    for (const copy of EMPTY_COPY[style]) {
+      expect(screen.getAllByText(copy).length).toBeGreaterThan(0);
     }
   });
 
-  it("counts zero events and zero overdue tasks in the date line", () => {
-    renderInicio("analitico", INICIO_EMPTY);
-    expect(screen.getByText("viernes, 6 de noviembre · 0 eventos hoy · 0 tareas vencidas")).toBeTruthy();
+  it("says nothing needs attention in the Esencial description", () => {
+    renderInicio("esencial", INICIO_EMPTY);
+    expect(screen.getByText("Viernes 6 de noviembre · nada necesita tu atención hoy.")).toBeTruthy();
   });
 
-  it("offers Nuevo proyecto when there are no projects", () => {
-    renderInicio("analitico", INICIO_EMPTY);
-    expect(screen.getByRole("link", { name: "Nuevo proyecto" }).getAttribute("href")).toBe("/proyectos");
+  it.each(STYLES)("keeps Nueva tarea in the %s header with no data", (style) => {
+    renderInicio(style, INICIO_EMPTY);
+    expect(screen.getAllByRole("link", { name: "Nueva tarea" }).length).toBeGreaterThan(0);
   });
 });
 
@@ -242,69 +247,45 @@ describe("InicioClient visibility (B8)", () => {
 });
 
 // ── Dashboard interactions (useInicioDashboard, zustand.md §2.5) ────────────
+// Each style's own controls are covered in InicioVisual / InicioEsencial /
+// InicioAnalitico tests; these check that the shared store reaches the layouts.
 
-/** The widget card titled `title`. */
+/** The section titled `title`. */
 const region = (title: string) => screen.getByRole("region", { name: title });
 
-/** Body rows (rows with data cells) of the table inside a card. */
-const dataRows = (title: string) =>
-  within(region(title))
-    .getAllByRole("row")
-    .filter((row) => within(row).queryAllByRole("cell").length > 0);
+/** Body rows of the table inside a section (no header, no tfoot). */
+const dataRows = (title: string) => [...region(title).querySelectorAll("tbody tr")];
 
 const ATTENTION_TITLE = INICIO_NON_ADMIN.attention[0].title;
 const PACE = INICIO_NON_ADMIN.weeklyPace;
 
-describe("InicioClient KPI selection", () => {
-  it("makes the KPIs toggle buttons; the same KPI again clears the selection", () => {
+describe("InicioClient Visual links", () => {
+  it("sends Ver vencidas to the overdue tasks", () => {
     renderInicio("visual");
-    const tile = screen.getByRole("button", { name: "Vencidas" });
-    expect(tile.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(tile);
-    expect(screen.getByRole("button", { name: "Vencidas" }).getAttribute("aria-pressed")).toBe("true");
-    expect(useInicioDashboard.getState().selectedKpi).toBe("vencidas");
-    fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
-    expect(screen.getByRole("button", { name: "Vencidas" }).getAttribute("aria-pressed")).toBe("false");
-    expect(useInicioDashboard.getState().selectedKpi).toBeNull();
-  });
-
-  it("keeps the selected KPI's destination reachable as a link", () => {
-    renderInicio("visual");
-    expect(screen.queryByRole("link", { name: /^Ver vencidas/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
-    expect(screen.getByRole("link", { name: /^Ver vencidas/ }).getAttribute("href")).toBe(VENCIDAS_HREF);
-  });
-
-  it("shows no selection for a KPI that is not in the data", () => {
-    useInicioDashboard.setState({ selectedKpi: "vencidas" });
-    renderInicio("visual", INICIO_EMPTY);
-    expect(screen.queryByRole("link", { name: /^Ver / })).toBeNull();
+    const links = screen.getAllByRole("link", { name: "Ver vencidas" });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) expect(link.getAttribute("href")).toBe("/tareas?mostrar=en_retraso");
   });
 });
 
-/** The classic pace card's table (Visual with the table picked). */
-const seedPaceTable = () => useInicioDashboard.setState({ views: { visual: { weeklyPace: "table" } } });
-
-describe("InicioClient range (Ritmo semanal)", () => {
-  it("offers 4 / 8 / 12 semanas with 8 pressed by default", () => {
-    seedPaceTable();
-    renderInicio("visual");
-    const group = within(region("Ritmo semanal")).getByRole("group", { name: "Rango" });
-    const pressed = within(group)
-      .getAllByRole("button")
-      .map((b) => [b.getAttribute("aria-label"), b.getAttribute("aria-pressed")]);
-    expect(pressed).toEqual([
-      ["4 semanas", "false"],
-      ["8 semanas", "true"],
-      ["12 semanas", "false"],
+describe("InicioClient range (Analítico Ritmo semanal)", () => {
+  it("offers 4 / 8 / 12 sem with 8 selected by default", () => {
+    renderInicio("analitico");
+    const group = screen.getByRole("radiogroup", { name: "Rango" });
+    const checked = within(group)
+      .getAllByRole("radio")
+      .map((r) => [r.textContent?.trim(), r.getAttribute("aria-checked")]);
+    expect(checked).toEqual([
+      ["4 sem", "false"],
+      ["8 sem", "true"],
+      ["12 sem", "false"],
     ]);
-    expect(dataRows("Ritmo semanal")).toHaveLength(8);
+    expect(dataRows("Ritmo semanal")).toHaveLength(Math.min(8, PACE.length));
   });
 
   it("shows exactly the selected weeks in the pace table (seeded 4 weeks)", () => {
-    seedPaceTable();
     useInicioDashboard.setState({ range: "4w" });
-    renderInicio("visual");
+    renderInicio("analitico");
     const rows = dataRows("Ritmo semanal");
     expect(rows).toHaveLength(4);
     expect(rows[0].textContent).toContain(weekLabel(PACE[PACE.length - 4].weekStart));
@@ -312,49 +293,26 @@ describe("InicioClient range (Ritmo semanal)", () => {
   });
 
   it("switches to 12 weeks from the control", () => {
-    seedPaceTable();
-    renderInicio("visual");
-    fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: "12 semanas" }));
+    renderInicio("analitico");
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Rango" })).getByRole("radio", { name: /12 sem/ }));
     expect(useInicioDashboard.getState().range).toBe("12w");
-    expect(dataRows("Ritmo semanal")).toHaveLength(12);
+    expect(dataRows("Ritmo semanal")).toHaveLength(Math.min(12, PACE.length));
   });
 });
 
-describe("InicioClient series toggles (Ritmo semanal)", () => {
-  it("drops a hidden series from the table and keeps the other", () => {
-    seedPaceTable();
-    useInicioDashboard.setState({ hiddenSeries: { weeklyPace: ["created"] } });
-    renderInicio("visual");
-    const card = within(region("Ritmo semanal"));
-    expect(card.queryByRole("columnheader", { name: "Creadas" })).toBeNull();
-    expect(card.getByRole("columnheader", { name: "Completadas" })).toBeTruthy();
-  });
-
-  it("toggles a series from the legend and never hides the last one", () => {
-    renderInicio("visual");
-    const series = within(region("Ritmo semanal")).getByRole("group", { name: "Series" });
-    fireEvent.click(within(series).getByRole("button", { name: /Creadas/ }));
-    expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
-    fireEvent.click(within(series).getByRole("button", { name: /Completadas/ }));
-    expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
-  });
-});
-
-describe("InicioClient collapse", () => {
-  it.each(SHARED_STYLES)("gives every widget card a collapse toggle in %s", (style) => {
-    renderInicio(style);
-    const titles = ["Tareas abiertas por tramo", "Requiere atención", "Mi día", "Avance de proyectos activos", "Carga por persona"];
-    if (style !== "esencial") titles.push("Ritmo semanal");
-    for (const title of titles) {
-      const toggle = within(region(title)).getByRole("button", { name: "Contraer" });
-      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+describe("InicioClient collapse (Analítico)", () => {
+  it("gives every section a collapse toggle", () => {
+    renderInicio("analitico");
+    for (const title of SECTION_TITLES.analitico) {
+      const toggle = region(title).querySelector("button[aria-expanded]");
+      expect(toggle?.getAttribute("aria-expanded")).toBe("true");
     }
   });
 
-  it("does not render a collapsed card's body (seeded) and expands it again", () => {
+  it("does not render a collapsed section's body (seeded) and expands it again", () => {
     useInicioDashboard.setState({ collapsed: { attention: true } });
     renderInicio("analitico");
-    const toggle = within(region("Requiere atención")).getByRole("button", { name: "Expandir" });
+    const toggle = region("Atención").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText(ATTENTION_TITLE)).toBeNull();
     fireEvent.click(toggle);
@@ -362,50 +320,20 @@ describe("InicioClient collapse", () => {
     expect(useInicioDashboard.getState().collapsed.attention).toBe(false);
   });
 
-  it("collapses an empty widget card too", () => {
+  it("collapses an empty section too", () => {
     useInicioDashboard.setState({ collapsed: { workload: true } });
     renderInicio("analitico", INICIO_EMPTY);
-    expect(within(region("Carga por persona")).getByRole("button", { name: "Expandir" })).toBeTruthy();
-    expect(screen.queryByText("Nadie tiene tareas abiertas.")).toBeNull();
-  });
-});
-
-describe("InicioClient chart / table per style", () => {
-  const TRAMO = "Tareas abiertas por tramo";
-
-  it("renders each style's default without a pick", () => {
-    renderInicio("esencial");
-    expect(within(region(TRAMO)).queryAllByRole("columnheader")).toHaveLength(0);
-  });
-
-  it("keeps a table pick in Esencial out of Analítico", () => {
-    renderInicio("esencial");
-    fireEvent.click(within(region(TRAMO)).getByRole("button", { name: "Ver como tabla" }));
-    expect(useInicioDashboard.getState().views).toEqual({ esencial: { tramoDonut: "table" } });
-    expect(within(region(TRAMO)).getAllByRole("columnheader").length).toBeGreaterThan(0);
-    cleanup();
-
-    renderInicio("analitico");
-    expect(
-      within(region(TRAMO)).getByRole("button", { name: "Ver como tabla" }).getAttribute("aria-pressed"),
-    ).toBe("true");
-  });
-
-  it("shows the Analítico workload table in Esencial when picked there (seeded)", () => {
-    useInicioDashboard.setState({ views: { esencial: { workload: "table" } } });
-    renderInicio("esencial");
-    expect(within(region("Carga por persona")).getAllByRole("columnheader").length).toBeGreaterThan(0);
+    expect(region("Carga por persona").querySelector("button[aria-expanded]")?.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Sin tareas asignadas")).toBeNull();
   });
 });
 
 describe("InicioClient dashboard state stays on the client", () => {
   it("calls no server action when the controls change", () => {
-    renderInicio("visual");
-    fireEvent.click(screen.getByRole("button", { name: "Vencidas" }));
-    fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: "4 semanas" }));
-    fireEvent.click(within(region("Ritmo semanal")).getByRole("button", { name: /Creadas/ }));
-    fireEvent.click(within(region("Mi día")).getByRole("button", { name: "Contraer" }));
-    fireEvent.click(within(region("Carga por persona")).getByRole("button", { name: "Ver como gráfica" }));
+    renderInicio("analitico");
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Rango" })).getByRole("radio", { name: /4 sem/ }));
+    fireEvent.click(region("Agenda de hoy").querySelector<HTMLButtonElement>("button[aria-expanded]")!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Contraer todo" })[0]);
     expect(actions.getInicioPageData).not.toHaveBeenCalled();
     expect(actions.fetchMyProfileAction).not.toHaveBeenCalled();
   });
@@ -430,7 +358,7 @@ describe("InicioClient SSR and persisted choices", () => {
     const client = createTestQueryClient();
     client.setQueryData(qk.inicio(), pageData(INICIO_NON_ADMIN));
     client.setQueryData(qk.me.profile(), PROFILE);
-    const tree = <QueryClientProvider client={client}>{ui("visual")}</QueryClientProvider>;
+    const tree = <QueryClientProvider client={client}>{ui("analitico")}</QueryClientProvider>;
 
     const html = renderToString(tree);
     const container = document.createElement("div");
@@ -447,7 +375,7 @@ describe("InicioClient SSR and persisted choices", () => {
     consoleError.mockRestore();
 
     // First client render = server render = defaults.
-    expect(container.textContent).toContain(ATTENTION_TITLE);
+    expect(container.textContent).toContain("resumen operativo de las últimas 8 semanas.");
     expect(useInicioDashboard.getState().range).toBe("8w");
 
     // What `<UiStoresHydrator/>` does after mount.
@@ -455,7 +383,8 @@ describe("InicioClient SSR and persisted choices", () => {
       await useInicioDashboard.persist.rehydrate();
     });
     expect(useInicioDashboard.getState().range).toBe("4w");
-    expect(container.textContent).not.toContain(ATTENTION_TITLE);
+    expect(container.textContent).toContain("resumen operativo de las últimas 4 semanas.");
+    expect(useInicioDashboard.getState().collapsed.attention).toBe(true);
     expect(useInicioDashboard.getState().hiddenSeries.weeklyPace).toEqual(["created"]);
   });
 });

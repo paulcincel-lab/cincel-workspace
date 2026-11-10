@@ -131,9 +131,9 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
       task(p.granted, 4),
       // Not counted: deleted, archived, or another project's.
       task(p.granted, 5, { deletedAt: new Date() }),
-      task(p.granted, 6, { archived: true, closedAt: new Date() }),
-      task(p.other, 7, { closedAt: new Date() }),
-      task(p.other, 8, { closedAt: new Date() }),
+      task(p.granted, 6, { archived: true, closedAt: new Date(), status: "completado" }),
+      task(p.other, 7, { closedAt: new Date(), status: "completado" }),
+      task(p.other, 8, { closedAt: new Date(), status: "completado" }),
     ]);
 
     // Team: the manager, one member and one soft-deleted member.

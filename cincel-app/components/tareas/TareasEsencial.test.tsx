@@ -26,7 +26,8 @@ vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({ member: { id: ME, name: "Ana Ruiz" }, access: "Colaborador" }),
 }));
 const caps = vi.hoisted(() => ({ canCreateActivity: true }));
-vi.mock("@/lib/auth/permissions", () => ({
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: caps.canCreateActivity }),
 }));
 

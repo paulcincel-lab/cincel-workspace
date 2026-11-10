@@ -150,13 +150,12 @@ export function StatusDonutCard({
   unit: string;
 }) {
   const c = DONUT_SIZE / 2;
-  let start = 0;
-  const arcs = segments.map((s) => {
+  const arcs = segments.reduce<((typeof segments)[number] & { share: number; start: number })[]>((out, s) => {
+    const previous = out[out.length - 1];
+    const start = previous ? previous.start + previous.share : 0;
     const share = total > 0 ? (s.value / total) * 100 : 0;
-    const arc = { ...s, share, start };
-    start += share;
-    return arc;
-  });
+    return [...out, { ...s, share, start }];
+  }, []);
   const imageLabel = `${title}: ${segments.map((s) => `${s.label} ${s.value}`).join(", ")}`;
 
   return (

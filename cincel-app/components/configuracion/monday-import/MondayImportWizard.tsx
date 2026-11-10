@@ -91,7 +91,7 @@ function useMinuteClock(): number {
 
 function DraftNote() {
   return (
-    <p role="note" className="rounded-[10px] border border-border bg-muted/50 px-3 py-2 text-[13px] text-muted-foreground">
+    <p role="note" className="rounded-[10px] border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
       {DRAFT_NOTE}
     </p>
   );
@@ -808,7 +808,7 @@ function MondayRunWizard({
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
             {mapping && !finished && DRAFT_STEPS.includes(step) ? (
-              <span role="status" className="inline-flex items-center gap-1 text-[13px] text-muted-foreground">
+              <span role="status" className="inline-flex items-center gap-1 text-sm text-muted-foreground">
                 {draftSaving ? (
                   "Guardando…"
                 ) : (

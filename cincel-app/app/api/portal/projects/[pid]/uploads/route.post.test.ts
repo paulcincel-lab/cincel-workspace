@@ -26,7 +26,7 @@ type Access = {
 
 const state = vi.hoisted(() => ({
   cookie: undefined as string | undefined,
-  user: null as null | { id: string; name: string; email: string; contactId: string },
+  user: null as null | { id: string; name: string; email: string; contactId: string; companyName: string | null },
   access: new Map<string, Access>(),
   afterTasks: [] as (() => unknown)[],
 }));

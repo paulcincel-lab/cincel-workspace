@@ -73,7 +73,8 @@ function ResumenVisual({ data }: ProjectSummaryContentProps) {
   const { data: tareas } = useSuspenseQuery(proyectoTareasOptions(projectId));
   const history = useInfiniteQuery(proyectoHistoryOptions(projectId));
   const user = useSessionStore(selectAuthenticatedUser);
-  const canCreate = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
+  // No signed-in user (not yet seeded) means no create permission.
+  const canCreate = useMemo(() => (user ? resolveActivitiesCapabilities(user).canCreateActivity : false), [user]);
   const { create } = useQuickAddCreate();
   const recentIds = useQuickAddRecent((state) => state.recent);
   const openNewTask = useNewTaskUi((state) => state.openNewTask);

@@ -68,7 +68,8 @@ describe("ProjectsEsencialLayout", () => {
     expect(screen.getByText("Al día")).toBeTruthy();
     expect(screen.getByText("Plano de acabados ·")).toBeTruthy();
     expect(container.querySelector("table")).toBeNull();
-    expect(container.querySelector("svg circle")).toBeNull();
+    // No chart: the only circles are in the icons.
+    expect(container.querySelector("svg:not(.lucide) circle")).toBeNull();
   });
 
   it("pill selection filters and Todos clears", () => {

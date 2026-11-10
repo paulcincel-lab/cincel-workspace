@@ -54,7 +54,7 @@ function recentDocuments(data: PortalOverviewData): RecentDoc[] | null {
   if (recent && recent.length > 0) {
     return recent.slice(0, 3).map((f) => ({ id: f.id, name: f.name, modifiedAt: f.modifiedAt }));
   }
-  if (data.documentos === null) return recent ? [] : null;
+  if (data.documentos === null) return null;
   return data.documentos.rows.slice(0, 3).map((row) => ({
     id: String(row.id),
     name: String(row.name),

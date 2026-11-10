@@ -341,7 +341,7 @@ export function workloadTable(output: unknown): StepTable | null {
 }
 
 /** Output tables per tool (the data panel); a tool without an entry gets a generic record table. */
-export const STEP_TABLES: Record<string, (output: unknown, input: unknown) => StepTable | null> = {
+export const STEP_TABLES: Partial<Record<string, (output: unknown, input: unknown) => StepTable | null>> = {
   list_activities_due: (output) => activitiesDueTable(output),
   team_workload_summary: (output) => workloadTable(output),
 };

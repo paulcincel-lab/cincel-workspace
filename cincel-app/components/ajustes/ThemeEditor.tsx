@@ -264,7 +264,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
 
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-[13px] font-medium text-sidebar-foreground">Modo que editas</span>
-            <SegmentedChoice
+            <SegmentedChoice<EditMode>
               label="Modo que editas"
               value={mode}
               options={EDIT_MODES.map((m) => ({ value: m, label: EDIT_MODE_LABELS[m] }))}

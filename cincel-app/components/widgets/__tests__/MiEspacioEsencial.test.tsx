@@ -20,7 +20,17 @@ import { seedSessionUser } from "@/tests/helpers/session-user";
 
 import type { QuickAddRowProps } from "@/components/widgets/QuickAddRow";
 
-const flags = vi.hoisted(() => ({}) as Record<string, boolean>);
+/** The flags on: the layout reads some (Bandeja, Gmail) once, when its module loads. */
+const FLAGS_ON = vi.hoisted(() => ({
+  fetchNotesAction: true,
+  createNoteAction: true,
+  fetchChecklistsAction: true,
+  toggleChecklistItemAction: true,
+  addChecklistItemAction: true,
+  fetchRemindersAction: true,
+  fetchNotificationsAction: true,
+}));
+const flags = vi.hoisted(() => ({ ...FLAGS_ON }) as Record<string, boolean>);
 vi.mock("@/lib/actions/my-space-actions.flags", () => ({ IMPLEMENTED: flags }));
 vi.mock("@/lib/actions/notifications-actions.flags", () => ({ IMPLEMENTED: flags }));
 vi.mock("@/lib/actions/gmail-actions.flags", () => ({ IMPLEMENTED: flags }));
@@ -231,15 +241,7 @@ function deferred<T>() {
 beforeEach(() => {
   vi.clearAllMocks();
   for (const key of Object.keys(flags)) delete flags[key];
-  Object.assign(flags, {
-    fetchNotesAction: true,
-    createNoteAction: true,
-    fetchChecklistsAction: true,
-    toggleChecklistItemAction: true,
-    addChecklistItemAction: true,
-    fetchRemindersAction: true,
-    fetchNotificationsAction: true,
-  });
+  Object.assign(flags, FLAGS_ON);
   caps.statusScope = "all";
   caps.canCreateActivity = true;
   caps.canDeleteActivity = true;
@@ -274,7 +276,7 @@ describe("MiEspacioEsencial", () => {
     renderEsencial();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Completar Revisar presupuesto" }));
-    expect(tasksActions.setTaskStatusAction).toHaveBeenCalledWith("t2", "completado");
+    await waitFor(() => expect(tasksActions.setTaskStatusAction).toHaveBeenCalledWith("t2", "completado"));
     await waitFor(() => expect(screen.queryByText("Revisar presupuesto")).toBeNull());
 
     await act(async () => {
@@ -331,7 +333,12 @@ describe("MiEspacioEsencial", () => {
     const created = task("t9", "Cotizar herrería");
     tasksActions.createUserTaskAction.mockResolvedValue({ ok: true, data: detail(created) });
     tasksActions.deleteTaskAction.mockResolvedValue({ ok: true, data: undefined });
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
+    // The create's refetch has the new task; the delete's refetch no longer does.
+    tasksActions.fetchMyOpenTasksAction.mockResolvedValue([...TASKS, created]);
+    tasksActions.deleteTaskAction.mockImplementation(async () => {
+      tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
+      return { ok: true, data: undefined };
+    });
     renderEsencial();
 
     const input = await screen.findByRole("textbox", { name: "Agregar tarea en Casa Lomas" });

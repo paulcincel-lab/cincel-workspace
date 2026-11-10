@@ -15,6 +15,7 @@ function step(overrides: Partial<ToolStep>): ToolStep {
     state: "done",
     label: "Buscó tareas",
     short: "Tareas vencidas del proyecto",
+    running: "Buscando tareas por vencer…",
     icon: ListIcon,
     tone: 1,
     params: [],

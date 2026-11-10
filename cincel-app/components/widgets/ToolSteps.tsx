@@ -331,12 +331,13 @@ function CompactGroup({ steps, mode }: { steps: readonly ToolStep[]; mode?: Tool
     : `Usó ${n.toLocaleString("es-MX")} ${n === 1 ? "herramienta" : "herramientas"}`;
   return (
     <div className="flex flex-col gap-2">
+      {/* While a step runs, its running label takes the line's place. */}
       {running ? (
         <p className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
           <Spinner className="size-3.5" />
           {running.running}
         </p>
-      ) : null}
+      ) : (
       <button
         type="button"
         aria-expanded={open}
@@ -352,7 +353,8 @@ function CompactGroup({ steps, mode }: { steps: readonly ToolStep[]; mode?: Tool
           {lead} · <span className={failed ? undefined : "text-secondary-foreground"}>{open ? "Ocultar" : "Ver"}</span>
         </span>
       </button>
-      {open ? (
+      )}
+      {open && !running ? (
         <div id={listId}>
           <StepList steps={steps} results={false} />
         </div>

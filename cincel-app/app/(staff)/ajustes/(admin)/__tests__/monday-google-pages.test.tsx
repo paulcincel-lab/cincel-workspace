@@ -329,7 +329,12 @@ describe("/ajustes/google/primeros-pasos", () => {
   beforeEach(() => {
     googleReads.listGroupMappings.mockResolvedValue([{ id: "m-1" }]);
     googleReads.listPositions.mockResolvedValue([]);
-    googleReads.loadGoogleHealth.mockResolvedValue({ sharedDriveId: "drive" });
+    googleReads.loadGoogleHealth.mockResolvedValue({
+      sharedDriveId: "drive",
+      pendingGoogleStaff: [],
+      projectsWithoutFolder: 0,
+      projectsWithFolder: 0,
+    });
   });
 
   it("renders the unchanged wizard for the bootstrap admin, with the Google page data hydrated", async () => {

@@ -16,7 +16,7 @@ function at(month: number, day: number, hour = 10, minute = 0): string {
 }
 
 function thread(id: string, patch: Partial<AssistantThreadSummary> = {}): AssistantThreadSummary {
-  return { id, title: id, updatedAt: at(10, 5), pinnedAt: null, pendingApprovals: 0, unread: false, ...patch };
+  return { id, title: id, updatedAt: at(10, 5), pinnedAt: null, pendingApprovals: 0, unread: false, toolCalls: 0, ...patch };
 }
 
 describe("groupAssistantThreads (pinned mode)", () => {

@@ -491,6 +491,7 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
 
             {groups.length > 0 ? (
               <GroupedTable<PortfolioTableRow>
+                toggleAll={false}
                 label={PORTFOLIO_TABLE_LABEL}
                 columns={columns}
                 groups={groups}

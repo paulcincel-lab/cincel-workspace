@@ -97,8 +97,8 @@ describe("InicioVisual accessibility", () => {
     expect(tables.map((t) => t.caption?.textContent)).toEqual(["Ritmo semanal", "Tareas por tramo"]);
     for (const table of tables) expect(table.classList.contains("sr-only")).toBe(true);
     // Ritmo semanal: the default 8 weeks; Tareas por tramo: one row per tramo.
-    expect(tables[0].tBodies[0].rows).toHaveLength(8);
-    expect(tables[1].tBodies[0].rows).toHaveLength(INICIO_VISUAL.tasksByTramo.length);
+    expect(tables[0].querySelectorAll("tbody tr")).toHaveLength(8);
+    expect(tables[1].querySelectorAll("tbody tr")).toHaveLength(INICIO_VISUAL.tasksByTramo.length);
   });
 
   it("makes the hero a labelled section with decorative avatars", () => {

@@ -33,8 +33,6 @@ import { INICIO_EMPTY, INICIO_NON_ADMIN } from "./inicio-fixtures";
 
 const MODES = ["light", "dark"] as const;
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
-/** The styles with the shared widget layout and its dashboard controls (Visual is `InicioVisual`). */
-const SHARED_STYLES: PresentationStyle[] = ["esencial", "analitico"];
 
 /** The token pairs the Inicio page puts text and marks on (FE §14.6). */
 const INICIO_PAIRS = new Set([
@@ -114,31 +112,34 @@ describe("Inicio accessibility", () => {
 });
 
 describe("Inicio dashboard controls accessibility", () => {
-  it.each(SHARED_STYLES)("names the KPI toggles, range, view and collapse controls with their states (%s)", async (style) => {
+  it("names the Analítico range, filter and collapse controls with their states", async () => {
     applyTheme(THEME_IDS[0], "light");
-    renderInicio(style, INICIO_NON_ADMIN);
+    renderInicio("analitico", INICIO_NON_ADMIN);
 
-    const kpi = screen.getAllByRole("button").find((b) => b.getAttribute("aria-pressed") !== null && /Vencidas/.test(b.textContent ?? ""));
-    if (!kpi) throw new Error("no Vencidas toggle");
-    fireEvent.click(kpi);
-    expect(kpi.getAttribute("aria-pressed")).toBe("true");
+    const range = screen.getByRole("radiogroup", { name: "Rango" });
+    expect(within(range).getByRole("radio", { name: /8 sem/ }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(within(range).getByRole("radio", { name: /4 sem/ }));
+    expect(within(range).getByRole("radio", { name: /4 sem/ }).getAttribute("aria-checked")).toBe("true");
 
-    const tramo = within(screen.getByRole("region", { name: "Tareas abiertas por tramo" }));
-    expect(tramo.getByRole("group", { name: "Vista" })).toBeTruthy();
-    expect(tramo.getByRole("button", { name: "Ver como tabla" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("navigation", { name: "Ir a sección" })).toBeTruthy();
 
-    if (style !== "esencial") {
-      const pace = within(screen.getByRole("region", { name: "Ritmo semanal" }));
-      expect(pace.getByRole("group", { name: "Rango" })).toBeTruthy();
-      expect(pace.getByRole("button", { name: "8 semanas" }).getAttribute("aria-pressed")).toBe("true");
-    }
-
-    const attention = within(screen.getByRole("region", { name: "Requiere atención" }));
-    const collapse = attention.getByRole("button", { name: "Contraer" });
+    const attention = screen.getByRole("region", { name: "Atención" });
+    const collapse = attention.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
     expect(collapse.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById(collapse.getAttribute("aria-controls") ?? "")).toBeTruthy();
     fireEvent.click(collapse);
-    expect(attention.getByRole("button", { name: "Expandir" }).getAttribute("aria-expanded")).toBe("false");
+    expect(collapse.getAttribute("aria-expanded")).toBe("false");
 
+    expect(await seriousViolations()).toEqual([]);
+  });
+
+  it("gives every Esencial card a heading and no pressed toggles", async () => {
+    applyTheme(THEME_IDS[0], "light");
+    renderInicio("esencial", INICIO_NON_ADMIN);
+    for (const name of ["Lo que vence esta semana", "Requiere atención", "Ritmo semanal", "Avance de proyectos"]) {
+      expect(screen.getByRole("heading", { name })).toBeTruthy();
+    }
+    expect(screen.queryAllByRole("button").filter((b) => b.getAttribute("aria-pressed") !== null)).toEqual([]);
     expect(await seriousViolations()).toEqual([]);
   });
 

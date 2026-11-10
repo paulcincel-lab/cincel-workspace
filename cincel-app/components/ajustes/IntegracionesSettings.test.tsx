@@ -549,7 +549,11 @@ describe("scopes", () => {
 describe("Enlace de suscripción", () => {
   it("copy shows a toast", async () => {
     calendarActions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: false });
-    calendarActions.generateCalendarFeedAction.mockResolvedValue({ token: "abc123" });
+    // Once generated, the status refetch the create triggers reads the link on.
+    calendarActions.generateCalendarFeedAction.mockImplementation(async () => {
+      calendarActions.fetchCalendarFeedStatusAction.mockResolvedValue({ enabled: true });
+      return { token: "abc123" };
+    });
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     renderPage();

@@ -38,7 +38,6 @@ const ERRORS = [
 
 const LOADINGS = [
   ["(staff)", StaffLoading, "kpis"],
-  ["(staff)/ajustes/(personal)", PersonalLoading, "list"],
   ["(staff)/ajustes/(admin)", AdminLoading, "list"],
 ] as const;
 
@@ -69,5 +68,12 @@ describe("staff route groups", () => {
   it.each(LOADINGS)("%s loading.tsx renders the matching skeleton", (_name, LoadingPage, variant) => {
     render(<LoadingPage />);
     expect(screen.getByTestId("skeleton").getAttribute("data-variant")).toBe(variant);
+  });
+
+  it("(staff)/ajustes/(personal) loading.tsx renders the settings-card skeleton", () => {
+    render(<PersonalLoading />);
+    const status = screen.getByRole("status", { name: "Cargando ajustes" });
+    expect(status.getAttribute("data-variant")).toBe("settings");
+    expect(status.getAttribute("aria-busy")).toBe("true");
   });
 });

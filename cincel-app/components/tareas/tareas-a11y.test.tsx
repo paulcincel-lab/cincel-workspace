@@ -157,7 +157,7 @@ describe("Tareas shell accessibility", () => {
   }
 
   it("has no serious axe violations with a combobox open", async () => {
-    renderClient({ vista: "lista" });
+    renderClient({ vista: "calendario" });
     fireEvent.click(screen.getByRole("button", { name: "Responsable: Todos" }));
     await screen.findByRole("listbox");
     expect(await seriousViolations(document.body)).toEqual([]);

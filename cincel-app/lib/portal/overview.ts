@@ -198,6 +198,24 @@ export function portalInitials(name: string): string {
   return `${first}${last}`.toLocaleUpperCase("es-MX");
 }
 
+/** The schedule with only the DTO's section fields, so nothing else a caller passes reaches the page. */
+function portalScheduleDTO(schedule: PortalScheduleDTO): PortalScheduleDTO {
+  if (!schedule) return null;
+  return {
+    sections: schedule.sections.map((s) => ({
+      key: s.key,
+      planta: s.planta,
+      seccion: s.seccion,
+      start: s.start,
+      end: s.end,
+      progressPct: s.progressPct,
+      ...(s.actualStart !== undefined ? { actualStart: s.actualStart } : {}),
+      ...(s.actualEnd !== undefined ? { actualEnd: s.actualEnd } : {}),
+      ...(s.tramoKey !== undefined ? { tramoKey: s.tramoKey } : {}),
+    })),
+  };
+}
+
 export function buildPortalOverview(input: {
   project: PortalProjectDTO;
   schedule: PortalScheduleDTO;
@@ -225,7 +243,7 @@ export function buildPortalOverview(input: {
     team: input.team ?? [],
     analitico: {
       project: input.project,
-      schedule: input.schedule,
+      schedule: portalScheduleDTO(input.schedule),
       tramos: input.tramos,
       documents: input.files,
       documentFolders: input.folders ?? null,

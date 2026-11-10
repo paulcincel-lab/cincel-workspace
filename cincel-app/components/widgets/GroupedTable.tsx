@@ -8,7 +8,7 @@ import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState"
 import { ErrorState } from "@/components/shell/ErrorState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { Button } from "@/components/ui/shadcn/button";
+import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import {
   HEAT_CELL_CLASS,
   columnAlign,
@@ -42,6 +42,8 @@ export type GroupMetric = {
   value: string;
   tone?: "default" | "muted" | "destructive" | "warning" | "success";
   pill?: boolean;
+  /** Top group header: the label before the value ("Vencidas **7**") instead of after it. */
+  labelFirst?: boolean;
 };
 export type GroupFooter = "auto" | Record<string, string | number>;
 export type Group<Row> = {
@@ -66,6 +68,8 @@ export type GroupedTableProps<Row extends Record<string, unknown>> = {
   totals?: { label: string; summary: string };
   anchors?: GroupAnchor[];
   anchorsCaption?: string;
+  /** "Expandir todo" / "Contraer todo" above the groups (default true); false when the page has its own. */
+  toggleAll?: boolean;
   defaultExpanded?: boolean | string[];
   expanded?: string[];
   onExpandedChange?(ids: string[]): void;
@@ -196,8 +200,9 @@ function TopMetrics({ metrics }: { metrics: GroupMetric[] }) {
           </Badge>
         ) : (
           <span key={metric.key} data-metric={metric.key}>
+            {metric.labelFirst && metric.label ? `${metric.label} ` : null}
             <b className={cn("font-semibold", METRIC_TEXT[metric.tone ?? "default"])}>{metric.value}</b>
-            {metric.label ? ` ${metric.label}` : null}
+            {!metric.labelFirst && metric.label ? ` ${metric.label}` : null}
           </span>
         ),
       )}
@@ -587,6 +592,7 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
 
   return (
     <div data-slot="grouped-table" className="flex min-w-0 flex-col gap-3">
+      {anchors.length > 0 || p.toggleAll !== false ? (
       <div className="flex flex-wrap items-center gap-2">
         {anchors.length > 0 ? (
           <nav aria-label={ANCHORS_LABEL} className="flex flex-wrap items-center gap-2">
@@ -594,14 +600,14 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
               {ANCHORS_LABEL}
             </span>
             {anchors.map((anchor) => (
-              <Button
+              <a
                 key={anchor.groupId}
-                variant="outline"
-                size="sm"
-                nativeButton={false}
-                render={<a href={`#${groupAnchorId(anchor.groupId)}`} />}
+                href={`#${groupAnchorId(anchor.groupId)}`}
                 onClick={(event: MouseEvent<HTMLElement>) => goTo(event, anchor.groupId)}
-                className="h-[30px] gap-2 rounded-[10px] px-3 text-[12.5px] font-medium"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "h-[30px] gap-2 rounded-[10px] px-3 text-[12.5px] font-medium",
+                )}
               >
                 {anchor.label}
                 <span
@@ -612,16 +618,19 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
                 >
                   {anchor.count}
                 </span>
-              </Button>
+              </a>
             ))}
             {p.anchorsCaption ? <span className="text-xs text-muted-foreground">{p.anchorsCaption}</span> : null}
           </nav>
         ) : null}
         <span className="flex-1" />
-        <Button type="button" variant="link" size="sm" onClick={toggleAll}>
-          {allOpen ? COLLAPSE_ALL_LABEL : EXPAND_ALL_LABEL}
-        </Button>
+        {p.toggleAll !== false ? (
+          <Button type="button" variant="link" size="sm" onClick={toggleAll}>
+            {allOpen ? COLLAPSE_ALL_LABEL : EXPAND_ALL_LABEL}
+          </Button>
+        ) : null}
       </div>
+      ) : null}
       {groups.map((group) => (
         <TopGroup
           key={group.id}

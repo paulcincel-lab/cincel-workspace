@@ -47,13 +47,14 @@ export function StatusDonutWidget({ counts, empty }: StatusDonutWidgetProps): Re
 
   const segments = counts.filter((c) => c.count > 0);
   const gap = segments.length > 1 ? GAP : 0;
-  let offset = 0;
-  const arcs = segments.map((c) => {
-    const length = (c.count / total) * CIRCUMFERENCE;
-    const arc = { status: c.status, dash: Math.max(0, length - gap), offset };
-    offset += length;
-    return arc;
-  });
+  const arcs = segments.reduce<{ status: (typeof segments)[number]["status"]; dash: number; offset: number; end: number }[]>(
+    (out, c) => {
+      const offset = out.length > 0 ? out[out.length - 1].end : 0;
+      const length = (c.count / total) * CIRCUMFERENCE;
+      return [...out, { status: c.status, dash: Math.max(0, length - gap), offset, end: offset + length }];
+    },
+    [],
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-6">

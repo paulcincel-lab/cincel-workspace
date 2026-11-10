@@ -109,8 +109,9 @@ describe.skipIf(!url)("org appearance actions (test DB)", async () => {
     const after = await nextLoad();
     expect(after.stored).toEqual({ ...edit, v: before.stored.v + 1 });
     expect(after.resolved.version).toBe(before.stored.v + 1);
-    expect(after.resolved.cssVars.light).toEqual(toCssVars(edit, "light"));
-    expect(after.resolved.cssVars.dark).toEqual(toCssVars(edit, "dark"));
+    // `--text-base` is the viewer's text size (default 14), not the org body size.
+    expect(after.resolved.cssVars.light).toEqual(toCssVars(edit, "light", after.resolved.textSize));
+    expect(after.resolved.cssVars.dark).toEqual(toCssVars(edit, "dark", after.resolved.textSize));
     expect(after.resolved.cssVars.light["--primary"]).toBe("#1d4ed8");
     expect(after.block).toContain('html:root[data-theme="light"]');
     expect(after.block).toContain('html:root[data-theme="dark"]');

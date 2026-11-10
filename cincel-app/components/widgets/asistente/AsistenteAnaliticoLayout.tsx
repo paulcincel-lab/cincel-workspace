@@ -770,10 +770,10 @@ function ConversationBody(props: BodyProps) {
             Datos
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="conversacion" keepMounted className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden">
+        <TabsContent value="conversacion" keepMounted hidden={tab !== "conversacion"} className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden">
           {conversation}
         </TabsContent>
-        <TabsContent value="datos" keepMounted className="min-h-0 flex-1 overflow-y-auto [&[hidden]]:hidden">
+        <TabsContent value="datos" keepMounted hidden={tab !== "datos"} className="min-h-0 flex-1 overflow-y-auto [&[hidden]]:hidden">
           {dataPanel}
         </TabsContent>
       </Tabs>

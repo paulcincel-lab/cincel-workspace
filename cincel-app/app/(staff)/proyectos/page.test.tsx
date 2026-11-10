@@ -91,7 +91,17 @@ describe("/proyectos page", () => {
     await renderPage();
     expect(seen.data?.canSeeAdminData).toBe(false);
     expect(Object.keys(seen.data ?? {}).sort()).toEqual(
-      ["canCreateProject", "canSeeAdminData", "portfolio", "presaleAutoStart", "projects", "tramos"].sort(),
+      [
+        "canChangeProjectStage",
+        "canCreateProject",
+        "canSeeAdminData",
+        "portfolio",
+        "presaleAutoStart",
+        "projects",
+        "today",
+        "tramos",
+        "viewerStaffId",
+      ].sort(),
     );
   });
 

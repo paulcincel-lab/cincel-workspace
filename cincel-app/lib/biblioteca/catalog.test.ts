@@ -443,7 +443,9 @@ describe("Biblioteca Analítico table", () => {
       makeLink({ id: "d31", updatedAt: daysAgo(31) }),
     ];
     const table = buildBibliotecaTable(links, ALL, { showEmpresa: false, now: NOW, usage: null });
-    const rows = table.groups[0].children!.flatMap((c) => c.rows ?? []);
+    // A group lists its newest BIBLIOTECA_GROUP_ROWS rows: the boundary pair alone.
+    const pair = buildBibliotecaTable(links.slice(0, 2), ALL, { showEmpresa: false, now: NOW, usage: null });
+    const rows = pair.groups.flatMap((g) => g.children ?? []).flatMap((c) => c.rows ?? []);
     expect(rows.find((r) => r.id === "d180")!.stale).toBe(false);
     expect(rows.find((r) => r.id === "d181")!.stale).toBe(true);
     expect(table.kpis.sinActualizar).toBe(1);

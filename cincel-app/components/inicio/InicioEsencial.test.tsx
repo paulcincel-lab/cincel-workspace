@@ -279,7 +279,7 @@ describe("InicioEsencial quick-add", () => {
 
     // Optimistic: the row is in Esta semana (Thursday 12) before the server answers.
     const week = within(screen.getByRole("group", { name: "Esta semana" }));
-    expect(week.getByText("Cotizar herrería")).toBeTruthy();
+    expect(await week.findByText("Cotizar herrería")).toBeTruthy();
     expect(actions.createUserTaskAction).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: "p-1",
@@ -290,11 +290,13 @@ describe("InicioEsencial quick-add", () => {
       }),
     );
 
+    // The mutation settles once its invalidations refetch: this refetch answers.
+    actions.getInicioPageData.mockResolvedValue({ inicio: DATA, firstLogin: { showGoogleSetupBanner: false } });
     await act(async () => {
       resolve({ ok: true, data: { id: "t-new", title: "Cotizar herrería" } });
     });
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.inicio() }));
-    expect(screen.getByText("Tarea agregada")).toBeTruthy();
+    expect(await screen.findByText("Tarea agregada")).toBeTruthy();
   });
 
   it("opens the new-task dialog prefilled when there is no project", async () => {

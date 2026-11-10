@@ -20,7 +20,8 @@ vi.mock("@/components/tareas/TaskSheet", () => ({
   TaskSheetRoute: () => null,
   taskSheetHref: (pathname: string, _search: unknown, id: string) => `${pathname}?tarea=${id}`,
 }));
-vi.mock("@/components/tareas/quick-add-create", () => ({
+vi.mock("@/components/tareas/quick-add-create", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/tareas/quick-add-create")>()),
   useQuickAddCreate: () => ({ create: vi.fn(), undo: vi.fn() }),
 }));
 
@@ -99,7 +100,7 @@ describe("Proyecto · Resumen Esencial accessibility", () => {
   it("quick-add field is labelled", () => {
     renderPage();
     const card = screen.getByRole("region", { name: "Próximas tareas" });
-    const field = within(card).getByRole("textbox");
+    const field = within(card).getByRole<HTMLInputElement>("textbox");
     expect(field.getAttribute("aria-label") || field.labels?.[0]?.textContent || "").not.toBe("");
   });
 });

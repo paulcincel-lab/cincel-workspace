@@ -9,7 +9,8 @@ import type { AssistantUIMessage } from "@/lib/types/asistente";
 import type { AssistantContext } from "@/lib/types/redesign";
 
 const STEPS: Record<string, ToolStepGroup[]> = {};
-vi.mock("@/lib/assistant/tool-steps", () => ({
+vi.mock("@/lib/assistant/tool-steps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/assistant/tool-steps")>()),
   toToolSteps: (message: AssistantUIMessage) => STEPS[message.id] ?? [],
 }));
 
@@ -49,6 +50,7 @@ function step(overrides: Partial<ToolStep>): ToolStep {
     state: "done",
     label: "Buscó tareas",
     short: "Tareas vencidas del proyecto",
+    running: "Buscando tareas por vencer…",
     icon: ListIcon,
     tone: 1,
     params: [],

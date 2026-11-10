@@ -122,7 +122,7 @@ export function EsencialCard({
             data-slot="esencial-card-completed"
             className={cn("-mx-2.5 flex-col", open ? "flex" : "hidden")}
           >
-            <EsencialRowMutedContext.Provider value>{completed.children}</EsencialRowMutedContext.Provider>
+            {open ? <EsencialRowMutedContext.Provider value>{completed.children}</EsencialRowMutedContext.Provider> : null}
           </div>
         </>
       ) : null}

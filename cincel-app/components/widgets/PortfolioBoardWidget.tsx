@@ -93,14 +93,15 @@ export function PortfolioBoardWidget({
   const hintId = useId();
   const [picked, setPicked] = useState<Picked | null>(null);
   // A keyboard drop remounts the card in its new column: focus follows it there.
-  const [refocusId, setRefocusId] = useState<string | null>(null);
+  const refocusId = useRef<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!refocusId) return;
-    const card = rootRef.current?.querySelector<HTMLElement>(`[data-project="${refocusId}"]`);
+    const id = refocusId.current;
+    if (!id) return;
+    const card = rootRef.current?.querySelector<HTMLElement>(`[data-project="${id}"]`);
     if (card && card !== document.activeElement) card.focus();
-    setRefocusId(null);
-  }, [refocusId, columns]);
+    refocusId.current = null;
+  }, [picked, columns]);
   const columnOfCard = (id: string) => columns.find((c) => c.cards.some((card) => card.id === id)) ?? null;
   const droppable = columns.filter((c) => c.droppable);
 
@@ -132,7 +133,7 @@ export function PortfolioBoardWidget({
       }
       setPicked(null);
       if (current.over === current.from || !drop(card.id, current.over)) onAnnounce?.(MOVE_CANCELLED_TEXT);
-      else setRefocusId(card.id);
+      else refocusId.current = card.id;
       return;
     }
     if (!current) return;

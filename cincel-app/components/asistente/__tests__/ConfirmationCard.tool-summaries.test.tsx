@@ -2,12 +2,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { ConfirmationCard, type ConfirmationCardProps } from "../ConfirmationCard";
+import { ConfirmationCard, type ConfirmationPart } from "../ConfirmationCard";
 import { summarizeCreateNote } from "@/lib/assistant/tool-summaries";
 
 afterEach(cleanup);
 
-function part(state: ConfirmationCardProps["part"]["state"], errorText?: string): ConfirmationCardProps["part"] {
+function part(state: ConfirmationPart["state"], errorText?: string): ConfirmationPart {
   return {
     toolCallId: "call-1",
     toolName: "create_note",

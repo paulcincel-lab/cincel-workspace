@@ -12,7 +12,7 @@ const OTHER_PID = "22222222-2222-4222-8222-222222222222";
 
 const state = vi.hoisted(() => ({
   cookie: undefined as string | undefined,
-  user: null as null | { id: string; name: string; email: string; contactId: string },
+  user: null as null | { id: string; name: string; email: string; contactId: string; companyName: string | null },
   access: new Set<string>(),
 }));
 

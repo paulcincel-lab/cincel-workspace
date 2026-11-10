@@ -151,7 +151,7 @@ describe("ProjectsVisualLayout", () => {
     const { container, client } = renderLayout();
     pointerDrag(boardCard(container, "p-lomas"), column(container, "construccion"));
 
-    expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p-lomas", "w3");
+    await waitFor(() => expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p-lomas", "w3"));
     // Optimistic: the card is already in Construcción.
     await waitFor(() => expect(within(column(container, "construccion")).queryByText("Casa Lomas")).toBeTruthy());
     const cached = client.getQueryData<ProyectosPageData>(qk.proyectos.list())!;
@@ -194,7 +194,7 @@ describe("ProjectsVisualLayout", () => {
     fireEvent.keyDown(card, { key: "ArrowRight" });
     expect(column(container, "construccion").dataset.dropTarget).toBe("true");
     fireEvent.keyDown(card, { key: " " });
-    expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p-lomas", "w3");
+    await waitFor(() => expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p-lomas", "w3"));
     expect(live.textContent).toBe("Casa Lomas movido a Construcción");
     await waitFor(() => expect(within(column(container, "construccion")).queryByText("Casa Lomas")).toBeTruthy());
   });

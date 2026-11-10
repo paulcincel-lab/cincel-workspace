@@ -55,6 +55,8 @@ vi.mock("@/lib/portal/queries", () => ({
   getPortalTeam: mocks.getPortalTeam,
   listPortalProjects: mocks.listPortalProjects,
 }));
+// "Subido por" on Resumen reads the client's own upload events; none here.
+vi.mock("@/lib/portal/uploads", () => ({ listOwnPortalUploadFileIds: async () => new Set<string>() }));
 vi.mock("@/lib/portal/files", () => ({
   listPortalFolder: mocks.listPortalFolder,
   listPortalFolderGroups: mocks.listPortalFolderGroups,

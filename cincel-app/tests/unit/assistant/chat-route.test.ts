@@ -433,6 +433,7 @@ describe("POST /api/asistente/chat (server threads)", () => {
     expect(mocks.saveThreadMessages).not.toHaveBeenCalled();
     const call = lastStreamCall() as StreamCall & { toolApproval?: unknown };
     expect(call.toolApproval).toBeUndefined();
-    expect(mocks.toUIMessageStreamResponse).toHaveBeenCalledWith();
+    // The stateless answer still carries the step timings (message metadata).
+    expect(mocks.toUIMessageStreamResponse).toHaveBeenCalledWith({ messageMetadata: expect.any(Function) });
   });
 });

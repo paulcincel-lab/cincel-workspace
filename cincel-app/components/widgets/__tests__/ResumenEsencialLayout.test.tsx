@@ -118,7 +118,10 @@ afterEach(() => cleanup());
 describe("ResumenEsencialLayout", () => {
   it("renders four cards", () => {
     const { container } = renderLayout();
-    const sections = [...container.querySelectorAll("section")].map((s) => s.getAttribute("aria-label"));
+    // EsencialCard names its section by its title (aria-labelledby).
+    const sections = [...container.querySelectorAll("section")].map(
+      (s) => s.getAttribute("aria-label") ?? document.getElementById(s.getAttribute("aria-labelledby") ?? "")?.textContent ?? null,
+    );
     expect(sections).toEqual(["Tramos", "Próximas tareas", "Equipo", "Archivos recientes"]);
 
     const tramos = screen.getByRole("region", { name: "Tramos" });

@@ -151,7 +151,8 @@ function boot(element: ReactNode, preferences: UserPreferences = DEFAULT_USER_PR
 
 /** The rendered markup with React's per-render ids replaced, so two renders compare equal. */
 function normalizedMarkup(container: HTMLElement): string {
-  return container.innerHTML.replace(/(«|:|_)r[0-9a-z]+(»|:|_)/g, "«id»");
+  // React ids: «r1», :r1: and _r_1_.
+  return container.innerHTML.replace(/(«|:|_)r_?[0-9a-z]+(»|:|_)/g, "«id»");
 }
 
 function expectNoClientCalls() {

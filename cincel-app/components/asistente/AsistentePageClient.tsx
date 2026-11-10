@@ -87,14 +87,11 @@ export function AsistentePageClient({
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data]);
   const threadQuery = useQuery({ ...asistenteThreadOptions(active.id), enabled: !active.isNew });
 
-  // A deep-linked project chip gets its name from the context lookup; null = not visible to the viewer.
+  // A deep-linked project chip gets its name from the context lookup; null = not visible to the
+  // viewer, and a chip without a label is neither shown nor sent as context.
   const lookupProjectId = chips.project && chips.project.label === null ? chips.project.id : null;
   const projectLookupIds = useMemo(() => ({ projectId: lookupProjectId ?? undefined }), [lookupProjectId]);
   const projectLookup = useQuery({ ...asistenteContextOptions(projectLookupIds), enabled: lookupProjectId !== null });
-  const lookupGone = lookupProjectId !== null && (projectLookup.data === null || projectLookup.isError);
-  useEffect(() => {
-    if (lookupGone) setChips((prev) => (prev.project && prev.project.label === null ? { ...prev, project: null } : prev));
-  }, [lookupGone]);
 
   const projectLabel = chips.project ? (chips.project.label ?? projectLookup.data?.label ?? null) : null;
   const chipList = useMemo<ContextChip[]>(() => {

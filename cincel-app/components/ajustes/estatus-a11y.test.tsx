@@ -58,7 +58,7 @@ async function seriousViolations(container: HTMLElement) {
 function renderPage(data: AjustesEstatusPageData = PAGE) {
   const client = createTestQueryClient();
   client.setQueryData(qk.ajustes.page("estatus"), data);
-  return { client, ...renderWithQueryClient(<EstatusSettings />, { client }) };
+  return renderWithQueryClient(<EstatusSettings />, { client });
 }
 
 function section(name: string) {

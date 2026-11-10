@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { ChevronLeft, Ellipsis, Plus } from "lucide-react";
 
 import {
@@ -56,6 +56,15 @@ export function reportHref(projectId: string): string {
   return `/proyectos/${encodeURIComponent(projectId)}/cronograma/reporte`;
 }
 
+function subscribeToHistory(onChange: () => void): () => void {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+}
+
+function readEstiloParam(): string | null {
+  return new URLSearchParams(window.location.search).get("estilo");
+}
+
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 /** "30 abr 2027" */
@@ -92,14 +101,12 @@ export function projectDescription(
 export function ProjectTabs({ project, active, counts, canManagePortal, showEstilo = false }: ProjectTabsProps) {
   const description = projectDescription(project);
   const user = useSessionStore(selectAuthenticatedUser);
-  const canCreate = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
+  // No signed-in user (not yet seeded) means no create permission.
+  const canCreate = useMemo(() => (user ? resolveActivitiesCapabilities(user).canCreateActivity : false), [user]);
   const openCreate = () => useNewTaskUi.getState().openNewTask({ projectId: project.id }, "proyecto");
-  // "← Proyectos" keeps the `?estilo=` override of the current URL (read after mount).
-  const [backHref, setBackHref] = useState("/proyectos");
-  useEffect(() => {
-    const estilo = new URLSearchParams(window.location.search).get("estilo");
-    if (estilo) setBackHref(`/proyectos?${new URLSearchParams({ estilo }).toString()}`);
-  }, []);
+  // "← Proyectos" keeps the `?estilo=` override of the current URL (none on the server render).
+  const estilo = useSyncExternalStore(subscribeToHistory, readEstiloParam, () => null);
+  const backHref = estilo ? `/proyectos?${new URLSearchParams({ estilo }).toString()}` : "/proyectos";
   const moreLinks = projectSectionLinks(project.id, { showClientes: canManagePortal }).filter(
     (link) => !MOBILE_PROJECT_SECTIONS.includes(link.section)
   );

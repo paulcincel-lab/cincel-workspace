@@ -88,7 +88,7 @@ describe("useQuickAddCreate", () => {
   }
 
   const invalidatedKeys = (spy: ReturnType<typeof vi.spyOn>) =>
-    spy.mock.calls.map((call) => (call[0] as { queryKey: unknown }).queryKey);
+    spy.mock.calls.map((call: unknown[]) => (call[0] as { queryKey: unknown }).queryKey);
 
   it("creates without a success toast and invalidates the task views", async () => {
     actions.createUserTaskAction.mockResolvedValue({ id: "t-1", title: "Revisar plafones", status: "pendiente", customStatus: null });

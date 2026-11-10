@@ -39,8 +39,8 @@ describe.skipIf(!url)("summarizeNotifications (test DB)", async () => {
       { staffId: ana, kind: "mencion", title: "m3", inApp: true, createdAt: at(5) },
       { staffId: ana, kind: "asignacion", title: "a1", inApp: true, createdAt: at(3), readAt: at(3, 13) },
       // Not in the Bandeja: email-only rows.
-      { staffId: ana, kind: "asignacion", title: "a2", inApp: false, createdAt: at(8) },
-      { staffId: ana, kind: "sistema", title: "s1", inApp: false, createdAt: at(8) },
+      { staffId: ana, kind: "asignacion", title: "a2", inApp: false, emailStatus: "pending", createdAt: at(8) },
+      { staffId: ana, kind: "sistema", title: "s1", inApp: false, emailStatus: "pending", createdAt: at(8) },
       // Another person's rows.
       { staffId: beto, kind: "mencion", title: "bm", inApp: true, createdAt: at(9) },
       { staffId: beto, kind: "vencimiento", title: "bv", inApp: true, createdAt: at(9) },

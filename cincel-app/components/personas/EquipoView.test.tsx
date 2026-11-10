@@ -44,6 +44,7 @@ vi.mock("@/components/personas/TeamGrid", () => ({
   TeamMemberActions: () => null,
 }));
 vi.mock("@/components/widgets/PeopleLoadBoard", () => ({ PeopleLoadBoard: () => <div data-testid="load-board" /> }));
+vi.mock("@/components/personas/EquipoAnalitico", () => ({ EquipoAnalitico: () => <div data-testid="equipo-analitico" /> }));
 vi.mock("@/components/personas/AvailabilityWeek", () => ({ AvailabilityWeek: () => null }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
@@ -134,7 +135,7 @@ describe("EquipoView styles", () => {
         <EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />
       </StyleProvider>,
     );
-    expect(screen.getByTestId("team-grid")).toBeTruthy();
+    expect(screen.getByTestId("equipo-analitico")).toBeTruthy();
     expect(screen.queryByTestId("load-board")).toBeNull();
   });
 });
