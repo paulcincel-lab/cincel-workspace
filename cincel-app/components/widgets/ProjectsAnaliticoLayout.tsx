@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderKanban, Plus } from "lucide-react";
 
 import {
   NO_TRAMO_KEY,
+  NO_TRAMO_LABEL,
   PORTFOLIO_ANALITICO_DESCRIPTION,
   PORTFOLIO_CLEAR_FILTERS,
   PORTFOLIO_FILTER_GROUP,
@@ -50,8 +51,12 @@ import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { GroupedTable } from "@/components/widgets/GroupedTable";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
 import { PageHeader } from "@/components/widgets/PageHeader";
+import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
+import { PORTFOLIO_COMMIT_KEYS, portfolioEditColumns } from "@/components/widgets/proyectos-cell-edits";
+import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { HEAT_CELL_CLASS } from "@/components/widgets/record-table-format";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
+import { catalogStaffOptions } from "@/lib/query/options/catalog";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
 import { tramoColorVar } from "@/lib/tramos/compat";
 import { cn } from "@/lib/utils";
@@ -69,6 +74,10 @@ import { cn } from "@/lib/utils";
  * written with `router.replace`. KPIs, groups, totals and anchors are all
  * computed from the visible rows. "Nuevo proyecto" calls `onNewProject`;
  * without it, it sets `?nuevo=1`, which the page's create dialog listens to.
+ *
+ * Tramo actual and Responsable edit in place (#1026, `portfolioEditColumns`):
+ * a new tramo moves the project to that group at once; the other columns are
+ * calculated and stay inert.
  */
 export type ProjectsAnaliticoLayoutProps = {
   /** Opens the create dialog. */
@@ -178,7 +187,10 @@ function prefersReducedMotion(): boolean {
 
 /** The Analítico body over loaded page data. */
 function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onNewProject(): void }) {
-  const { projects, portfolio, tramos, canSeeAdminData, canCreateProject, viewerStaffId } = data;
+  const { projects, portfolio, tramos, canSeeAdminData, canCreateProject, canChangeProjectStage, viewerStaffId } = data;
+  const canEditProjectGeneral = data.canEditProjectGeneral ?? false;
+  const qc = useQueryClient();
+  const staffQuery = useQuery({ ...catalogStaffOptions(), enabled: canEditProjectGeneral });
   const router = useRouter();
   const pathname = usePathname() ?? "/proyectos";
   const searchParams = useSearchParams();
@@ -232,7 +244,27 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
     () => table.groups.map((group) => ({ ...group, rows: sortPortfolioRows(group.rows ?? [], sort) })),
     [table.groups, sort],
   );
-  const columns = useMemo(() => portfolioColumns({ canSeeAdminData }), [canSeeAdminData]);
+  const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  // Responsable: the staff catalog; the projects' own people until it loads.
+  const staff = useMemo(() => {
+    if (staffQuery.data) return staffQuery.data;
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const p of projects) for (const s of [p.manager, p.coordinator, ...p.members]) if (s) byId.set(s.id, s);
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [staffQuery.data, projects]);
+  const columns = useMemo(
+    () =>
+      portfolioEditColumns(portfolioColumns({ canSeeAdminData }), {
+        qc,
+        projects: projectsById,
+        tramos,
+        staff,
+        canChangeProjectStage,
+        canEditProjectGeneral,
+        canSeeAdminData,
+      }),
+    [canSeeAdminData, qc, projectsById, tramos, staff, canChangeProjectStage, canEditProjectGeneral],
+  );
   const createdAt = useMemo(() => new Map(projects.map((p) => [p.id, Date.parse(p.createdAt)])), [projects]);
 
   const groupIds = groups.map((g) => g.id);
@@ -308,6 +340,26 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
             ) : null}
           </div>
         );
+      case "tramo": {
+        const project = projectsById.get(row.id);
+        const tramo = project && !project.needsTramo ? (project.currentWorkflow ?? project.tramos.find((t) => t.current) ?? null) : null;
+        return tramo ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: tramoColorVar(tramo.key) }} />
+            <span className="truncate">{tramo.name}</span>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">{NO_TRAMO_LABEL}</span>
+        );
+      }
+      case "manager": {
+        const manager = projectsById.get(row.id)?.manager;
+        return manager ? (
+          <span className="block max-w-[170px] truncate">{manager.name}</span>
+        ) : (
+          <span className="text-muted-foreground">{CLEAR_LABEL.person}</span>
+        );
+      }
       case "real": {
         const color = row.tramoKey ? tramoColorVar(row.tramoKey) : "var(--muted-foreground)";
         return (
@@ -490,22 +542,24 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
             </section>
 
             {groups.length > 0 ? (
-              <GroupedTable<PortfolioTableRow>
-                toggleAll={false}
-                label={PORTFOLIO_TABLE_LABEL}
-                columns={columns}
-                groups={groups}
-                totals={{ label: totals.name, summary }}
-                expanded={expanded}
-                onExpandedChange={(ids) => setCollapsed(groupIds.filter((id) => !ids.includes(id)))}
-                getRowId={(row) => row.id}
-                renderCell={renderCell}
-                isRowNew={(row) => mountedAt - (createdAt.get(row.id) ?? 0) < NEW_ROW_MS}
-                isRowMuted={(row) => projects.find((p) => p.id === row.id)?.status === "pausado"}
-                sortable={[...PORTFOLIO_SORTABLE_COLUMNS].filter((key) => columns.some((c) => c.key === key))}
-                sort={sort}
-                onSortChange={handleSort}
-              />
+              <CellCommitProvider queryKeys={PORTFOLIO_COMMIT_KEYS}>
+                <GroupedTable<PortfolioTableRow>
+                  toggleAll={false}
+                  label={PORTFOLIO_TABLE_LABEL}
+                  columns={columns}
+                  groups={groups}
+                  totals={{ label: totals.name, summary }}
+                  expanded={expanded}
+                  onExpandedChange={(ids) => setCollapsed(groupIds.filter((id) => !ids.includes(id)))}
+                  getRowId={(row) => row.id}
+                  renderCell={renderCell}
+                  isRowNew={(row) => mountedAt - (createdAt.get(row.id) ?? 0) < NEW_ROW_MS}
+                  isRowMuted={(row) => projects.find((p) => p.id === row.id)?.status === "pausado"}
+                  sortable={[...PORTFOLIO_SORTABLE_COLUMNS].filter((key) => columns.some((c) => c.key === key))}
+                  sort={sort}
+                  onSortChange={handleSort}
+                />
+              </CellCommitProvider>
             ) : (
               <div className="flex flex-col items-center gap-2 rounded-xl border bg-card px-4 py-8 text-center text-[12.5px]">
                 <p>{PORTFOLIO_NO_MATCH}</p>

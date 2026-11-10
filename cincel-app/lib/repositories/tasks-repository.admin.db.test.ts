@@ -142,7 +142,7 @@ describe.skipIf(!url)("tasks repository: admin tasks (test DB)", async () => {
     const task = await adminTask("Sin fase");
     await expect(repo.updateTask(task.id, { phaseId: randomUUID() }, adminId)).rejects.toThrow(/^ADMIN_TASK$/);
     await expect(repo.updateTask(task.id, { spaceId: randomUUID() }, adminId)).rejects.toThrow(/^ADMIN_TASK$/);
-    await expect(repo.updateTask(task.id, { workflowId: randomUUID() }, adminId)).rejects.toThrow(/^INVALID/);
+    await expect(repo.updateTask(task.id, { workflowId: randomUUID() }, adminId)).rejects.toThrow(/^ADMIN_TASK$/);
     await expect(repo.updateTask(task.id, { phaseId: null, title: `Renombrada ${run}` }, adminId)).resolves.toMatchObject(
       { title: `Renombrada ${run}` }
     );

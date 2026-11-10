@@ -206,11 +206,12 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
   });
 
   describe("updateTask", () => {
-    it("rejects changing the tramo of a task that already has one", async () => {
+    it("rejects a non-admin changing the tramo of a task that already has one", async () => {
       await inTx(async (tx, ctx) => {
         const task = await addTask(tx, ctx, "Con tramo", { workflowId: ctx.workflowId });
+        // Only admins move a task between tramos (#1022).
         await expect(updateTask(task.id, { workflowId: ctx.firstWorkflowId }, ctx.staffId)).rejects.toThrow(
-          /^INVALID/
+          /^FORBIDDEN: task tramo change/
         );
         // Sending the same tramo again is a no-op.
         await expect(updateTask(task.id, { workflowId: ctx.workflowId }, ctx.staffId)).resolves.toMatchObject({
@@ -259,7 +260,7 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
         await expect(updateTask(admin.id, { phaseId: ctx.anteproyectoId }, ctx.staffId)).rejects.toThrow(
           "ADMIN_TASK"
         );
-        await expect(updateTask(admin.id, { workflowId: ctx.workflowId }, ctx.staffId)).rejects.toThrow(/^INVALID/);
+        await expect(updateTask(admin.id, { workflowId: ctx.workflowId }, ctx.staffId)).rejects.toThrow("ADMIN_TASK");
       });
     });
   });

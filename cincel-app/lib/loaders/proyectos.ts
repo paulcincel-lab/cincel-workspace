@@ -274,6 +274,8 @@ export type ProyectosPageData = {
   canCreateProject: boolean;
   /** The board may move projects between tramos (`setProjectCurrentTramoAction` checks it again). */
   canChangeProjectStage: boolean;
+  /** Project fields edit in place (Responsable, #1026); `updateProjectAction` checks it again. Absent = false. */
+  canEditProjectGeneral?: boolean;
   /** The viewer's staff id ("Solo míos": manager, coordinator or member). */
   viewerStaffId: string;
   /** Today in the project timezone (`scheduleToday`), `YYYY-MM-DD`: the delivery timeline's first day. */
@@ -313,6 +315,7 @@ export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new
       canSeeAdminData: isAdmin,
       canCreateProject: false,
       canChangeProjectStage: false,
+      canEditProjectGeneral: false,
       viewerStaffId,
       today,
     };
@@ -332,6 +335,7 @@ export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new
     canSeeAdminData: isAdmin,
     canCreateProject: capabilities.canCreateProject,
     canChangeProjectStage: capabilities.canChangeProjectStage,
+    canEditProjectGeneral: capabilities.canEditProjectGeneral,
     viewerStaffId,
     today,
   };

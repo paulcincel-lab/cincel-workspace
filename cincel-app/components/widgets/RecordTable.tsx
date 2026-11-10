@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type ReactNode } from "react";
-import type { CellContext, ColumnDef } from "@tanstack/react-table";
+import type { CellContext, ColumnDef, ColumnMeta } from "@tanstack/react-table";
 import { toast } from "sonner";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
@@ -50,6 +50,10 @@ import { StyleView } from "./StyleView";
  * With `selectable`, the selected rows can be exported (Excel / PDF).
  * With `onEndReached` (opt-in pagination), a "Cargar más" button under the
  * rows asks the page for the next rows while `hasMore`.
+ *
+ * Columns with `edit` (#1024) make the Visual and Analítico tables a keyboard
+ * grid with editable cells (through `DataTable`'s column meta); the Esencial
+ * list stays read-only.
  */
 export type RecordTableProps = {
   data: RecordTableData;
@@ -121,7 +125,7 @@ function cellContent(column: RecordColumn, row: Row, renderCell: RecordTableProp
 }
 
 /** What `RecordCell` reads from its column's meta: this render's column and `renderCell`. */
-type RecordCellMeta = {
+type RecordCellMeta = ColumnMeta<Row, unknown> & {
   record: RecordColumn;
   renderCell: RecordTableProps["renderCell"];
 };
@@ -232,7 +236,13 @@ function TableView({
           </span>
         ),
         cell: RecordCell,
-        meta: { record: column, renderCell } satisfies RecordCellMeta,
+        meta: {
+          record: column,
+          renderCell,
+          edit: column.edit,
+          canEdit: column.canEdit,
+          editLabel: column.label,
+        } satisfies RecordCellMeta as RecordCellMeta,
       }),
     ),
     ...(hasActions ? [createRowActionsColumn<Row>(() => rowActions ?? [])] : []),

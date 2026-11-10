@@ -9,7 +9,9 @@ import type { GroupMetric, HeatRule } from "@/components/widgets/GroupedTable";
 import type { KpiStripItem } from "@/components/widgets/KpiStrip";
 import { formatDueDate } from "@/lib/proyectos/project-tasks-by-fase";
 import type { TareasMostrar } from "@/lib/tareas/query";
+import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
 import {
+  SIN_TRAMO_LABEL,
   hiddenSummaryProjects,
   pctVencidas,
   retrasoPromedio,
@@ -34,6 +36,8 @@ export const ANALITICO_TABLE_LABEL = "Tareas por proyecto y tramo";
 
 export const ANALITICO_COLUMNS: RecordColumn[] = [
   { key: "tarea", label: "Tarea" },
+  { key: "tramo", label: "Tramo" },
+  { key: "fase", label: "Fase" },
   { key: "responsable", label: "Responsable" },
   { key: "estatus", label: "Estatus" },
   { key: "vence", label: "Vence", mono: true },
@@ -204,7 +208,13 @@ export function expandAnnouncement(opened: boolean, n: number): string {
 /** One table row (`GroupedTable` leaf). */
 export type AnaliticoRow = {
   id: string;
+  /** The row's task: the editable cells read and patch it. */
+  task: TaskListRow;
   tarea: string;
+  /** Tramo name, or "Sin tramo". */
+  tramo: string;
+  /** Fase name, or "Sin fase". */
+  fase: string;
   responsable: string;
   estatus: string;
   statusToken: StatusColorToken;
@@ -221,7 +231,10 @@ export function analiticoRow(row: TaskListRow, today: string): AnaliticoRow {
   const late = daysLate(item, today);
   return {
     id: row.id,
+    task: row,
     tarea: row.title,
+    tramo: row.workflow?.name ?? SIN_TRAMO_LABEL,
+    fase: row.phase?.name ?? CLEAR_LABEL.phase,
     responsable: row.manager?.name ?? "Sin asignar",
     estatus: taskStatusLabel(row),
     statusToken: statusColorToken(row),

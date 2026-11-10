@@ -19,7 +19,7 @@ import {
   workflows,
 } from "@/lib/db/schema";
 import { closedAtPatch } from "@/lib/project-flow/closing";
-import { flowError } from "@/lib/project-flow/errors";
+import { TASK_TRAMO_CHANGE_FORBIDDEN, flowError } from "@/lib/project-flow/errors";
 import { completionsFromStatusEvents } from "@/lib/dashboard/task-trend";
 import { assertAdminAssignees, todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import type { AdminTaskFilters } from "@/lib/validation/project-flow";
@@ -1374,27 +1374,42 @@ export async function listSubtasks(parentId: string, viewer: ViewerScope): Promi
 }
 
 /**
- * Tramo, fase and espacio rules of updateTask (BE §7.5):
- * - `workflowId` only on a usuario task that has none (legacy tasks the
- *   backfill couldn't place); any other change → INVALID. Sending the
- *   current tramo again is a no-op.
+ * Tramo, fase and espacio rules of updateTask (BE §7.5, #1022):
+ * - `workflowId` on a usuario task: setting a tramo on a task without one is
+ *   open to task writers; changing an existing tramo needs `canMoveTramo`
+ *   (admins) → `FORBIDDEN: task tramo change`. Clearing it, an unknown or
+ *   deleted tramo, or a workflow task (tied to its template's tramo) →
+ *   INVALID. Sending the current tramo again is a no-op.
+ * - A move clears `phaseId` unless the same patch sets a fase of the new
+ *   tramo (a fase belongs to exactly one tramo, so the old one never fits).
  * - `phaseId` must be a fase of the task's tramo (the new one when set in the
  *   same patch) → PHASE_MISMATCH; null clears it.
  * - `spaceId` must be an espacio of the task's project → SPACE_MISMATCH.
- * - On an admin task, `phaseId` / `spaceId` → ADMIN_TASK.
+ * - On an admin task, `phaseId` / `spaceId` / `workflowId` → ADMIN_TASK.
+ *
+ * Returns the tramo the task left when it moved, else null.
  */
-async function applyFlowPatch(before: TaskRow, patch: TaskPatch, set: Partial<TaskRow>): Promise<void> {
+async function applyFlowPatch(
+  before: TaskRow,
+  patch: TaskPatch,
+  set: Partial<TaskRow>,
+  canMoveTramo: boolean
+): Promise<string | null> {
   const isAdmin = before.kind === "admin";
-  if (isAdmin && (patch.phaseId || patch.spaceId)) throw flowError("ADMIN_TASK");
+  if (isAdmin && (patch.phaseId || patch.spaceId || patch.workflowId)) throw flowError("ADMIN_TASK");
 
   let workflowId = before.workflowId;
+  let movedFrom: string | null = null;
   if (patch.workflowId !== undefined && patch.workflowId !== before.workflowId) {
-    if (before.workflowId || isAdmin || before.kind !== "usuario" || !patch.workflowId) {
-      throw flowError("INVALID", "workflowId");
-    }
+    if (isAdmin || before.kind !== "usuario" || !patch.workflowId) throw flowError("INVALID", "workflowId");
+    if (before.workflowId && !canMoveTramo) throw new Error(TASK_TRAMO_CHANGE_FORBIDDEN);
     await assertLiveWorkflow(patch.workflowId);
     set.workflowId = patch.workflowId;
     workflowId = patch.workflowId;
+    if (before.workflowId) {
+      movedFrom = before.workflowId;
+      if (patch.phaseId === undefined) set.phaseId = null;
+    }
   }
 
   if (patch.phaseId !== undefined) {
@@ -1409,26 +1424,112 @@ async function applyFlowPatch(before: TaskRow, patch: TaskPatch, set: Partial<Ta
     if (patch.spaceId) await assertSpaceInProject(db, patch.spaceId, before.projectId);
     set.spaceId = patch.spaceId || null;
   }
+  return movedFrom;
 }
 
 /**
  * Admin task rules on a patch (BE §7.5): no fase, espacio or tramo
- * (`ADMIN_TASK`, `INVALID` for a tramo) and an administrator manager
- * (`ASSIGNEE_NOT_ADMIN`). Clearing one of them (null) is a no-op.
+ * (`ADMIN_TASK`) and an administrator manager (`ASSIGNEE_NOT_ADMIN`).
+ * Clearing one of them (null) is a no-op.
  */
 async function assertAdminTaskPatch(patch: TaskPatch): Promise<void> {
-  if (patch.phaseId || patch.spaceId) throw flowError("ADMIN_TASK");
-  if (patch.workflowId) throw flowError("INVALID", "workflowId");
+  if (patch.phaseId || patch.spaceId || patch.workflowId) throw flowError("ADMIN_TASK");
   if (patch.managerId) await requireAdminAssignees([patch.managerId]);
 }
 
-export async function updateTask(id: string, patch: TaskPatch, actorId: string): Promise<TaskDetail> {
+/** History field of a tramo move; before/after hold the tramo names ("Movió la tarea de Diseño a Construcción"). */
+const TRAMO_MOVE_HISTORY_FIELD = "tramo";
+
+const TASK_FIELDS_BUT_TRAMO = TASK_TRACKED_FIELDS.filter((f) => f !== "workflowId");
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Name of each tramo id (deleted ones included: the history keeps the name it had). */
+async function tramoNames(tx: Tx, ids: string[]): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ id: workflows.id, name: workflows.name })
+    .from(workflows)
+    .where(inArray(workflows.id, ids));
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+/**
+ * A tramo move inside one transaction: the task row, its live usuario
+ * subtasks (same tramo; a subtask on the parent's old fase follows the
+ * parent's new fase, any other fase is cleared) and one history entry per
+ * moved task with the tramo names instead of the raw `workflowId` change.
+ */
+async function moveTaskTramo(
+  before: TaskRow,
+  set: Partial<TaskRow>,
+  movedFrom: string,
+  actorId: string
+): Promise<void> {
+  const toWorkflowId = set.workflowId!;
+  await db.transaction(async (tx) => {
+    const [after] = await tx.update(tasks).set(set).where(eq(tasks.id, before.id)).returning();
+    // Workflow children stay: their template ties them to their tramo (tasks_template_fk).
+    const children = (
+      await tx
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.parentTaskId, before.id), eq(tasks.kind, "usuario"), isNull(tasks.deletedAt)))
+    ).filter((child) => child.workflowId !== toWorkflowId);
+    const fromIds = children.map((c) => c.workflowId).filter((w): w is string => w !== null);
+    const names = await tramoNames(tx, [...new Set([movedFrom, toWorkflowId, ...fromIds])]);
+    const moveEvent = (entityId: string, fromId: string | null) =>
+      tx.insert(historyEvents).values({
+        entity: "task",
+        entityId,
+        kind: "cambio",
+        actorId,
+        field: TRAMO_MOVE_HISTORY_FIELD,
+        beforeValue: fromId ? (names.get(fromId) ?? null) : null,
+        afterValue: names.get(toWorkflowId) ?? null,
+      });
+    await recordChanges(
+      { entity: "task", entityId: before.id, actorId, before, after: after!, fields: TASK_FIELDS_BUT_TRAMO },
+      tx
+    );
+    await moveEvent(before.id, movedFrom);
+
+    for (const child of children) {
+      const phaseId = child.phaseId === before.phaseId ? after!.phaseId : null;
+      const [moved] = await tx
+        .update(tasks)
+        .set({ workflowId: toWorkflowId, phaseId })
+        .where(eq(tasks.id, child.id))
+        .returning();
+      await recordChanges(
+        { entity: "task", entityId: child.id, actorId, before: child, after: moved!, fields: TASK_FIELDS_BUT_TRAMO },
+        tx
+      );
+      await moveEvent(child.id, child.workflowId);
+    }
+  });
+}
+
+/** The live task's tramo id (null without one); TASK_NOT_FOUND when gone. */
+export async function taskWorkflowId(id: string): Promise<string | null> {
+  return (await loadLiveTask(id)).workflowId;
+}
+
+/**
+ * `opts.canMoveTramo`: the actor may change a task's existing tramo (admins,
+ * #1022); without it such a patch is `FORBIDDEN: task tramo change`.
+ */
+export async function updateTask(
+  id: string,
+  patch: TaskPatch,
+  actorId: string,
+  opts: { canMoveTramo?: boolean } = {}
+): Promise<TaskDetail> {
   const before = await loadLiveTask(id);
   if (before.kind === "admin") await assertAdminTaskPatch(patch);
   const set: Partial<TaskRow> = {};
   if (patch.title !== undefined) set.title = patch.title.trim() || before.title;
   if (patch.notes !== undefined) set.notes = clean(patch.notes);
-  await applyFlowPatch(before, patch, set);
+  const movedFrom = await applyFlowPatch(before, patch, set, opts.canMoveTramo ?? false);
   if (patch.priority !== undefined) set.priority = patch.priority;
   // Picking a built-in status leaves any custom one.
   if (patch.status !== undefined) {
@@ -1440,6 +1541,11 @@ export async function updateTask(id: string, patch: TaskPatch, actorId: string):
   if (patch.commitmentDate !== undefined) set.commitmentDate = clean(patch.commitmentDate);
   if (patch.reviewDate !== undefined) set.reviewDate = clean(patch.reviewDate);
   if (patch.deliveryDate !== undefined) set.deliveryDate = clean(patch.deliveryDate);
+
+  if (movedFrom) {
+    await moveTaskTramo(before, set, movedFrom, actorId);
+    return (await getTask(id))!;
+  }
 
   // A patch that changes nothing (e.g. the current tramo sent again) writes nothing.
   const [after] =

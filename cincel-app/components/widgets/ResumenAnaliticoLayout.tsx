@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ErrorState } from "@/components/shell/ErrorState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
+import { resumenCommitKeys, resumenTaskColumns } from "@/components/widgets/proyectos-cell-edits";
+import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { StatusChip } from "@/components/widgets/StatusChip";
 import { TeamLoadTable } from "@/components/widgets/TeamLoadTable";
 import { HEAT_CELL_CLASS } from "@/components/widgets/record-table-format";
@@ -37,6 +39,7 @@ import {
 import type { AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
+import { catalogTaskStatusesOptions } from "@/lib/query/options/catalog";
 import { proyectoAssigneeSuggestionOptions, proyectoTareasOptions } from "@/lib/query/options/proyectos";
 import { parseQuickAdd, type QuickAddPerson, type QuickAddTramo } from "@/lib/quick-add/parse";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
@@ -55,6 +58,11 @@ import { cn } from "@/lib/utils";
  * (S-curve) and "Carga del equipo", and "Tareas por tramo" (tramo → tarea)
  * whose groups end in a quick-add line. The task rows come from
  * `qk.proyectos.tab(id, "tareas")`; the rest from the Resumen read.
+ *
+ * In "Tareas por tramo", Tarea, Fase, Responsable, Estatus and Vence edit in
+ * place with the Tareas table rules (#1026, `resumenTaskColumns`). Every
+ * "Tramos y fases" number and date is calculated from the tasks (a fase has
+ * no schedule row of its own), so that table stays inert.
  */
 export type ResumenAnaliticoLayoutProps = { data: ProjectSummaryInput };
 
@@ -80,15 +88,6 @@ const PHASE_COLUMNS: RecordColumn[] = [
   { key: "start", label: "Inicio", mono: true, width: 90 },
   { key: "endPlan", label: "Fin plan", mono: true, width: 90 },
   { key: "deviationDays", label: "Desv. días", align: "right", mono: true, width: 100 },
-];
-
-const TASK_COLUMNS: RecordColumn[] = [
-  { key: "title", label: "Tarea", width: 360 },
-  { key: "phase", label: "Fase", width: 160 },
-  { key: "responsable", label: "Responsable", width: 170 },
-  { key: "status", label: "Estatus", width: 140 },
-  { key: "due", label: "Vence", mono: true, width: 90 },
-  { key: "daysLate", label: "Días de retraso", align: "right", mono: true, format: "count", width: 130 },
 ];
 
 /** Heat of "Desv. días": warning from 1 to 9 days, destructive from 10. */
@@ -189,6 +188,29 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
 
   const tramoById = useMemo(() => new Map(data.tramoCatalog.map((t) => [t.id, t])), [data.tramoCatalog]);
 
+  const qc = useQueryClient();
+  const statusesQuery = useQuery({ ...catalogTaskStatusesOptions(), enabled: caps.statusScope !== "none" });
+  const statuses = statusesQuery.data;
+  const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  // Responsable: the project's team, by name.
+  const teamPeople = useMemo(
+    () => Object.values(data.staff).map((s) => ({ id: s.id, name: s.name })).sort((a, b) => a.name.localeCompare(b.name, "es")),
+    [data.staff],
+  );
+  const taskColumns = useMemo(
+    () =>
+      resumenTaskColumns({
+        qc,
+        projectId,
+        tasks: tasksById,
+        phasesByTramo: data.phasesByTramo,
+        people: teamPeople,
+        statuses: statuses ?? [],
+        viewer: { admin: data.showBudget, caps },
+      }),
+    [qc, projectId, tasksById, data.phasesByTramo, teamPeople, statuses, data.showBudget, caps],
+  );
+
   const mutation = useActionMutation(createUserTaskAction, { invalidate: NEW_TASK_KEYS(projectId) });
   const people = useMemo<QuickAddPerson[]>(() => {
     const byId = new Map<string, QuickAddPerson>();
@@ -237,7 +259,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
             meId={user?.member.id ?? null}
             team={team}
             canAssign={canAssign}
-            colSpan={TASK_COLUMNS.length}
+            colSpan={taskColumns.length}
             onCreate={createTask}
           />
         ) : undefined,
@@ -292,17 +314,11 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
   function renderTaskCell(key: string, row: TaskRow): ReactNode | undefined {
     switch (key) {
       case "title":
+        // The table links it (`rowHref`): a click edits the title, the open icon and ⌘/Ctrl-click open the task.
         return (
-          <Link
-            href={`/tareas?tarea=${encodeURIComponent(row.id)}`}
-            title={row.title}
-            className={cn(
-              "block max-w-[360px] truncate underline decoration-border underline-offset-3",
-              row.done && "text-muted-foreground",
-            )}
-          >
+          <span title={row.title} className="block max-w-[360px] truncate">
             {row.title}
-          </Link>
+          </span>
         );
       case "phase":
         return <span className={cn(row.phase === null && "text-muted-foreground")}>{row.phase ?? RESUMEN_SIN_FASE}</span>;
@@ -422,21 +438,24 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
             {overdueCount} {overdueCount === 1 ? "vencida" : "vencidas"}
           </span>
         </header>
-        <GroupedTable<TaskRow>
-          label="Tareas por tramo"
-          columns={TASK_COLUMNS}
-          groups={taskGroups}
-          totals={{ label: taskTable.totals.title ?? "Total", summary: `${taskTable.totals.daysLate} días de retraso` }}
-          expanded={expandedOf(taskScope)}
-          onExpandedChange={(ids) => onExpandedChange(ids, taskScope)}
-          getRowId={(row) => row.id}
-          renderCell={renderTaskCell}
-          isRowMuted={(row) => row.done}
-          isRowNew={(row) => created.includes(row.id)}
-          onLoadMore={(groupId) => setUncapped((current) => [...current, groupId.replace(/^tareas-/, "")])}
-          loading={tasksLoading}
-          error={tasksError}
-        />
+        <CellCommitProvider queryKeys={resumenCommitKeys(projectId)}>
+          <GroupedTable<TaskRow>
+            label="Tareas por tramo"
+            columns={taskColumns}
+            groups={taskGroups}
+            totals={{ label: taskTable.totals.title ?? "Total", summary: `${taskTable.totals.daysLate} días de retraso` }}
+            expanded={expandedOf(taskScope)}
+            onExpandedChange={(ids) => onExpandedChange(ids, taskScope)}
+            getRowId={(row) => row.id}
+            renderCell={renderTaskCell}
+            rowHref={(row) => `/tareas?tarea=${encodeURIComponent(row.id)}`}
+            isRowMuted={(row) => row.done}
+            isRowNew={(row) => created.includes(row.id)}
+            onLoadMore={(groupId) => setUncapped((current) => [...current, groupId.replace(/^tareas-/, "")])}
+            loading={tasksLoading}
+            error={tasksError}
+          />
+        </CellCommitProvider>
       </section>
     </div>
   );

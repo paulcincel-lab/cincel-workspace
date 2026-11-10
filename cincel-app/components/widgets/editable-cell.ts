@@ -1,0 +1,128 @@
+import type { ActionResult } from "@/lib/types/schedule";
+
+/**
+ * Editable table cells (#1021, #1023): the contract shared by the popover
+ * editors (`CellEditor`), the commit hook (`useCellCommit`), the table
+ * wrapper (`EditableCell`) and the column types of `GroupedTable`,
+ * `RecordTable` and `DataTable`. A column without `edit` is calculated and
+ * stays inert; the cell's rendered content never changes at rest.
+ */
+
+/** One entry of a select / person list. `value: null` is the "Sin …" entry. */
+export type CellOption = {
+  value: string | null;
+  label: string;
+  /** Colour of the dot (a CSS colour or token, e.g. `var(--chart-2)`). */
+  color?: string;
+  avatar?: { name: string; photoUrl?: string };
+};
+
+type Base<Row> = {
+  /** The current value: an option value, an ISO date (`YYYY-MM-DD`) or text. */
+  value(row: Row): string | null;
+  /** Saves `v` (`null` clears). Undo calls it again with the previous value. */
+  commit(row: Row, v: string | null): Promise<ActionResult<unknown>>;
+};
+
+export type CellEdit<Row> =
+  | (Base<Row> & { kind: "select"; options(row: Row): CellOption[]; searchable?: boolean; clearable?: boolean })
+  | (Base<Row> & { kind: "person"; options(row: Row): CellOption[]; clearable?: boolean })
+  | (Base<Row> & { kind: "date"; quickPicks?: boolean; clearable?: boolean })
+  | (Base<Row> & { kind: "text"; required?: boolean });
+
+export type CellEditKind = CellEdit<unknown>["kind"];
+
+/** true, or the reason shown when the viewer clicks a locked cell */
+export type CanEdit<Row> = (row: Row) => true | string;
+
+/** How a cell behaves: calculated (no edit), locked with a reason, or editable. */
+export type CellEditState = { state: "inert" } | { state: "locked"; reason: string } | { state: "editable" };
+
+export function cellEditState<Row>(row: Row, edit?: CellEdit<Row>, canEdit?: CanEdit<Row>): CellEditState {
+  if (!edit) return { state: "inert" };
+  const allowed = canEdit ? canEdit(row) : true;
+  return allowed === true ? { state: "editable" } : { state: "locked", reason: allowed };
+}
+
+/** List editors show a search box above this many options (person always searches). */
+export const SEARCH_MIN_OPTIONS = 5;
+
+// Copy (Spanish, sentence case).
+export const SAVED_TOAST = (label: string): string => `${label} guardado.`;
+export const UNDO_LABEL = "Deshacer";
+export const UNDONE_TOAST = "Cambio deshecho.";
+/** How long the toast offers Deshacer (and ⌘/Ctrl+Z undoes), in ms. */
+export const UNDO_MS = 5000;
+export const EMPTY_TITLE_ERROR = "El título no puede quedar vacío.";
+export const SEARCH_PLACEHOLDER = (label: string): string => `Buscar ${label.toLowerCase()}…`;
+export const SEARCH_ARIA_LABEL = "Buscar";
+export const NO_RESULTS = "Sin resultados";
+export const OPEN_TASK_LABEL = "Abrir tarea";
+
+/** Clear entries of the list / date editors. */
+export const CLEAR_LABEL = {
+  person: "Sin asignar",
+  priority: "Sin prioridad",
+  phase: "Sin fase",
+  space: "Sin espacio",
+  date: "Sin fecha",
+} as const;
+
+/** Quick picks of the date editor, in order. */
+export const DATE_QUICK_PICKS = [
+  { id: "today", label: "Hoy" },
+  { id: "tomorrow", label: "Mañana" },
+  { id: "next-monday", label: "Próximo lunes" },
+  { id: "plus-week", label: "+1 semana" },
+  { id: "none", label: "Sin fecha" },
+] as const;
+export type DateQuickPick = (typeof DATE_QUICK_PICKS)[number]["id"];
+
+/** Reasons shown on a locked cell (from `resolveActivitiesCapabilities` and the task / project rules). */
+export const LOCK_REASON = {
+  /** Not the task's responsable nor an admin (`requireTaskWriter`). */
+  taskWriter: "Solo el responsable o un admin puede cambiar esta tarea.",
+  /** Tramo change (#1022): admins only. */
+  tramo: "Solo un admin puede mover la tarea de tramo.",
+  /** Responsable without `canChangeResponsible`. */
+  responsible: "Solo un admin puede cambiar el responsable.",
+  /** Estatus when `statusScope === "none"`. */
+  status: "Tu rol no puede cambiar el estatus de las tareas.",
+  /** Fase of a subtask: it inherits the parent's. */
+  subtaskPhase: "La fase viene de la tarea principal.",
+  /** Admin tasks have no tramo, fase nor espacio. */
+  adminTask: "Las tareas de administración no tienen tramo, fase ni espacio.",
+  /** Project fields: project admin rules of `updateProjectAction` / `setProjectCurrentTramoAction`. */
+  project: "Solo un admin puede cambiar este proyecto.",
+} as const;
+export type LockReasonKey = keyof typeof LOCK_REASON;
+
+/** A local date as ISO `YYYY-MM-DD` (no timezone shift). */
+export function toIsoDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** The ISO date a quick pick stands for, counted from `today`; "none" clears (null). */
+export function quickPickDate(id: DateQuickPick, today: Date = new Date()): string | null {
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  switch (id) {
+    case "today":
+      break;
+    case "tomorrow":
+      d.setDate(d.getDate() + 1);
+      break;
+    case "next-monday":
+      // The next Monday after today (a Monday gives the one a week later).
+      d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+      break;
+    case "plus-week":
+      d.setDate(d.getDate() + 7);
+      break;
+    case "none":
+      return null;
+  }
+  return toIsoDate(d);
+}

@@ -52,6 +52,19 @@ describe("HistoryEventList", () => {
     expect(screen.queryByText("Vacío")).toBeNull();
   });
 
+  it("words a tramo move with the tramo names", () => {
+    const move: HistoryEvent = {
+      ...comment,
+      kind: "cambio",
+      field: "tramo",
+      beforeValue: "Diseño",
+      afterValue: "Construcción",
+      comment: null,
+    };
+    render(<HistoryEventList events={[move]} empty={<p>Vacío</p>} />);
+    expect(screen.getByText("Movió la tarea de Diseño a Construcción")).toBeTruthy();
+  });
+
   it("renders the empty node when there are no events", () => {
     render(<HistoryEventList events={[]} empty={<p>Vacío</p>} />);
     expect(screen.getByText("Vacío")).toBeTruthy();

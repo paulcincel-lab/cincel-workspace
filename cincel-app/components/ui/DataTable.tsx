@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode, useState } from "react";
 import {
   type ColumnDef,
+  type RowData,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -15,6 +16,15 @@ import { GripVertical } from "lucide-react";
 
 import { Input } from "@/components/ui/shadcn/input";
 import { useKeyboardReorder } from "@/components/ui/use-keyboard-reorder";
+import { EditableCell } from "@/components/widgets/EditableCell";
+import { cellEditState, type CanEdit, type CellEdit } from "@/components/widgets/editable-cell";
+import {
+  CellGridContext,
+  GRID_CELL_CLASS,
+  GRID_GROUP_ATTR,
+  GRID_ROW_CLASS,
+  useCellGrid,
+} from "@/components/widgets/use-cell-grid";
 import {
   Table,
   TableBody,
@@ -25,9 +35,23 @@ import {
   TableRow,
 } from "@/components/ui/shadcn/table";
 
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TValue must match the original declaration
+  interface ColumnMeta<TData extends RowData, TValue> {
+    /** Editable cell (#1024); without it the column is calculated and inert. */
+    edit?: CellEdit<TData>;
+    /** true, or the reason shown when the viewer clicks a locked cell */
+    canEdit?(row: TData): ReturnType<CanEdit<TData>>;
+    /** Field name of an editable column for its toast and search ("Responsable"); defaults to the column id. */
+    editLabel?: string;
+  }
+}
+
 /**
  * Shared record table — sticky header, sortable columns, an optional built-in
- * search box, empty/loading states. Replaces the hand-rolled `<table>` markup
+ * search box, empty/loading states. Columns with `meta.edit` (#1024) make the
+ * table a keyboard grid whose editable cells open `CellEditor` (see
+ * `use-cell-grid`); clicks on them never reach `onRowClick`. Replaces the hand-rolled `<table>` markup
  * duplicated across proyectos/tareas/equipo/clientes/proveedores/dashboard
  * (Phase 7). Row actions are just a normal column whose `cell` renders
  * buttons — nothing special needed for that.
@@ -129,6 +153,8 @@ export function DataTable<T>({
   const [dragRowId, setDragRowId] = useState<string | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
   const reorderEnabled = Boolean(onReorderRows) && sorting.length === 0 && !globalFilter;
+  const editable = columns.some((column) => column.meta?.edit !== undefined);
+  const grid = useCellGrid(editable);
 
   const table = useReactTable({
     data,
@@ -161,8 +187,11 @@ export function DataTable<T>({
   const colSpan = columns.length + (reorderEnabled ? 1 : 0);
   const groupStarts = new Map((groups ?? []).map((g) => [g.rows[0].id, g] as const));
 
-  return (
-    <div className={`overflow-hidden rounded-2xl border border-border bg-card shadow-sm ${wrapperClassName}`}>
+  const view = (
+    <div
+      className={`overflow-hidden rounded-2xl border border-border bg-card shadow-sm ${wrapperClassName}`}
+      {...(editable ? grid.rootProps : {})}
+    >
       {searchPlaceholder ? (
         <div className="border-b border-border p-3">
           <Input
@@ -175,7 +204,7 @@ export function DataTable<T>({
         </div>
       ) : null}
 
-      <Table className={tableClassName}>
+      <Table className={tableClassName} role={editable ? "grid" : undefined}>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
@@ -265,7 +294,8 @@ export function DataTable<T>({
                       : undefined
                   }
                   data-lifted={keyboard.liftedId === row.id ? "true" : undefined}
-                  className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id || keyboard.liftedId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}`}
+                  {...(editable ? { [GRID_GROUP_ATTR]: groupBy ? groupBy(row.original) : "" } : {})}
+                  className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id || keyboard.liftedId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}${editable ? ` ${GRID_ROW_CLASS}` : ""}`}
                 >
                   {reorderEnabled ? (
                     <TableCell className="w-8 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
@@ -288,11 +318,39 @@ export function DataTable<T>({
                       </button>
                     </TableCell>
                   ) : null}
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className={cellClassName?.(cell.column.id, row.original)}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const content = flexRender(cell.column.columnDef.cell, cell.getContext());
+                    if (!editable) {
+                      return (
+                        <TableCell key={cell.id} className={cellClassName?.(cell.column.id, row.original)}>
+                          {content}
+                        </TableCell>
+                      );
+                    }
+                    const meta = cell.column.columnDef.meta;
+                    const state = cellEditState(row.original, meta?.edit, meta?.canEdit?.bind(meta)).state;
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        {...grid.cellProps(row.id, cell.column.id, state)}
+                        className={`${cellClassName?.(cell.column.id, row.original) ?? ""} ${GRID_CELL_CLASS}`}
+                      >
+                        <EditableCell<T>
+                          row={row.original}
+                          rowId={row.id}
+                          columnKey={cell.column.id}
+                          edit={meta?.edit}
+                          canEdit={meta?.canEdit?.bind(meta)}
+                          label={
+                            meta?.editLabel ??
+                            (typeof cell.column.columnDef.header === "string" ? cell.column.columnDef.header : undefined)
+                          }
+                        >
+                          {content}
+                        </EditableCell>
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               </Fragment>
             ))
@@ -307,4 +365,5 @@ export function DataTable<T>({
       ) : null}
     </div>
   );
+  return editable ? <CellGridContext.Provider value={grid.api}>{view}</CellGridContext.Provider> : view;
 }

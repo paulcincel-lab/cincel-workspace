@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
@@ -8,10 +17,12 @@ import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { GroupedTable, type Group, type GroupAnchor } from "@/components/widgets/GroupedTable";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
+import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions, tareasSummaryOptions } from "@/lib/query/options/tareas";
 import { selectAnaliticoCollapsed, useTareasUi } from "@/lib/stores/tareas-ui-store";
 import type { TareasFacets, TareasStaffOption } from "@/lib/tareas/page-data";
@@ -48,6 +59,7 @@ import {
   type AnaliticoRow,
 } from "./tareas-analitico";
 import { localIsoDate } from "./tablero-table";
+import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
 import { useTareasFilters, useTareasPageReady } from "./use-tareas-page";
 
 export const ANALITICO_SEARCH_LABEL = "Buscar tareas";
@@ -122,6 +134,8 @@ function GroupRowsLoader({
 
   return null;
 }
+
+const taskOfRow = (row: AnaliticoRow) => row.task;
 
 function sameState(a: GroupRowsState | undefined, b: GroupRowsState): boolean {
   return !!a && a.rows === b.rows && a.loading === b.loading && a.error === b.error && a.hasMore === b.hasMore;
@@ -280,15 +294,37 @@ export function TareasAnalitico({
     [summary.projects],
   );
 
-  // ── `?tarea=<id>` opens the task sheet over the table.
-  const rowHref = useCallback(
-    (row: AnaliticoRow) => {
+  // ── `?tarea=<id>` opens the task sheet over the table (shallow: the table under it stays as it is).
+  const taskHref = useCallback(
+    (taskId: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set("tarea", row.id);
+      params.set("tarea", taskId);
       return `${pathname}?${params.toString()}`;
     },
     [pathname, searchParams],
   );
+  const rowHref = useCallback((row: AnaliticoRow) => taskHref(row.id), [taskHref]);
+  const openTask = useCallback((taskId: string) => window.history.pushState(null, "", taskHref(taskId)), [taskHref]);
+
+  // Clicking a cell edits it; ⌘/Ctrl-click on a row opens the task (the title link and its
+  // open icon, added by `GroupedTable` from `rowHref`, keep their own ⌘/Ctrl-click: new tab).
+  const onRowsClickCapture = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const target = event.target as HTMLElement;
+      if (target.closest("a")) return;
+      const id = target.closest<HTMLElement>('[data-slot="leaf-row"]')?.dataset.rowId;
+      if (!id) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openTask(id);
+    },
+    [openTask],
+  );
+
+  // ── Editable cells (#1025): every task column but Subtareas and Días de retraso.
+  const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, tramos, staff });
+  const columns = useMemo(() => cells.withEdits(ANALITICO_COLUMNS), [cells]);
 
   const renderCell = useCallback((columnKey: string, row: AnaliticoRow): ReactNode | undefined => {
     switch (columnKey) {
@@ -297,6 +333,28 @@ export function TareasAnalitico({
           <span title={row.tarea} className="block max-w-[420px] truncate">
             {row.tarea}
           </span>
+        );
+      case "tramo": {
+        const tramo = row.task.workflow;
+        if (!tramo) return <span className="text-muted-foreground">{row.tramo}</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="size-[7px] shrink-0 rounded-full"
+              style={{ background: tramoColorVar(tramo.key, tramo.sortOrder) }}
+            />
+            {row.tramo}
+          </span>
+        );
+      }
+      case "fase":
+        return row.task.phase ? (
+          <span title={row.fase} className="block max-w-[180px] truncate">
+            {row.fase}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">{CLEAR_LABEL.phase}</span>
         );
       case "responsable":
         return (
@@ -402,7 +460,12 @@ export function TareasAnalitico({
   const totals = summary.projects.length > 0 && !summaryLoading ? analiticoTotals(summary, mostrar) : null;
 
   return (
-    <div data-slot="tareas-analitico" className="flex min-w-0 flex-col gap-5">
+    <div
+      data-slot="tareas-analitico"
+      className="flex min-w-0 flex-col gap-5"
+      onClickCapture={onRowsClickCapture}
+      {...cells.primeProps}
+    >
       <PageHeader title="Tareas" description={ANALITICO_DESCRIPTION} actions={actions} />
       <FilterCard
         groups={filterGroups}
@@ -411,25 +474,27 @@ export function TareasAnalitico({
         search={{ value: search, onChange: onSearch, placeholder: ANALITICO_SEARCH_LABEL, label: ANALITICO_SEARCH_LABEL }}
       />
       <KpiStrip items={analiticoKpis(summary, mostrar)} loading={summaryLoading} />
-      <GroupedTable<AnaliticoRow>
-        label={ANALITICO_TABLE_LABEL}
-        columns={ANALITICO_COLUMNS}
-        groups={groups}
-        anchors={anchors}
-        anchorsCaption={ANALITICO_ANCHORS_CAPTION}
-        expanded={expanded}
-        onExpandedChange={onExpandedChange}
-        heat={[ANALITICO_DAYS_LATE_HEAT]}
-        getRowId={(row) => row.id}
-        renderCell={renderCell}
-        rowHref={rowHref}
-        isRowNew={(row) => created.has(row.id)}
-        isRowMuted={(row) => row.closed}
-        onLoadMore={(id) => rowActions.current.get(id)?.more()}
-        loading={summaryLoading}
-        error={summaryQuery.isError && !summaryQuery.data ? { title: "No se pudo cargar", onRetry: () => void summaryQuery.refetch() } : undefined}
-        emptyState={emptyState}
-      />
+      <CellCommitProvider queryKeys={TAREAS_CELL_KEYS}>
+        <GroupedTable<AnaliticoRow>
+          label={ANALITICO_TABLE_LABEL}
+          columns={columns}
+          groups={groups}
+          anchors={anchors}
+          anchorsCaption={ANALITICO_ANCHORS_CAPTION}
+          expanded={expanded}
+          onExpandedChange={onExpandedChange}
+          heat={[ANALITICO_DAYS_LATE_HEAT]}
+          getRowId={(row) => row.id}
+          renderCell={renderCell}
+          rowHref={rowHref}
+          isRowNew={(row) => created.has(row.id)}
+          isRowMuted={(row) => row.closed}
+          onLoadMore={(id) => rowActions.current.get(id)?.more()}
+          loading={summaryLoading}
+          error={summaryQuery.isError && !summaryQuery.data ? { title: "No se pudo cargar", onRetry: () => void summaryQuery.refetch() } : undefined}
+          emptyState={emptyState}
+        />
+      </CellCommitProvider>
       {note ? (
         <p data-slot="hidden-projects" className="rounded-[14px] border border-dashed border-input px-4 py-2.5 text-[12.5px] text-muted-foreground">
           {note}

@@ -131,11 +131,13 @@ describe("TareasAnalitico accessibility", () => {
     // Each tramo group's rows are a tbody of their own.
     const [, presale] = toggles;
     expect(container.querySelector(`[id="${presale.getAttribute("aria-controls")}"]`)?.tagName).toBe("TBODY");
-    // A native table per project with column headers.
-    const table = within(lomas).getByRole("table");
+    // A native table per project with column headers; its editable cells make it a grid.
+    const table = within(lomas).getByRole("grid");
     const headers = within(table).getAllByRole("columnheader");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Tarea",
+      "Tramo",
+      "Fase",
       "Responsable",
       "Estatus",
       "Vence",

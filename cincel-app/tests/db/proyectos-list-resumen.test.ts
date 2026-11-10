@@ -169,6 +169,7 @@ describe.skipIf(!url)("Proyectos list, Resumen and Tareas page data (test DB)", 
       [
         "canChangeProjectStage",
         "canCreateProject",
+        "canEditProjectGeneral",
         "canSeeAdminData",
         "portfolio",
         "presaleAutoStart",

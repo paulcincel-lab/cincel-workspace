@@ -255,8 +255,7 @@ describe("TareasAnalitico", () => {
     // Closed and on-time tasks have no delay.
     expect(cell("t2").textContent).toBe("—");
     // Overdue due dates in destructive.
-    const vence = container.querySelector('[data-row-id="t1"] [data-column="vence"] span') as HTMLElement;
-    expect(vence.className).toContain("text-destructive");
+    expect(container.querySelector('[data-row-id="t1"] [data-column="vence"] .text-destructive')?.textContent).toBeTruthy();
     // Rows in the order they came: days late desc.
     const lomas = screen.getByRole("region", { name: "Casa Lomas" });
     expect([...lomas.querySelectorAll("[data-row-id]")].map((r) => r.getAttribute("data-row-id"))).toEqual(["t1", "t2", "t3", "t4"]);
