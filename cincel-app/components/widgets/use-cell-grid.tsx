@@ -21,7 +21,9 @@ import type { CellEditState } from "@/components/widgets/editable-cell";
  * cells (rows without cells, such as group headers and "Cargar más", are
  * skipped), Enter / F2 open the editor, a letter opens a list editor with that
  * letter in its search, Supr / Backspace clears a clearable cell and ⌘/Ctrl +
- * Enter follows the cell's open link. After a save the grid keeps focus on the
+ * Enter follows the cell's open link. In a table with row delete
+ * (`onRowDelete`, #1041) the row handles Supr first and opens the delete
+ * confirmation instead, so there only Backspace clears a cell. After a save the grid keeps focus on the
  * same row id when sorting or regrouping re-renders the row elsewhere, and a
  * row that lands in another group scrolls into view and flashes once.
  *
@@ -33,7 +35,7 @@ import type { CellEditState } from "@/components/widgets/editable-cell";
 export type CellHandle = {
   /** Opens the editor (or closes it when `toggle` and it is open). */
   open(options?: { initialQuery?: string; toggle?: boolean }): void;
-  /** Supr / Backspace: saves `null` when the column is clearable. */
+  /** Supr / Backspace (only Backspace in a table with row delete): saves `null` when the column is clearable. */
   clear(): void;
   /** A typed letter opens the editor with that letter in its search (list editors). */
   acceptsLetters: boolean;
@@ -159,8 +161,15 @@ export function useCellGrid(enabled: boolean): UseCellGrid {
   }, []);
 
   const api = useMemo(() => {
-    const cells = (): HTMLElement[] =>
-      rootRef.current ? Array.from(rootRef.current.querySelectorAll<HTMLElement>("[data-grid-cell]")) : [];
+    const cells = (): HTMLElement[] => {
+      const root = rootRef.current;
+      if (!root) return [];
+      // A table nested in an expanded row (`data-row-detail`, #1042) is its own grid.
+      return Array.from(root.querySelectorAll<HTMLElement>("[data-grid-cell]")).filter((cell) => {
+        const detail = cell.closest("[data-row-detail]");
+        return !detail || !root.contains(detail);
+      });
+    };
 
     const find = (row: string, column: string): HTMLElement | undefined =>
       cells().find((cell) => cell.dataset.cellRow === row && cell.dataset.cellColumn === column);

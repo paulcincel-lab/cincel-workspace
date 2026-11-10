@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type ReactNode, useState } from "react";
+import { Fragment, type KeyboardEvent, type ReactNode, useState } from "react";
 import {
   type ColumnDef,
   type RowData,
@@ -17,8 +17,15 @@ import { GripVertical } from "lucide-react";
 import { Input } from "@/components/ui/shadcn/input";
 import { useKeyboardReorder } from "@/components/ui/use-keyboard-reorder";
 import { EditableCell } from "@/components/widgets/EditableCell";
+import { ROW_ACTIONS_HEADER, ROW_ACTIONS_WIDTH, RowActionsMenu, rowDeleteKeyDown } from "@/components/widgets/RowActionsMenu";
 import { cellEditState, type AnyCellEdit, type CanEdit } from "@/components/widgets/editable-cell";
 import type { TableRowActionsProps, TableSelectionProps } from "@/components/widgets/table-rows";
+import {
+  HeaderSelectCheckbox,
+  RowSelectCheckbox,
+  SELECT_CELL_CLASS,
+  useTableSelection,
+} from "@/components/widgets/table-selection";
 import {
   CellGridContext,
   GRID_CELL_CLASS,
@@ -142,6 +149,9 @@ export function DataTable<T>({
   tableClassName = "",
   wrapperClassName = "",
   onReorderRows,
+  selectable,
+  selectedIds,
+  onSelectionChange,
   getRowLabel,
   reorderHeader,
   headerClassName,
@@ -149,6 +159,8 @@ export function DataTable<T>({
   footer,
   groupBy,
   renderGroupHeader,
+  rowActions,
+  onRowDelete,
 }: DataTableProps<T>): ReactNode {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -189,13 +201,23 @@ export function DataTable<T>({
   const rows = keyboard.liftedId
     ? keyboard.order.map((id) => rowById.get(id)).filter((row): row is (typeof shownRows)[number] => Boolean(row))
     : shownRows;
-  const colSpan = columns.length + (reorderEnabled ? 1 : 0);
+  const rowOrder = rows.map((row) => row.id);
+  const selection = useTableSelection<T>({ selectable, selectedIds, onSelectionChange }, rowOrder);
+  const colSpan = (selection.enabled ? 1 : 0) + columns.length + (reorderEnabled ? 1 : 0) + (rowActions ? 1 : 0);
   const groupStarts = new Map((groups ?? []).map((g) => [g.rows[0].id, g] as const));
 
   const view = (
     <div
       className={`overflow-hidden rounded-2xl border border-border bg-card shadow-sm ${wrapperClassName}`}
       {...(editable ? grid.rootProps : {})}
+      {...(selection.enabled
+        ? {
+            onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+              grid.rootProps.onKeyDown(event);
+              selection.onKeyDown(event);
+            },
+          }
+        : {})}
     >
       {searchPlaceholder ? (
         <div className="border-b border-border p-3">
@@ -213,6 +235,11 @@ export function DataTable<T>({
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
+              {selection.enabled ? (
+                <TableHead data-slot="row-select-head" className={SELECT_CELL_CLASS}>
+                  <HeaderSelectCheckbox selection={selection} ids={rowOrder} />
+                </TableHead>
+              ) : null}
               {reorderEnabled ? (
                 reorderHeader ? (
                   <TableHead className="w-8">{reorderHeader}</TableHead>
@@ -244,19 +271,24 @@ export function DataTable<T>({
                   </TableHead>
                 );
               })}
+              {rowActions ? (
+                <TableHead data-slot="row-actions-head" style={{ width: ROW_ACTIONS_WIDTH }}>
+                  <span className="sr-only">{ROW_ACTIONS_HEADER}</span>
+                </TableHead>
+              ) : null}
             </TableRow>
           ))}
         </TableHeader>
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={columns.length + (reorderEnabled ? 1 : 0)} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={colSpan} className="py-8 text-center text-sm text-muted-foreground">
                 {loadingMessage}
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={columns.length + (reorderEnabled ? 1 : 0)} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={colSpan} className="py-8 text-center text-sm text-muted-foreground">
                 {emptyMessage}
               </TableCell>
             </TableRow>
@@ -272,6 +304,7 @@ export function DataTable<T>({
                 ) : null}
                 <TableRow
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onKeyDown={onRowDelete ? (event) => rowDeleteKeyDown(event, () => onRowDelete(row.original)) : undefined}
                   onDragOver={
                     reorderEnabled && dragRowId
                       ? (e) => {
@@ -299,9 +332,15 @@ export function DataTable<T>({
                       : undefined
                   }
                   data-lifted={keyboard.liftedId === row.id ? "true" : undefined}
+                  data-state={selection.isSelected(row.id) ? "selected" : undefined}
                   {...(editable ? { [GRID_GROUP_ATTR]: groupBy ? groupBy(row.original) : "" } : {})}
-                  className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id || keyboard.liftedId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}${editable ? ` ${GRID_ROW_CLASS}` : ""}`}
+                  className={`${onRowClick ? "cursor-pointer" : ""} ${dragOverRowId === row.id || keyboard.liftedId === row.id ? "bg-muted" : ""} ${rowClassName?.(row.original) ?? ""}${editable ? ` ${GRID_ROW_CLASS}` : ""}${rowActions ? " group/row" : ""}`}
                 >
+                  {selection.enabled ? (
+                    <TableCell data-slot="row-select-cell" className={SELECT_CELL_CLASS} onClick={(e) => e.stopPropagation()}>
+                      <RowSelectCheckbox selection={selection} id={row.id} label={getRowLabel?.(row.original) ?? row.id} />
+                    </TableCell>
+                  ) : null}
                   {reorderEnabled ? (
                     <TableCell className="w-8 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -356,6 +395,14 @@ export function DataTable<T>({
                       </TableCell>
                     );
                   })}
+                  {rowActions ? (
+                    <TableCell data-slot="row-actions-cell" className="w-10 px-1 py-0 text-right" onClick={(e) => e.stopPropagation()}>
+                      <RowActionsMenu
+                        rowLabel={getRowLabel?.(row.original) ?? row.id}
+                        actions={rowActions(row.original)}
+                      />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               </Fragment>
             ))

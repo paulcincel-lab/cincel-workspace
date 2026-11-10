@@ -10,6 +10,7 @@ import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import type { PageHeaderProps } from "@/components/shell/PageHeader";
 import { ListPage, type ListSpec } from "@/components/patterns/ListPage";
 import { OPEN_TASK_LABEL } from "@/components/widgets/editable-cell";
+import { PeopleStack } from "@/components/widgets/PeopleStack";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions } from "@/lib/query/options/tareas";
@@ -18,8 +19,13 @@ import type { TareasQuery } from "@/lib/tareas/query";
 import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
 
 import { listaTable, listaTasks } from "./lista-table";
+import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
+import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 import { TareasStartSlot, startSlotTramo } from "./TareasStartSlot";
 import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
+import { deleteTargetOf, useDeleteTasks } from "./use-delete-tasks";
+import { TaskBulkBar } from "./TaskBulkBar";
+import { useTaskSelection } from "./use-task-selection";
 import { useTareasFilters, useTareasPage, useTareasPageReady } from "./use-tareas-page";
 
 /** Empty state when the filters leave no task (FE §3.4). */
@@ -58,7 +64,13 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
   const list = useInfiniteQuery({ ...tareasListInfiniteOptions(f), enabled: ready });
 
   const pages = list.data?.pages;
-  const loaded = useMemo(() => (pages ?? []).flatMap((p) => p.rows.map(listItemOfRow)), [pages]);
+  // Delete (#1041): deleted rows (and their subtasks) leave right away.
+  const deletes = useDeleteTasks();
+  const isHidden = deletes.isHidden;
+  const loaded = useMemo(
+    () => (pages ?? []).flatMap((p) => p.rows.filter((r) => !isHidden(r.id, r.parentTaskId)).map(listItemOfRow)),
+    [pages, isHidden],
+  );
   // Idempotent: the rows come narrowed by tramo and proyecto already.
   const tasks = useMemo(
     () => listaTasks(loaded, { tramo: query.tramo, proyecto: query.proyecto }),
@@ -76,6 +88,11 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
     const table = listaTable(tasks);
     return { ...table, columns: cells.withEdits(table.columns) };
   }, [tasks, cells]);
+
+  // ── Row checkboxes and the bulk bar (#1040): a filter change clears the selection.
+  const visibleIds = useMemo(() => data.rows.map((row) => String(row.id)), [data.rows]);
+  const selection = useTaskSelection({ visibleIds, resetKey: JSON.stringify(f) });
+  const taskOfId = useCallback((id: string) => tasksById.get(id), [tasksById]);
 
   // `/tareas?…&tarea=<id>`: the task sheet opens over the mounted list.
   const taskHref = useCallback(
@@ -120,10 +137,32 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
         );
       }
       if (columnKey === "tramo" && task.workflow) return <TramoBadge tramo={task.workflow} />;
+      if (columnKey === TASK_SUPPORT_COLUMN) return <PeopleStack people={task.support} label={SUPPORT_COLUMN_LABEL} />;
       return undefined;
     },
     [tasksById, taskHref],
   );
+
+  const { rowActions: deleteActions, request: requestDelete, canDelete } = deletes;
+  const rowMenu = useMemo(() => {
+    const targetOf = (row: Record<string, unknown>) => {
+      const task = tasksById.get(String(row.id));
+      return task ? deleteTargetOf(task) : null;
+    };
+    return {
+      getRowLabel: (row: Record<string, unknown>) => tasksById.get(String(row.id))?.title ?? String(row.id),
+      rowActions: (row: Record<string, unknown>) => {
+        const target = targetOf(row);
+        return target ? deleteActions(target, () => window.history.pushState(null, "", taskHref(target.id))) : [];
+      },
+      onRowDelete: canDelete
+        ? (row: Record<string, unknown>) => {
+            const target = targetOf(row);
+            if (target) requestDelete([target]);
+          }
+        : undefined,
+    };
+  }, [tasksById, deleteActions, requestDelete, canDelete, taskHref]);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = list;
   const onEndReached = useCallback(() => void fetchNextPage(), [fetchNextPage]);
@@ -132,9 +171,16 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
       kind: "table" as const,
       data,
       renderCell,
+      rowMenu,
+      rowSelection: {
+        selectable: true,
+        selectedIds: selection.selectedIds,
+        onSelectionChange: selection.onSelectionChange,
+        getRowLabel: rowMenu.getRowLabel,
+      },
       pagination: { onEndReached, hasMore: hasNextPage, loadingMore: isFetchingNextPage },
     }),
-    [data, renderCell, onEndReached, hasNextPage, isFetchingNextPage],
+    [data, renderCell, rowMenu, selection, onEndReached, hasNextPage, isFetchingNextPage],
   );
 
   const slotTramo = startSlotTramo(query.tramo, tramos);
@@ -159,6 +205,8 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
           spec={spec}
           empty={empty}
         />
+        {deletes.dialog}
+        <TaskBulkBar selection={selection} taskOf={taskOfId} staff={staff} deletes={deletes} />
       </div>
     </CellCommitProvider>
   );

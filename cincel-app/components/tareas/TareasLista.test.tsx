@@ -206,8 +206,8 @@ describe("TareasLista", () => {
       "tramo:select",
       "fase:select",
       "responsable:person",
+      "apoyo:people",
       "plazo:-",
-      "vence:date",
     ]);
   });
 
