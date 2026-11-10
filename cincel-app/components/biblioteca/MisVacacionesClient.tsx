@@ -40,6 +40,7 @@ export function MisVacacionesClient({ month, year }: MisVacacionesClientProps) {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
+        estilo={false}
         title="Mis vacaciones"
         description={`Saldo ${year}, solicitudes y quién está fuera este mes.`}
         breadcrumb={[{ label: "Biblioteca", href: "/biblioteca" }, { label: "Mis vacaciones" }]}

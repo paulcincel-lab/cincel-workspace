@@ -95,6 +95,7 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <PageHeader
+        estilo={false}
         title={MI_ESPACIO_TITLE}
         description={MI_ESPACIO_DESCRIPTION}
         badge={

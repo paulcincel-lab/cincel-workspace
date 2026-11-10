@@ -87,6 +87,7 @@ export function PersonaDetail({ detail }: PersonaDetailProps) {
         </Avatar>
         <div className="min-w-0 flex-1">
           <PageHeader
+            estilo={false}
             title={name}
             description={headerDescription(person)}
             breadcrumb={[{ label: "Personas", href: "/personas" }, { label: name }]}

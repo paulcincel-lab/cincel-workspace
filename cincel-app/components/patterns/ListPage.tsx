@@ -106,6 +106,7 @@ export function ListPage({ header, filters, tabs, spec, empty }: ListPageProps) 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-list-kind={spec.kind}>
       <PageHeader
+        estilo={false}
         {...header}
         actions={
           <>

@@ -165,6 +165,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
   return (
     <div className="space-y-6">
       <PageHeader
+        estilo={false}
         title="Tema de la organización"
         description="Colores, tipografía y forma para todos. Cada usuario puede elegir otro tema solo para sí."
         breadcrumb={[{ label: "Ajustes", href: "/ajustes" }, { label: "Tema de la organización" }]}

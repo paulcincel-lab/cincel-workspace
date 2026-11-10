@@ -19,7 +19,19 @@ const FILES = [
 ].map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") }));
 
 /** Widgets the list composes (FE §4.10.2: `EntityCardGrid` and `DistributionWidget` through these and `ListPage`). */
-const ALLOWED_WIDGETS = new Set(["DistributionStripWidget", "EntityCardFooter"]);
+const ALLOWED_WIDGETS = new Set([
+  "DistributionStripWidget",
+  "EntityCardFooter",
+  // Estilos kit (#979): the per-style page layout and its shared parts.
+  "PageStyleLayout",
+  "PageHeader",
+  "KpiStrip",
+  "FilterCard",
+  "GroupedTable",
+  "EsencialCard",
+  "EsencialItemRow",
+  "QuickAddRow",
+]);
 
 describe("Proyectos list composition guard", () => {
   it.each(FILES.map((f) => [f.path, f.text]))("%s does not import StyleView", (_path, text) => {
