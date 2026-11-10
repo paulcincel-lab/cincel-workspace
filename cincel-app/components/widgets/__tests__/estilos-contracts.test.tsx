@@ -124,7 +124,7 @@ describe("Estilos contracts", () => {
     expect(onChange).toHaveBeenCalledWith("estado", "vencidas");
   });
 
-  it("QuickAddRow calls onCreate with the parsed title on Enter", () => {
+  it("QuickAddRow calls onCreate with the parsed title on Enter", async () => {
     const onCreate = vi.fn(async () => ({ id: "t1", title: "Revisar" }));
     renderWithQueryClient(<QuickAddRow context={{ label: "Nueva tarea", projectId: "p1" }} onCreate={onCreate} variant="card" />);
     const input = screen.getByLabelText("Nueva tarea en Nueva tarea");
@@ -138,6 +138,7 @@ describe("Estilos contracts", () => {
       dueDate: null,
       priority: "media",
     });
+    await screen.findByText("Creada: Revisar");
   });
 
   it("ToolSteps lists one step per tool part", () => {

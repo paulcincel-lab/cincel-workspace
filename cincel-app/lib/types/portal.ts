@@ -18,8 +18,8 @@ export type PortalProjectDTO = {
   /** projects.manager_id */
   manager: { name: string; email: string | null } | null;
   /**
-   * Points gained this month (today's progress minus the first snapshot of the month). Not emitted yet: it
-   * arrives with `project_progress_snapshots`; until then the Analítico KPI leaves its sub-line out.
+   * Points gained this month: today's progress minus the month's first `project_progress_snapshots` row. Null
+   * while the month has no snapshot; the Analítico KPI then leaves its sub-line out.
    */
   progressDeltaMonth?: number | null;
 };
@@ -33,12 +33,13 @@ export type PortalScheduleSectionDTO = {
   end: string;
   progressPct: number;
   /**
-   * First and last real dates of the section (`schedule_tasks.started_on` / `finished_on`). Not emitted yet:
-   * absent until those columns exist, and the Analítico Real / Desvío columns stay hidden meanwhile.
+   * First real start and, once every task of the section is finished, last real end
+   * (`schedule_tasks.started_on` / `finished_on`); null otherwise. While no section has any, the Analítico
+   * Real / Desvío columns stay hidden.
    */
   actualStart?: string | null;
   actualEnd?: string | null;
-  /** The tramo the section belongs to (`schedule_tasks.workflow_id`). Not emitted yet; phases group by planta. */
+  /** The tramo the section belongs to (`schedule_tasks.workflow_id` → `workflows.key`); while none is linked, phases group by planta. */
   tramoKey?: string | null;
 };
 

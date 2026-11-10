@@ -67,12 +67,18 @@ export function CronogramaHeader({
             <Button
               variant="outline"
               size="sm"
+              nativeButton={false}
               render={<a href={`/api/proyectos/${projectId}/cronograma/export`} download={`cronograma-${projectId}.json`} />}
             >
               Exportar
             </Button>
             <ImportDialog projectId={projectId} scheduleId={scheduleId} />
-            <Button variant="outline" size="sm" render={<Link href={`/proyectos/${projectId}/cronograma/reporte`} />}>
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<Link href={`/proyectos/${projectId}/cronograma/reporte`} />}
+            >
               Generar reporte
             </Button>
           </div>

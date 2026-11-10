@@ -409,15 +409,6 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
   const pausadosGroup = filterGroups.find((g) => g.id === PORTFOLIO_FILTER_GROUP.pausados)!;
 
   const totalShown = visible.length;
-  const totals = table.totals;
-  const summary = [
-    totals.real,
-    `${totals.open} abiertas`,
-    `${totals.overdue} vencidas`,
-    totals.overduePct,
-    totals.avgDelayDays,
-    ...(canSeeAdminData && totals.budgetSpentPct ? [`presup. ${totals.budgetSpentPct}`] : []),
-  ].join(" · ");
 
   const headerActions = (
     <>
@@ -548,7 +539,8 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
                   label={PORTFOLIO_TABLE_LABEL}
                   columns={columns}
                   groups={groups}
-                  totals={{ label: totals.name, summary }}
+                  layout="table"
+                  footerRow={table.totals}
                   expanded={expanded}
                   onExpandedChange={(ids) => setCollapsed(groupIds.filter((id) => !ids.includes(id)))}
                   getRowId={(row) => row.id}

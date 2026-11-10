@@ -36,7 +36,6 @@ vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
 }));
 vi.mock("@ai-sdk/react", () => ({
   useChat: (opts: { messages?: UIMessage[] }) => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [messages, setMessages] = useState<UIMessage[]>(opts.messages ?? []);
     return { messages, setMessages, sendMessage: vi.fn(), status: "ready", addToolApprovalResponse: vi.fn() };
   },

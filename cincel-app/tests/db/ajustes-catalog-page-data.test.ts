@@ -109,7 +109,7 @@ describe.skipIf(!url)("ajustes catalog page data (test DB)", async () => {
     const json = JSON.stringify(data);
     expect(json).not.toContain(email);
     expect(json).not.toContain(`admin-${email}`);
-    expect(Object.keys(data).sort()).toEqual(["defaultPermissions", "staff"]);
+    expect(Object.keys(data).sort()).toEqual(["defaultPermissions", "hasCustom", "permissions", "staff"]);
   });
 
   it("Puestos page data runs ≤ 5 statements in one wave", async () => {

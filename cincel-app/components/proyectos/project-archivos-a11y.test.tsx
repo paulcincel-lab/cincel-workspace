@@ -14,6 +14,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 import type { StaffFilesResult } from "@/lib/types/workspace-access";
 
 import { ProjectFiles } from "./ProjectFiles";
+import { settle } from "@/tests/helpers/settle";
 
 const MODES = ["light", "dark"] as const;
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
@@ -63,6 +64,7 @@ const OK: StaffFilesResult = {
 };
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout and rendering, which happy-dom doesn't provide;
   // the token pairs are checked with checkContrast below.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

@@ -54,7 +54,7 @@ describe.skipIf(!url)("tramos color, order and counts (test DB)", async () => {
   const schema = await import("@/lib/db/schema");
   const repo = await import("./workflows-repository");
   const actions = await import("@/lib/actions/workflows-actions");
-  const { reorderWorkflowsAction } = unwrapActions(actions);
+  const { reorderWorkflowsAction, updateWorkflowAction } = unwrapActions(actions);
   const { tramoColorSlot } = await import("@/lib/tramos/tramo-color");
 
   let adminId = "";
@@ -118,18 +118,18 @@ describe.skipIf(!url)("tramos color, order and counts (test DB)", async () => {
     // Derived: sortOrder 2 → slot 2.
     expect(tramoColorSlot(before)).toBe(2);
 
-    const saved = await actions.updateWorkflowAction(id, { colorSlot: 5 });
+    const saved = await updateWorkflowAction(id, { colorSlot: 5 });
     expect(saved.colorSlot).toBe(5);
     expect(tramoColorSlot(saved)).toBe(5);
     const nav = (await repo.listTramosNav()).find((w) => w.id === id);
     expect(nav?.colorSlot).toBe(5);
 
-    await expect(actions.updateWorkflowAction(id, { colorSlot: 6 as never })).rejects.toThrow(/INVALID/);
+    await expect(updateWorkflowAction(id, { colorSlot: 6 as never })).rejects.toThrow(/INVALID/);
     await expect(
       db.execute(sql`update core.workflows set color_slot = 0 where id = ${id}`),
     ).rejects.toThrow();
 
-    const cleared = await actions.updateWorkflowAction(id, { colorSlot: null });
+    const cleared = await updateWorkflowAction(id, { colorSlot: null });
     expect(cleared.colorSlot).toBeNull();
     expect(tramoColorSlot(cleared)).toBe(2);
   });

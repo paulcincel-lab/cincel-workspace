@@ -109,6 +109,19 @@ describe("ProjectsVisualLayout", () => {
     expect(container.textContent).not.toContain("Presup");
   });
 
+  it("sections rise in 60 ms apart", () => {
+    const { container } = renderLayout();
+    const sections = [...container.querySelectorAll<HTMLElement>("[data-section], [data-slot=delivery-timeline]")];
+    for (const section of sections) expect(section.classList.contains("rise")).toBe(true);
+    expect(sections.map((el) => el.style.getPropertyValue("--anim-delay"))).toEqual(["0ms", "60ms", "120ms", "180ms"]);
+  });
+
+  it("without Requieren atención the board and timeline keep the 60 ms step", () => {
+    const { container } = renderLayout({ portfolio: PORTFOLIO.map((row) => ({ ...row, overdue: 0 })) });
+    const sections = [...container.querySelectorAll<HTMLElement>("[data-section], [data-slot=delivery-timeline]")];
+    expect(sections.map((el) => el.style.getPropertyValue("--anim-delay"))).toEqual(["0ms", "60ms", "120ms"]);
+  });
+
   it("hides Requieren atención when no project has overdue tasks", () => {
     renderLayout({ portfolio: PORTFOLIO.map((row) => ({ ...row, overdue: 0 })) });
     expect(screen.queryByRole("heading", { name: "Requieren atención" })).toBeNull();

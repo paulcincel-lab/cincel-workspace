@@ -3,11 +3,34 @@ import { SYSTEM_ACCESS_ROLES, isAdministratorRole, type SystemAccessRole } from 
 import type { ResourceSection } from "@/lib/types/resource";
 
 /**
- * The browser key of the old custom permissions matrix (#950). Nothing reads
- * it any more: the resolvers below return the default permissions, as the
- * server enforces them. Ajustes › Permisos removes the stored value once.
+ * The overrides of one access role's permission matrix (Ajustes › Permisos,
+ * #971): module id → capability key → value, only where the saved matrix
+ * differs from the defaults below. The server reads them from
+ * `core.role_permissions` once per request and puts them on the session user
+ * (`AuthenticatedUser.permissionOverrides`), so the server checks and the
+ * client gating run the same resolvers over the same values.
  */
-export const PERMISSIONS_CUSTOM_STORAGE_KEY = "cincel.permissions.custom.v1";
+export type PermissionOverrides = Readonly<Record<string, Readonly<Record<string, boolean | string>>>>;
+
+/** Roles whose permissions are fixed: full access, never edited and never overridden. */
+export const PROTECTED_PERMISSION_ROLES: readonly SystemAccessRole[] = ["Administrador"];
+
+export function isProtectedPermissionRole(role: SystemAccessRole): boolean {
+  return PROTECTED_PERMISSION_ROLES.includes(role);
+}
+
+/** Modules whose `canExportData` is capped to Administrador and Dirección whatever the matrix says. */
+const EXPORT_CAPPED_MODULES: ReadonlySet<string> = new Set(["activities", "projects", "clients", "team"]);
+
+/**
+ * A capability the matrix cannot change for this role: every capability of a
+ * protected role, and the capped data export for roles other than
+ * Administrador and Dirección.
+ */
+export function isPermissionLocked(role: SystemAccessRole, moduleId: string, key: string): boolean {
+  if (isProtectedPermissionRole(role)) return true;
+  return key === "canExportData" && EXPORT_CAPPED_MODULES.has(moduleId) && !canExportByRole(role);
+}
 
 export type DashboardDataScope = "global" | "managed_projects" | "assigned_tasks";
 
@@ -817,6 +840,53 @@ function canExportByRole(access: SystemAccessRole): boolean {
   return access === "Administrador" || access === "Dirección";
 }
 
+type CapabilityTree = { [key: string]: boolean | string | CapabilityTree };
+
+/**
+ * The defaults with the viewer's matrix overrides applied. `moduleIds` are the
+ * registry modules that write into these capabilities; a key is a dotted path
+ * into them unless `paths` maps it. A value whose type differs from the
+ * default's, an unknown key and any override of a protected role are ignored.
+ */
+function withOverrides<T extends object>(
+  defaults: T,
+  user: AuthenticatedUser | null,
+  moduleIds: readonly string[],
+  paths: Readonly<Record<string, string>> = {},
+): T {
+  const overrides = user?.permissionOverrides;
+  if (!overrides || !user || isProtectedPermissionRole(user.access)) return defaults;
+
+  let next: CapabilityTree | null = null;
+  for (const moduleId of moduleIds) {
+    const values = overrides[moduleId];
+    if (!values) continue;
+    for (const [key, value] of Object.entries(values)) {
+      if (isPermissionLocked(user.access, moduleId, key)) continue;
+      const path = (paths[key] ?? key).split(".");
+      const leaf = path.pop()!;
+      let source: CapabilityTree | undefined = defaults as unknown as CapabilityTree;
+      for (const part of path) {
+        const child: boolean | string | CapabilityTree | undefined = source?.[part];
+        source = typeof child === "object" ? child : undefined;
+      }
+      if (!source || !(leaf in source) || typeof source[leaf] !== typeof value) continue;
+
+      next ??= JSON.parse(JSON.stringify(defaults)) as CapabilityTree;
+      let target: CapabilityTree = next;
+      for (const part of path) target = target[part] as CapabilityTree;
+      target[leaf] = value;
+    }
+  }
+  return (next as T | null) ?? defaults;
+}
+
+const DASHBOARD_KEY_PATHS: Readonly<Record<string, string>> = {
+  showProjectAssignments: "sections.showProjectAssignments",
+  showProjectRisk: "sections.showProjectRisk",
+  showTeamWorkload: "sections.showTeamWorkload",
+};
+
 export function resolveDashboardCapabilitiesFromDefaults(user: AuthenticatedUser | null): DashboardCapabilities {
   const access = resolveAccess(user);
   return DASHBOARD_CAPABILITIES_BY_ROLE[access];
@@ -863,27 +933,27 @@ export function resolveWorkflowsCapabilitiesFromDefaults(user: AuthenticatedUser
 }
 
 export function resolveDashboardCapabilities(user: AuthenticatedUser | null): DashboardCapabilities {
-  return resolveDashboardCapabilitiesFromDefaults(user);
+  return withOverrides(resolveDashboardCapabilitiesFromDefaults(user), user, ["dashboard"], DASHBOARD_KEY_PATHS);
 }
 
 export function resolveCalendarCapabilities(user: AuthenticatedUser | null): CalendarCapabilities {
-  return resolveCalendarCapabilitiesFromDefaults(user);
+  return withOverrides(resolveCalendarCapabilitiesFromDefaults(user), user, ["calendar"]);
 }
 
 export function resolveActivitiesCapabilities(user: AuthenticatedUser | null): ActivitiesCapabilities {
   const access = resolveAccess(user);
-  const defaults = resolveActivitiesCapabilitiesFromDefaults(user);
+  const defaults = withOverrides(resolveActivitiesCapabilitiesFromDefaults(user), user, ["activities"]);
   return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
 export function resolveProjectsCapabilities(user: AuthenticatedUser | null): ProjectsCapabilities {
   const access = resolveAccess(user);
-  const defaults = resolveProjectsCapabilitiesFromDefaults(user);
+  const defaults = withOverrides(resolveProjectsCapabilitiesFromDefaults(user), user, ["projects"]);
   return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
 export function resolveResourcesCapabilities(user: AuthenticatedUser | null): ResourcesCapabilities {
-  return resolveResourcesCapabilitiesFromDefaults(user);
+  return withOverrides(resolveResourcesCapabilitiesFromDefaults(user), user, ["resources", "enterprise"]);
 }
 
 export function canViewResourceSection({
@@ -916,13 +986,13 @@ export function canCreateResourceCategoryInSection({
 
 export function resolveClientsCapabilities(user: AuthenticatedUser | null): ClientsCapabilities {
   const access = resolveAccess(user);
-  const defaults = resolveClientsCapabilitiesFromDefaults(user);
+  const defaults = withOverrides(resolveClientsCapabilitiesFromDefaults(user), user, ["clients"]);
   return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
 export function resolveTeamCapabilities(user: AuthenticatedUser | null): TeamCapabilities {
   const access = resolveAccess(user);
-  const defaults = resolveTeamCapabilitiesFromDefaults(user);
+  const defaults = withOverrides(resolveTeamCapabilitiesFromDefaults(user), user, ["team"]);
   return { ...defaults, canExportData: defaults.canExportData && canExportByRole(access) };
 }
 
@@ -933,16 +1003,16 @@ export function resolveTaskStatusesCapabilitiesFromDefaults(
 }
 
 export function resolveTaskStatusesCapabilities(user: AuthenticatedUser | null): TaskStatusesCapabilities {
-  return resolveTaskStatusesCapabilitiesFromDefaults(user);
+  return withOverrides(resolveTaskStatusesCapabilitiesFromDefaults(user), user, ["taskStatuses"]);
 }
 
 /** Puestos capabilities. */
 export function resolvePositionsCapabilities(user: AuthenticatedUser | null): PositionsCapabilities {
-  return resolvePositionsCapabilitiesFromDefaults(user);
+  return withOverrides(resolvePositionsCapabilitiesFromDefaults(user), user, ["positions"]);
 }
 
 export function resolveWorkflowsCapabilities(user: AuthenticatedUser | null): WorkflowsCapabilities {
-  return resolveWorkflowsCapabilitiesFromDefaults(user);
+  return withOverrides(resolveWorkflowsCapabilitiesFromDefaults(user), user, ["workflows"]);
 }
 
 export function resolvePortalCapabilitiesFromDefaults(user: AuthenticatedUser | null): PortalCapabilities {
@@ -950,7 +1020,7 @@ export function resolvePortalCapabilitiesFromDefaults(user: AuthenticatedUser | 
 }
 
 export function resolvePortalCapabilities(user: AuthenticatedUser | null): PortalCapabilities {
-  return resolvePortalCapabilitiesFromDefaults(user);
+  return withOverrides(resolvePortalCapabilitiesFromDefaults(user), user, ["portal"]);
 }
 
 export function isCorporateResourcesSection(section: ResourceSection): boolean {

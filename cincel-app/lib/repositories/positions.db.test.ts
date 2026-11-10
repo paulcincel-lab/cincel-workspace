@@ -8,7 +8,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { unwrapActions } from "@/tests/helpers/action-result";
 

@@ -73,17 +73,21 @@ function buildAuthenticatedUser(access: SessionAccess): AuthenticatedUser | null
     },
     email: (u.email ?? "").trim().toLowerCase(),
     access: u.access,
+    ...(u.permissionOverrides ? { permissionOverrides: u.permissionOverrides } : {}),
   };
 }
 
 // ── Identity changes reset the client caches (plan §4.8 rule 1) ─────────────
 
 /**
- * What the capabilities derive from: the user id, the access status and the
- * system access role. A name change keeps the key.
+ * What the capabilities derive from: the user id, the access status, the
+ * system access role and the saved permission overrides of that role (#971),
+ * so a matrix change that reaches this viewer clears the caches it gated. A
+ * name change keeps the key.
  */
 export function sessionIdentityKey(access: SessionAccess): string {
-  return `${access.status}:${access.user?.id ?? ""}:${access.user?.access ?? ""}`;
+  const overrides = access.user?.permissionOverrides;
+  return `${access.status}:${access.user?.id ?? ""}:${access.user?.access ?? ""}${overrides ? `:${JSON.stringify(overrides)}` : ""}`;
 }
 
 /**

@@ -350,7 +350,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   const visibleRows = useMemo(() => groups.flatMap((g) => (g.children ?? []).flatMap((c) => c.rows ?? [])), [groups]);
   const all = useMemo(() => taskMetrics(allTasks, today), [allTasks, today]);
   const shown = useMemo(() => taskMetrics(visibleTasks, today), [visibleTasks, today]);
-  const filtering = filters.estado !== "abiertas" || tramo !== null || q !== "";
 
   // ── Checklists ──
   const checklists = useMemo(() => flattenPages(checklistsQuery.data?.pages), [checklistsQuery.data]);

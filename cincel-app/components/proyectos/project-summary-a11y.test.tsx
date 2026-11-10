@@ -73,6 +73,7 @@ import { HISTORY_EVENTS, TASK_ROWS } from "@/tests/unit/fixtures/project-summary
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 import { fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { settle } from "@/tests/helpers/settle";
 
 import { ProjectSummaryContent } from "./ProjectSummary";
 import { ProjectTabs } from "./ProjectTabs";
@@ -81,6 +82,7 @@ const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout and rendering, which happy-dom doesn't provide;
   // the token pairs are covered by `CONTRAST_PAIRS` / `checkContrast` in lib/ui/contrast.ts.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

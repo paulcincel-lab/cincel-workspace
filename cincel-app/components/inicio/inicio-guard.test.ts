@@ -33,6 +33,8 @@ const ALLOWED_WIDGETS = new Set([
   "EsencialCard",
   "EsencialItemRow",
   "QuickAddRow",
+  // Visual hover and focus lift class shared by the kit cards (#985).
+  "lift",
 ]);
 
 function sourceFiles(dir: string): string[] {

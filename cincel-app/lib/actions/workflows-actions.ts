@@ -62,7 +62,13 @@ export async function fetchWorkflowAction(id: string): Promise<WorkflowDetail | 
   return workflowsRepository.getWorkflow(id);
 }
 
-export async function createWorkflowAction(input: WorkflowInput): Promise<Workflow> {
+export async function createWorkflowAction(
+  ...args: Parameters<typeof createWorkflowActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createWorkflowActionImpl>>>> {
+  return toActionResult(() => createWorkflowActionImpl(...args));
+}
+
+async function createWorkflowActionImpl(input: WorkflowInput): Promise<Workflow> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: workflow create");
@@ -74,7 +80,13 @@ export async function createWorkflowAction(input: WorkflowInput): Promise<Workfl
 const ColorSlotSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).nullable();
 
 /** Partial patch; `colorSlot` is 1–5 or null (INVALID otherwise). Errors: FORBIDDEN, WORKFLOW_NOT_FOUND, INVALID. */
-export async function updateWorkflowAction(id: string, patch: Partial<WorkflowInput>): Promise<Workflow> {
+export async function updateWorkflowAction(
+  ...args: Parameters<typeof updateWorkflowActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof updateWorkflowActionImpl>>>> {
+  return toActionResult(() => updateWorkflowActionImpl(...args));
+}
+
+async function updateWorkflowActionImpl(id: string, patch: Partial<WorkflowInput>): Promise<Workflow> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: workflow edit");
@@ -99,7 +111,13 @@ async function reorderWorkflowsActionImpl(orderedIds: string[]): Promise<void> {
   await workflowsRepository.reorderWorkflows(parseInput(OrderedIdsSchema, orderedIds));
 }
 
-export async function deleteWorkflowAction(id: string): Promise<void> {
+export async function deleteWorkflowAction(
+  ...args: Parameters<typeof deleteWorkflowActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deleteWorkflowActionImpl>>>> {
+  return toActionResult(() => deleteWorkflowActionImpl(...args));
+}
+
+async function deleteWorkflowActionImpl(id: string): Promise<void> {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) {
     throw new Error("FORBIDDEN: workflow delete");

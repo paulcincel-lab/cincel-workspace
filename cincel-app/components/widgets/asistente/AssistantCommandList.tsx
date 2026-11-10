@@ -8,7 +8,9 @@ import type { AssistantToolGroup } from "@/lib/assistant/starter-prompts";
 /**
  * Every starter group of the assistant ("Más ideas" and "/ comandos" in the
  * Visual composer): picking a prompt puts it in the composer without
- * sending. Disabled groups (Cutto) are drawn with their note and link.
+ * sending. Disabled groups (Cutto) are drawn with their note and link:
+ * their buttons are disabled, the section itself stays reachable so the link
+ * to Cutto still works.
  */
 export type AssistantCommandListProps = {
   groups: readonly AssistantToolGroup[];
@@ -23,7 +25,6 @@ export function AssistantCommandList({ groups, onPick }: AssistantCommandListPro
         <section
           key={group.key}
           aria-labelledby={`asistente-comandos-${group.key}`}
-          aria-disabled={group.disabled || undefined}
           className="flex flex-col gap-1"
         >
           <h3 id={`asistente-comandos-${group.key}`} className="px-2 text-xs font-medium text-muted-foreground">

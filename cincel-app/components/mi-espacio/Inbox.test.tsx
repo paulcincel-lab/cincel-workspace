@@ -161,6 +161,7 @@ import type { NotificationsPage } from "@/lib/types/redesign";
 import type { ShellBadges } from "@/lib/types/shell";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
+import { settle } from "@/tests/helpers/settle";
 
 const NOW = Date.now();
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
@@ -687,7 +688,8 @@ describe("Inbox accessibility", () => {
           for (const [name, value] of Object.entries(THEME_PRESETS[theme].tokens)) {
             root.style.setProperty(`--${name}`, value[mode]);
           }
-          renderInbox({}, style);
+          const { client } = renderInbox({}, style);
+          await settle(client);
           const results = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
           const bad = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
           expect(bad.map((v) => v.id), `${theme} ${mode} ${style}`).toEqual([]);

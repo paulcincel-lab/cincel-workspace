@@ -122,7 +122,7 @@ describe("EstiloSwitch", () => {
 
   it("moves and selects with the arrow keys (wrapping), Home and End", () => {
     setup();
-    radio("Visual").focus();
+    act(() => radio("Visual").focus());
     fireEvent.keyDown(radio("Visual"), { key: "ArrowRight" });
     expect(radio("Esencial").getAttribute("aria-checked")).toBe("true");
     expect(document.activeElement).toBe(radio("Esencial"));

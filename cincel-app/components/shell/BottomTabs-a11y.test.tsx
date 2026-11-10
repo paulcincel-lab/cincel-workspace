@@ -30,6 +30,7 @@ import type { ThemeId, TokenName } from "@/lib/types/redesign";
 
 import { BottomTabs } from "./BottomTabs";
 import { MobileTopBar } from "./MobileTopBar";
+import { settle } from "@/tests/helpers/settle";
 
 const MODES = ["light", "dark"] as const;
 
@@ -67,6 +68,7 @@ function themeVars(theme: ThemeId, mode: (typeof MODES)[number]): Record<string,
 }
 
 async function seriousViolations(root: HTMLElement) {
+  await settle();
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide;
   // the token pairs are checked with checkContrast below.
   const results = await axe.run(root, { rules: { "color-contrast": { enabled: false } } });

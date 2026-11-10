@@ -35,6 +35,7 @@ import type { CronogramaData, PaymentRow, ScheduleTask } from "@/lib/types/sched
 
 import CronogramaView from "./cronograma-view";
 import { CronogramaReport } from "./cronograma-report";
+import { settle } from "@/tests/helpers/settle";
 
 // A slice of the real dataset keeps every axe run fast while covering each sección.
 const allTasks = md22Tasks as unknown as ScheduleTask[];
@@ -81,6 +82,7 @@ function applyTheme(theme: string, mode: (typeof MODES)[number]) {
 }
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout; it is checked on the tokens below.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
   return results.violations.filter((v) => v.impact === "critical" || v.impact === "serious");

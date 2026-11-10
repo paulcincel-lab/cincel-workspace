@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { qk } from "@/lib/query/keys";
@@ -190,7 +190,7 @@ describe("ClockInPrompt after requiredFrom", () => {
     fireEvent.pointerDown(document.body);
     fireEvent.mouseDown(document.body);
     fireEvent.click(document.body);
-    await new Promise((r) => setTimeout(r, 30));
+    await act(() => new Promise((r) => setTimeout(r, 30)));
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 });

@@ -78,7 +78,7 @@ vi.mock("@/components/patterns/FiltersBar", () => ({
     return (
       <div>
         {(props.chips ?? []).map((chip) => (
-          <a key={chip.key} href={chip.href} aria-pressed={chip.pressed}>
+          <a key={chip.key} href={chip.href} role="button" aria-pressed={chip.pressed}>
             {chip.label} {chip.count}
           </a>
         ))}
@@ -202,7 +202,7 @@ describe("PersonasContacts", () => {
   describe("Proveedores sub-filter chips", () => {
     it("shows Todos, Colaboradores, Contratistas and Tiendas as links", () => {
       renderTab({ tab: "proveedores" });
-      const chips = screen.getAllByRole("link").filter((link) => link.hasAttribute("aria-pressed"));
+      const chips = screen.getAllByRole("button").filter((chip) => chip.hasAttribute("aria-pressed"));
       expect(chips.map((c) => c.textContent)).toEqual(["Todos 4", "Colaboradores 1", "Contratistas 2", "Tiendas 1"]);
       expect(chips[0].getAttribute("aria-pressed")).toBe("true");
     });
@@ -210,7 +210,7 @@ describe("PersonasContacts", () => {
     it("filters the providers by the active chip", () => {
       renderTab({ tab: "proveedores", subfilter: "tiendas" });
       expect(tableRowIds()).toEqual(["p-pisos"]);
-      expect(screen.getByRole("link", { name: "Tiendas 1" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Tiendas 1" }).getAttribute("aria-pressed")).toBe("true");
     });
 
     it("has no chips on the other tabs", () => {

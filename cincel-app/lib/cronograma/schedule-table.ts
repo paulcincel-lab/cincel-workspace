@@ -83,6 +83,15 @@ export function buildScheduleTable({ tasks, payments, today, contractEnd = null 
     else bySection.set(task.seccion, [task]);
   }
 
+  // Row ids are React keys: two tasks can share an id (a legacy import with a repeated planta + tarea), so a
+  // repeated id gets a numeric suffix instead of colliding.
+  const usedIds = new Map<string, number>();
+  const uniqueId = (base: string): string => {
+    const seen = usedIds.get(base) ?? 0;
+    usedIds.set(base, seen + 1);
+    return seen === 0 ? base : `${base}-${seen + 1}`;
+  };
+
   const rows: Record<string, unknown>[] = [];
   for (const seccion of sortSections([...bySection.keys()])) {
     const sectionTasks = [...(bySection.get(seccion) ?? [])].sort(
@@ -93,7 +102,7 @@ export function buildScheduleTable({ tasks, payments, today, contractEnd = null 
     const real = Math.round((sectionTasks.reduce((sum, t) => sum + statusWeight(t.status), 0) / sectionTasks.length) * 100);
     const plan = Math.round((sectionTasks.filter((t) => t.fin <= weekEnd).length / sectionTasks.length) * 100);
     rows.push({
-      id: `partida-${slugify(seccion) || rows.length}`,
+      id: uniqueId(`partida-${slugify(seccion) || rows.length}`),
       kind: "partida",
       partida: seccion,
       responsable: null,
@@ -109,7 +118,7 @@ export function buildScheduleTable({ tasks, payments, today, contractEnd = null 
       const taskReal = Math.round(statusWeight(task.status) * 100);
       const taskPlan = task.fin <= weekEnd ? 100 : 0;
       rows.push({
-        id: `tarea-${task.id}`,
+        id: uniqueId(`tarea-${task.id}`),
         kind: "tarea",
         partida: task.tarea,
         responsable: task.responsable,

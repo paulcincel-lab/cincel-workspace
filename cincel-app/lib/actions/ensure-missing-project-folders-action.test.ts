@@ -26,7 +26,7 @@ beforeEach(() => {
 describe("ensureMissingProjectFoldersAction", () => {
   it("runs the backfill for an Administrador and returns its counts", async () => {
     folders.ensureMissingProjectFolders.mockResolvedValue({ created: 3, failed: 1, skipped: 2 });
-    expect(await ensureMissingProjectFoldersAction()).toEqual({ created: 3, failed: 1, skipped: 2 });
+    expect(await ensureMissingProjectFoldersAction()).toEqual({ ok: true, data: { created: 3, failed: 1, skipped: 2 } });
     expect(folders.ensureMissingProjectFolders).toHaveBeenCalledTimes(1);
   });
 
@@ -36,7 +36,10 @@ describe("ensureMissingProjectFoldersAction", () => {
     ["no session", { status: "anonymous", user: null }],
   ])("refuses %s", async (_label, access) => {
     sessionAccess.value = access;
-    await expect(ensureMissingProjectFoldersAction()).rejects.toThrow("FORBIDDEN");
+    expect(await ensureMissingProjectFoldersAction()).toEqual({
+      ok: false,
+      error: "FORBIDDEN: ensure project folders",
+    });
     expect(folders.ensureMissingProjectFolders).not.toHaveBeenCalled();
   });
 });

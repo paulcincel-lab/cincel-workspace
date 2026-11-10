@@ -1,10 +1,11 @@
 /**
  * Daily producers (redesign BE §13, FE §21.1): run once a day, only by the
  * `daily-digest` job and before the digests are sent, to create the day's
- * notifications. One file per producer, listed here.
+ * notifications (and the day's progress snapshots). One file per producer, listed here.
  */
 import type { CronJobContext } from "@/lib/cron/registry";
 
+import { progressSnapshotsProducer } from "./progress-snapshots";
 import { vencimientoProducer } from "./vencimiento";
 
 export type DailyProducer = {
@@ -13,7 +14,7 @@ export type DailyProducer = {
   run(ctx: CronJobContext): Promise<{ count: number }>;
 };
 
-export const DAILY_PRODUCERS: readonly DailyProducer[] = [vencimientoProducer];
+export const DAILY_PRODUCERS: readonly DailyProducer[] = [vencimientoProducer, progressSnapshotsProducer];
 
 export type DailyProducersReport = {
   /** Rows created by all producers. */

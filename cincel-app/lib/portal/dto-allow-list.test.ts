@@ -55,6 +55,7 @@ const projectRow = {
   managerName: "Laura",
   managerLastName: "Pérez",
   managerEmail: "laura@cincel.example",
+  progressMonthStart: 35,
   ...LEAKS,
 } as PortalProjectRow;
 
@@ -66,6 +67,9 @@ const taskRow = {
   inicio: "2026-02-02",
   fin: "2026-02-06",
   status: "done",
+  startedOn: "2026-02-02",
+  finishedOn: "2026-02-07",
+  tramoKey: "construccion",
   ...LEAKS,
 } as PortalScheduleTaskRow;
 
@@ -107,6 +111,18 @@ describe("portal DTO allow-list", () => {
     expect(sortedKeys(dto!)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.schedule]);
     expect(sortedKeys(dto!.sections[0])).toEqual([...PORTAL_DTO_ALLOWED_KEYS.scheduleSection]);
     expectNoLeak(dto);
+  });
+
+  it("schedule section emits real dates and tramoKey only, from the new columns", () => {
+    const [section] = toPortalScheduleDTO([taskRow])!.sections;
+    expect(section).toMatchObject({ actualStart: "2026-02-02", actualEnd: "2026-02-07", tramoKey: "construccion" });
+    expect(sortedKeys(section)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.scheduleSection]);
+  });
+
+  it("project emits progressDeltaMonth, not the snapshot it comes from", () => {
+    const dto = toPortalProjectDTO(projectRow);
+    expect(dto.progressDeltaMonth).toBe(5);
+    expect(dto).not.toHaveProperty("progressMonthStart");
   });
 
   it("toPortalTramosDTO emits exactly the allowed keys", () => {
@@ -161,10 +177,10 @@ describe("portal DTO allow-list", () => {
 
   it("pins the allow-list itself", () => {
     expect(PORTAL_DTO_ALLOWED_KEYS).toEqual({
-      project: ["address", "code", "endDate", "id", "manager", "name", "progressPct", "startDate", "status"],
+      project: ["address", "code", "endDate", "id", "manager", "name", "progressDeltaMonth", "progressPct", "startDate", "status"],
       projectManager: ["email", "name"],
       schedule: ["sections"],
-      scheduleSection: ["end", "key", "planta", "progressPct", "seccion", "start"],
+      scheduleSection: ["actualEnd", "actualStart", "end", "key", "planta", "progressPct", "seccion", "start", "tramoKey"],
       tramo: ["key", "name", "progressPct", "startMonth", "state"],
       file: ["deliveredAs", "id", "kind", "mimeType", "modifiedAt", "name", "sizeBytes", "uploadedBy"],
       folderGroup: ["files", "folderId", "name"],

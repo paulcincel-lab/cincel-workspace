@@ -24,6 +24,7 @@ import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { useShellUi } from "@/lib/stores/shell-ui-store";
 
 import { CommandPalette } from "./CommandPalette";
+import { settle } from "@/tests/helpers/settle";
 
 const RESULTS: SearchResult[] = [
   { type: "proyecto", id: "p1", title: "Ensenada", subtitle: "Construcción", url: "/proyectos/p1" },
@@ -32,6 +33,7 @@ const RESULTS: SearchResult[] = [
 ];
 
 async function seriousViolations() {
+  await settle();
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide; token pairs are
   // covered by CONTRAST_PAIRS / checkContrast in lib/ui/contrast.ts.
   const results = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });

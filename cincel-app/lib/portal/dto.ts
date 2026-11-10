@@ -28,6 +28,8 @@ export type PortalProjectRow = {
   managerName: string | null;
   managerLastName: string | null;
   managerEmail: string | null;
+  /** Progress of the month's first `project_progress_snapshots` row; null (or absent) without one. */
+  progressMonthStart?: number | null;
 };
 
 /** The schedule columns the portal reads. `tarea` and `responsable` are not among them. */
@@ -39,6 +41,11 @@ export type PortalScheduleTaskRow = {
   inicio: string;
   fin: string;
   status: string;
+  /** `schedule_tasks.started_on` / `finished_on`: the row's real dates, null until it moves. */
+  startedOn?: string | null;
+  finishedOn?: string | null;
+  /** The key of the row's tramo (`schedule_tasks.workflow_id` → `workflows.key`), null while unlinked. */
+  tramoKey?: string | null;
 };
 
 function joinNonBlank(parts: (string | null | undefined)[], sep: string): string | null {
@@ -58,6 +65,10 @@ export function toPortalProjectDTO(row: PortalProjectRow): PortalProjectDTO {
     startDate: row.startDate,
     endDate: row.endDate,
     manager: managerName ? { name: managerName, email: row.managerEmail } : null,
+    progressDeltaMonth:
+      typeof row.progressMonthStart === "number" && Number.isFinite(row.progressMonthStart)
+        ? row.progress - row.progressMonthStart
+        : null,
   };
 }
 
@@ -65,12 +76,15 @@ export function toPortalProjectDTO(row: PortalProjectRow): PortalProjectDTO {
  * Groups schedule tasks per `planta` and `seccion`: first `inicio`, last
  * `fin`, and `done` tasks over all tasks as a whole percentage. Plantas keep
  * the order they first appear in (by `sortOrder`); within a planta, sections
- * follow `seccionOrder`.
+ * follow `seccionOrder`. Real dates: `actualStart` is the first `startedOn`,
+ * `actualEnd` the last `finishedOn` once every task of the section has one
+ * (null while any is open). `tramoKey` is the first linked task's tramo.
  */
 export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): PortalScheduleDTO {
   if (tasks === null) return null;
 
-  type Group = PortalScheduleSectionDTO & { order: number; total: number; done: number };
+  type Group = PortalScheduleSectionDTO & { order: number; total: number; done: number; finished: number;
+    lastFinish: string | null };
   const plantaRank = new Map<string, number>();
   const groups = new Map<string, Group>();
 
@@ -80,9 +94,18 @@ export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): Port
     let g = groups.get(key);
     if (!g) {
       g = { key, planta: t.planta, seccion: t.seccion, start: t.inicio, end: t.fin, progressPct: 0,
-        order: t.seccionOrder, total: 0, done: 0 };
+        actualStart: null, actualEnd: null, tramoKey: null, order: t.seccionOrder, total: 0, done: 0, finished: 0,
+        lastFinish: null };
       groups.set(key, g);
     }
+    if (t.startedOn && (g.actualStart === null || g.actualStart === undefined || t.startedOn < g.actualStart)) {
+      g.actualStart = t.startedOn;
+    }
+    if (t.finishedOn) {
+      g.finished += 1;
+      if (g.lastFinish === null || t.finishedOn > g.lastFinish) g.lastFinish = t.finishedOn;
+    }
+    if (!g.tramoKey && t.tramoKey) g.tramoKey = t.tramoKey;
     if (t.inicio < g.start) g.start = t.inicio;
     if (t.fin > g.end) g.end = t.fin;
     if (t.seccionOrder < g.order) g.order = t.seccionOrder;
@@ -101,6 +124,9 @@ export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): Port
       start: g.start,
       end: g.end,
       progressPct: g.total ? Math.round((g.done / g.total) * 100) : 0,
+      actualStart: g.actualStart ?? null,
+      actualEnd: g.total > 0 && g.finished === g.total ? g.lastFinish : null,
+      tramoKey: g.tramoKey ?? null,
     }));
 
   return { sections };
@@ -212,10 +238,10 @@ export function markPortalClientUploads(files: PortalFileDTO[], ownUploadFileIds
  * the mappers, so a new field is a reviewed change here.
  */
 export const PORTAL_DTO_ALLOWED_KEYS = {
-  project: ["address", "code", "endDate", "id", "manager", "name", "progressPct", "startDate", "status"],
+  project: ["address", "code", "endDate", "id", "manager", "name", "progressDeltaMonth", "progressPct", "startDate", "status"],
   projectManager: ["email", "name"],
   schedule: ["sections"],
-  scheduleSection: ["end", "key", "planta", "progressPct", "seccion", "start"],
+  scheduleSection: ["actualEnd", "actualStart", "end", "key", "planta", "progressPct", "seccion", "start", "tramoKey"],
   tramo: ["key", "name", "progressPct", "startMonth", "state"],
   file: ["deliveredAs", "id", "kind", "mimeType", "modifiedAt", "name", "sizeBytes", "uploadedBy"],
   folderGroup: ["files", "folderId", "name"],

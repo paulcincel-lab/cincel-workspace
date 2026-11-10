@@ -268,12 +268,13 @@ describe("QuickAddRow", () => {
     expect(chips?.textContent).toContain("Media");
   });
 
-  it("a #tramo token replaces the context tramo", () => {
+  it("a #tramo token replaces the context tramo", async () => {
     const { input, onCreate } = renderRow();
     typeInto(input, "Revisar #presale");
     expect(document.querySelector('[data-slot="quick-add-chips"]')?.textContent).not.toContain("· del tramo");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisar", tramoId: "w-presale" }));
+    await screen.findByText("Creada: Creada");
   });
 
   it.each(["row", "card", "column"] as const)("variant %s renders", (variant) => {

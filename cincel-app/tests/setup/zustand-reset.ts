@@ -8,7 +8,14 @@ import { afterEach } from "vitest";
 
 import { resetUiStores } from "@/lib/query/reset-client-state";
 
+/**
+ * This hook runs before Testing Library's own cleanup, so unmount the rendered trees first: resetting a store that a
+ * still-mounted component subscribes to would update it outside `act(...)`.
+ */
+const cleanup = typeof document !== "undefined" ? (await import("@testing-library/react")).cleanup : () => undefined;
+
 afterEach(() => {
+  cleanup();
   resetUiStores();
   try {
     globalThis.localStorage?.clear();

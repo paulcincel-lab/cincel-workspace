@@ -107,6 +107,8 @@ beforeEach(() => {
   mocks.reencodePhoto.mockResolvedValue(new Blob(["jpeg"], { type: "image/jpeg" }));
   mocks.uploadMyPhoto.mockResolvedValue("/api/staff/00000000-0000-0000-0000-0000000000aa/photo?v=abcdef12");
   mocks.removeMyPhotoAction.mockResolvedValue(undefined);
+  // A refetch after an invalidation reads the profile again; a query function must never resolve to undefined.
+  mocks.fetchMyProfileAction.mockResolvedValue({ id: BASE.staffId, name: BASE.name, photoUrl: null });
 });
 
 afterEach(() => {
@@ -317,9 +319,11 @@ describe("Perfil fields", () => {
         phone: "",
       }),
     );
-    for (const key of [qk.me.profile(), qk.personas.equipo(), qk.personas.detail(BASE.staffId), qk.catalog.staff()]) {
+    for (const key of [qk.personas.equipo(), qk.personas.detail(BASE.staffId), qk.catalog.staff()]) {
       await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true));
     }
+    // The profile has an observer (the photo), so its invalidation refetches it at once.
+    await waitFor(() => expect(mocks.fetchMyProfileAction).toHaveBeenCalled());
     // Saved: nothing left to save.
     expect(screen.getByRole("button", { name: "Guardar cambios" }).getAttribute("aria-disabled")).toBe("true");
   });

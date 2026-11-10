@@ -151,6 +151,8 @@ describe("Ajustes › Estatus / Permisos pages", () => {
     const data = {
       staff: [{ id: "a1", name: "Alejandro", lastName: null, active: true, access: "Administrador" }],
       defaultPermissions: { Dirección: {} },
+      permissions: { Dirección: {} },
+      hasCustom: false,
     };
     loaders.loadAjustesPermisos.mockResolvedValueOnce(data);
 

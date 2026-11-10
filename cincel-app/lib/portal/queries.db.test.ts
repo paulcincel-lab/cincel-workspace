@@ -109,8 +109,11 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
       responsable: `Responsable ${run}`, inicio: `2026-02-0${n}`, fin: `2026-02-1${n}`, tarea: `Tarea ${run} ${n}`,
       status, sortOrder: n,
     });
-    await db.insert(schema.scheduleTasks).values([t(1, "Preliminares", "done"), t(2, "Preliminares", "pending"),
-      t(3, "Acabados", "progress")]);
+    await db.insert(schema.scheduleTasks).values([
+      { ...t(1, "Preliminares", "done"), startedOn: "2026-02-01", finishedOn: "2026-02-12" },
+      t(2, "Preliminares", "pending"),
+      { ...t(3, "Acabados", "progress"), startedOn: "2026-02-04" },
+    ]);
 
     // Tramo progress: one tramo under way on the granted project, with tasks on it and on another project.
     const [wf] = await db
@@ -118,6 +121,8 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
       .values({ key: `portal-${run}`, name: `Tramo ${run}`, sortOrder: 900 })
       .returning({ id: schema.workflows.id });
     ids.workflows.push(wf.id);
+    await db.update(schema.scheduleTasks).set({ workflowId: wf.id })
+      .where(inArray(schema.scheduleTasks.stableKey, [`${run}-1`, `${run}-2`]));
     await db.insert(schema.projectStages).values({ projectId: p.granted, workflowId: wf.id,
       startedAt: new Date("2026-06-03T12:00:00Z") });
     const task = (projectId: string, n: number, extra: Partial<typeof schema.tasks.$inferInsert> = {}) => ({
@@ -211,5 +216,45 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
   it("returns no schedule without access, and a null schedule without one", async () => {
     expect(await loadPortalProjectData(asUser(otherUserId), { id: p.granted, tab: "cronograma" })).toBeNull();
     expect(await getPortalSchedule(await access(otherUserId, p.other))).toBeNull();
+  });
+
+  it("sections carry real dates once every task finished, and the linked tramo's key", async () => {
+    const schedule = await getPortalSchedule(await access(clientUserId, p.granted));
+    expect(schedule?.sections.map((s) => [s.seccion, s.actualStart, s.actualEnd, s.tramoKey])).toEqual([
+      ["Preliminares", "2026-02-01", null, `portal-${run}`],
+      ["Acabados", "2026-02-04", null, null],
+    ]);
+  });
+
+  it("progressDeltaMonth compares with the month's first snapshot, and the producer writes today's", async () => {
+    const { scheduleToday } = await import("@/lib/cronograma/today");
+    const { snapshotProjectProgress } = await import("@/lib/cron/daily-producers/progress-snapshots");
+    const { and, eq } = await import("drizzle-orm");
+    const a = await access(clientUserId, p.granted);
+    expect((await getPortalProject(a))?.progressDeltaMonth).toBeNull();
+
+    const today = scheduleToday();
+    await db.insert(schema.projectProgressSnapshots).values([
+      { projectId: p.granted, takenOn: `${today.slice(0, 7)}-01`, progressPct: 20 },
+      // Last month: ignored.
+      { projectId: p.granted, takenOn: "2020-01-31", progressPct: 5 },
+    ]);
+    expect((await getPortalProject(a))?.progressDeltaMonth).toBe(5);
+    expect((await listPortalProjects(clientUserId))[0].progressDeltaMonth).toBe(5);
+
+    await db.update(schema.projects).set({ progress: 30 }).where(eq(schema.projects.id, p.granted));
+    expect(await snapshotProjectProgress(db, new Date())).toBeGreaterThan(0);
+    const [row] = await db
+      .select({ pct: schema.projectProgressSnapshots.progressPct })
+      .from(schema.projectProgressSnapshots)
+      .where(and(eq(schema.projectProgressSnapshots.projectId, p.granted), eq(schema.projectProgressSnapshots.takenOn, today)));
+    expect(row?.pct).toBe(30);
+    // Running again the same day overwrites, never duplicates.
+    await snapshotProjectProgress(db, new Date());
+    const rows = await db
+      .select({ pct: schema.projectProgressSnapshots.progressPct })
+      .from(schema.projectProgressSnapshots)
+      .where(and(eq(schema.projectProgressSnapshots.projectId, p.granted), eq(schema.projectProgressSnapshots.takenOn, today)));
+    expect(rows).toHaveLength(1);
   });
 });

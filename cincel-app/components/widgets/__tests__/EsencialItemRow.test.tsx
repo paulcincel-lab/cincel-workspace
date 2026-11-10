@@ -62,6 +62,16 @@ describe("EsencialItemRow", () => {
     expect(container.querySelector('[data-slot="esencial-status"] > span')!.classList.contains("text-foreground")).toBe(true);
   });
 
+  it("text status as a soft chip", () => {
+    const { container } = render(
+      <EsencialItemRow title="Planos" status={{ kind: "text", label: "Bloqueada", tone: "destructive", chip: true }} />,
+    );
+    const label = container.querySelector('[data-slot="esencial-status"] > span') as HTMLElement;
+    expect(label.className).toContain("bg-tint-destructive");
+    expect(label.className).toContain("rounded-full");
+    expect(label.classList.contains("text-destructive")).toBe(true);
+  });
+
   it("null status keeps the column", () => {
     const { container } = render(<EsencialItemRow title="Revisar planos" status={null} />);
     const col = container.querySelector('[data-slot="esencial-status"]') as HTMLElement;

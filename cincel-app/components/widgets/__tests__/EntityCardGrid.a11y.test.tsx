@@ -15,6 +15,7 @@ import {
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS, TOKEN_NAMES } from "@/lib/ui/themes";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
+import { settle } from "@/tests/helpers/settle";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
@@ -50,6 +51,7 @@ function themeStyle(theme: ThemeId, mode: (typeof MODES)[number]): CSSProperties
 }
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide;
   // the token pairs are checked with checkContrast below.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

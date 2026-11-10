@@ -26,6 +26,7 @@ import { QuickAddRow, type QuickAddRowProps } from "@/components/widgets/QuickAd
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { CatalogAssignableStaffOption } from "@/lib/types/catalog";
+import { settle } from "@/tests/helpers/settle";
 
 const STAFF: CatalogAssignableStaffOption[] = [
   { id: "p-luis", name: "Luis Pérez", suggested: true, openCount: 2, overdueCount: 0 },
@@ -40,6 +41,7 @@ function setMode(mode: (typeof MODES)[number]) {
 }
 
 async function seriousViolations() {
+  await settle();
   const results = await axe.run(document.body);
   return results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")

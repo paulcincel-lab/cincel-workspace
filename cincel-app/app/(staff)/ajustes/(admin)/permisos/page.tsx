@@ -8,9 +8,9 @@ import { getQueryClient, prefetch } from "@/lib/query/server";
 export const dynamic = "force-dynamic";
 
 /**
- * Ajustes › Permisos (redesign FE §3.8, #950): a read-only summary of the
- * people per access with the default permissions, which are the ones the
- * server enforces. The segment layout guards it; the Ajustes layout renders
+ * Ajustes › Permisos (redesign FE §3.8, #950, #971): the people per access
+ * and the permission matrix the server enforces, editable by an
+ * Administrador. The segment layout guards it; the Ajustes layout renders
  * the header and `AjustesNav`. Prefetches `qk.ajustes.page('permisos')`.
  */
 export default async function AjustesPermisosPage() {

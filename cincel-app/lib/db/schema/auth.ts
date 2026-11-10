@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { core, stamps } from "./_schema";
 import { staff } from "./people";
 
@@ -122,7 +122,8 @@ export const authEvents = core.table(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     // "staff_login_allowed" | "staff_login_denied" | "staff_login_error" | "group_mapping_error" |
-    // "staff_recheck_kept" | "staff_recheck_revoked" | "staff_recheck_error" | "password_login"
+    // "staff_recheck_kept" | "staff_recheck_revoked" | "staff_recheck_error" | "password_login" |
+    // "permissions_changed" | "permissions_restored" (staff_id = the admin, reason = what changed)
     kind: text("kind").notNull(),
     staffId: uuid("staff_id").references(() => staff.id, { onDelete: "set null" }),
     email: text("email"),
@@ -132,6 +133,26 @@ export const authEvents = core.table(
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("idx_auth_events_at").on(t.at), index("idx_auth_events_staff_id").on(t.staffId)]
+);
+
+/**
+ * Ajustes › Permisos (#971): one row per (access role, module, capability)
+ * whose saved value differs from the default in `lib/auth/permissions.ts`.
+ * No row means the default; Administrador never has rows (protected).
+ * `value` is a boolean or a select option string. Changes are audited in
+ * `auth_events` (`permissions_changed`, `permissions_restored`).
+ */
+export const rolePermissions = core.table(
+  "role_permissions",
+  {
+    role: text("role").notNull(),
+    moduleId: text("module_id").notNull(),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull(),
+    updatedBy: uuid("updated_by").references(() => staff.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.role, t.moduleId, t.key] })]
 );
 
 export const authEventsRelations = relations(authEvents, ({ one }) => ({

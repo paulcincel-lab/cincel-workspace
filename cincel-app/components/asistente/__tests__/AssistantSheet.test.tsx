@@ -44,7 +44,10 @@ function renderSheet(context: AssistantContext = { route: "/inicio" }, client: Q
 async function send(text: string) {
   const composer = await screen.findByPlaceholderText("Pregunta, pide un cálculo o arrastra un plano…");
   fireEvent.change(composer, { target: { value: text } });
-  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  // Sending pushes the message and the status from a promise: let that happen inside act.
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  });
 }
 
 beforeEach(() => {

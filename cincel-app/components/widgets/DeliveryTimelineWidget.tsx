@@ -4,6 +4,7 @@ import { useId } from "react";
 
 import type { TimelineDay, TimelineItem, TramoTone } from "@/components/proyectos/projects-portfolio-data";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
+import { staggerStyle } from "@/lib/ui/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,6 +24,11 @@ export type DeliveryTimelineWidgetProps = {
   rangeLabel: string;
   toneOf(key: string | null): TramoTone;
   legend: { key: string; label: string }[];
+  /**
+   * Position among the page's sections: the card rises in (`rise`) 60 ms
+   * after the one before instead of fading in on its own.
+   */
+  enterIndex?: number;
 };
 
 export const MAX_PER_DAY = 3;
@@ -49,13 +55,17 @@ function Item({ item, tone }: { item: TimelineItem; tone: TramoTone }) {
   );
 }
 
-export function DeliveryTimelineWidget({ title, days, items, rangeLabel, toneOf, legend }: DeliveryTimelineWidgetProps) {
+export function DeliveryTimelineWidget({ title, days, items, rangeLabel, toneOf, legend, enterIndex }: DeliveryTimelineWidgetProps) {
   const titleId = useId();
   return (
     <section
       aria-labelledby={titleId}
       data-slot="delivery-timeline"
-      className="anim-in flex min-w-0 flex-col gap-3.5 rounded-[14px] border bg-card px-[22px] py-5"
+      className={cn(
+        enterIndex !== undefined ? "rise" : "anim-in",
+        "flex min-w-0 flex-col gap-3.5 rounded-[14px] border bg-card px-[22px] py-5",
+      )}
+      style={enterIndex !== undefined ? staggerStyle(enterIndex, 60) : undefined}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id={titleId} className="text-lg font-semibold">

@@ -179,8 +179,8 @@ function TramoCard({ data, tasks }: { data: ProjectSummaryInput; tasks: TaskList
 // ── 2a. Próximas tareas ──────────────────────────────────────────────────────
 
 function taskStatus(task: NextTask): EsencialStatus {
-  if (task.daysLate > 0) return { kind: "text", label: `${task.daysLate} d tarde`, tone: "destructive" };
-  if (task.blocked) return { kind: "text", label: "Bloqueada", tone: "destructive" };
+  if (task.daysLate > 0) return { kind: "text", label: `${task.daysLate} d tarde`, tone: "destructive", chip: true };
+  if (task.blocked) return { kind: "text", label: "Bloqueada", tone: "destructive", chip: true };
   if (task.dueDate) return { kind: "text", label: shortDate(task.dueDate), tone: "muted" };
   return null;
 }

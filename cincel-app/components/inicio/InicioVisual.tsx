@@ -9,6 +9,7 @@ import { DistributionWidget } from "@/components/widgets/DistributionWidget";
 import { kpiValueText } from "@/components/widgets/KpiWidget";
 import { LineSeriesWidget, type LineSeries } from "@/components/widgets/LineSeriesWidget";
 import { PageHeader } from "@/components/widgets/PageHeader";
+import { LIFT_CLASS } from "@/components/widgets/lift";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { areaTintClass } from "@/lib/areas/area-color";
 import { greetingFor } from "@/lib/inicio/header";
@@ -215,7 +216,7 @@ function KpiTile({ kpi, spec, index }: { kpi: KpiDatum; spec: TileSpec; index: n
       aria-label={tileAriaLabel(kpi, value)}
       data-slot="inicio-tile"
       data-kpi={kpi.key}
-      className="anim-in lift flex flex-col gap-2.5 rounded-[14px] border bg-card px-5 py-[18px] text-card-foreground"
+      className="anim-in flex flex-col gap-2.5 rounded-[14px] border bg-card px-5 py-[18px] text-card-foreground"
       style={staggerStyle(index)}
     >
       <div className="flex items-center gap-2.5">
@@ -380,7 +381,8 @@ function AttentionCard({ item, index }: { item: AttentionItem; index: number }) 
         href={item.href}
         data-slot="attention-card"
         className={cn(
-          "anim-in lift flex h-full flex-col overflow-hidden rounded-[14px] border bg-card text-card-foreground",
+          "anim-in flex h-full flex-col overflow-hidden rounded-[14px] border bg-card text-card-foreground",
+          LIFT_CLASS,
           FOCUS_RING,
         )}
         style={staggerStyle(index)}
@@ -540,9 +542,11 @@ function ProjectCard({ item, index }: { item: ProgressItem; index: number }) {
         href={item.href ?? `/proyectos/${encodeURIComponent(item.id)}`}
         data-slot="project-card"
         className={cn(
-          "lift flex h-full items-center gap-3.5 rounded-[10px] border border-accent bg-card p-3.5 text-card-foreground",
+          "anim-in flex h-full items-center gap-3.5 rounded-[10px] border border-accent bg-card p-3.5 text-card-foreground",
+          LIFT_CLASS,
           FOCUS_RING,
         )}
+        style={staggerStyle(index, 60)}
       >
         <ProjectRing pct={item.real} colorVar={item.colorVar ?? "var(--chart-1)"} index={index} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">

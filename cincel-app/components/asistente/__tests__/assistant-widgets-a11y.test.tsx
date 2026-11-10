@@ -21,8 +21,10 @@ import {
   renderInStyle,
   resetTheme,
 } from "./fixtures";
+import { settle } from "@/tests/helpers/settle";
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide;
   // token pairs are covered by `CONTRAST_PAIRS` / `checkContrast` in lib/ui/contrast.ts.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

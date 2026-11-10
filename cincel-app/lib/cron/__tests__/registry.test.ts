@@ -96,8 +96,8 @@ describe("dailyDigestDue", () => {
 });
 
 describe("daily producers", () => {
-  it("lists the vencimiento producer", () => {
-    expect(DAILY_PRODUCERS.map((p) => p.name)).toEqual(["vencimiento"]);
+  it("lists the vencimiento and progress-snapshots producers", () => {
+    expect(DAILY_PRODUCERS.map((p) => p.name)).toEqual(["vencimiento", "progress-snapshots"]);
     expect(DAILY_PRODUCERS[0]).toBe(vencimientoProducer);
   });
 

@@ -61,7 +61,7 @@ vi.mock("@/components/patterns/FiltersBar", () => ({
   FiltersBar: ({ chips }: FiltersBarProps) => (
     <div>
       {(chips ?? []).map((chip) => (
-        <a key={chip.key} href={chip.href} aria-pressed={chip.pressed}>
+        <a key={chip.key} href={chip.href} role="button" aria-pressed={chip.pressed}>
           {chip.label}
         </a>
       ))}
@@ -124,10 +124,10 @@ describe("BibliotecaSection", () => {
 
   it("builds tipo and tramo filter chips as links keeping the other filter", () => {
     renderSection({ tipo: "drive_file", tramo: null });
-    const carpeta = screen.getByRole("link", { name: "Carpeta" });
+    const carpeta = screen.getByRole("button", { name: "Carpeta" });
     expect(carpeta.getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_folder");
-    expect(screen.getByRole("link", { name: "Archivo" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("link", { name: "Construcción" }).getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_file&tramo=construccion");
+    expect(screen.getByRole("button", { name: "Archivo" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Construcción" }).getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_file&tramo=construccion");
     expect(screen.queryByRole("button", { name: "Acta de entrega-recepción" })).toBeNull();
   });
 

@@ -83,6 +83,9 @@ export const BOARD_TITLE = "Tablero del portafolio";
 export const BOARD_HINT = "Arrastra un proyecto para moverlo de tramo";
 export const TIMELINE_TITLE = "Próximas entregas";
 
+/** Visual section entrance: each section rises 60 ms after the one before. */
+const SECTION_STEP_MS = 60;
+
 /** Toast and live-region copy of a failed move, by action error code. */
 export function moveErrorText(err: unknown): string {
   switch (actionErrorCode(err)) {
@@ -445,6 +448,9 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
     );
   }
 
+  // Sections rise in one after another (summary, attention, board, timeline).
+  const boardIndex = attention.length > 0 ? 2 : 1;
+
   return (
     <div className="flex min-w-0 flex-col gap-5" data-slot="projects-visual">
       <PageHeader
@@ -456,7 +462,8 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
       <section
         aria-label={SUMMARY_SECTION_LABEL}
         data-section="summary"
-        className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+        className="rise grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+        style={staggerStyle(0, SECTION_STEP_MS)}
       >
         {summaries.map((summary, index) => (
           <SummaryCard
@@ -471,7 +478,12 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
       </section>
 
       {attention.length > 0 ? (
-        <section aria-labelledby={attentionId} data-section="attention" className="flex flex-col gap-3.5">
+        <section
+          aria-labelledby={attentionId}
+          data-section="attention"
+          className="rise flex flex-col gap-3.5"
+          style={staggerStyle(1, SECTION_STEP_MS)}
+        >
           <div className="flex items-baseline justify-between gap-3">
             <h2 id={attentionId} className="text-lg font-semibold">
               {ATTENTION_TITLE}
@@ -488,7 +500,12 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
         </section>
       ) : null}
 
-      <section aria-labelledby={boardId} data-section="board" className="flex flex-col gap-3.5">
+      <section
+        aria-labelledby={boardId}
+        data-section="board"
+        className="rise flex flex-col gap-3.5"
+        style={staggerStyle(boardIndex, SECTION_STEP_MS)}
+      >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 id={boardId} className="text-lg font-semibold">
             {BOARD_TITLE}
@@ -520,6 +537,7 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
         rangeLabel={timeline.rangeLabel}
         toneOf={toneOf}
         legend={tramoOrder.map((t) => ({ key: t.key, label: t.name }))}
+        enterIndex={boardIndex + 1}
       />
     </div>
   );

@@ -9,7 +9,7 @@
     "perf:routes": "node scripts/perf/measure-routes.mjs",
     "build": "NODE_OPTIONS=--max-old-space-size=8192 next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 0",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",

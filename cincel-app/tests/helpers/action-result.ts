@@ -98,6 +98,9 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "reorderWorkflowPhasesAction",
     "setWorkflowAutoStartAction",
     "reorderWorkflowsAction",
+    "createWorkflowAction",
+    "updateWorkflowAction",
+    "deleteWorkflowAction",
   ],
   "preferences-actions": ["updateMyPreferencesAction"],
   "tramo-start-actions": ["startTramoAction", "undoStartTramoAction"],
@@ -107,6 +110,9 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "decideVacationAction",
     "saveVacationSettingsAction",
   ],
+  "assistant-actions": ["pinAssistantThreadAction", "markAssistantThreadReadAction"],
+  "workspace-access-actions": ["ensureMissingProjectFoldersAction"],
+  "app-settings-actions": ["saveGeneralSettingsAction", "restoreGeneralSettingsAction"],
   "resources-actions": ["createResourceLinkAction", "updateResourceLinkAction", "deleteResourceLinkAction"],
 };
 

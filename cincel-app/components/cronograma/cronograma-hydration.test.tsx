@@ -49,6 +49,7 @@ import { prefetch } from "@/lib/query/server";
 import { hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { CronogramaData } from "@/lib/types/schedule";
 import type { ViewerScope } from "@/lib/types/core";
+import { settle } from "@/tests/helpers/settle";
 
 import CronogramaView from "./cronograma-view";
 import { CronogramaReport } from "./cronograma-report";
@@ -121,6 +122,7 @@ describe("Cronograma hydration", () => {
   it("renders the tab from the dehydrated schedule with 0 client action calls", async () => {
     const { client, state } = await prefetchAs("Colaborador");
     renderWithQueryClient(<CronogramaView projectId={PID} />, { client, hydrate: state });
+    await settle(client);
     expect(screen.getAllByText("Trazo y nivelación").length).toBeGreaterThan(0);
     expect(screen.getByText("Reparación de muro")).toBeTruthy();
     noActionCalls();
@@ -129,6 +131,7 @@ describe("Cronograma hydration", () => {
   it("renders Reporte from the same key with 0 client action calls", async () => {
     const { client, state } = await prefetchAs("Colaborador");
     renderWithQueryClient(<CronogramaReport projectId={PID} asOf="2026-09-18" />, { client, hydrate: state });
+    await settle(client);
     expect(screen.getByRole("article", { name: "Hoja del reporte" })).toBeTruthy();
     noActionCalls();
   });

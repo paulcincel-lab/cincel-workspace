@@ -115,7 +115,8 @@ beforeEach(() => {
   nav.replace.mockReset();
   submitProjectCreateAction.mockReset();
   updateProjectAction.mockClear();
-  pageData.getProyectosPageData.mockReset();
+  // The create invalidates the list, so the refetch needs page data (a query function never resolves to undefined).
+  pageData.getProyectosPageData.mockReset().mockResolvedValue(portfolioPageData());
   catalog.fetchCatalogContacts.mockClear();
   catalog.fetchCatalogStaff.mockClear();
   captured.dialog = null;

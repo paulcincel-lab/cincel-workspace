@@ -156,6 +156,9 @@ export function DataTable<T>({
   const editable = columns.some((column) => column.meta?.edit !== undefined);
   const grid = useCellGrid(editable);
 
+  // TanStack Table returns a mutable instance the React Compiler cannot memoize, so the compiler
+  // skips this component (the app does not run the compiler today). Expected, not a defect.
+  // eslint-disable-next-line react-hooks/incompatible-library -- useReactTable is not compiler-safe
   const table = useReactTable({
     data,
     columns,

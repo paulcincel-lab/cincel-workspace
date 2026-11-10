@@ -11,11 +11,15 @@ import { THEME_IDS } from "@/lib/ui/themes";
 
 const pageData = vi.hoisted(() => ({ getAjustesPermisosPageData: vi.fn() }));
 vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
+const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
+const writes = vi.hoisted(() => ({ savePermissionsMatrixAction: vi.fn(), restoreDefaultPermissionsAction: vi.fn() }));
+vi.mock("@/lib/actions/permissions-actions", () => writes);
 
 
 import { PermisosSettings, peopleSummary } from "./PermisosSettings";
 
-/** The browser key the removed editor wrote (#950). */
+/** The browser key the removed editor wrote (#950); nothing reads or writes it now. */
 const LEGACY_MATRIX_KEY = "cincel.permissions.custom.v1";
 
 function member(id: string, name: string, access: PermisosStaffRow["access"]): PermisosStaffRow {
@@ -50,12 +54,12 @@ function applyTheme(theme: string, mode: "light" | "dark") {
 /** Renders the page under a client hydrated with the page data, as the page's prefetch leaves it. */
 function renderPage() {
   const client = createTestQueryClient();
-  const data: AjustesPermisosPageData = { staff: STAFF, defaultPermissions: DEFAULTS };
+  const data: AjustesPermisosPageData = { staff: STAFF, defaultPermissions: DEFAULTS, permissions: DEFAULTS, hasCustom: false };
   client.setQueryData(qk.ajustes.page("permisos"), data);
   return renderWithQueryClient(<PermisosSettings />, { client });
 }
 
-describe("Ajustes › Permisos (read-only, #950)", () => {
+describe("Ajustes › Permisos (#950, #971)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -83,7 +87,7 @@ describe("Ajustes › Permisos (read-only, #950)", () => {
   it("shows the matrix with people per access and the default permissions", () => {
     renderPage();
 
-    expect(screen.getByRole("note").textContent).toContain("Próximamente: permisos aplicados en el servidor.");
+    expect(screen.queryByText(/Próximamente/)).toBeNull();
     const section = screen.getByRole("region", { name: "Permisos por acceso" });
     const table = within(section).getByRole("table", { name: "Permisos por acceso" });
     const peopleRow = within(table).getByRole("rowheader", { name: "Personas por acceso" }).closest("tr")!;
@@ -91,7 +95,7 @@ describe("Ajustes › Permisos (read-only, #950)", () => {
     // Administrador first, Colaborador's four people.
     expect(cells[0]).toBe("1");
     expect(cells).toContain("4");
-    expect(within(section).getByText("Admin tiene acceso completo y no se puede editar.")).toBeTruthy();
+    expect(within(section).getByText(/Admin tiene acceso completo y no se puede editar\./)).toBeTruthy();
   });
 
   it("expands a module into its capabilities", () => {
@@ -106,20 +110,52 @@ describe("Ajustes › Permisos (read-only, #950)", () => {
     expect(screen.getAllByText("Puede").length).toBeGreaterThan(0);
   });
 
-  it("has no editor: saving is disabled and there are no permission controls", () => {
+  it("edits the matrix: Administrador and capped exports are read only, the rest are controls", () => {
     renderPage();
-    expect((screen.getByRole("button", { name: "Guardar permisos" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Descartar" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: /Configurar/ })).toBeNull();
-    expect(screen.queryByRole("switch")).toBeNull();
-    expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Proyectos/ }));
+    expect(screen.queryByRole("checkbox", { name: "Eliminar proyecto · Administrador" })).toBeNull();
+    const direccion = screen.getByRole("checkbox", { name: "Eliminar proyecto · Dirección" });
+    expect(direccion.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("checkbox", { name: "Exportar datos · Dirección" })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Exportar datos · Colaborador" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Crear proyecto · Colaborador" }).getAttribute("aria-checked")).toBe("false");
   });
 
-  it("removes the browser-only matrix once on mount", () => {
-    window.localStorage.setItem(LEGACY_MATRIX_KEY, JSON.stringify({ version: 1, roles: {} }));
+  it("saves the draft through the action and stores nothing in the browser", async () => {
+    writes.savePermissionsMatrixAction.mockImplementation(async ({ permissions }) => ({
+      ok: true,
+      data: { permissions, hasCustom: true, changed: 1 },
+    }));
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
     renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /^Proyectos/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Crear proyecto · Colaborador" }));
+    expect(screen.getByText("1 cambio sin guardar")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar permisos" }));
+    await vi.waitFor(() => expect(writes.savePermissionsMatrixAction).toHaveBeenCalledTimes(1));
+    const sent = writes.savePermissionsMatrixAction.mock.calls[0]![0].permissions;
+    expect(sent.Colaborador.projects.canCreateProject).toBe(true);
+    expect(sent.Dirección.projects.canCreateProject).toBe(true);
+    await vi.waitFor(() => expect(screen.queryByText("1 cambio sin guardar")).toBeNull());
+    expect(setItem).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(LEGACY_MATRIX_KEY)).toBeNull();
+  });
+
+  it("discards the draft", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /^Clientes/ }));
+    const box = screen.getByRole("checkbox", { name: "Ver clientes · Otros" });
+    fireEvent.click(box);
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(screen.getByRole("checkbox", { name: "Ver clientes · Otros" }).getAttribute("aria-checked")).toBe("false");
+    expect(writes.savePermissionsMatrixAction).not.toHaveBeenCalled();
+  });
+
+  it("restoring the defaults is off while the matrix has no saved changes", () => {
+    renderPage();
+    expect((screen.getByRole("button", { name: "Restaurar valores por defecto" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("registers no focus or storage listener and makes no call on mount", () => {

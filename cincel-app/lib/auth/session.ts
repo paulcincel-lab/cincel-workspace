@@ -6,6 +6,8 @@ import { cache } from "react";
 
 import { staffAccessRole } from "@/lib/auth/access-role";
 import { accessRecheckHours, isAccessCheckDue, recheckStaffAccess } from "@/lib/auth/access-recheck";
+import type { PermissionOverrides } from "@/lib/auth/permissions";
+import { getRolePermissionOverrides } from "@/lib/auth/permissions-matrix";
 import * as authRepository from "@/lib/repositories/auth-repository";
 import type { SessionStaffAccess, SessionUser as RepoSessionUser } from "@/lib/repositories/auth-repository";
 import type { SystemAccessRole } from "@/lib/data/roles";
@@ -42,7 +44,11 @@ export type SessionAccessStatus =
 export type SessionAccess = {
   status: SessionAccessStatus;
   user:
-    | (SessionUser & { access: SystemAccessRole })
+    | (SessionUser & {
+        access: SystemAccessRole;
+        /** The saved permission overrides of this access (#971); absent means the defaults. */
+        permissionOverrides?: PermissionOverrides;
+      })
     | null;
 };
 
@@ -58,7 +64,9 @@ export async function getSessionAccess(): Promise<SessionAccess> {
   const access = staffAccessRole(session.user.role, session.user.email);
   if (!access) return { status: "no_system_access", user: null };
 
-  const user = { ...session.user, access };
+  // The saved matrix (#971): every capability check and the client mirror read the same overrides.
+  const permissionOverrides = await getRolePermissionOverrides(access);
+  const user = { ...session.user, access, ...(permissionOverrides ? { permissionOverrides } : {}) };
   // Google staff have no password state (BE §A.4): never forced to /change-password.
   if (session.user.mustChangePassword && !session.user.googleLinked) {
     return { status: "pending_first_access", user };
@@ -214,6 +222,7 @@ function toCapabilityUser(
     },
     email: user.email ?? "",
     access: user.access,
+    ...(user.permissionOverrides ? { permissionOverrides: user.permissionOverrides } : {}),
   };
 }
 

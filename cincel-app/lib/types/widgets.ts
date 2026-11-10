@@ -169,6 +169,8 @@ export type RecordColumnFormat = "text" | "count" | "percent" | "hours" | "days"
 export type RecordColumn<Row = Record<string, unknown>> = {
   key: string;
   label: string;
+  /** Small pill after the header label (e.g. "ADMIN" on admin-only columns). */
+  badge?: string;
   align?: "left" | "right";
   mono?: boolean;
   width?: number;

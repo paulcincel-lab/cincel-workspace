@@ -10,6 +10,8 @@ import { loadProyectoCronograma } from "@/lib/loaders/proyectos";
 import { computeImportDiff } from "@/lib/cronograma/import/diff";
 import { parseScheduleExcel } from "@/lib/cronograma/import/parse-excel";
 import { parseLegacyState } from "@/lib/cronograma/import/parse-json";
+import { nextScheduleRealDates } from "@/lib/cronograma/real-dates";
+import { scheduleToday } from "@/lib/cronograma/today";
 import { SECTION_ORDER } from "@/lib/cronograma/sections";
 import type {
   ActionResult,
@@ -77,7 +79,12 @@ export async function setTaskStatusAction(
   await db.transaction(async (tx) => {
     await tx
       .update(scheduleTasks)
-      .set({ status: next, statusUpdatedAt: new Date(), statusUpdatedBy: user.member.id })
+      .set({
+        status: next,
+        statusUpdatedAt: new Date(),
+        statusUpdatedBy: user.member.id,
+        ...nextScheduleRealDates(task, next, scheduleToday()),
+      })
       .where(eq(scheduleTasks.id, taskId));
     await tx.insert(scheduleTaskEvents).values({
       taskId,

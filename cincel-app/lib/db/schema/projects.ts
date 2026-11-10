@@ -8,6 +8,7 @@ import {
   integer,
   numeric,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -280,6 +281,22 @@ export const tramoStartBatches = core.table(
     index("idx_tramo_start_batches_undone_by_id").on(t.undoneById),
     index("idx_tramo_start_batches_previous_current").on(t.previousCurrentWorkflowId),
   ]
+);
+
+/**
+ * One row per project per day with its overall progress (written by the daily `progress-snapshots` producer),
+ * so the client portal can show the change this month: today's progress minus the month's first snapshot.
+ */
+export const projectProgressSnapshots = core.table(
+  "project_progress_snapshots",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    takenOn: date("taken_on").notNull(),
+    progressPct: smallint("progress_pct").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.takenOn] })]
 );
 
 export const projectSpacesRelations = relations(projectSpaces, ({ one }) => ({

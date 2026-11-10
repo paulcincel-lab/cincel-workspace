@@ -181,7 +181,10 @@ export function Inbox({ onOpenThread }: InboxProps) {
     (CAN_LINK || CAN_CREATE_TASK) &&
     (panel !== null || visibleThreads.some((t) => t.projectId !== null || t.suggestedProjectId !== null));
   const projectsQuery = useQuery({ ...catalogOptions.projectOptions(), enabled: needsProjects });
-  const projects: ProjectOption[] | null = projectsQuery.data ?? (projectsQuery.isError ? [] : null);
+  const projects = useMemo<ProjectOption[] | null>(
+    () => projectsQuery.data ?? (projectsQuery.isError ? [] : null),
+    [projectsQuery.data, projectsQuery.isError],
+  );
 
   const projectName = useCallback(
     (id: string | null) => (id ? (projects?.find((p) => p.id === id)?.name ?? null) : null),

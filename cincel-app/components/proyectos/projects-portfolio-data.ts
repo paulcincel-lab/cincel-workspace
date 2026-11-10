@@ -27,6 +27,8 @@ export const PROJECTS_TITLE = "Proyectos";
 export const PROJECTS_BY_TRAMO_TITLE = "Proyectos por tramo";
 export const BUDGET_COLUMN_LABEL = "Presup. ejercido";
 export const NEXT_DELIVERY_LABEL = "Próxima entrega";
+/** Pill on admin-only columns (Presup. ejercido). */
+export const ADMIN_COLUMN_BADGE = "ADMIN";
 
 const DELIVERY_DATE = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -637,7 +639,9 @@ export function portfolioColumns(opts: { canSeeAdminData: boolean }): RecordColu
     { key: "avgDelayDays", label: "Retraso prom.", format: "days", width: 110 },
     { key: "nextDelivery", label: NEXT_DELIVERY_LABEL, width: 200 },
   ];
-  if (opts.canSeeAdminData) columns.push({ key: "budgetSpentPct", label: BUDGET_COLUMN_LABEL, format: "percent", width: 130 });
+  if (opts.canSeeAdminData) {
+    columns.push({ key: "budgetSpentPct", label: BUDGET_COLUMN_LABEL, badge: ADMIN_COLUMN_BADGE, format: "percent", width: 150 });
+  }
   return columns;
 }
 

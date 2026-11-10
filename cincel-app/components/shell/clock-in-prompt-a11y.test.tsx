@@ -23,6 +23,7 @@ vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
 }));
 
 import { ClockInPrompt } from "./ClockInPrompt";
+import { settle } from "@/tests/helpers/settle";
 
 const NOW = new Date("2026-11-09T15:00:00Z");
 
@@ -53,6 +54,7 @@ const VARIANTS: [string, TodayStatus][] = [
 ];
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout, which happy-dom doesn't provide; token pairs are covered by lib/ui/contrast.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
   return results.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
