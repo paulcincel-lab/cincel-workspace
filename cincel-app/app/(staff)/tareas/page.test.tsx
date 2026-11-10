@@ -22,6 +22,7 @@ vi.mock("@/lib/loaders/tareas", () => ({ loadTareasPage: m.loadTareasPage }));
 vi.mock("@/lib/ui/preferences-server", () => ({
   getResolvedAppearance: async () => m.appearance,
   getStoredOrgAppearance: async () => m.org,
+  getMyPreferences: async () => null,
 }));
 // One request-scoped client per test (React `cache` does not memoize outside a server render).
 vi.mock("@/lib/query/server", async (importOriginal) => ({

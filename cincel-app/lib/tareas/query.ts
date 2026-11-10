@@ -26,10 +26,18 @@ export type TareasQuery = {
    * default true (shown, left out of the URL). "Abiertas" in Mostrar implies hidden.
    */
   completadas?: boolean;
+  /**
+   * "Incluir apoyo" (#1038): a responsable filter also matches the tasks where
+   * that person is apoyo. Default true (left out of the URL); `?apoyo=0` turns it off.
+   */
+  apoyo?: boolean;
   nueva?: boolean;
 };
 
 export const TAREAS_ESTADOS: readonly TaskStatus[] = ["pendiente", "en_proceso", "completado", "bloqueado"];
+
+/** The "Incluir apoyo" search param: `?apoyo=0` matches the Responsable only. */
+export const TAREAS_APOYO_PARAM = "apoyo";
 
 /** The "Ocultar completadas" search param: `?completadas=0` hides them. */
 export const TAREAS_COMPLETADAS_PARAM = "completadas";
@@ -45,6 +53,7 @@ export const DEFAULT_TAREAS_QUERY: TareasQuery = {
   q: null,
   mostrar: "todas",
   completadas: true,
+  apoyo: true,
   nueva: false,
 };
 
@@ -71,8 +80,24 @@ function searchText(value: string | null): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-/** URL → query; unknown or malformed values fall back to the defaults. */
-export function parseTareasQuery(sp: URLSearchParams): TareasQuery {
+/** Defaults a URL without the param falls back to (the viewer's preference). */
+export type TareasQueryDefaults = {
+  /** What a missing `?completadas=` means: false when the viewer hides completed tasks. */
+  completadas?: boolean;
+};
+
+/** `?completadas=`: "0" hides, "1" shows, missing or anything else is the default. */
+export function parseCompletadasParam(value: string | null, fallback = true): boolean {
+  if (value === "0") return false;
+  if (value === "1") return true;
+  return fallback;
+}
+
+/**
+ * URL → query; unknown or malformed values fall back to the defaults. A
+ * missing `?completadas=` uses `defaults.completadas` (the preference).
+ */
+export function parseTareasQuery(sp: URLSearchParams, defaults: TareasQueryDefaults = {}): TareasQuery {
   const responsable = sp.get("responsable");
   const estado = sp.get("estado");
   return {
@@ -82,7 +107,8 @@ export function parseTareasQuery(sp: URLSearchParams): TareasQuery {
     estado: estado !== null && (TAREAS_ESTADOS as readonly string[]).includes(estado) ? estado : null,
     q: searchText(sp.get("q")),
     mostrar: pick(sp.get("mostrar"), TAREAS_MOSTRAR, DEFAULT_TAREAS_QUERY.mostrar),
-    completadas: sp.get(TAREAS_COMPLETADAS_PARAM) !== "0",
+    completadas: parseCompletadasParam(sp.get(TAREAS_COMPLETADAS_PARAM), defaults.completadas ?? true),
+    apoyo: sp.get(TAREAS_APOYO_PARAM) !== "0",
     nueva: sp.get("nueva") === "1",
   };
 }
@@ -98,6 +124,7 @@ export function toTareasSearch(q: Partial<TareasQuery>): string {
   if (text) sp.set("q", text);
   if (q.mostrar && q.mostrar !== DEFAULT_TAREAS_QUERY.mostrar) sp.set("mostrar", q.mostrar);
   if (q.completadas === false) sp.set(TAREAS_COMPLETADAS_PARAM, "0");
+  if (q.apoyo === false) sp.set(TAREAS_APOYO_PARAM, "0");
   if (q.nueva) sp.set("nueva", "1");
   const out = sp.toString();
   return out === "" ? "" : `?${out}`;
@@ -153,6 +180,42 @@ export function hasEsencialFilters(q: TareasQuery): boolean {
   return Boolean(
     q.tramo || q.proyecto || q.estado || q.q || (q.mostrar && q.mostrar !== "todas") || !isEsencialSoloMias(q.responsable),
   );
+}
+
+// ── Ocultar completadas (#1039) ─────────────────────────────────────────────
+
+/**
+ * True when the tables hide the completed tasks: the switch is on, or
+ * Mostrar narrows to open work ("Abiertas", "En retraso" imply it).
+ */
+export function isHidingCompleted(q: Pick<TareasQuery, "completadas" | "mostrar">): boolean {
+  return q.completadas === false || (q.mostrar !== undefined && q.mostrar !== "todas");
+}
+
+/**
+ * The Mostrar the loaders filter by: the switch on with "Todas" is
+ * "Abiertas" (open = not completado and no closing custom status).
+ */
+export function effectiveMostrar(q: Pick<TareasQuery, "completadas" | "mostrar">): TareasMostrar {
+  const mostrar = q.mostrar ?? "todas";
+  return mostrar === "todas" && q.completadas === false ? "abiertas" : mostrar;
+}
+
+/**
+ * The query patch of the switch: on writes `completadas=0`; off shows the
+ * completed tasks again, and a Mostrar that implies hidden goes back to "Todas".
+ */
+export function hideCompletedPatch(hide: boolean, q: Pick<TareasQuery, "mostrar">): Partial<TareasQuery> {
+  if (hide) return { completadas: false };
+  return q.mostrar !== undefined && q.mostrar !== "todas" ? { completadas: true, mostrar: "todas" } : { completadas: true };
+}
+
+/**
+ * Completed tasks a group hides: its count without the switch minus what it
+ * shows; never negative.
+ */
+export function hiddenCompletedCount(all: number, shown: number): number {
+  return Math.max(0, all - shown);
 }
 
 /** The query with every filter removed. */

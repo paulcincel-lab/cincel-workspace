@@ -189,6 +189,7 @@ export const UserPreferencesPatchSchema = z
     density: DensitySchema,
     textSize: TextSizeSchema,
     quietHours: QuietHoursSchema.nullable(),
+    hideCompletedTasks: z.boolean(),
   })
   .strict()
   .partial() satisfies z.ZodType<Partial<UserPreferences>>;

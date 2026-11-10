@@ -53,6 +53,7 @@ function randomQuery(r: Rand): TareasQuery {
     q: maybe(r, () => oneOf(r, SEARCHES)),
     mostrar: oneOf(r, TAREAS_MOSTRAR),
     completadas: r() < 0.5,
+    apoyo: r() < 0.5,
     nueva: r() < 0.5,
   };
 }
@@ -211,5 +212,51 @@ describe("Esencial responsable", async () => {
     expect(hasEsencialFilters(query)).toBe(true);
     expect(hasEsencialFilters(DEFAULT_TAREAS_QUERY)).toBe(false);
     expect(hasEsencialFilters(clearTareasFilters())).toBe(false);
+  });
+});
+
+describe("Ocultar completadas (#1039)", () => {
+  it("a missing ?completadas= follows the preference; 0 and 1 override it", async () => {
+    const { parseCompletadasParam } = await import("./query");
+    expect(parseTareasQuery(new URLSearchParams(""), { completadas: false }).completadas).toBe(false);
+    expect(parseTareasQuery(new URLSearchParams("completadas=1"), { completadas: false }).completadas).toBe(true);
+    expect(parseTareasQuery(new URLSearchParams("completadas=0"), { completadas: true }).completadas).toBe(false);
+    expect(parseCompletadasParam("x", false)).toBe(false);
+    expect(parseCompletadasParam(null)).toBe(true);
+  });
+
+  it("the switch on with Todas filters as Abiertas; Abiertas and En retraso imply it", async () => {
+    const { effectiveMostrar, isHidingCompleted } = await import("./query");
+    expect(effectiveMostrar({ mostrar: "todas", completadas: false })).toBe("abiertas");
+    expect(effectiveMostrar({ mostrar: "todas", completadas: true })).toBe("todas");
+    expect(effectiveMostrar({ mostrar: "en_retraso", completadas: false })).toBe("en_retraso");
+    expect(isHidingCompleted({ mostrar: "todas", completadas: true })).toBe(false);
+    expect(isHidingCompleted({ mostrar: "todas", completadas: false })).toBe(true);
+    expect(isHidingCompleted({ mostrar: "abiertas", completadas: true })).toBe(true);
+    expect(isHidingCompleted({ mostrar: "en_retraso", completadas: true })).toBe(true);
+  });
+
+  it("turning the switch off with Abiertas selected brings Mostrar back to Todas", async () => {
+    const { hideCompletedPatch } = await import("./query");
+    expect(hideCompletedPatch(true, { mostrar: "todas" })).toEqual({ completadas: false });
+    expect(hideCompletedPatch(true, { mostrar: "abiertas" })).toEqual({ completadas: false });
+    expect(hideCompletedPatch(false, { mostrar: "todas" })).toEqual({ completadas: true });
+    expect(hideCompletedPatch(false, { mostrar: "abiertas" })).toEqual({ completadas: true, mostrar: "todas" });
+    expect(hideCompletedPatch(false, { mostrar: "en_retraso" })).toEqual({ completadas: true, mostrar: "todas" });
+  });
+
+  it("counts what a group hides, never below zero", async () => {
+    const { hiddenCompletedCount } = await import("./query");
+    expect(hiddenCompletedCount(8, 5)).toBe(3);
+    expect(hiddenCompletedCount(2, 3)).toBe(0);
+  });
+
+  it("the list filters carry Abiertas while hiding; Esencial's page key ignores the switch", async () => {
+    const { tareasListFiltersOf, tareasPageKeyInputOf } = await import("@/lib/query/options/tareas");
+    const hidden = { ...DEFAULT_TAREAS_QUERY, completadas: false };
+    expect(tareasListFiltersOf(hidden).mostrar).toBe("abiertas");
+    expect(tareasListFiltersOf(DEFAULT_TAREAS_QUERY).mostrar).toBeUndefined();
+    expect(tareasPageKeyInputOf(hidden, "analitico").mostrar).toBe("abiertas");
+    expect(tareasPageKeyInputOf(hidden, "esencial").mostrar).toBeUndefined();
   });
 });

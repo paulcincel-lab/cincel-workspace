@@ -9,7 +9,8 @@ import { seedTareasPage, tareasPageKeyInputOf, tareasPageOptions } from "@/lib/q
 import { getQueryClient, prefetch } from "@/lib/query/server";
 import type { TareasPageData } from "@/lib/tareas/page-data";
 import { parseTareasQuery, toUrlSearchParams } from "@/lib/tareas/query";
-import { getResolvedAppearance, getStoredOrgAppearance } from "@/lib/ui/preferences-server";
+import { DEFAULT_HIDE_COMPLETED_TASKS } from "@/lib/ui/preferences";
+import { getMyPreferences, getResolvedAppearance, getStoredOrgAppearance } from "@/lib/ui/preferences-server";
 import { readEstiloOverride, resolvePageStyle } from "@/lib/ui/style-override";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -30,8 +31,15 @@ export default async function TareasPage({ searchParams }: { searchParams: Promi
   const user = await requireCapabilityUser();
   if (!resolveActivitiesCapabilities(user).canViewActivities) notFound();
 
-  const query = parseTareasQuery(toUrlSearchParams(raw));
-  const [appearance, org] = await Promise.all([getResolvedAppearance(), getStoredOrgAppearance()]);
+  const [appearance, org, preferences] = await Promise.all([
+    getResolvedAppearance(),
+    getStoredOrgAppearance(),
+    getMyPreferences(),
+  ]);
+  // A URL without `?completadas=` follows "Ocultar completadas" (the client reads the same preference).
+  const query = parseTareasQuery(toUrlSearchParams(raw), {
+    completadas: !(preferences?.hideCompletedTasks ?? DEFAULT_HIDE_COMPLETED_TASKS),
+  });
   const { style } = resolvePageStyle({
     override: readEstiloOverride(raw),
     chosen: appearance.style,
