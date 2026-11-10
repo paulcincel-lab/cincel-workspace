@@ -167,6 +167,8 @@ describe.skipIf(!url)("assistant threads (test DB)", async () => {
 
     const loaded = (await threads.loadThreadMessages(db, id)).find((m) => m.id === "a1")!;
     expect(loaded.metadata).toMatchObject({ toolMs: { "call-read": 300, "call-write": 650 }, responseMs: 1200 });
+  });
+
   it("tool_call_count counts non-widget tool parts once", async () => {
     const id = randomUUID();
     await threads.upsertOwnedThread(db, { threadId: id, staffId: owner, context: { route: "/" } });

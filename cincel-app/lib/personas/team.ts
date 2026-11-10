@@ -337,6 +337,8 @@ export function saturationSummary(people: PersonDatum[], today: string): Saturat
     .sort(byLoadThenName)
     .slice(0, 3);
   return { top, nearLimit, candidate: suggestAssignee(people, top, today) };
+}
+
 // ── Personas · Analítico (people grouped by tramo, 4-week capacity) ────────
 
 /** Analítico `?estado=` filter (the Esencial pills are `TeamEstado`). */

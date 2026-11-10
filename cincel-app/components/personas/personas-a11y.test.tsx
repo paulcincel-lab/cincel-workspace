@@ -232,6 +232,8 @@ describe("Personas · Equipo Visual accessibility", () => {
       expect(await seriousViolations(container)).toEqual([]);
     });
   }
+});
+
 describe("Personas · Analítico accessibility", () => {
   const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
   const counts = countPersonasTabs(EQUIPO_STAFF, []);

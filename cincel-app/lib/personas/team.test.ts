@@ -203,6 +203,9 @@ describe("filterTeam", () => {
     expect(filterTeam(people, { estado: "saturado", q: null }, TODAY).map((p) => p.id)).toEqual(["2"]);
     expect(filterTeam(people, { estado: "cargado", q: "ana" }, TODAY)).toEqual([]);
     expect(filterTeam(people, { estado: null, q: "" }, TODAY)).toHaveLength(3);
+  });
+});
+
 // ── Personas · Analítico ────────────────────────────────────────────────────
 
 const MONDAYS = ["2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"];
