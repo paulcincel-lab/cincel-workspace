@@ -18,7 +18,7 @@
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
 import { randomBytes, scryptSync } from "node:crypto";
-import { test, expect, type Response } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { loginAs } from "./helpers/seed-auth";
 import { BASE_URL, clearAppearanceCookie, withDb } from "./helpers/redesign";
 
@@ -108,15 +108,27 @@ test.describe("Action error copy (production build)", () => {
     await sheet.getByLabel("Desde").fill(range.from);
     await sheet.getByLabel("Hasta").fill(range.to);
 
-    const actionResponse = page.waitForResponse(
-      (response: Response) => response.request().method() === "POST" && !!response.request().headers()["next-action"],
-    );
+    // The first action POST after the click is the request. It is fetched through a route so its body
+    // is kept: the page refetches its data right after the failed action, and the browser may drop the
+    // action's body before a waitForResponse handler gets to read it.
+    let captured: (value: { status: number; body: string }) => void = () => {};
+    const actionResponse = new Promise<{ status: number; body: string }>((resolve) => (captured = resolve));
+    let seen = false;
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      if (seen || request.method() !== "POST" || !request.headers()["next-action"]) return route.fallback();
+      seen = true;
+      const response = await route.fetch();
+      const body = await response.text();
+      captured({ status: response.status(), body });
+      await route.fulfill({ response, body });
+    });
     await sheet.getByRole("button", { name: "Enviar solicitud" }).click();
 
     // The action answers 200 with the code in the payload, not a 500 with only a digest.
     const response = await actionResponse;
-    expect(response.status()).toBe(200);
-    expect(await response.text()).toContain("OVERLAP");
+    expect(response.status).toBe(200);
+    expect(response.body).toContain("OVERLAP");
 
     // The specific copy shows inline; the sheet stays open and nothing new is stored.
     await expect(sheet).toContainText(OVERLAP_COPY, { timeout: 15_000 });
