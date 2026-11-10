@@ -63,7 +63,7 @@ export type Group<Row> = {
 export type GroupAnchor = { groupId: string; label: string; count: number; tone?: "destructive" | "muted" };
 export type GroupedTableProps<Row extends Record<string, unknown>> = {
   label: string;
-  columns: RecordColumn[];
+  columns: RecordColumn<Row>[];
   groups: Group<Row>[];
   totals?: { label: string; summary: string };
   anchors?: GroupAnchor[];

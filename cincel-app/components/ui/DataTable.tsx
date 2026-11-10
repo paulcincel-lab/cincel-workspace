@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode, useState } from "react";
 import {
   type ColumnDef,
+  type RowData,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -15,6 +16,7 @@ import { GripVertical } from "lucide-react";
 
 import { Input } from "@/components/ui/shadcn/input";
 import { useKeyboardReorder } from "@/components/ui/use-keyboard-reorder";
+import type { CanEdit, CellEdit } from "@/components/widgets/editable-cell";
 import {
   Table,
   TableBody,
@@ -24,6 +26,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/shadcn/table";
+
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TValue must match the original declaration
+  interface ColumnMeta<TData extends RowData, TValue> {
+    /** Editable cell (#1024); without it the column is calculated and inert. */
+    edit?: CellEdit<TData>;
+    /** true, or the reason shown when the viewer clicks a locked cell */
+    canEdit?(row: TData): ReturnType<CanEdit<TData>>;
+  }
+}
 
 /**
  * Shared record table — sticky header, sortable columns, an optional built-in

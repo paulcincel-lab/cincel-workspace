@@ -588,7 +588,12 @@ export type TaskPatch = Partial<
     | "deliveryDate"
     | "workflowId"
   >
->; // `workflowId` only when the task has none and isn't an admin task (else INVALID)
+>;
+// `workflowId`: setting a tramo on a task without one is open to task writers;
+// changing an existing tramo is admins only (`FORBIDDEN: task tramo change`)
+// and clears `phaseId` when the fase isn't in the new tramo, subtasks moving
+// with the parent (#1022). Admin tasks reject it (ADMIN_TASK); an unknown
+// tramo or one of another project is INVALID.
 
 export type TaskFilters = {
   projectId?: string;
