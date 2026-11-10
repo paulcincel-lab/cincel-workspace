@@ -70,6 +70,14 @@ vi.mock("@/components/widgets/EsencialItemRow", () => ({
   ),
 }));
 
+// The empty state's Iniciar tramo sheet (#1043) reads these; no test here starts a tramo.
+vi.mock("@/lib/actions/tramo-start-actions", () => ({
+  previewStartTramoAction: vi.fn(() => new Promise(() => {})),
+  startTramoAction: vi.fn(),
+  undoStartTramoAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasStartSlotData: vi.fn(() => new Promise(() => {})) }));
+
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskListRow } from "@/lib/types/core";
@@ -187,12 +195,31 @@ describe("ResumenEsencialLayout", () => {
     expect(screen.getByRole("link", { name: "Subir archivos" }).getAttribute("href")).toBe("/proyectos/p1/archivos");
   });
 
-  it("no tramo assigned", () => {
+  it("no started tramo: the empty state with Iniciar un tramo, no suggested tramos (#1043)", () => {
     renderLayout({
       input: fixtureSummaryInput({
         project: fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [] }),
       }),
     });
-    expect(screen.getByRole("heading", { name: "Sin tramo asignado" })).toBeTruthy();
+    const card = screen.getByRole("region", { name: "Tramos" });
+    expect(card.textContent).toContain("Este proyecto aún no tiene tramo.");
+    expect(card.textContent).not.toContain("Presale");
+    expect(within(card).getByRole("button", { name: "Iniciar un tramo" })).toBeTruthy();
+  });
+
+  it("started in Diseño: only Diseño, plus Siguiente: Construcción (#1043)", () => {
+    const diseno = TRAMOS[1]!;
+    renderLayout({
+      input: fixtureSummaryInput({
+        project: fixtureProject({
+          currentWorkflowId: diseno.id,
+          currentWorkflow: diseno,
+          tramos: [{ ...diseno, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
+        }),
+      }),
+    });
+    const card = screen.getByRole("region", { name: "Tramos" });
+    expect(card.textContent).toContain("Siguiente: Construcción");
+    expect(card.textContent).not.toContain("Presale");
   });
 });

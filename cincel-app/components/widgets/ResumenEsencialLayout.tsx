@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { ErrorState } from "@/components/shell/ErrorState";
+import { ProjectNoTramo } from "@/components/proyectos/ProjectNoTramo";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import {
   RESUMEN_ESENCIAL_FILES,
@@ -134,6 +135,14 @@ function TramoCard({ data, tasks }: { data: ProjectSummaryInput; tasks: TaskList
   );
   const tones = line.steps.map((step) => tramoTone(step.key, data.tramoCatalog));
   const noTramo = line.steps.every((step) => step.state === "next");
+  // No started tramo (#1043): the empty state instead of a line of suggested tramos.
+  if (line.steps.length === 0) {
+    return (
+      <section aria-label="Tramos" className={cn(CARD, "anim-in")}>
+        <ProjectNoTramo projectId={data.project.id} tramos={data.tramoCatalog} />
+      </section>
+    );
+  }
   return (
     <section aria-label="Tramos" className={cn(CARD, "anim-in flex flex-col gap-3.5 px-6 py-[22px]")}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -156,6 +165,11 @@ function TramoCard({ data, tasks }: { data: ProjectSummaryInput; tasks: TaskList
             ) : null}
           </Fragment>
         ))}
+        {line.next ? (
+          <span aria-hidden="true" data-slot="tramo-next" className="shrink-0 text-[12.5px] text-muted-foreground">
+            Siguiente: {line.next.label}
+          </span>
+        ) : null}
       </div>
       {line.steps.length > 0 ? (
         <div
