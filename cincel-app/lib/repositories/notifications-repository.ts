@@ -1,9 +1,9 @@
 /** Notifications and channel preferences (redesign BE §3.5, §7.4). Owner-only. */
-import { and, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, max, sql, type SQL } from "drizzle-orm";
 
 import { notificationPreferences, notifications, userPreferences } from "@/lib/db/schema";
 import { ownerScoped, type OwnerDb } from "@/lib/repositories/owner-scoped";
-import type { NotificationKind } from "@/lib/types/redesign";
+import type { NotificationKind, NotificationKindSummary } from "@/lib/types/redesign";
 
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NotificationPreferenceDbRow = typeof notificationPreferences.$inferSelect;
@@ -52,6 +52,30 @@ export async function countUnreadNotifications(db: OwnerDb, staffId: string): Pr
     .from(notifications)
     .where(and(eq(notifications.staffId, staffId), eq(notifications.inApp, true), isNull(notifications.readAt)));
   return Number(row?.n ?? 0);
+}
+
+/**
+ * Unread and total in-app rows of the caller per kind, with the newest
+ * `created_at` (same filter as `listInboxNotifications`). Kinds without rows
+ * are left out.
+ */
+export async function summarizeNotifications(db: OwnerDb, staffId: string): Promise<NotificationKindSummary[]> {
+  const rows = await db
+    .select({
+      kind: notifications.kind,
+      total: count(),
+      unread: count(sql`case when ${notifications.readAt} is null then 1 end`),
+      latestAt: max(notifications.createdAt),
+    })
+    .from(notifications)
+    .where(and(eq(notifications.staffId, staffId), eq(notifications.inApp, true)))
+    .groupBy(notifications.kind);
+  return rows.map((row) => ({
+    kind: row.kind,
+    unread: Number(row.unread),
+    total: Number(row.total),
+    latestAt: row.latestAt ? new Date(row.latestAt).toISOString() : null,
+  }));
 }
 
 /**

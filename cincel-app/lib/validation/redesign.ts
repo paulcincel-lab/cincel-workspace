@@ -362,6 +362,14 @@ export const TeamHoursInputSchema = z
   .strict()
   .refine((v) => new Date(`${v.weekStart}T12:00:00Z`).getUTCDay() === 1, { path: ["weekStart"] });
 
+/** `fetchMyWeekHoursAction`: an optional Monday (that it is not a future week is checked against today). */
+export const MyWeekHoursInputSchema = z
+  .object({ weekStart: isoDate.optional() })
+  .strict()
+  .refine((v) => v.weekStart === undefined || new Date(`${v.weekStart}T12:00:00Z`).getUTCDay() === 1, {
+    path: ["weekStart"],
+  });
+
 /** `requestVacationAction` (BE §7.8). */
 export const VacationRequestInputSchema = z
   .object({ from: isoDate, to: isoDate, kind: VacationKindSchema, comment: z.string().max(1000).optional() })

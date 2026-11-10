@@ -747,3 +747,180 @@ Object.assign(toolSummaries, {
   moodboard_from_references: summarizeMoodboardFromReferences,
   progress_report: summarizeProgressReport,
 } satisfies Record<string, ToolSummary>);
+
+// ── Approval previews (grouped confirmation card) ───────────────────────────
+
+/** One row of a grouped confirmation: what the call adds (+), changes (~) or removes (−). */
+export type ToolPreviewRow = {
+  op: "+" | "~" | "−";
+  title: string;
+  tramo?: { key: string; name: string; sortOrder: number };
+  person?: string;
+  /** Already formatted ("vie 13 nov"). */
+  date?: string;
+};
+
+export type ToolPreview = (input: unknown) => ToolPreviewRow;
+
+/** Copy of a tool's grouped confirmation: verb forms and the object, singular and plural. */
+type PreviewCopy = {
+  /** Infinitive: "crear" → "¿Confirmas crear 4 tareas?". */
+  verb: string;
+  /** First person: "Creo" → "¿Creo 4 tareas?". */
+  first: string;
+  /** Imperative for the composer draft: "Crea" → "Crea estas tareas:". */
+  imperative: string;
+  one: string;
+  many: string;
+  feminine: boolean;
+  /** Prefix of a date every row shares: "vence" / "vencen". */
+  datePrefix?: [string, string];
+};
+
+const PREVIEW_COPY: Record<string, PreviewCopy> = {
+  create_task: { verb: "crear", first: "Creo", imperative: "Crea", one: "tarea", many: "tareas", feminine: true, datePrefix: ["vence", "vencen"] },
+  assign_task: { verb: "reasignar", first: "Reasigno", imperative: "Reasigna", one: "tarea", many: "tareas", feminine: true },
+  reschedule_task: { verb: "mover", first: "Muevo", imperative: "Mueve", one: "entrega", many: "entregas", feminine: true, datePrefix: ["al", "al"] },
+  update_task_status: { verb: "cambiar", first: "Cambio", imperative: "Cambia", one: "estatus", many: "estatus", feminine: false },
+  add_checklist_item: { verb: "agregar", first: "Agrego", imperative: "Agrega", one: "punto", many: "puntos", feminine: false },
+  create_event: { verb: "crear", first: "Creo", imperative: "Crea", one: "evento", many: "eventos", feminine: false },
+  update_event: { verb: "cambiar", first: "Cambio", imperative: "Cambia", one: "evento", many: "eventos", feminine: false },
+  cancel_event: { verb: "cancelar", first: "Cancelo", imperative: "Cancela", one: "evento", many: "eventos", feminine: false },
+  create_client: { verb: "dar de alta", first: "Doy de alta", imperative: "Da de alta", one: "cliente", many: "clientes", feminine: false },
+  onboard_client: { verb: "arrancar", first: "Arranco", imperative: "Arranca", one: "cliente", many: "clientes", feminine: false },
+  discard_project: { verb: "descartar", first: "Descarto", imperative: "Descarta", one: "proyecto", many: "proyectos", feminine: false },
+};
+
+const WORKFLOW_PREVIEW: Record<string, { key: string; name: string; sortOrder: number }> = {
+  presale: { key: "presale", name: "Presale", sortOrder: 1 },
+  diseno: { key: "diseno", name: "Diseño", sortOrder: 2 },
+  construccion: { key: "construccion", name: "Construcción", sortOrder: 3 },
+};
+
+/** `YYYY-MM-DD` (or a local date-time) as "vie 13 nov"; anything else as typed. */
+export function formatPreviewDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  if (!match) return value.trim();
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return new Intl.DateTimeFormat("es-MX", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
+    .format(date)
+    .replace(/\./g, "")
+    .replace(",", "");
+}
+
+function previewDate(input: unknown, key: string): string | undefined {
+  const value = text(input, key);
+  return value ? formatPreviewDate(value) : undefined;
+}
+
+function optional(value: string): string | undefined {
+  return value ? value : undefined;
+}
+
+function patchOf(input: unknown): unknown {
+  return field(input, "patch");
+}
+
+/** `preview(input)` per tool with a row preview; a tool without one keeps the summary card. */
+export const toolPreviews: Record<string, ToolPreview> = {
+  create_task: (input) => ({
+    op: "+",
+    title: text(input, "description") || "Tarea nueva",
+    tramo: WORKFLOW_PREVIEW[text(input, "workflow")],
+    person: optional(text(input, "manager")),
+    date: previewDate(input, "commitmentDate"),
+  }),
+  assign_task: (input) => ({
+    op: "~",
+    title: text(input, "descriptionContains") || "Tarea",
+    tramo: WORKFLOW_PREVIEW[text(input, "workflow")],
+    person: optional(text(input, "manager")),
+  }),
+  reschedule_task: (input) => ({ op: "~", title: text(input, "reason") || "Entrega de la tarea", date: previewDate(input, "dueDate") }),
+  update_task_status: (input) => ({
+    op: "~",
+    title: text(input, "status") ? `Estatus: ${taskStatusLabel(text(input, "status"))}` : "Estatus de la tarea",
+  }),
+  add_checklist_item: (input) => ({ op: "+", title: text(input, "item") || "Punto del checklist" }),
+  create_event: (input) => ({
+    op: "+",
+    title: text(input, "title") || "Evento",
+    person: optional(stringList(input, "attendees").slice(0, 2).join(", ")),
+    date: previewDate(input, "start"),
+  }),
+  update_event: (input) => ({
+    op: "~",
+    title: text(patchOf(input), "title") || "Evento",
+    date: previewDate(patchOf(input), "start"),
+  }),
+  cancel_event: () => ({ op: "−", title: "Evento" }),
+  create_client: (input) => ({ op: "+", title: text(input, "name") || "Cliente nuevo" }),
+  onboard_client: (input) => ({
+    op: "+",
+    title: [text(input, "name"), text(input, "projectName")].filter(Boolean).join(" · ") || "Cliente nuevo",
+    tramo: WORKFLOW_PREVIEW[text(input, "workflow") || "presale"],
+    person: optional(text(input, "manager")),
+  }),
+  discard_project: (input) => ({ op: "−", title: text(input, "projectName") || "Proyecto" }),
+};
+
+/** The preview row of one call, or null when the tool has none or the input doesn't fit it. */
+export function previewToolCall(toolName: string, input: unknown): ToolPreviewRow | null {
+  const preview = toolPreviews[toolName];
+  if (!preview) return null;
+  try {
+    return preview(input);
+  } catch {
+    return null;
+  }
+}
+
+function previewObject(copy: PreviewCopy, n: number): string {
+  if (n === 1) return `${copy.feminine ? "la" : "el"} ${copy.one}`;
+  return `${n.toLocaleString("es-MX")} ${copy.many}`;
+}
+
+/**
+ * The title of a grouped confirmation: "¿Confirmas crear 4 tareas?"
+ * (`confirm`) or the question form "¿Creo 4 tareas para el vie 13 nov?"
+ * (`question`). A tool without preview copy keeps the generic title.
+ */
+export function previewTitle(
+  toolName: string,
+  n: number,
+  form: "confirm" | "question" = "confirm",
+  date?: string,
+): string {
+  const copy = PREVIEW_COPY[toolName];
+  if (!copy) return "¿Confirmas esta acción?";
+  const object = previewObject(copy, n);
+  if (form === "confirm") return `¿Confirmas ${copy.verb} ${object}?`;
+  return `¿${copy.first} ${object}${date ? ` para el ${date}` : ""}?`;
+}
+
+/** "vence vie 13 nov" / "vencen vie 13 nov" for a date every row shares; null otherwise. */
+export function previewSharedDate(toolName: string, rows: readonly ToolPreviewRow[]): string | null {
+  const date = rows[0]?.date;
+  if (!date || rows.some((row) => row.date !== date)) return null;
+  const prefix = PREVIEW_COPY[toolName]?.datePrefix;
+  return prefix ? `${rows.length === 1 ? prefix[0] : prefix[1]} ${date}` : date;
+}
+
+/** The confirm button: "Confirmar y crear 4" / "… cambiar 4" / "… borrar 4"; "Confirmar" for one. */
+export function previewConfirmLabel(rows: readonly ToolPreviewRow[]): string {
+  const n = rows.length;
+  if (n <= 1) return "Confirmar";
+  const ops = new Set(rows.map((row) => row.op));
+  const verb = ops.size === 1 && ops.has("+") ? "crear" : ops.size === 1 && ops.has("−") ? "borrar" : "cambiar";
+  return `Confirmar y ${verb} ${n.toLocaleString("es-MX")}`;
+}
+
+/** The rows as editable text for the composer ("Editar"): "Crea estas tareas:\n- Revisión · Ana Ruiz · vie 13 nov". */
+export function previewDraft(toolName: string, rows: readonly ToolPreviewRow[]): string {
+  const copy = PREVIEW_COPY[toolName];
+  const head = copy
+    ? `${copy.imperative} ${copy.feminine ? (rows.length === 1 ? "esta" : "estas") : rows.length === 1 ? "este" : "estos"} ${rows.length === 1 ? copy.one : copy.many}:`
+    : "Haz esto:";
+  const lines = rows.map((row) => `- ${[row.title, row.person, row.date].filter(Boolean).join(" · ")}`);
+  return [head, ...lines].join("\n");
+}

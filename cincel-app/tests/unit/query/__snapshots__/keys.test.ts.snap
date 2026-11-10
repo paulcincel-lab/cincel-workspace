@@ -155,6 +155,10 @@ exports[`qk > builds every key shape 1`] = `
       "unreadOnly": true,
     },
   ],
+  "me.notificationsSummary": [
+    "me",
+    "notifications-summary",
+  ],
   "me.preferences": [
     "me",
     "preferences",
@@ -173,6 +177,10 @@ exports[`qk > builds every key shape 1`] = `
     "reminders",
     "today-tomorrow",
   ],
+  "me.tasks": [
+    "me",
+    "tasks",
+  ],
   "me.today": [
     "me",
     "today",
@@ -184,6 +192,11 @@ exports[`qk > builds every key shape 1`] = `
   "me.weekHours": [
     "me",
     "week-hours",
+  ],
+  "me.weekHours(w)": [
+    "me",
+    "week-hours",
+    "2026-11-02",
   ],
   "monday.choices": [
     "monday",
@@ -507,9 +520,11 @@ exports[`qk > covers every key of the factory 1`] = `
   "org.general",
   "me.today",
   "me.weekHours",
+  "me.tasks",
   "me.preferences",
   "me.profile",
   "me.notifications",
+  "me.notificationsSummary",
   "me.gmail.all",
   "me.gmail.status",
   "me.gmail.threads",

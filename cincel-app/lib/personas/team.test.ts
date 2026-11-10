@@ -2,7 +2,22 @@ import { describe, expect, it } from "vitest";
 
 import type { PersonDatum } from "@/lib/types/widgets";
 
-import { peopleWithAvailability, saturationSummary } from "./team";
+import {
+  filterTeam,
+  filterTeamAnalitico,
+  impactPct,
+  loadBucket,
+  personasCsv,
+  peopleWithAvailability,
+  personStatus,
+  saturationSummary,
+  SIN_TRAMO,
+  suggestAssignee,
+  TEAM_ANALITICO_DEFAULT_FILTERS,
+  teamFilterCounts,
+  teamPillCounts,
+  tramoGroups,
+} from "./team";
 
 function person(id: string, availability?: PersonDatum["availability"]): PersonDatum {
   return { id, name: id, initials: id.slice(0, 2).toUpperCase(), open: 0, overdue: 0, availability };
@@ -188,5 +203,102 @@ describe("filterTeam", () => {
     expect(filterTeam(people, { estado: "saturado", q: null }, TODAY).map((p) => p.id)).toEqual(["2"]);
     expect(filterTeam(people, { estado: "cargado", q: "ana" }, TODAY)).toEqual([]);
     expect(filterTeam(people, { estado: null, q: "" }, TODAY)).toHaveLength(3);
+// ── Personas · Analítico ────────────────────────────────────────────────────
+
+const MONDAYS = ["2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"];
+const TRAMOS = [
+  { id: "w-pre", key: "presale", name: "Presale", sortOrder: 1 },
+  { id: "w-dis", key: "diseno", name: "Diseño", sortOrder: 2 },
+  { id: "w-con", key: "construccion", name: "Construcción", sortOrder: 3 },
+];
+
+function weeks(pcts: number[], open: number[] = pcts.map(() => 0), absentDays: number[] = pcts.map(() => 0)) {
+  return MONDAYS.map((weekStart, i) => ({ weekStart, open: open[i] ?? 0, occupancyPct: pcts[i] ?? 0, absentDays: absentDays[i] ?? 0 }));
+}
+
+function member(id: string, extra: Partial<PersonDatum>): PersonDatum {
+  return { id, name: id, initials: id.slice(0, 2).toUpperCase(), open: 0, overdue: 0, occupancyPct: 0, ...extra };
+}
+
+/** Fixture team: 6 people over 3 tramos plus one without tramo. */
+const TEAM: PersonDatum[] = [
+  member("Ana", { tramo: "diseno", occupancyPct: 112, open: 6, overdue: 4, sharesProjectWithViewer: true }),
+  member("Valeria", { tramo: "diseno", occupancyPct: 70, open: 3, sharesProjectWithViewer: false }),
+  member("Luis", { tramo: "presale", occupancyPct: 85, open: 4, overdue: 1, sharesProjectWithViewer: true }),
+  member("Marta", { tramo: "construccion", occupancyPct: 40, open: 2, sharesProjectWithViewer: true }),
+  member("Raúl", { tramo: "construccion", occupancyPct: 20, open: 1, sharesProjectWithViewer: false }),
+  member("Zoe", { tramo: null, occupancyPct: 50, open: 1, sharesProjectWithViewer: false }),
+];
+
+describe("Personas Analítico helpers", () => {
+  it("teamFilterCounts applies the other groups", () => {
+    const all = teamFilterCounts(TEAM, TEAM_ANALITICO_DEFAULT_FILTERS, TODAY);
+    expect(all.estado).toEqual({ todas: 6, sobrecargadas: 1, "con-capacidad": 4 });
+    expect(all.tramo).toEqual({ todos: 6, diseno: 2, presale: 1, construccion: 2, [SIN_TRAMO]: 1 });
+    expect(all.alcance).toEqual({ todo: 6, "mi-equipo": 3 });
+
+    // Tramo = Diseño: estado and alcance count only Diseño; tramo counts ignore the tramo filter.
+    const diseno = teamFilterCounts(TEAM, { ...TEAM_ANALITICO_DEFAULT_FILTERS, tramo: "diseno" }, TODAY);
+    expect(diseno.estado).toEqual({ todas: 2, sobrecargadas: 1, "con-capacidad": 1 });
+    expect(diseno.alcance).toEqual({ todo: 2, "mi-equipo": 1 });
+    expect(diseno.tramo.todos).toBe(6);
+
+    // Alcance = Solo mi equipo and Estado = Con capacidad: the tramo counts apply both.
+    const mine = teamFilterCounts(
+      TEAM,
+      { ...TEAM_ANALITICO_DEFAULT_FILTERS, alcance: "mi-equipo", estado: "con-capacidad" },
+      TODAY,
+    );
+    expect(mine.tramo).toEqual({ todos: 1, construccion: 1 });
+    expect(mine.estado).toEqual({ todas: 3, sobrecargadas: 1, "con-capacidad": 1 });
+    expect(filterTeamAnalitico(TEAM, { ...TEAM_ANALITICO_DEFAULT_FILTERS, alcance: "mi-equipo", estado: "con-capacidad" }, TODAY).map((p) => p.id)).toEqual(["Marta"]);
+
+    // The search applies to every group.
+    const searched = teamFilterCounts(TEAM, { ...TEAM_ANALITICO_DEFAULT_FILTERS, q: "raul" }, TODAY);
+    expect(searched.estado.todas).toBe(1);
+  });
+
+  it("tramoGroups puts people without tramo last", () => {
+    const groups = tramoGroups(TEAM, TRAMOS);
+    expect(groups.map((g) => g.id)).toEqual(["presale", "diseno", "construccion", SIN_TRAMO]);
+    expect(groups.at(-1)!.label).toBe("Sin tramo");
+    const diseno = groups.find((g) => g.id === "diseno")!;
+    expect(diseno.rows!.map((r) => r.id)).toEqual(["Ana", "Valeria"]);
+    expect(diseno.caption).toBe("2 personas");
+    expect(diseno.metrics.find((m) => m.key === "carga")!.value).toBe("91 %");
+    expect(diseno.metrics.find((m) => m.key === "vencidas")).toMatchObject({ value: "4", tone: "destructive" });
+    // A tramo with nobody is left out.
+    expect(tramoGroups(TEAM.slice(0, 2), TRAMOS).map((g) => g.id)).toEqual(["diseno"]);
+  });
+
+  it("personasCsv escapes ; and quotes and adds the BOM", () => {
+    const rows = [
+      member("a", { name: "Ana; Ruiz", puesto: 'Diseñadora "senior"', tramo: "diseno", open: 6, overdue: 4, occupancyPct: 112, weeks: weeks([112, 104, 86, 60]) }),
+      member("b", { name: "Sofía León", tramo: null, open: 2, occupancyPct: 55, weeks: weeks([55, 0, 60, 40], [2, 0, 3, 2], [0, 5, 0, 0]) }),
+    ];
+    const csv = personasCsv(rows, TODAY);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    const lines = csv.slice(1).trimEnd().split("\r\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe("Persona;Puesto;Tramo;Abiertas;Vencidas;Carga %;9–15 nov;16–22 nov;23–29 nov;30 nov–6 dic;Disponibilidad");
+    expect(lines[1]).toBe('"Ana; Ruiz";"Diseñadora ""senior""";Diseño;6;4;112;112;104;86;60;Saturado');
+    expect(lines[2]).toBe("Sofía León;;;2;0;55;55;Vac.;60;40;Libre");
+  });
+
+  it("impact pct uses the parsed due week", () => {
+    const ana = member("Ana", { capacity: 5, weeks: weeks([100, 80, 40, 0], [5, 4, 2, 0], [0, 0, 0, 0]) });
+    // No date: week 1, (5 + 1) / 5.
+    expect(impactPct(ana, null, MONDAYS)).toEqual({ week: 0, pct: 120 });
+    // Due Friday 20 nov: week 2, (4 + 1) / 5.
+    expect(impactPct(ana, "2026-11-20", MONDAYS)).toEqual({ week: 1, pct: 100 });
+    // Overdue date counts in week 1.
+    expect(impactPct(ana, "2026-11-02", MONDAYS)).toEqual({ week: 0, pct: 120 });
+    // After the 4 weeks: no impact.
+    expect(impactPct(ana, "2026-12-15", MONDAYS)).toBeNull();
+    // Absent days lower the capacity: 3 of 5 days → capacity 3, (2 + 1) / 3.
+    const away = member("Sofía", { capacity: 5, weeks: weeks([0, 0, 67, 0], [0, 0, 2, 0], [0, 0, 2, 0]) });
+    expect(impactPct(away, "2026-11-24", MONDAYS)).toEqual({ week: 2, pct: 100 });
+    // No capacity: no impact.
+    expect(impactPct(member("x", { capacity: 0, weeks: weeks([0, 0, 0, 0]) }), null, MONDAYS)).toBeNull();
   });
 });

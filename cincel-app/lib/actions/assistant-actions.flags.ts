@@ -3,6 +3,8 @@ export const IMPLEMENTED = {
   fetchAssistantThreadsAction: true,
   fetchAssistantThreadAction: true,
   deleteAssistantThreadAction: true,
+  pinAssistantThreadAction: true,
+  markAssistantThreadReadAction: true,
   importLegacyAssistantThreadAction: true,
   fetchAssistantActionsAction: true,
 } as const;

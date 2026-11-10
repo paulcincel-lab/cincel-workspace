@@ -15,9 +15,12 @@ function shapes() {
     "org.general": qk.org.general(),
     "me.today": qk.me.today(),
     "me.weekHours": qk.me.weekHours(),
+    "me.weekHours(w)": qk.me.weekHours("2026-11-02"),
+    "me.tasks": qk.me.tasks(),
     "me.preferences": qk.me.preferences(),
     "me.profile": qk.me.profile(),
     "me.notifications": qk.me.notifications({ unreadOnly: true, kinds: ["task"] }),
+    "me.notificationsSummary": qk.me.notificationsSummary(),
     "me.gmail.all": qk.me.gmail.all,
     "me.gmail.status": qk.me.gmail.status(),
     "me.gmail.threads()": qk.me.gmail.threads(),
@@ -139,6 +142,7 @@ describe("qk", () => {
     expect(qk.tasks.subtasks("k1").slice(0, 2)).toEqual(qk.tasks.detail("k1"));
     expect(qk.proyectos.cronograma("p1").slice(0, 2)).toEqual(qk.proyectos.detail("p1"));
     expect(qk.me.gmail.thread("t1").slice(0, 2)).toEqual(qk.me.gmail.all);
+    expect(qk.me.weekHours("2026-11-02").slice(0, 2)).toEqual(qk.me.weekHours());
     expect(qk.contacts.history("c1").slice(0, 2)).toEqual(qk.contacts.detail("c1"));
   });
 });

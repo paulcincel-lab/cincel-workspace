@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { MemberEditorDrawer } from "@/components/equipo/MemberEditorDrawer";
-import { AvailabilityWeek } from "@/components/personas/AvailabilityWeek";
+import { EquipoAnalitico } from "@/components/personas/EquipoAnalitico";
 import { PersonasTabs, type PersonasTab } from "@/components/personas/PersonasTabs";
-import { TeamGrid, TeamMemberActions } from "@/components/personas/TeamGrid";
+import { TeamMemberActions } from "@/components/personas/TeamGrid";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { Button } from "@/components/ui/shadcn/button";
 import { PageHeader } from "@/components/widgets/PageHeader";
@@ -16,7 +16,6 @@ import { PeopleEsencialTeam } from "@/components/widgets/PeopleWidget";
 import { SYSTEM_ADMIN_ROLE } from "@/lib/data/roles";
 import { MEMBER_AVAILABILITY_OPTIONS } from "@/lib/equipo/availability-options";
 import { useMemberEditor } from "@/lib/equipo/use-member-editor";
-import { availabilityRows } from "@/lib/personas/team";
 import { personasCountsOptions, personasEquipoOptions, personasPositionsOptions } from "@/lib/query/options/personas";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import type { WorkflowRef } from "@/lib/types/core";
@@ -64,9 +63,9 @@ export function PersonasEquipoScreen() {
 /**
  * Personas · Equipo (redesign FE §3.6): header (with the Estilo switch) + tabs and
  * one body per style through `PageStyleLayout`: Visual the load board
- * (`PeopleLoadBoard`), Esencial the person cards, Analítico the
- * availability widget and the team table. Every style difference lives in
- * the widgets; this view only composes them.
+ * (`PeopleLoadBoard`), Esencial the person cards (`PeopleEsencialTeam`),
+ * Analítico `EquipoAnalitico` (its own header, tabs and table). Every style
+ * difference lives in the widgets; this view only composes them.
  * "Agregar persona" opens the existing collaborator editor, which saves with
  * one mutation and reads the puestos catalog only while it is open.
  */
@@ -117,14 +116,16 @@ export function EquipoView({ people, emails, counts, canCreate, canAssign, canCr
             <PeopleEsencialTeam people={people} canCreateTask={canCreateTask} canAssign={canAssign} />
           ))
         }
-        analitico={() =>
-          page(PERSONAS_DESCRIPTION, () => (
-            <>
-              <AvailabilityWeek rows={availabilityRows(people)} />
-              <TeamGrid people={people} emails={emails} />
-            </>
-          ))
-        }
+        analitico={() => (
+          <EquipoAnalitico
+            people={people}
+            counts={counts}
+            canCreate={canCreate}
+            canAssign={canAssign}
+            canCreateTask={canCreateTask}
+            onAddPerson={editor.openAddEditor}
+          />
+        )}
       />
 
       {canCreate ? (

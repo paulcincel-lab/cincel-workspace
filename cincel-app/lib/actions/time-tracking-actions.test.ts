@@ -315,6 +315,25 @@ describe("fetchMyWeekHoursAction", () => {
     expect(week.target).toBe(24);
   });
 
+  it("defaults to this week", async () => {
+    await fetchMyWeekHoursAction();
+    await fetchMyWeekHoursAction({});
+    expect(weekHours).toHaveBeenNthCalledWith(1, { marker: "db" }, ["staff-colab"], "2026-11-09", expect.any(Object));
+    expect(weekHours).toHaveBeenNthCalledWith(2, { marker: "db" }, ["staff-colab"], "2026-11-09", expect.any(Object));
+  });
+
+  it("weekStart must be a past or current Monday", async () => {
+    const week = await fetchMyWeekHoursAction({ weekStart: "2026-11-02" });
+    expect(weekHours).toHaveBeenCalledWith({ marker: "db" }, ["staff-colab"], "2026-11-02", expect.any(Object));
+    expect(week.days[0]?.date).toBe("2026-11-02");
+    expect(week.days[6]?.date).toBe("2026-11-08");
+    await expect(fetchMyWeekHoursAction({ weekStart: "2026-11-09" })).resolves.toMatchObject({ total: 0 });
+    // Not a Monday, a future week, not a date.
+    await expect(fetchMyWeekHoursAction({ weekStart: "2026-11-03" })).rejects.toThrow(/^INVALID/);
+    await expect(fetchMyWeekHoursAction({ weekStart: "2026-11-16" })).rejects.toThrow(/^INVALID/);
+    await expect(fetchMyWeekHoursAction({ weekStart: "lunes" })).rejects.toThrow(/^INVALID/);
+  });
+
   it("ignores another person's absences", async () => {
     approvedAbsences.mockResolvedValue([{ staffId: "someone-else", from: "2026-11-09", to: "2026-11-15", kind: "vacaciones" }]);
     await expect(fetchMyWeekHoursAction()).resolves.toMatchObject({ total: 0, target: 40 });

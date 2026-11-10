@@ -14,7 +14,7 @@ import type { AssistantContext, AssistantThreadSummary } from "@/lib/types/redes
  * and the cache only seeds it. The query functions only read.
  */
 
-/** The caller's live threads, newest first (≤ 50). */
+/** The caller's live threads, pinned first then newest first (≤ 50). */
 export function asistenteThreadsOptions() {
   return queryOptions<AssistantThreadSummary[]>({
     queryKey: qk.asistente.threads(),
@@ -86,8 +86,19 @@ export function prependNewThread(client: QueryClient, thread: { id: string; titl
   client.setQueryData<AssistantThreadSummary[]>(qk.asistente.threads(), (prev) => {
     if (!prev || prev.some((t) => t.id === thread.id)) return prev;
     return [
-      { id: thread.id, title: thread.title, updatedAt: new Date().toISOString() },
+      { id: thread.id, title: thread.title, updatedAt: new Date().toISOString(), pinnedAt: null, pendingApprovals: 0, unread: false },
       ...prev,
     ];
   });
+}
+
+/** Replaces one thread of the cached `asistente.threads` list (pin, read). No-op when it isn't cached. */
+export function patchThreadSummary(
+  client: QueryClient,
+  id: string,
+  patch: Partial<Omit<AssistantThreadSummary, "id">>,
+): void {
+  client.setQueryData<AssistantThreadSummary[]>(qk.asistente.threads(), (prev) =>
+    prev?.map((thread) => (thread.id === id ? { ...thread, ...patch } : thread)),
+  );
 }

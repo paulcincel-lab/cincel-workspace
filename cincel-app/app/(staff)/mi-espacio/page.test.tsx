@@ -56,6 +56,8 @@ const DATA: MiEspacioPageData = {
   checklistsCursor: null,
   notes: [],
   notesCursor: "24",
+  tasks: [],
+  canCreateTask: true,
 };
 
 type HydrateElement = ReactElement<{ qc: QueryClient; children: ReactElement<MiEspacioClientProps> }>;
@@ -95,7 +97,9 @@ describe("/mi-espacio page", () => {
     expect(qc.getQueryData(qk.me.reminders("today-tomorrow"))).toEqual([]);
     expect(qc.getQueryData(qk.me.checklists())).toEqual({ pages: [{ items: [], nextCursor: null }], pageParams: [null] });
     expect(qc.getQueryData(qk.me.notes())).toEqual({ pages: [{ items: [], nextCursor: "24" }], pageParams: [null] });
+    expect(qc.getQueryData(qk.me.tasks())).toEqual([]);
     expect(client.noteParam).toBe("n1");
+    expect(client.canCreateTask).toBe(true);
   });
 
   it("seeds no Gmail keys while the Gmail read is a stub", async () => {

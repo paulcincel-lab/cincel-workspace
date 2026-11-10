@@ -113,7 +113,7 @@ describe("tareasListInfiniteOptions / tareasBoardColumnOptions", () => {
 });
 
 describe("tableroMoveInvalidations", () => {
-  it("lists the facets, Lista, calendar, trend, summary, project tabs, Inicio and badges, never the board", () => {
+  it("lists the facets, Lista, calendar, trend, summary, project tabs, Inicio, badges and my tasks, never the board", () => {
     const keys = tableroMoveInvalidations("p1").map((k) => JSON.stringify(k));
     expect(keys).toEqual([
       JSON.stringify(["tareas", "facets"]),
@@ -126,9 +126,10 @@ describe("tableroMoveInvalidations", () => {
       JSON.stringify(qk.proyectos.cronograma("p1")),
       JSON.stringify(qk.inicio()),
       JSON.stringify(qk.shell.badges()),
+      JSON.stringify(qk.me.tasks()),
     ]);
     expect(keys.some((k) => k.includes('"board"'))).toBe(false);
-    expect(tableroMoveInvalidations(null)).toHaveLength(7);
+    expect(tableroMoveInvalidations(null)).toHaveLength(8);
   });
 
   it("tareasListFiltersOf drops the view", () => {

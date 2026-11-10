@@ -1,8 +1,8 @@
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
-import { driveFiles, resourceLinks, staff } from "@/lib/db/schema";
+import { driveFiles, projects, resourceLinkOpens, resourceLinks, staff } from "@/lib/db/schema";
 import { recordChanges } from "@/lib/repositories/history-repository";
 import { upsertDriveFile } from "@/lib/repositories/projects-repository";
 import type { ResourceLink, ResourceLinkInput, ResourceSection } from "@/lib/types/resource";
@@ -24,11 +24,14 @@ function baseQuery() {
       personalForId: personalFor.id,
       personalForName: personalFor.name,
       drive: driveFiles,
+      projectId: projects.id,
+      projectName: projects.name,
     })
     .from(resourceLinks)
     .leftJoin(owner, eq(owner.id, resourceLinks.ownerId))
     .leftJoin(personalFor, eq(personalFor.id, resourceLinks.personalForId))
-    .leftJoin(driveFiles, eq(driveFiles.id, resourceLinks.driveFileId));
+    .leftJoin(driveFiles, eq(driveFiles.id, resourceLinks.driveFileId))
+    .leftJoin(projects, and(eq(projects.id, resourceLinks.projectId), isNull(projects.deletedAt)));
 }
 
 type JoinedRow = Awaited<ReturnType<ReturnType<typeof baseQuery>["execute"]>>[number];
@@ -57,9 +60,11 @@ function toResourceLink(r: JoinedRow): ResourceLink {
           iconLink: r.drive.iconLink,
           thumbnailLink: r.drive.thumbnailLink,
           webViewLink: r.drive.webViewLink,
+          sizeBytes: r.drive.sizeBytes ?? null,
           syncedAt: r.drive.syncedAt?.toISOString() ?? null,
         }
       : null,
+    project: r.projectId ? { id: r.projectId, name: r.projectName! } : null,
     createdAt: l.createdAt.toISOString(),
     updatedAt: l.updatedAt.toISOString(),
   };
@@ -115,6 +120,7 @@ async function toValues(input: ResourceLinkInput) {
     ownerId: input.ownerId ?? null,
     personalForId: input.personalForId ?? null,
     sortOrder: input.sortOrder ?? 0,
+    projectId: input.projectId ?? null,
     driveFileId: input.drive ? await upsertDriveFile(input.drive) : null,
   };
 }
@@ -157,6 +163,7 @@ export async function updateResourceLink(
     ownerId: patch.ownerId === undefined ? before.ownerId : patch.ownerId,
     personalForId: patch.personalForId === undefined ? before.personalForId : patch.personalForId,
     sortOrder: patch.sortOrder ?? before.sortOrder,
+    projectId: patch.projectId === undefined ? before.projectId : patch.projectId,
     drive: patch.drive,
   });
   if (patch.drive === undefined) values.driveFileId = before.driveFileId;
@@ -188,4 +195,67 @@ export async function softDeleteResourceLink(id: string, actorId: string): Promi
     after: { deleted: true },
     fields: ["deleted"],
   });
+}
+
+// ── Opens (Biblioteca Analítico "Aperturas 30 d") ───────────────────────────
+
+/** One staff member's opens of one link closer than this count once. */
+export const RESOURCE_OPEN_DEDUPE_MS = 10 * 60 * 1000;
+
+/** How long open rows are kept (the delete below spells it as an interval literal). */
+export const RESOURCE_OPENS_RETENTION_MONTHS = 13;
+
+/**
+ * Records that `staffId` opened `linkId`, unless the same person already
+ * opened it within the last 10 minutes, and drops that link's rows older
+ * than the retention. True when a row was written.
+ */
+export async function recordResourceLinkOpen(linkId: string, staffId: string, now: Date = new Date()): Promise<boolean> {
+  const since = new Date(now.getTime() - RESOURCE_OPEN_DEDUPE_MS);
+  const [recent] = await db
+    .select({ id: resourceLinkOpens.id })
+    .from(resourceLinkOpens)
+    .where(
+      and(
+        eq(resourceLinkOpens.resourceLinkId, linkId),
+        eq(resourceLinkOpens.staffId, staffId),
+        gt(resourceLinkOpens.openedAt, since)
+      )
+    )
+    .orderBy(desc(resourceLinkOpens.openedAt))
+    .limit(1);
+  if (recent) return false;
+  await db.insert(resourceLinkOpens).values({ resourceLinkId: linkId, staffId, openedAt: now });
+  // Retention: the link's rows older than 13 months go (cheap on the (link, opened_at) index).
+  await db
+    .delete(resourceLinkOpens)
+    .where(
+      and(
+        eq(resourceLinkOpens.resourceLinkId, linkId),
+        sql`${resourceLinkOpens.openedAt} < ${now.toISOString()}::timestamptz - interval '13 months'`
+      )
+    );
+  return true;
+}
+
+/** Per-link opens of the last 30 days: everyone's, the viewer's, and everyone's of the last 7 days. */
+export type ResourceLinkOpenCounts = { linkId: string; opens30d: number; mine30d: number; week: number };
+
+/**
+ * Open counts of the last 30 days per link (only counts; who opened is never
+ * returned). `viewerId` fills `mine30d`.
+ */
+export async function countResourceLinkOpens(viewerId: string): Promise<ResourceLinkOpenCounts[]> {
+  const o = resourceLinkOpens;
+  const rows = await db
+    .select({
+      linkId: o.resourceLinkId,
+      opens30d: count(),
+      mine30d: sql<number>`count(*) filter (where ${o.staffId} = ${viewerId})`,
+      week: sql<number>`count(*) filter (where ${o.openedAt} >= now() - interval '7 days')`,
+    })
+    .from(o)
+    .where(gte(o.openedAt, sql`now() - interval '30 days'`))
+    .groupBy(o.resourceLinkId);
+  return rows.map((r) => ({ linkId: r.linkId, opens30d: Number(r.opens30d), mine30d: Number(r.mine30d), week: Number(r.week) }));
 }

@@ -702,6 +702,8 @@ export async function upsertDriveFile(input: DriveFileInput): Promise<string> {
     iconLink: input.iconLink,
     thumbnailLink: input.thumbnailLink,
     webViewLink: input.webViewLink,
+    // A caller that doesn't know the size leaves the stored one as is.
+    ...(input.sizeBytes !== undefined ? { sizeBytes: input.sizeBytes } : {}),
     syncedAt: input.syncedAt ? new Date(input.syncedAt) : new Date(),
   };
   const [row] = await db

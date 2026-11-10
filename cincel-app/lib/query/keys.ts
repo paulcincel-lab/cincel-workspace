@@ -48,10 +48,16 @@ export const qk = {
   org: { general: () => ["org", "general"] as const },
   me: {
     today: () => ["me", "today"] as const,
-    weekHours: () => ["me", "week-hours"] as const,
+    /** One week of my hours; the no-arg form is the prefix of every week (the clock writes invalidate it). */
+    weekHours: (weekStart?: string) =>
+      weekStart ? (["me", "week-hours", weekStart] as const) : (["me", "week-hours"] as const),
+    /** My open tasks (Mi espacio). */
+    tasks: () => ["me", "tasks"] as const,
     preferences: () => ["me", "preferences"] as const,
     profile: () => ["me", "profile"] as const,
     notifications: (f: { unreadOnly?: boolean; kinds?: string[] }) => ["me", "notifications", f] as const,
+    /** Unread and total per kind (Mi espacio Analítico); not under the `me.notifications` prefix. */
+    notificationsSummary: () => ["me", "notifications-summary"] as const,
     gmail: {
       all: ["me", "gmail"] as const,
       status: () => ["me", "gmail", "status"] as const,

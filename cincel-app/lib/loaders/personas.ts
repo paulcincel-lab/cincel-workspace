@@ -24,6 +24,8 @@ import {
   localIsoDate,
   occupancyPct,
   openCounts,
+  projectLoads,
+  sharesProjectWithViewer,
   toAttentionItems,
   weekAvailability,
   weekLoads,
@@ -152,9 +154,11 @@ export async function loadPeopleOverview(user: AuthenticatedUser, staff: Staff[]
     absencesByStaff(user, staffIds, { from: mondays[0]!, to: addIsoDays(mondays[3]!, 6) }),
     hoursByStaff(hoursIds, days[0]!),
   ]);
+  const shares = sharesProjectWithViewer(projectsByStaff, user.member.id);
 
   return rows.map((row) => {
-    const dueDates = (tasksByStaff.get(row.id) ?? []).map((t) => t.due);
+    const openTasks = tasksByStaff.get(row.id) ?? [];
+    const dueDates = openTasks.map((t) => t.due);
     const { open, overdue } = openCounts(dueDates, today);
     const personAbsences = absences.get(row.id) ?? [];
     return {
@@ -170,8 +174,10 @@ export async function loadPeopleOverview(user: AuthenticatedUser, staff: Staff[]
         days,
         capacity: row.capacity,
         dueDates,
-        absences: absences.get(row.id) ?? [],
+        absences: personAbsences,
       }),
+      projects: projectLoads(openTasks, today, mondays),
+      sharesProjectWithViewer: shares.get(row.id) ?? false,
     };
   });
 }

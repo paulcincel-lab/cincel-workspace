@@ -157,12 +157,16 @@ describe.skipIf(!url)("Biblioteca page data (test DB)", async () => {
       // A Colaborador has no `enterprise.canView` by default: Empresa stays out of the index.
       expect(got).not.toContain("empresaShared");
       expect(data.viewerId).toBe(beto);
+      // The index carries the open counts of its own links only (never who opened).
+      expect(data.usage).not.toBeNull();
+      for (const id of Object.keys(data.usage!.byLink)) expect(data.links.some((link) => link.id === id)).toBe(true);
     });
 
     it("ships only the section's rows plus the viewer's favorites", async () => {
       const data = await asViewer(asAna(), () => getBibliotecaPageData({ section: "formacion" }));
       expect(names(data.links)).toEqual(["anaFavorite", "formacionShared"]);
       expect(new Set(data.links.map((l) => l.section))).toEqual(new Set(["formacion", "mis-favoritos"]));
+      expect(data.usage).toBeNull();
     });
 
     it("leaves Empresa out of the index without enterprise.canView", async () => {

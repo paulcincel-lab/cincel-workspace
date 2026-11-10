@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup } from "@testing-library/react";
+import { cleanup, within } from "@testing-library/react";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
@@ -26,6 +26,14 @@ vi.mock("@/lib/actions/staff-actions", () => ({
 }));
 vi.mock("@/lib/actions/positions-actions", () => ({ fetchPositionsAction: vi.fn(async () => []) }));
 vi.mock("@/lib/actions/workspace-access-actions", () => ({ recheckStaffAccessAction: vi.fn() }));
+vi.mock("@/lib/query/options/catalog", async (importOriginal) => {
+  const { EQUIPO_TRAMOS: tramos } = await import("./fixtures/equipo");
+  return {
+    ...(await importOriginal<typeof import("@/lib/query/options/catalog")>()),
+    catalogTramosOptions: () => ({ queryKey: ["catalog", "tramos"], queryFn: async () => tramos }),
+  };
+});
+vi.mock("@/lib/actions/tasks-actions", () => ({ createUserTaskAction: vi.fn() }));
 vi.mock("@/lib/tramos/compat", () => ({
   tramoLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
   tramoColorVar: (key: string) =>
@@ -150,34 +158,6 @@ describe("Personas · Equipo accessibility", () => {
   }
 });
 
-describe("Personas · Equipo dashboard controls accessibility", () => {
-  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
-  const counts = countPersonasTabs(EQUIPO_STAFF, []);
-
-  // Only Analítico keeps the availability legend: Esencial has light person cards and Visual the load board.
-  for (const style of STYLES.filter((s) => s === "analitico")) {
-    it(`legend toggles and the collapse button have no serious or critical axe violations (${style})`, async () => {
-      const state = usePersonasDashboard.getState();
-      state.toggleKpi("saturado");
-      const { container, getByRole } = render(
-        <main>
-          <StyleProvider style={style} scope="staff">
-            <EquipoView people={people} emails={emails} counts={counts} canCreate canAssign canCreateTask />
-          </StyleProvider>
-        </main>,
-      );
-      const legend = getByRole("list", { name: "Leyenda de disponibilidad" });
-      expect(legend.querySelectorAll("button[aria-pressed]")).toHaveLength(4);
-      expect(legend.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Saturado");
-      expect(await seriousViolations(container)).toEqual([]);
-
-      act(() => usePersonasDashboard.getState().setCollapsed("availability", true));
-      expect(container.querySelector('[aria-expanded="false"]')).toBeTruthy();
-      expect(await seriousViolations(container)).toEqual([]);
-    });
-  }
-});
-
 describe("Personas · Equipo Esencial accessibility", () => {
   const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
   const counts = countPersonasTabs(EQUIPO_STAFF, []);
@@ -252,4 +232,70 @@ describe("Personas · Equipo Visual accessibility", () => {
       expect(await seriousViolations(container)).toEqual([]);
     });
   }
+describe("Personas · Analítico accessibility", () => {
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const counts = countPersonasTabs(EQUIPO_STAFF, []);
+
+  function renderAnalitico() {
+    return render(
+      <main>
+        <StyleProvider style="analitico" scope="staff">
+          <EquipoView people={people} emails={emails} counts={counts} canCreate canAssign canCreateTask />
+        </StyleProvider>
+      </main>,
+    );
+  }
+
+  for (const mode of MODES) {
+    it(`has no serious or critical axe violations (${mode})`, async () => {
+      applyTheme("azul", mode);
+      const { container } = renderAnalitico();
+      expect(await seriousViolations(container)).toEqual([]);
+    });
+  }
+
+  it("names every group and person toggle", () => {
+    const { getByRole, getAllByRole } = renderAnalitico();
+    const table = getByRole("table", { name: "Personas por tramo" });
+    const toggles = Array.from(table.querySelectorAll("button[aria-expanded]"));
+    expect(toggles.length).toBeGreaterThan(0);
+    for (const toggle of toggles) {
+      expect((toggle.getAttribute("aria-label") ?? toggle.textContent ?? "").trim()).not.toBe("");
+      for (const id of (toggle.getAttribute("aria-controls") ?? "").split(" ").filter(Boolean)) {
+        if (toggle.getAttribute("aria-expanded") === "true") expect(document.getElementById(id)).not.toBeNull();
+      }
+    }
+    for (const person of people.filter((p) => p.open > 0 && (p.projects?.length ?? 0) > 0)) {
+      expect(getByRole("button", { name: `Expandir ${person.name}` })).toBeTruthy();
+    }
+    const filters = getByRole("region", { name: "Filtros" });
+    for (const name of ["Estado", "Tramo", "Alcance"]) expect(within(filters).getByRole("radiogroup", { name })).toBeTruthy();
+    expect(getAllByRole("radiogroup").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("table headers are column headers and the person cell is a row header", () => {
+    const { getByRole } = renderAnalitico();
+    const table = getByRole("table", { name: "Personas por tramo" });
+    const headers = Array.from(table.querySelectorAll("thead th"));
+    expect(headers).toHaveLength(10);
+    expect(headers.every((th) => th.getAttribute("scope") === "col")).toBe(true);
+    expect(headers.map((th) => th.textContent)).toEqual(
+      expect.arrayContaining(["Persona", "Puesto", "Abiertas", "Vencidas", "Carga", "Disponibilidad"]),
+    );
+    const rowHeaders = Array.from(table.querySelectorAll('tbody th[scope="row"]'));
+    expect(rowHeaders.length).toBe(people.length);
+  });
+
+  it("at 390 px the table scrolls inside its card, not the page", () => {
+    window.innerWidth = 390;
+    const { getByRole, container } = renderAnalitico();
+    const table = getByRole("table", { name: "Personas por tramo" });
+    expect(table.parentElement?.className).toContain("overflow-x-auto");
+    expect(table.closest('[data-slot="card"]')?.className).toContain("overflow-hidden");
+    // Only the table carries a minimum width; nothing outside the scroller does.
+    const fixedWidth = Array.from(container.querySelectorAll<HTMLElement>("[class*='min-w-[']")).filter(
+      (el) => el !== table && !table.parentElement?.contains(el),
+    );
+    expect(fixedWidth).toEqual([]);
+  });
 });

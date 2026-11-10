@@ -3,14 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import axe from "axe-core";
+import type { ReactNode } from "react";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
 import { seedMiEspacio, type NotesData } from "@/lib/query/options/mi-espacio";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { MiEspacioPageData } from "@/lib/types/mi-espacio";
+import { seedSessionUser } from "@/tests/helpers/session-user";
 import type { Checklist, Note, NotificationsPage, PresentationStyle, Reminder } from "@/lib/types/redesign";
 
 import type { ChecklistCardProps } from "./ChecklistCard";
@@ -105,9 +107,37 @@ vi.mock("./ChecklistCard", () => ({
     <p data-testid="checklist">{`${checklist.title}:${checklist.items.length}`}</p>
   ),
 }));
+// The Visual layout has its own tests (components/widgets/MiEspacioBoard.test.tsx).
+vi.mock("@/components/widgets/MiEspacioBoard", () => ({
+  MiEspacioBoard: ({ notice, reader }: { notice?: ReactNode; reader?: ReactNode }) => (
+    <div data-testid="visual-board">
+      {notice}
+      {reader}
+    </div>
+  ),
+}));
+// The Analítico layout has its own tests (components/widgets/__tests__/MiEspacioAnalitico.test.tsx).
+vi.mock("@/components/widgets/MiEspacioAnalitico", () => ({
+  MiEspacioAnalitico: ({ notice, reader }: { notice?: ReactNode; reader?: ReactNode }) => (
+    <div data-testid="analitico-layout">
+      {notice}
+      {reader}
+    </div>
+  ),
+}));
 vi.mock("./GmailReader", () => ({
   GmailReader: ({ threadId }: { threadId: string }) => <p data-testid="reader">{threadId}</p>,
 }));
+// The Esencial layout reads my tasks and opens the task sheet (MiEspacioEsencial.test.tsx covers them).
+vi.mock("@/lib/actions/tasks-actions", () => ({
+  fetchMyOpenTasksAction: vi.fn(async () => []),
+  setTaskStatusAction: vi.fn(),
+  createUserTaskAction: vi.fn(),
+  deleteTaskAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/catalog-actions", () => ({ fetchCatalogProjectOptions: vi.fn(async () => []) }));
+vi.mock("@/components/tareas/TaskSheet", () => ({ TaskSheetRoute: () => null, taskSheetHref: () => "/mi-espacio" }));
+vi.mock("@/components/tareas/NewTaskDialog", () => ({ newTaskInvalidations: () => [] }));
 
 import { MiEspacioClient, type MiEspacioClientProps } from "./MiEspacioClient";
 
@@ -154,6 +184,8 @@ const CHECKLISTS: Checklist[] = [
     id: "c1",
     title: "Visita de obra",
     projectId: null,
+    projectName: null,
+    updatedAt: "2026-11-01T12:00:00.000Z",
     items: [{ id: "i1", text: "Planos", done: false, sortOrder: 0 }],
   },
 ];
@@ -169,13 +201,15 @@ function pageData(overrides: Partial<MiEspacioPageData> = {}): MiEspacioPageData
     checklistsCursor: null,
     notes: NOTES,
     notesCursor: null,
+    tasks: [],
+    canCreateTask: true,
     ...overrides,
   };
 }
 
 /** As the page renders it: the page data seeded into the granular keys, then the client under them. */
 function renderClient(
-  style: PresentationStyle = "visual",
+  style: PresentationStyle = "analitico",
   overrides: Partial<MiEspacioPageData> = {},
   clientProps: Partial<MiEspacioClientProps> = {},
 ) {
@@ -202,35 +236,20 @@ afterEach(() => {
 });
 
 describe("MiEspacioClient", () => {
-  it("renders the header, the private chip, the description and the style switch", () => {
-    renderClient();
-    expect(screen.getByRole("heading", { level: 1, name: "Mi espacio" })).toBeTruthy();
-    expect(screen.getByText("Solo tú lo ves")).toBeTruthy();
-    expect(screen.getByText("Tu bandeja, notas, checklists y recordatorios.")).toBeTruthy();
-    expect(screen.getByRole("radiogroup", { name: "Estilo" })).toBeTruthy();
+  it("Analítico renders its layout with the shared notice and reader", () => {
+    nav.search = "correo=t1";
+    renderClient("analitico");
+    expect(screen.getByTestId("analitico-layout")).toBeTruthy();
+    expect(screen.getByTestId("reader").textContent).toBe("t1");
+    expect(screen.queryByTestId("visual-board")).toBeNull();
   });
 
-  it("composes capture, Bandeja, Recordatorios, Checklists and Notas", () => {
-    renderClient();
-    expect(screen.getByTestId("quick-capture")).toBeTruthy();
-    expect(screen.getByTestId("inbox")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Recordatorios" })).toBeTruthy();
-    expect(screen.getByText("Llamar a Juanma por cotas")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Checklists" })).toBeTruthy();
-    expect(screen.getByTestId("checklist").textContent).toBe("Visita de obra:1");
-    expect(screen.getByRole("heading", { name: "Notas" })).toBeTruthy();
-    expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toContain("Ideas recepción");
-  });
-
-  it("hands the same data to every section in Visual, Esencial and Analítico", () => {
-    const snapshots = (["visual", "esencial", "analitico"] as const).map((style) => {
-      const { container, unmount } = renderClient(style);
-      const text = container.textContent;
-      unmount();
-      return text;
-    });
-    expect(snapshots[1]).toBe(snapshots[0]);
-    expect(snapshots[2]).toBe(snapshots[0]);
+  it("Visual renders the Mi espacio board instead of the sections", () => {
+    nav.search = "correo=t1";
+    renderClient("visual");
+    expect(screen.getByTestId("visual-board")).toBeTruthy();
+    expect(screen.getByTestId("reader").textContent).toBe("t1");
+    expect(screen.queryByTestId("quick-capture")).toBeNull();
   });
 
   it("reads every list from its query, with no fetch on mount", () => {
@@ -243,14 +262,16 @@ describe("MiEspacioClient", () => {
   });
 
   it("a cache write shows at once (no local copy of the lists)", async () => {
+    nav.search = "nota=n3";
     const { client } = renderClient();
+    expect(screen.queryByRole("dialog")).toBeNull();
     act(() => {
       client.setQueryData<NotesData>(qk.me.notes(), (old) => ({
         ...old!,
         pages: [{ ...old!.pages[0]!, items: [note("n3", "Nueva idea"), ...old!.pages[0]!.items] }],
       }));
     });
-    expect(await screen.findByText("Nueva idea")).toBeTruthy();
+    expect((await screen.findByTestId("editor-note")).textContent).toBe("n3");
     const src = readFileSync(join(__dirname, "MiEspacioClient.tsx"), "utf8");
     // `IMPLEMENTED.<action>` flag lookups gate the queries; the actions themselves are never called here.
     expect(src).not.toMatch(
@@ -258,36 +279,14 @@ describe("MiEspacioClient", () => {
     );
   });
 
-  it("Ver más loads the next bounded page of notes and of checklists", async () => {
-    actions.fetchNotesPage.mockResolvedValue({ items: [note("n9", "Nota antigua")], nextCursor: null });
-    actions.fetchChecklistsPage.mockResolvedValue({
-      items: [{ id: "c9", title: "Lista antigua", projectId: null, items: [] }],
-      nextCursor: null,
-    });
-    renderClient("visual", { notesCursor: "24", checklistsCursor: "10" });
-    const [checklistsMore, notesMore] = screen.getAllByRole("button", { name: "Ver más" });
-    fireEvent.click(notesMore!);
-    expect(await screen.findByText("Nota antigua")).toBeTruthy();
-    expect(actions.fetchNotesPage).toHaveBeenCalledWith({ cursor: "24" });
-    fireEvent.click(checklistsMore!);
-    await waitFor(() => expect(screen.getAllByTestId("checklist").map((c) => c.textContent)).toContain("Lista antigua:0"));
-    expect(actions.fetchChecklistsPage).toHaveBeenCalledWith({ cursor: "10" });
-    expect(screen.queryByRole("button", { name: "Ver más" })).toBeNull();
-  });
-
   it("?nota=<id> of a note past the first page loads pages until it shows up", async () => {
     actions.fetchNotesPage.mockResolvedValue({ items: [note("n9", "Nota antigua")], nextCursor: null });
     nav.search = "nota=n9";
-    renderClient("visual", { notesCursor: "24" });
+    renderClient("analitico", { notesCursor: "24" });
     expect(await screen.findByTestId("editor-note")).toBeTruthy();
     expect(screen.getByTestId("editor-note").textContent).toBe("n9");
     expect(actions.fetchNotesPage).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Ya no existe. Recarga la página.")).toBeNull();
-  });
-
-  it("shows the empty reminders line", () => {
-    renderClient("visual", { reminders: [] });
-    expect(screen.getByText("Sin recordatorios para hoy y mañana")).toBeTruthy();
   });
 
   it("?nota=<id> opens the editor for an own note", () => {
@@ -317,12 +316,6 @@ describe("MiEspacioClient", () => {
     expect(params.replaceMiEspacioParam).toHaveBeenCalledWith("nota", null);
   });
 
-  it("opening a note from the grid sets ?nota=<id>", () => {
-    renderClient();
-    fireEvent.click(screen.getByRole("button", { name: "Pendientes" }));
-    expect(params.replaceMiEspacioParam).toHaveBeenCalledWith("nota", "n2");
-  });
-
   it("?correo=<id> opens the Gmail reader", () => {
     nav.search = "correo=t1";
     renderClient();
@@ -333,14 +326,23 @@ describe("MiEspacioClient", () => {
     for (const key of Object.keys(flags)) flags[key] = false;
     nav.search = "nota=n1&correo=t1";
     renderClient();
-    expect(screen.getByRole("heading", { level: 1, name: "Mi espacio" })).toBeTruthy();
-    expect(screen.queryByTestId("inbox")).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Recordatorios" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Checklists" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Notas" })).toBeNull();
+    expect(screen.getByTestId("analitico-layout")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByTestId("reader")).toBeNull();
     expect(screen.queryByText("Ya no existe. Recarga la página.")).toBeNull();
+  });
+
+  it("Esencial: header copy and greeting", () => {
+    seedSessionUser({ member: { id: "me", name: "Ana López" }, access: "Colaborador" });
+    renderClient("esencial");
+    expect(screen.getByRole("heading", { level: 1, name: "Mi espacio" })).toBeTruthy();
+    expect(screen.getByText("Solo tú lo ves")).toBeTruthy();
+    expect(screen.getByText(/^Buen(?:os días|as tardes|as noches), Ana\. Tu día en un vistazo\.$/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Nueva nota" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Captura rápida" })).toBeTruthy();
+    // The capture bar lives in the header popover in this style.
+    expect(screen.queryByTestId("quick-capture")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Mis tareas" })).toBeTruthy();
   });
 
   it("has no serious axe violations", async () => {

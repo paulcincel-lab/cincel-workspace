@@ -11,6 +11,7 @@ import type { ModelMessage, UIMessage } from "ai";
 
 import { assistantMessages, assistantThreads } from "@/lib/db/schema";
 import type { OwnerDb } from "@/lib/repositories/owner-scoped";
+import type { AssistantMessageMeta, AssistantUIMessage } from "@/lib/types/asistente";
 import type { AssistantContext } from "@/lib/types/redesign";
 
 /** The column default of `assistant_threads.title`. */
@@ -71,10 +72,22 @@ async function touchOwnedThread(
   return { created: false };
 }
 
-/** The stored messages of a thread, oldest first. Call after `upsertOwnedThread`. */
-export async function loadThreadMessages(db: OwnerDb, threadId: string): Promise<UIMessage[]> {
+/** The stored metadata of a message plus its row time (`createdAt`, ISO). */
+export function messageMetaOf(row: { metadata: unknown; createdAt: Date }): AssistantMessageMeta {
+  const stored = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {};
+  return { ...(stored as AssistantMessageMeta), createdAt: row.createdAt.toISOString() };
+}
+
+/** The stored messages of a thread, oldest first, with their metadata. Call after `upsertOwnedThread`. */
+export async function loadThreadMessages(db: OwnerDb, threadId: string): Promise<AssistantUIMessage[]> {
   const rows = await db
-    .select({ id: assistantMessages.id, role: assistantMessages.role, parts: assistantMessages.parts })
+    .select({
+      id: assistantMessages.id,
+      role: assistantMessages.role,
+      parts: assistantMessages.parts,
+      metadata: assistantMessages.metadata,
+      createdAt: assistantMessages.createdAt,
+    })
     .from(assistantMessages)
     .where(eq(assistantMessages.threadId, threadId))
     .orderBy(asc(assistantMessages.createdAt), asc(assistantMessages.id));
@@ -84,7 +97,18 @@ export async function loadThreadMessages(db: OwnerDb, threadId: string): Promise
       id: row.id,
       role: row.role as UIMessage["role"],
       parts: (Array.isArray(row.parts) ? row.parts : []) as UIMessage["parts"],
+      metadata: messageMetaOf(row),
     }));
+}
+
+/**
+ * The metadata a row stores: everything but `createdAt` (the row has its own
+ * column), null when nothing is left.
+ */
+export function storableMessageMeta(metadata: unknown): Omit<AssistantMessageMeta, "createdAt"> | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const rest = Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== "createdAt"));
+  return Object.keys(rest).length > 0 ? (rest as Omit<AssistantMessageMeta, "createdAt">) : null;
 }
 
 /** JSON with object keys sorted, so a stored `jsonb` value and the same in-memory value compare equal. */
@@ -96,11 +120,15 @@ function stableJson(value: unknown): string {
   });
 }
 
-/** What is stored per message id (role and parts), to tell new and changed messages from unchanged ones. */
+/** What is stored per message id (role, parts and metadata), to tell new and changed messages from unchanged ones. */
 export type ThreadSnapshot = ReadonlyMap<string, string>;
 
+function storedShape(message: UIMessage): string {
+  return stableJson({ role: message.role, parts: message.parts, metadata: storableMessageMeta(message.metadata) });
+}
+
 export function threadSnapshot(messages: readonly UIMessage[]): ThreadSnapshot {
-  return new Map(messages.map((message) => [message.id, stableJson({ role: message.role, parts: message.parts })]));
+  return new Map(messages.map((message) => [message.id, storedShape(message)]));
 }
 
 /**
@@ -109,14 +137,14 @@ export function threadSnapshot(messages: readonly UIMessage[]): ThreadSnapshot {
  * whole history. Order is kept.
  */
 export function changedMessages(messages: readonly UIMessage[], snapshot: ThreadSnapshot): UIMessage[] {
-  return messages.filter(
-    (message) => snapshot.get(message.id) !== stableJson({ role: message.role, parts: message.parts }),
-  );
+  return messages.filter((message) => snapshot.get(message.id) !== storedShape(message));
 }
 
 /**
  * Upserts the messages by `(thread_id, id)` (new rows keep the list order,
- * existing rows get their parts replaced), sets the title from the first user
+ * existing rows get their parts replaced and their metadata merged: `toolMs`
+ * keeps the durations of earlier requests, since an approved call runs in
+ * the request after the one that asked), sets the title from the first user
  * message while the thread still has the default one, and bumps `updated_at`.
  * The chat route passes only the new or changed messages (`changedMessages`)
  * and the whole conversation as `titleFrom`.
@@ -143,12 +171,21 @@ export async function saveThreadMessages(
           threadId,
           role: message.role,
           parts: message.parts as unknown[],
+          metadata: storableMessageMeta(message.metadata),
           createdAt: new Date(base + index),
         })),
       )
       .onConflictDoUpdate({
         target: [assistantMessages.threadId, assistantMessages.id],
-        set: { parts: sql`excluded.parts`, role: sql`excluded.role` },
+        set: {
+          parts: sql`excluded.parts`,
+          role: sql`excluded.role`,
+          metadata: sql`case when excluded.metadata is null then ${assistantMessages.metadata}
+            else coalesce(${assistantMessages.metadata}, '{}'::jsonb) || excluded.metadata || jsonb_build_object(
+              'toolMs',
+              coalesce(${assistantMessages.metadata} -> 'toolMs', '{}'::jsonb) || coalesce(excluded.metadata -> 'toolMs', '{}'::jsonb)
+            ) end`,
+        },
       });
   }
 

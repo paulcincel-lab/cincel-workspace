@@ -20,18 +20,103 @@ export const ASSISTANT_THREADS_KEEP = 50;
 /** Page size of the approval audit. */
 export const ASSISTANT_ACTIONS_PAGE = 30;
 
-/** The caller's live threads, newest first (`updated_at`). */
+/** One row of the threads list: the thread plus its rail status (`AssistantThreadSummary`). */
+export type AssistantThreadListRow = Pick<AssistantThreadRow, "id" | "title" | "updatedAt" | "pinnedAt"> & {
+  pendingApprovals: number;
+  unread: boolean;
+};
+
+/** `assistant_actions` rows of the thread still waiting for an answer. */
+const pendingApprovalsSql = sql<number>`(
+  select count(*)::int from ${assistantActions}
+  where ${assistantActions.threadId} = ${assistantThreads.id} and ${assistantActions.status} = 'proposed'
+)`;
+
+/**
+ * An assistant message newer than `last_read_at`. A thread never marked
+ * read (`last_read_at` null, every thread before the column existed) counts
+ * as read.
+ */
+const unreadSql = sql<boolean>`(
+  ${assistantThreads.lastReadAt} is not null and exists (
+    select 1 from ${assistantMessages}
+    where ${assistantMessages.threadId} = ${assistantThreads.id}
+      and ${assistantMessages.role} = 'assistant'
+      and ${assistantMessages.createdAt} > ${assistantThreads.lastReadAt}
+  )
+)`;
+
+const threadListColumns = {
+  id: assistantThreads.id,
+  title: assistantThreads.title,
+  updatedAt: assistantThreads.updatedAt,
+  pinnedAt: assistantThreads.pinnedAt,
+  pendingApprovals: pendingApprovalsSql,
+  unread: unreadSql,
+};
+
+function toListRow(row: AssistantThreadListRow): AssistantThreadListRow {
+  return { ...row, pendingApprovals: Number(row.pendingApprovals) || 0, unread: Boolean(row.unread) };
+}
+
+/**
+ * The caller's live threads: pinned first (newest pin first), then newest
+ * first (`updated_at`), so a pinned thread is never cut by the limit.
+ */
 export async function listLiveAssistantThreads(
   db: OwnerDb,
   staffId: string,
   limit: number = ASSISTANT_THREADS_KEEP,
-): Promise<Pick<AssistantThreadRow, "id" | "title" | "updatedAt">[]> {
-  return db
-    .select({ id: assistantThreads.id, title: assistantThreads.title, updatedAt: assistantThreads.updatedAt })
+): Promise<AssistantThreadListRow[]> {
+  const rows = await db
+    .select(threadListColumns)
     .from(assistantThreads)
     .where(and(eq(assistantThreads.staffId, staffId), isNull(assistantThreads.deletedAt)))
-    .orderBy(desc(assistantThreads.updatedAt), desc(assistantThreads.id))
+    .orderBy(sql`${assistantThreads.pinnedAt} desc nulls last`, desc(assistantThreads.updatedAt), desc(assistantThreads.id))
     .limit(limit);
+  return rows.map(toListRow);
+}
+
+/** One of the caller's live threads as a list row, or null when it isn't theirs. */
+export async function findOwnedAssistantThreadListRow(
+  db: OwnerDb,
+  staffId: string,
+  id: string,
+): Promise<AssistantThreadListRow | null> {
+  const [row] = await db
+    .select(threadListColumns)
+    .from(assistantThreads)
+    .where(and(eq(assistantThreads.id, id), eq(assistantThreads.staffId, staffId), isNull(assistantThreads.deletedAt)))
+    .limit(1);
+  return row ? toListRow(row) : null;
+}
+
+/**
+ * Pins (now) or unpins the caller's live thread. `updated_at` stays as it
+ * was: pinning isn't activity. False when there is no such thread.
+ */
+export async function setOwnedAssistantThreadPinned(
+  db: OwnerDb,
+  staffId: string,
+  id: string,
+  pinned: boolean,
+): Promise<boolean> {
+  const rows = await db
+    .update(assistantThreads)
+    .set({ pinnedAt: pinned ? new Date() : null, updatedAt: sql`${assistantThreads.updatedAt}` })
+    .where(and(eq(assistantThreads.id, id), eq(assistantThreads.staffId, staffId), isNull(assistantThreads.deletedAt)))
+    .returning({ id: assistantThreads.id });
+  return rows.length > 0;
+}
+
+/** Sets `last_read_at` to now on the caller's live thread (keeps `updated_at`). False when there is none. */
+export async function markOwnedAssistantThreadRead(db: OwnerDb, staffId: string, id: string): Promise<boolean> {
+  const rows = await db
+    .update(assistantThreads)
+    .set({ lastReadAt: new Date(), updatedAt: sql`${assistantThreads.updatedAt}` })
+    .where(and(eq(assistantThreads.id, id), eq(assistantThreads.staffId, staffId), isNull(assistantThreads.deletedAt)))
+    .returning({ id: assistantThreads.id });
+  return rows.length > 0;
 }
 
 /** The caller's thread, or null when missing, owned by someone else or (unless `includeDeleted`) soft-deleted. */
@@ -171,7 +256,8 @@ export async function listAssistantActions(
 
 /**
  * `daily-digest` housekeeping (BE §13): soft-deletes every live thread beyond
- * the newest `keep` per staff. Returns how many threads were soft-deleted.
+ * the first `keep` per staff in list order (pinned first, then newest), so a
+ * pinned thread is kept. Returns how many threads were soft-deleted.
  * The `assistant_actions` audit rows are kept.
  */
 export async function trimAssistantThreads(db: OwnerDb, keep: number = ASSISTANT_THREADS_KEEP): Promise<number> {
@@ -179,7 +265,7 @@ export async function trimAssistantThreads(db: OwnerDb, keep: number = ASSISTANT
     update ${assistantThreads} t
     set deleted_at = now()
     from (
-      select id, row_number() over (partition by staff_id order by updated_at desc, id desc) as rn
+      select id, row_number() over (partition by staff_id order by pinned_at desc nulls last, updated_at desc, id desc) as rn
       from ${assistantThreads}
       where deleted_at is null
     ) ranked

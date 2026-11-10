@@ -27,6 +27,9 @@ vi.mock("@/lib/actions/page-data/biblioteca-actions", () => ({
   getBibliotecaPageData: vi.fn(),
   getMisVacacionesPageData: vi.fn(),
 }));
+vi.mock("@/lib/actions/resources-actions", () => ({
+  recordResourceOpenAction: vi.fn().mockResolvedValue({ ok: true, data: { recorded: true } }),
+}));
 
 // The workspace viewer embeds Drive iframes; the reader only needs to hand it the part.
 vi.mock("@/components/recursos/ResourcePreview", () => ({

@@ -141,6 +141,7 @@ export function taskDeleteInvalidations(projectId: string | null | undefined): Q
     ...(projectId ? [qk.proyectos.tab(projectId, "tareas")] : []),
     qk.inicio(),
     qk.shell.badges(),
+    qk.me.tasks(),
   ];
 }
 
@@ -257,7 +258,7 @@ const TAREAS_VIEW_KEYS: readonly QueryKey[] = [
 
 /** `updateTaskAction` (plan §3): every Tareas view, the project's Tareas tab and Inicio; the detail is set from the result. */
 export function taskUpdateInvalidations(projectId: string): QueryKey[] {
-  return [...TAREAS_VIEW_KEYS, qk.proyectos.tab(projectId, "tareas"), qk.inicio()];
+  return [...TAREAS_VIEW_KEYS, qk.proyectos.tab(projectId, "tareas"), qk.inicio(), qk.me.tasks()];
 }
 
 /**
@@ -272,12 +273,13 @@ export function taskStatusInvalidations(projectId: string): QueryKey[] {
     qk.proyectos.cronograma(projectId),
     qk.inicio(),
     qk.shell.badges(),
+    qk.me.tasks(),
   ];
 }
 
-/** `assignTaskAction`: every Tareas view, Inicio (workload) and the shell badges. */
+/** `assignTaskAction`: every Tareas view, Inicio (workload), the shell badges and Mi espacio's tasks. */
 export function taskAssignInvalidations(): QueryKey[] {
-  return [...TAREAS_VIEW_KEYS, qk.inicio(), qk.shell.badges()];
+  return [...TAREAS_VIEW_KEYS, qk.inicio(), qk.shell.badges(), qk.me.tasks()];
 }
 
 /** Checklist add / update / remove / reorder: the views that show checklist progress. */
@@ -449,7 +451,7 @@ export function tareasBoardColumnOptions(f: TareasListFilters, columnId: string,
 /**
  * What a Tablero drag invalidates once it settles (plan §3, §4.4): the
  * facets and every Lista (and calendar) entry, the project's Tareas tab,
- * resumen and cronograma, Inicio and the shell badges. Not the board it just
+ * resumen and cronograma, Inicio, the shell badges and my tasks. Not the board it just
  * patched: the optimistic move already matches the server.
  */
 export function tableroMoveInvalidations(projectId: string | null): QueryKey[] {
@@ -464,6 +466,7 @@ export function tableroMoveInvalidations(projectId: string | null): QueryKey[] {
       : []),
     qk.inicio(),
     qk.shell.badges(),
+    qk.me.tasks(),
   ];
 }
 

@@ -2,13 +2,17 @@ import "server-only";
 
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import { db } from "@/lib/db/client";
 import { loadGmailAccess } from "@/lib/gmail/access";
 import { gmailStatusOf, listGmailThreadsPage } from "@/lib/gmail/threads-page";
+import { openTasksInOrder } from "@/lib/my-space/my-tasks";
 import { listChecklistsPage, listNotesPage } from "@/lib/my-space/notes-checklists";
 import { listNotificationsPage } from "@/lib/my-space/notifications-page";
 import { listReminders } from "@/lib/my-space/reminder-service";
 import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
+import { listMyTasks } from "@/lib/repositories/tasks-repository";
 import type { MiEspacioGmail, MiEspacioPageData } from "@/lib/types/mi-espacio";
 
 /**
@@ -37,7 +41,8 @@ async function loadGmail(staffId: string): Promise<MiEspacioGmail> {
  * `getMiEspacioPageData` calls it after the session check and the page
  * prefetch calls it directly; `seedMiEspacio` writes the result into the
  * granular keys (`me.notifications`, `me.gmail.*`, `me.reminders`,
- * `me.checklists`, `me.notes`).
+ * `me.checklists`, `me.notes`, `me.tasks`). `canCreateTask` gates the task
+ * quick add.
  *
  * Security (plan §4.8 rule 2): every read is owner-scoped by
  * `user.member.id`, so only the viewer's own rows reach the dehydrated HTML.
@@ -47,12 +52,13 @@ async function loadGmail(staffId: string): Promise<MiEspacioGmail> {
  */
 export async function loadMiEspacio(user: AuthenticatedUser, now: Date = new Date()): Promise<MiEspacioPageData> {
   const staffId = user.member.id;
-  const [notifications, gmail, reminders, checklists, notes] = await Promise.all([
+  const [notifications, gmail, reminders, checklists, notes, tasks] = await Promise.all([
     listNotificationsPage(staffId, {}),
     loadGmail(staffId),
     listReminders(user, todayTomorrowRange(now), now),
     listChecklistsPage(user),
     listNotesPage(user),
+    listMyTasks(staffId, {}, viewerScopeOf(user)),
   ]);
   return {
     notifications,
@@ -62,5 +68,7 @@ export async function loadMiEspacio(user: AuthenticatedUser, now: Date = new Dat
     checklistsCursor: checklists.nextCursor,
     notes: notes.items,
     notesCursor: notes.nextCursor,
+    tasks: openTasksInOrder(tasks),
+    canCreateTask: resolveActivitiesCapabilities(user).canCreateActivity,
   };
 }

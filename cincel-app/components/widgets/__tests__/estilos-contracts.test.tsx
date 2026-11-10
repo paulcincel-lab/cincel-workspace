@@ -148,7 +148,10 @@ describe("Estilos contracts", () => {
     ] as unknown as UIMessage["parts"];
     render(<ToolSteps parts={parts} />);
     const list = screen.getByRole("list", { name: "Pasos del asistente" });
-    expect([...list.querySelectorAll("li")].map((li) => li.textContent)).toEqual(["listTasks", "buscar"]);
+    const items = [...list.querySelectorAll(":scope > li")].map((li) => li.textContent ?? "");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toContain("listTasks");
+    expect(items[1]).toContain("buscar");
   });
 
   it("parseQuickAdd returns the trimmed text as title", () => {

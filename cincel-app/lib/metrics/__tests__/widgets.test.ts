@@ -428,6 +428,10 @@ describe("toPersonDatum", () => {
       occupancyPct: 60,
       weekHours: 32.5,
       availability: ["libre", "ocupado", "ocupado", "saturado", "vacaciones"],
+      weeks: [],
+      absences: [],
+      projects: [],
+      sharesProjectWithViewer: false,
     };
     const person = toPersonDatum(makeStaff({ positions: [{ id: "pos1", name: "Arquitecta" }] }), row);
     expectTypeOf(person).toEqualTypeOf<PersonDatum>();

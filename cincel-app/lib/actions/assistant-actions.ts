@@ -7,7 +7,7 @@ import { toActionResult } from "@/lib/actions/action-result";
 import { LEGACY_IMPORT_SOURCE, normalizeLegacyMessages, titleFromMessages } from "@/lib/assistant/legacy-import";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
-import { loadAsistenteThreads } from "@/lib/loaders/asistente";
+import { loadAsistenteThreads, toThreadSummary } from "@/lib/loaders/asistente";
 import * as assistantRepository from "@/lib/repositories/assistant-repository";
 import type { AssistantActionRecord, AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
 import type { ActionResult } from "@/lib/types/schedule";
@@ -80,6 +80,33 @@ export async function deleteAssistantThreadAction(id: string): Promise<ActionRes
     const deleted = await assistantRepository.softDeleteOwnedAssistantThread(db, staffId, threadId);
     if (!deleted) throw new Error("NOT_FOUND");
   });
+}
+
+/**
+ * Pins or unpins the caller's thread ("Fijadas" in the Visual rail); returns
+ * its list row. `updated_at` doesn't change. Errors: `NOT_FOUND` (missing,
+ * deleted or another user's thread), `INVALID` (`pinned` not a boolean).
+ */
+export async function pinAssistantThreadAction(input: { id: string; pinned: boolean }): Promise<AssistantThreadSummary> {
+  const staffId = await sessionStaffId();
+  const threadId = threadIdOrNotFound(input?.id);
+  if (typeof input.pinned !== "boolean") throw new Error("INVALID: pinned");
+  const updated = await assistantRepository.setOwnedAssistantThreadPinned(db, staffId, threadId, input.pinned);
+  if (!updated) throw new Error("NOT_FOUND");
+  const row = await assistantRepository.findOwnedAssistantThreadListRow(db, staffId, threadId);
+  if (!row) throw new Error("NOT_FOUND");
+  return toThreadSummary(row);
+}
+
+/**
+ * Marks the caller's thread read now (on open and after each turn), so its
+ * rail row stops showing "Nueva respuesta". Errors: `NOT_FOUND`.
+ */
+export async function markAssistantThreadReadAction(input: { id: string }): Promise<void> {
+  const staffId = await sessionStaffId();
+  const threadId = threadIdOrNotFound(input?.id);
+  const updated = await assistantRepository.markOwnedAssistantThreadRead(db, staffId, threadId);
+  if (!updated) throw new Error("NOT_FOUND");
 }
 
 /**

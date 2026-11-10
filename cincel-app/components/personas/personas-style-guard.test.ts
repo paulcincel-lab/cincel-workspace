@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 const FILES = [
   "components/personas/PersonasTabs.tsx",
   "components/personas/TeamGrid.tsx",
-  "components/personas/TeamTable.tsx",
+  "components/personas/EquipoAnalitico.tsx",
   "components/personas/AvailabilityWeek.tsx",
   "components/personas/EquipoView.tsx",
   "app/(staff)/personas/page.tsx",

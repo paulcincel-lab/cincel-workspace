@@ -1,0 +1,342 @@
+import { describe, expect, it } from "vitest";
+
+import type { TaskListItem } from "@/lib/types/core";
+
+import { dueInfo, groupMyTasksByProject, remainderText } from "./my-tasks";
+import {
+  bucketMyTasks,
+  bucketPresetDate,
+  daySentence,
+  greeting,
+  nextReminderToday,
+  openTasksInOrder,
+  timeAgo,
+} from "./my-tasks";
+import {
+  checklistMetrics,
+  miEspacioCsv,
+  miEspacioCsvFileName,
+  myTasksGroups,
+  taskMetrics,
+  taskRow,
+  type TaskRow,
+} from "./my-tasks";
+
+describe("Esencial: Mis tareas by project", () => {
+  const TODAY = "2026-11-09";
+
+  function mine(id: string, projectId: string, commitmentDate: string | null, over: Partial<TaskListItem> = {}): TaskListItem {
+    return {
+      id,
+      projectId,
+      kind: "workflow",
+      templateId: null,
+      workflowId: "w1",
+      phaseId: null,
+      spaceId: null,
+      closedAt: null,
+      title: id,
+      notes: null,
+      createdById: "me",
+      managerId: "me",
+      status: "pendiente",
+      customStatusId: null,
+      priority: "media",
+      sortOrder: null,
+      commitmentDate,
+      reviewDate: null,
+      deliveryDate: null,
+      archived: false,
+      createdAt: "2026-11-01T00:00:00.000Z",
+      updatedAt: "2026-11-01T00:00:00.000Z",
+      customStatus: null,
+      project: { id: projectId, name: `Proyecto ${projectId}`, clientName: null },
+      workflow: { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 },
+      phase: null,
+      space: null,
+      manager: { id: "me", name: "Ana López" },
+      support: [],
+      checklist: { total: 0, completed: 0 },
+      parentTaskId: null,
+      parentTitle: null,
+      subtaskCount: 0,
+      subtaskDoneCount: 0,
+      waitingOn: 0,
+      ...over,
+    };
+  }
+
+  it("groups overdue projects first", () => {
+    const tasks = [
+      mine("a1", "a", "2026-11-10"),
+      mine("b1", "b", "2026-11-20"),
+      mine("b2", "b", "2026-11-07"),
+      mine("c1", "c", null),
+      mine("d1", "d", "2026-11-12"),
+    ];
+    const { groups, remaining } = groupMyTasksByProject(tasks, TODAY);
+    expect(groups.map((g) => g.projectId)).toEqual(["b", "a", "d"]);
+    // Inside a group: by due date.
+    expect(groups[0]!.tasks.map((t) => t.id)).toEqual(["b2", "b1"]);
+    expect(groups[0]!.name).toBe("Proyecto b");
+    expect(remaining).toEqual({ count: 1, projectNames: ["Proyecto c"] });
+  });
+
+  it("limits 3 × 4 and counts the remainder", () => {
+    const tasks = [
+      ...["1", "2", "3", "4", "5", "6"].map((n) => mine(`a${n}`, "a", `2026-11-1${n}`)),
+      ...["1", "2"].map((n) => mine(`b${n}`, "b", `2026-11-2${n}`)),
+      mine("c1", "c", "2026-11-28"),
+      mine("d1", "d", null),
+      mine("d2", "d", null),
+    ];
+    const { groups, remaining } = groupMyTasksByProject(tasks, TODAY, { projects: 3, perProject: 4 });
+    expect(groups).toHaveLength(3);
+    expect(groups.map((g) => g.tasks.length)).toEqual([4, 2, 1]);
+    expect(groups[0]!.tasks.map((t) => t.id)).toEqual(["a1", "a2", "a3", "a4"]);
+    expect(remaining).toEqual({ count: 4, projectNames: ["Proyecto a", "Proyecto d"] });
+
+    const one = groupMyTasksByProject([mine("x", "a", null)], TODAY);
+    expect(one.groups).toHaveLength(1);
+    expect(one.groups[0]!.tasks).toHaveLength(1);
+    expect(one.remaining).toEqual({ count: 0, projectNames: [] });
+  });
+
+  it("remainderText 1/2/3+ projects", () => {
+    expect(remainderText({ count: 0, projectNames: [] })).toBe("");
+    expect(remainderText({ count: 1, projectNames: ["Casa Lomas"] })).toBe("1 tarea más en Casa Lomas");
+    expect(remainderText({ count: 5, projectNames: ["Casa Lomas", "Torre Sur"] })).toBe(
+      "5 tareas más en Casa Lomas y Torre Sur",
+    );
+    expect(remainderText({ count: 7, projectNames: ["Casa Lomas", "Torre Sur", "Loft"] })).toBe(
+      "7 tareas más en Casa Lomas, Torre Sur y 1 proyecto más",
+    );
+    expect(remainderText({ count: 9, projectNames: ["Casa Lomas", "Torre Sur", "Loft", "Bodega"] })).toBe(
+      "9 tareas más en Casa Lomas, Torre Sur y 2 proyectos más",
+    );
+  });
+
+  it("dueInfo Esencial labels incl. bloqueada and d tarde", () => {
+    const at = (commitmentDate: string | null, status: TaskListItem["status"] = "pendiente") =>
+      dueInfo({ commitmentDate, status }, TODAY, "esencial");
+    expect(at("2026-11-07")).toEqual({ tone: "overdue", label: "7 nov · 2 d tarde", daysLate: 2 });
+    expect(at("2026-11-09").label).toBe("hoy");
+    expect(at("2026-11-10").label).toBe("mañana");
+    expect(at("2026-11-13").label).toBe("vie 13 nov");
+    expect(at("2026-11-18").label).toBe("18 nov");
+    expect(at(null).label).toBe("Sin fecha");
+    expect(at("2026-11-12", "bloqueado").label).toBe("jue 12 nov · bloqueada");
+    expect(at("2026-11-07", "bloqueado").label).toBe("7 nov · 2 d tarde · bloqueada");
+  });
+});
+
+describe("Analítico: Mis tareas tables", () => {
+  const TODAY = "2026-11-09";
+  const DISENO = { id: "w-dis", key: "diseno", name: "Diseño", sortOrder: 2 };
+  const PRESALE = { id: "w-pre", key: "presale", name: "Presale", sortOrder: 1 };
+
+  function task(id: string, projectId: string, commitmentDate: string | null, over: Partial<TaskListItem> = {}): TaskListItem {
+    return {
+      id,
+      projectId,
+      kind: "usuario",
+      templateId: null,
+      workflowId: DISENO.id,
+      phaseId: null,
+      spaceId: null,
+      closedAt: null,
+      title: id,
+      notes: null,
+      createdById: "me",
+      managerId: "me",
+      status: "pendiente",
+      customStatusId: null,
+      priority: "media",
+      sortOrder: null,
+      commitmentDate,
+      reviewDate: null,
+      deliveryDate: null,
+      archived: false,
+      createdAt: "2026-11-01T00:00:00.000Z",
+      updatedAt: "2026-11-01T00:00:00.000Z",
+      customStatus: null,
+      project: { id: projectId, name: projectId === "p1" ? "Casa Lomas" : "Torre Sur", clientName: null },
+      workflow: DISENO,
+      phase: null,
+      space: null,
+      manager: { id: "me", name: "Ana López" },
+      support: [],
+      checklist: { total: 0, completed: 0 },
+      parentTaskId: null,
+      parentTitle: null,
+      subtaskCount: 0,
+      subtaskDoneCount: 0,
+      waitingOn: 0,
+      ...over,
+    } as TaskListItem;
+  }
+
+  const TASKS = [
+    task("Planos", "p1", "2026-11-04", { status: "bloqueado", subtaskCount: 3, subtaskDoneCount: 1 }),
+    task("Render", "p1", "2026-11-12"),
+    task("Visita", "p1", null, { workflow: PRESALE, workflowId: PRESALE.id }),
+    task("Cotizar", "p2", "2026-11-09", { priority: "alta" }),
+    task("Permisos", "p2", "2026-11-07"),
+  ];
+
+  it("myTasksGroups project → tramo", () => {
+    const groups = myTasksGroups(TASKS, TODAY);
+    expect(groups.map((g) => g.label)).toEqual(["Casa Lomas", "Torre Sur"]);
+    const [lomas, torre] = groups;
+    expect(lomas!.caption).toBe("3 tareas");
+    expect(lomas!.metrics[0]).toMatchObject({ value: "1 vencida · 5 d", tone: "destructive" });
+    expect(lomas!.children!.map((c) => c.label)).toEqual(["Presale", "Diseño"]);
+    const diseno = lomas!.children![1]!;
+    expect(diseno.caption).toBe("2 · 1 vencida · bloqueada");
+    expect(diseno.rows!.map((r) => r.title)).toEqual(["Planos", "Render"]);
+    expect(torre!.metrics[0]!.value).toBe("1 vencida · 2 d");
+    expect(myTasksGroups([task("Sola", "p2", "2026-11-20")], TODAY)[0]!.metrics[0]!.value).toBe("0 vencidas");
+  });
+
+  it("taskRow labels", () => {
+    const planos = taskRow(TASKS[0]!, TODAY);
+    expect(planos).toMatchObject({ estatus: "Bloqueado", vence: "4 nov", overdue: true, retraso: 5, subtareas: "1/3" });
+    expect(taskRow(TASKS[3]!, TODAY)).toMatchObject({ vence: "hoy", overdue: false, prioridad: "Alta", subtareas: "—" });
+    expect(taskRow(TASKS[2]!, TODAY)).toMatchObject({ vence: "—", tramoName: "Presale" });
+  });
+
+  it("taskMetrics overduePct and avgDaysLate", () => {
+    expect(taskMetrics(TASKS, TODAY)).toEqual({ open: 5, overdue: 2, overduePct: 40, avgDaysLate: 3.5, projects: 2 });
+    expect(taskMetrics([], TODAY)).toEqual({ open: 0, overdue: 0, overduePct: 0, avgDaysLate: 0, projects: 0 });
+  });
+
+  it("checklistMetrics sums items and averages percents", () => {
+    const item = (done: boolean) => ({ id: String(Math.random()), text: "x", done, sortOrder: 0 });
+    expect(
+      checklistMetrics([{ items: [item(true), item(false)] }, { items: [item(true), item(true), item(true), item(false)] }, { items: [] }]),
+    ).toEqual({ active: 3, done: 4, total: 6, pct: 67, avgPct: 63 });
+    expect(checklistMetrics([{ items: [] }])).toMatchObject({ pct: null, avgPct: null });
+  });
+
+  it("miEspacioCsv BOM and escaping", () => {
+    const rows: TaskRow[] = [
+      taskRow(task("Planos; fase 1", "p1", "2026-11-04", { subtaskCount: 2, subtaskDoneCount: 1 }), TODAY),
+      taskRow(task('=SUMA "x"', "p2", null), TODAY),
+    ];
+    const csv = miEspacioCsv(rows);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    const lines = csv.slice(1).split("\r\n");
+    expect(lines[0]).toBe("Proyecto;Tramo;Tarea;Estatus;Vence;Prioridad;Subtareas;Días de retraso");
+    expect(lines[1]).toBe('Casa Lomas;Diseño;"Planos; fase 1";Pendiente;2026-11-04;Media;1/2;5');
+    expect(lines[2]).toBe(`Torre Sur;Diseño;"'=SUMA ""x""";Pendiente;;Media;;0`);
+    expect(lines[3]).toBe("");
+    expect(miEspacioCsvFileName(TODAY)).toBe("mi-espacio-tareas-2026-11-09.csv");
+  });
+});
+
+describe("Visual: Mis tareas board and day hero", () => {
+  /** Monday. */
+  const MONDAY = "2026-11-09";
+
+  function t(id: string, commitmentDate: string | null, patch: Partial<TaskListItem> = {}): TaskListItem {
+    return { id, title: id, status: "pendiente", customStatus: null, commitmentDate, ...patch } as TaskListItem;
+  }
+  const ids = (tasks: TaskListItem[]) => tasks.map((x) => x.id);
+
+  it("bucketMyTasks puts overdue in Hoy", () => {
+    const b = bucketMyTasks(
+      [t("vencida", "2026-11-06"), t("hoy", MONDAY), t("jueves", "2026-11-12"), t("domingo", "2026-11-15"), t("lunes", "2026-11-16")],
+      MONDAY,
+    );
+    expect(ids(b.hoy)).toEqual(["vencida", "hoy"]);
+    expect(ids(b.semana)).toEqual(["jueves", "domingo"]);
+    expect(ids(b.despues)).toEqual(["lunes"]);
+  });
+
+  it("Sunday leaves Esta semana empty", () => {
+    const b = bucketMyTasks([t("hoy", "2026-11-15"), t("lunes", "2026-11-16")], "2026-11-15");
+    expect(ids(b.hoy)).toEqual(["hoy"]);
+    expect(b.semana).toEqual([]);
+    expect(ids(b.despues)).toEqual(["lunes"]);
+  });
+
+  it("undated → Después", () => {
+    const b = bucketMyTasks([t("sin-fecha", null)], MONDAY);
+    expect(ids(b.despues)).toEqual(["sin-fecha"]);
+    expect(b.hoy).toEqual([]);
+    expect(b.semana).toEqual([]);
+  });
+
+  it("dueInfo labels", () => {
+    expect(dueInfo(t("a", "2026-11-06"), MONDAY)).toEqual({ tone: "overdue", label: "Vencida · 6 nov", daysLate: 3 });
+    expect(dueInfo(t("a", MONDAY), MONDAY)).toEqual({ tone: "today", label: "Hoy", daysLate: 0 });
+    expect(dueInfo(t("a", "2026-11-10"), MONDAY)).toEqual({ tone: "soon", label: "mañana", daysLate: 0 });
+    expect(dueInfo(t("a", "2026-11-12"), MONDAY)).toEqual({ tone: "soon", label: "jue 12 nov", daysLate: 0 });
+    expect(dueInfo(t("a", "2026-11-18"), MONDAY)).toEqual({ tone: "later", label: "18 nov", daysLate: 0 });
+    expect(dueInfo(t("a", null), MONDAY)).toEqual({ tone: "none", label: "Sin fecha", daysLate: 0 });
+    expect(dueInfo(t("a", "2026-11-06", { status: "bloqueado" }), MONDAY).label).toBe("Vencida · 6 nov · bloqueada");
+  });
+
+  it("column presets: today, Friday of this week (today from Friday on), next Monday", () => {
+    expect(bucketPresetDate("hoy", MONDAY)).toBe(MONDAY);
+    expect(bucketPresetDate("semana", MONDAY)).toBe("2026-11-13");
+    expect(bucketPresetDate("despues", MONDAY)).toBe("2026-11-16");
+    expect(bucketPresetDate("semana", "2026-11-14")).toBe("2026-11-14");
+    expect(bucketPresetDate("despues", "2026-11-15")).toBe("2026-11-16");
+  });
+
+  it("greeting by hour in org time zone", () => {
+    // America/Mexico_City is UTC−6.
+    expect(greeting(new Date("2026-11-09T17:59:00Z"), "Ana Pérez")).toBe("Buenos días, Ana");
+    expect(greeting(new Date("2026-11-09T18:00:00Z"), "Ana Pérez")).toBe("Buenas tardes, Ana");
+    expect(greeting(new Date("2026-11-10T00:59:00Z"), "Ana Pérez")).toBe("Buenas tardes, Ana");
+    expect(greeting(new Date("2026-11-10T01:00:00Z"), "Ana Pérez")).toBe("Buenas noches, Ana");
+    expect(greeting(new Date("2026-11-09T12:00:00Z"), "")).toBe("Buenos días");
+  });
+
+  it("daySentence 0/1/n tasks with and without reminder", () => {
+    const now = new Date("2026-11-09T16:00:00Z"); // 10:00 in Mexico City
+    const reminder = { text: "Llamar a obra", dueAt: "2026-11-09T22:00:00Z" };
+    expect(daySentence({ now, todayCount: 0, reminder: null })).toBe("Lunes 9 de noviembre. No tienes tareas para hoy.");
+    expect(daySentence({ now, todayCount: 1, reminder: null })).toBe("Lunes 9 de noviembre. Tienes 1 tarea para hoy.");
+    expect(daySentence({ now, todayCount: 3, reminder: null })).toBe("Lunes 9 de noviembre. Tienes 3 tareas para hoy.");
+    expect(daySentence({ now, todayCount: 3, reminder })).toBe(
+      "Lunes 9 de noviembre. Tienes 3 tareas para hoy y «Llamar a obra» a las 16:00.",
+    );
+    expect(daySentence({ now, todayCount: 0, reminder })).toBe(
+      "Lunes 9 de noviembre. No tienes tareas para hoy y «Llamar a obra» a las 16:00.",
+    );
+  });
+
+  it("nextReminderToday takes the first live reminder later today", () => {
+    const now = new Date("2026-11-09T16:00:00Z");
+    const list = [
+      { id: "antes", dueAt: "2026-11-09T15:00:00Z", cancelledAt: null },
+      { id: "cancelado", dueAt: "2026-11-09T17:00:00Z", cancelledAt: "2026-11-09T10:00:00Z" },
+      { id: "tarde", dueAt: "2026-11-09T22:00:00Z", cancelledAt: null },
+      { id: "pronto", dueAt: "2026-11-09T19:00:00Z", cancelledAt: null },
+      { id: "manana", dueAt: "2026-11-10T15:00:00Z", cancelledAt: null },
+    ];
+    expect(nextReminderToday(list, now)?.id).toBe("pronto");
+    expect(nextReminderToday([list[4]!], now)).toBeNull();
+  });
+
+  it("openTasksInOrder drops closed tasks and sorts by date, then title", () => {
+    const rows = openTasksInOrder([
+      t("Zeta", null),
+      t("Beta", "2026-11-12"),
+      t("Hecha", "2026-11-01", { status: "completado" }),
+      t("Cerrada", "2026-11-02", { customStatus: { id: "s", name: "Entregada", closes: true, countsAsCompleted: true } }),
+      t("Alfa", "2026-11-12"),
+    ]);
+    expect(ids(rows)).toEqual(["Alfa", "Beta", "Zeta"]);
+  });
+
+  it("timeAgo", () => {
+    const now = new Date("2026-11-09T18:00:00Z");
+    expect(timeAgo("2026-11-09T17:48:00Z", now)).toBe("hace 12 min");
+    expect(timeAgo("2026-11-09T15:00:00Z", now)).toBe("hace 3 h");
+    expect(timeAgo("2026-11-08T18:00:00Z", now)).toBe("ayer");
+    expect(timeAgo("2026-11-06T18:00:00Z", now)).toBe("6 nov");
+  });
+});

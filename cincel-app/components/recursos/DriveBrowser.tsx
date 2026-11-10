@@ -16,6 +16,8 @@ export type DriveBrowserEntry = {
   thumbnailLink: string | null;
   webViewLink: string;
   modifiedTime: string | null;
+  /** Bytes; absent or null for folders and Google-native documents. */
+  sizeBytes?: number | null;
   isFolder: boolean;
 };
 
@@ -76,6 +78,8 @@ type Props = {
   onFileDoubleClick?: (entry: DriveBrowserEntry) => void;
   /** Fires whenever the visible folder or search changes, so a parent can clear its selection. */
   onNavigate?: () => void;
+  /** Search text to start with (e.g. a name typed in a quick-add line). */
+  initialSearch?: string;
 };
 
 function formatModified(iso: string | null): string {
@@ -104,9 +108,10 @@ export default function DriveBrowser({
   onFileClick,
   onFileDoubleClick,
   onNavigate,
+  initialSearch = "",
 }: Props) {
   const [path, setPath] = useState<Crumb[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const query = useDebounced(search.trim(), DRIVE_SEARCH_DEBOUNCE_MS);
 
   const currentFolderId = path.length > 0 ? path[path.length - 1].id : (rootFolderId ?? null);

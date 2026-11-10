@@ -3,6 +3,7 @@
 import { toActionResult } from "@/lib/actions/action-result";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { resolveResourcesCapabilities } from "@/lib/auth/permissions";
+import { canViewBibliotecaSection } from "@/lib/biblioteca/catalog";
 import * as resourcesRepository from "@/lib/repositories/resources-repository";
 import type { ResourceLink, ResourceLinkInput, ResourceSection } from "@/lib/types/resource";
 import type { ActionResult } from "@/lib/types/schedule";
@@ -76,4 +77,30 @@ async function deleteResourceLinkActionImpl(id: string): Promise<void> {
     throw new Error("FORBIDDEN: resource delete");
   }
   await resourcesRepository.softDeleteResourceLink(id, user.member.id);
+}
+
+export async function recordResourceOpenAction(
+  ...args: Parameters<typeof recordResourceOpenActionImpl>
+): Promise<ActionResult<{ recorded: boolean }>> {
+  return toActionResult(() => recordResourceOpenActionImpl(...args));
+}
+
+/**
+ * Counts one open of a resource link by the viewer (Biblioteca Analítico
+ * "Aperturas 30 d"): at most one per person and link every 10 minutes. Only
+ * a link the viewer can see (its section's capability; a personal link only
+ * for its owner); `recorded` is false for an open inside the 10 minutes.
+ */
+async function recordResourceOpenActionImpl(input: { linkId: string }): Promise<{ recorded: boolean }> {
+  const user = await requireCapabilityUser();
+  const linkId = typeof input?.linkId === "string" ? input.linkId.trim() : "";
+  if (!linkId) throw new Error("INVALID: linkId");
+  const link = await resourcesRepository.getResourceLink(linkId);
+  if (!link) throw new Error("NOT_FOUND: resource link");
+  const viewerId = user.member.id;
+  const canSee =
+    canViewBibliotecaSection(resolveResourcesCapabilities(user), link.section) &&
+    (link.personalFor === null || link.personalFor.id === viewerId);
+  if (!canSee) throw new Error("FORBIDDEN: resource open");
+  return { recorded: await resourcesRepository.recordResourceLinkOpen(link.id, viewerId) };
 }

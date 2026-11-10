@@ -432,6 +432,10 @@ export function inicioWorkloadRows(
         availability: [],
         inProgress: own.filter((t) => t.status === "en_proceso").length,
         avgDaysLate: overdue.length > 0 ? Math.round((daysLate / overdue.length) * 10) / 10 : null,
+        weeks: [],
+        absences: [],
+        projects: [],
+        sharesProjectWithViewer: false,
       };
     })
     .sort(

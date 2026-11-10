@@ -109,4 +109,63 @@ describe.skipIf(!url)("assistant threads (test DB)", async () => {
     await threads.saveThreadMessages(db, second, [{ id: "u1", role: "user", parts: [{ type: "text", text: "Hola" }] }]);
     expect((await threads.loadThreadMessages(db, id)).find((m) => m.id === "u1")!.parts).toEqual(user1.parts);
   });
+
+  it("saves and loads message metadata", async () => {
+    const id = randomUUID();
+    await threads.upsertOwnedThread(db, { threadId: id, staffId: owner, context: { route: "/" } });
+    const assistant: UIMessage = {
+      id: "a1",
+      role: "assistant",
+      parts: [{ type: "text", text: "Listo" }],
+      metadata: {
+        createdAt: "2020-01-01T00:00:00.000Z",
+        toolMs: { "call-1": 420 },
+        responseMs: 1800,
+        usage: { inputTokens: 1200, outputTokens: 80 },
+      },
+    };
+    const plain: UIMessage = { id: "u1", role: "user", parts: [{ type: "text", text: "Hola" }] };
+    await threads.saveThreadMessages(db, id, [plain, assistant]);
+
+    const rows = await db
+      .select({ id: schema.assistantMessages.id, metadata: schema.assistantMessages.metadata })
+      .from(schema.assistantMessages)
+      .where(eq(schema.assistantMessages.threadId, id));
+    const row = rows.find((r) => r.id === "a1")!;
+    expect(row.metadata).toEqual({ toolMs: { "call-1": 420 }, responseMs: 1800, usage: { inputTokens: 1200, outputTokens: 80 } });
+
+    const loaded = await threads.loadThreadMessages(db, id);
+    const loadedAssistant = loaded.find((m) => m.id === "a1")!;
+    expect(loadedAssistant.metadata).toMatchObject({ toolMs: { "call-1": 420 }, responseMs: 1800 });
+    // The time comes from the row, never from the streamed value.
+    expect(loadedAssistant.metadata!.createdAt).not.toBe("2020-01-01T00:00:00.000Z");
+    expect(Number.isNaN(Date.parse(loadedAssistant.metadata!.createdAt!))).toBe(false);
+    // A row without metadata still gets its time.
+    expect(Object.keys(loaded.find((m) => m.id === "u1")!.metadata!)).toEqual(["createdAt"]);
+  });
+
+  it("merges toolMs across the approval resume", async () => {
+    const id = randomUUID();
+    await threads.upsertOwnedThread(db, { threadId: id, staffId: owner, context: { route: "/" } });
+    const asked: UIMessage = {
+      id: "a1",
+      role: "assistant",
+      parts: [{ type: "text", text: "¿Confirmas?" }],
+      metadata: { toolMs: { "call-read": 300 }, responseMs: 900 },
+    };
+    await threads.saveThreadMessages(db, id, [asked]);
+
+    // The approved call runs in the next request: only its own duration is new.
+    const resumed: UIMessage = {
+      ...asked,
+      parts: [{ type: "text", text: "Hecho" }],
+      metadata: { toolMs: { "call-write": 650 }, responseMs: 1200 },
+    };
+    await threads.saveThreadMessages(db, id, [resumed]);
+    // A save without metadata keeps what is stored.
+    await threads.saveThreadMessages(db, id, [{ ...resumed, metadata: undefined }]);
+
+    const loaded = (await threads.loadThreadMessages(db, id)).find((m) => m.id === "a1")!;
+    expect(loaded.metadata).toMatchObject({ toolMs: { "call-read": 300, "call-write": 650 }, responseMs: 1200 });
+  });
 });

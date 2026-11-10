@@ -47,7 +47,7 @@ export type NewTaskDefaults = {
    * (`pendiente`, …) or `custom:<id>`. Applied right after the task is created.
    */
   status?: string;
-  /** Responsable (quick-add `@persona`); null = "Sin responsable". */
+  /** Responsable preselected (quick-add `@persona`, Mi espacio: me); null = "Sin responsable". Kept only when the tramo allows them. */
   managerId?: string | null;
   /** `YYYY-MM-DD` (quick-add date). */
   deliveryDate?: string | null;

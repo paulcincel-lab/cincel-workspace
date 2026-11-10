@@ -115,6 +115,9 @@ export type NotificationPreferences = {
 
 export type NotificationsPage = { items: NotificationItem[]; nextCursor: string | null; unreadCount: number };
 
+/** Bandeja counts of one kind (`fetchNotificationsSummaryAction`); `latestAt` is ISO, null without rows. */
+export type NotificationKindSummary = { kind: NotificationKind; unread: number; total: number; latestAt: string | null };
+
 // ── Mi espacio ──────────────────────────────────────────────────────────────
 export type NoteColor = "neutral" | "blue" | "amber" | "violet" | "cyan";
 
@@ -129,7 +132,18 @@ export type Note = {
 };
 
 export type ChecklistItem = { id: string; text: string; done: boolean; sortOrder: number };
-export type Checklist = { id: string; title: string; projectId: string | null; items: ChecklistItem[] };
+/**
+ * `projectName`: the linked project's name, null without one. `updatedAt`
+ * (ISO): the latest change of the checklist or any of its items.
+ */
+export type Checklist = {
+  id: string;
+  title: string;
+  projectId: string | null;
+  projectName: string | null;
+  updatedAt: string;
+  items: ChecklistItem[];
+};
 
 export type ReminderRepeat = "none" | "daily" | "weekly" | "monthly";
 export type ReminderChannel = "app" | "email";
@@ -297,7 +311,17 @@ export type AssistantActionRecord = {
   decidedAt: string | null;
 };
 
-export type AssistantThreadSummary = { id: string; title: string; updatedAt: string };
+export type AssistantThreadSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  /** ISO; `assistant_threads.pinned_at`, null when not pinned. */
+  pinnedAt: string | null;
+  /** `assistant_actions` rows of the thread still `proposed`. */
+  pendingApprovals: number;
+  /** The last assistant message is newer than `last_read_at`. */
+  unread: boolean;
+};
 
 // ── Aggregates (BE §7.10–§7.12, FE §7.1) ────────────────────────────────────
 export type InicioData = {
@@ -427,10 +451,6 @@ export type PersonProjectLoad = {
 };
 
 export type PeopleOverviewRow = {
-  /** Length 4, this Monday first (Personas). Inicio's workload rows leave it out. */
-  weeks?: WeekLoad[];
-  /** Approved absences overlapping the 4 weeks (Personas). Inicio's workload rows leave it out. */
-  absences?: AbsenceRange[];
   staffId: string;
   open: number;
   overdue: number;
@@ -441,6 +461,14 @@ export type PeopleOverviewRow = {
   weekHours: number | null;
   /** Mon–Fri. */
   availability: Availability[];
+  /** Length 4, this Monday first. */
+  weeks: WeekLoad[];
+  /** Approved absences overlapping the 4 weeks. */
+  absences: AbsenceRange[];
+  /** Sorted overdue desc, then open desc. */
+  projects: PersonProjectLoad[];
+  /** The person shares at least one active project with the viewer (the viewer's own row: true). */
+  sharesProjectWithViewer: boolean;
 };
 
 export type PortfolioRow = {

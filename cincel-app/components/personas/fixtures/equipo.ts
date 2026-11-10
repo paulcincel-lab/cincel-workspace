@@ -72,6 +72,10 @@ export const EQUIPO_OVERVIEW_NO_HOURS: PeopleOverviewRow[] = [
     occupancyPct: 75,
     weekHours: null,
     availability: ["ocupado", "ocupado", "saturado", "libre", "libre"],
+    weeks: [],
+    absences: [],
+    projects: [],
+    sharesProjectWithViewer: false,
   },
   {
     staffId: EQUIPO_STAFF[1].id,
@@ -81,6 +85,10 @@ export const EQUIPO_OVERVIEW_NO_HOURS: PeopleOverviewRow[] = [
     occupancyPct: 25,
     weekHours: null,
     availability: ["libre", "libre", "libre", "vacaciones", "vacaciones"],
+    weeks: [],
+    absences: [],
+    projects: [],
+    sharesProjectWithViewer: false,
   },
   {
     staffId: EQUIPO_STAFF[2].id,
@@ -90,6 +98,10 @@ export const EQUIPO_OVERVIEW_NO_HOURS: PeopleOverviewRow[] = [
     occupancyPct: 0,
     weekHours: null,
     availability: ["libre", "libre", "libre", "libre", "libre"],
+    weeks: [],
+    absences: [],
+    projects: [],
+    sharesProjectWithViewer: false,
   },
 ];
 

@@ -238,6 +238,8 @@ function seededClient(seed: Seed): QueryClient {
     checklistsCursor: null,
     notes: [],
     notesCursor: null,
+    tasks: [],
+    canCreateTask: true,
   });
   client.setQueryData<ShellBadges>(qk.shell.badges(), {
     tareasOpen: 4,

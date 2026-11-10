@@ -130,14 +130,16 @@ export type PersonDatum = {
   inProgress?: number;
   /** Mean days late of the overdue tasks (1 decimal), null without any (`inicioWorkloadRows`). */
   avgDaysLate?: number | null;
-  /** 4 weeks, this Monday first (`PeopleOverviewRow.weeks`). */
+  /** 4 weeks of load, this Monday first (`PeopleOverviewRow.weeks`). */
   weeks?: WeekLoad[];
   /** Approved absences overlapping the 4 weeks. */
   absences?: AbsenceRange[];
   /** Open tasks per project, overdue desc then open desc (Personas Analítico). */
   projects?: PersonProjectLoad[];
-  /** Shares an active project with the viewer (Personas Analítico). */
+  /** Shares at least one active project with the viewer (Personas Analítico). */
   sharesProjectWithViewer?: boolean;
+  /** Weekly capacity in open tasks (`staff.capacity`), for client-side load previews. */
+  capacity?: number;
 };
 
 export type EntityCard = {

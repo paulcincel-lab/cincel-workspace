@@ -15,6 +15,7 @@ import { BibliotecaSection, optimisticFavoriteId, type BibliotecaSectionProps } 
 const actions = vi.hoisted(() => ({
   createResourceLinkAction: vi.fn(),
   deleteResourceLinkAction: vi.fn(),
+  recordResourceOpenAction: vi.fn().mockResolvedValue({ ok: true, data: { recorded: true } }),
 }));
 vi.mock("@/lib/actions/resources-actions", () => actions);
 

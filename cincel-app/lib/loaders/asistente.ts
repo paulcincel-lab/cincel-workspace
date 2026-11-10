@@ -3,6 +3,7 @@ import "server-only";
 import { and, eq, isNull } from "drizzle-orm";
 import type { UIMessage } from "ai";
 
+import { messageMetaOf } from "@/lib/assistant/threads";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   resolveActivitiesCapabilities,
@@ -19,6 +20,7 @@ import type {
   AsistentePageThread,
   AssistantContextIds,
   AssistantContextLabel,
+  AssistantUIMessage,
 } from "@/lib/types/asistente";
 import type { AssistantThreadSummary } from "@/lib/types/redesign";
 
@@ -30,14 +32,26 @@ import type { AssistantThreadSummary } from "@/lib/types/redesign";
  * Read-only.
  */
 
-/** The viewer's live threads, newest first, at most 50 (`qk.asistente.threads()`). */
+/** The viewer's live threads, pinned first then newest first, at most 50 (`qk.asistente.threads()`). */
 export async function loadAsistenteThreads(user: AuthenticatedUser): Promise<AssistantThreadSummary[]> {
   const rows = await assistantRepository.listLiveAssistantThreads(
     db,
     user.member.id,
     assistantRepository.ASSISTANT_THREADS_KEEP,
   );
-  return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updatedAt.toISOString() }));
+  return rows.map(toThreadSummary);
+}
+
+/** A threads-list row as the client sees it (ISO dates). */
+export function toThreadSummary(row: assistantRepository.AssistantThreadListRow): AssistantThreadSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    updatedAt: row.updatedAt.toISOString(),
+    pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
+    pendingApprovals: row.pendingApprovals,
+    unread: row.unread,
+  };
 }
 
 /**
@@ -51,10 +65,12 @@ export async function loadAsistenteThread(
   const thread = await assistantRepository.findOwnedAssistantThread(db, user.member.id, input.id);
   if (!thread) return null;
   const rows = await assistantRepository.listAssistantThreadMessages(db, thread.id);
-  const messages: UIMessage[] = rows.map((row) => ({
+  // Metadata carries the tool durations and the message time (`created_at`) for the tool steps.
+  const messages: AssistantUIMessage[] = rows.map((row) => ({
     id: row.id,
     role: row.role as UIMessage["role"],
     parts: (Array.isArray(row.parts) ? row.parts : []) as UIMessage["parts"],
+    metadata: messageMetaOf(row),
   }));
   return { id: thread.id, title: thread.title, messages };
 }

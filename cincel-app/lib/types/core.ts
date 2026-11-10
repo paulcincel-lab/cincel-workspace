@@ -694,6 +694,8 @@ export type DriveFileMeta = {
   iconLink: string | null;
   thumbnailLink: string | null;
   webViewLink: string | null;
+  /** Bytes reported by Drive; null for Google-native documents, folders or before the first sync. */
+  sizeBytes?: number | null;
   syncedAt: string | null;
 };
 

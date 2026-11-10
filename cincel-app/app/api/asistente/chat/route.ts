@@ -34,6 +34,7 @@ import {
   upsertOwnedThread,
   type AppliedApproval,
 } from "@/lib/assistant/threads";
+import { continuedMeta, responseTimings } from "@/lib/assistant/response-timings";
 import { summarizeToolCall } from "@/lib/assistant/tool-summaries";
 import { db } from "@/lib/db/client";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
@@ -97,6 +98,7 @@ async function legacyChat(user: AuthenticatedUser, messages: UIMessage[]): Promi
   // everyone, write tools (create_task / assign_task) only for roles that can
   // create / reassign work in the /tareas UI.
   const tools = buildAssistantTools(user);
+  const timings = responseTimings(continuedMeta(messages));
 
   const result = streamText({
     model: getLanguageModel(),
@@ -106,9 +108,10 @@ async function legacyChat(user: AuthenticatedUser, messages: UIMessage[]): Promi
     // Ceiling on tool-call round-trips per user turn — a cost/availability
     // guard, not data safety (write tools re-check capabilities server-side).
     stopWhen: stepCountIs(5),
+    onToolExecutionEnd: timings.onToolExecutionEnd,
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({ messageMetadata: timings.messageMetadata });
 }
 
 // ── Server threads ─────────────────────────────────────────────────────────
@@ -187,7 +190,7 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
     throw err;
   }
 
-  let messages = await loadThreadMessages(db, threadId);
+  let messages: UIMessage[] = await loadThreadMessages(db, threadId);
   const stored = threadSnapshot(messages);
   const decisions: AppliedApproval[] = [];
 
@@ -275,6 +278,8 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
     },
   });
 
+  const timings = responseTimings(continuedMeta(messages));
+
   const result = streamText({
     model: getLanguageModel(),
     system: buildSystemPrompt({ toolNames: Object.keys(tools), user, context: resolved, serverThreads: true }),
@@ -283,10 +288,12 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
     toolApproval,
     // An approval request ends the step; the next request resumes it.
     stopWhen: stepCountIs(5),
+    onToolExecutionEnd: timings.onToolExecutionEnd,
   });
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
+    messageMetadata: timings.messageMetadata,
     generateMessageId: () => randomUUID(),
     onEnd: async ({ messages: finalMessages, responseMessage }) => {
       try {

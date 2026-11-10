@@ -10,14 +10,15 @@
  */
 import "server-only";
 
-import { asc, desc, isNull } from "drizzle-orm";
+import { asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { db } from "@/lib/db/client";
-import { checklists, notes } from "@/lib/db/schema";
+import { checklists, notes, projects } from "@/lib/db/schema";
 import { checklistsRepository, notesRepository } from "@/lib/repositories/my-space-repository";
 import type { ChecklistRow, NoteRow } from "@/lib/repositories/my-space-repository";
+import type { OwnerDb } from "@/lib/repositories/owner-scoped";
 import * as itemsRepository from "@/lib/repositories/notes-checklists-repository";
 import type { ChecklistItemRow } from "@/lib/repositories/notes-checklists-repository";
 import { projectExists } from "@/lib/repositories/projects-repository";
@@ -75,8 +76,38 @@ export function toChecklistItem(row: ChecklistItemRow): ChecklistItem {
   return { id: row.id, text: row.text, done: row.done, sortOrder: row.sortOrder };
 }
 
-function toChecklist(row: ChecklistRow, items: ChecklistItemRow[]): Checklist {
-  return { id: row.id, title: row.title, projectId: row.projectId, items: items.map(toChecklistItem) };
+/** The latest `updated_at` of the checklist and its items, ISO. */
+function checklistUpdatedAt(row: ChecklistRow, items: ChecklistItemRow[]): string {
+  let latest = row.updatedAt.getTime();
+  for (const item of items) latest = Math.max(latest, item.updatedAt.getTime());
+  return new Date(latest).toISOString();
+}
+
+function toChecklist(row: ChecklistRow, items: ChecklistItemRow[], projectName: string | null): Checklist {
+  return {
+    id: row.id,
+    title: row.title,
+    projectId: row.projectId,
+    projectName,
+    updatedAt: checklistUpdatedAt(row, items),
+    items: items.map(toChecklistItem),
+  };
+}
+
+/** Linked project names of the given checklists (left join: a checklist without a project is left out). */
+async function checklistProjectNames(
+  conn: OwnerDb,
+  checklistIds: string[],
+): Promise<Map<string, string>> {
+  if (checklistIds.length === 0) return new Map();
+  const rows = await conn
+    .select({ id: checklists.id, projectName: projects.name })
+    .from(checklists)
+    .leftJoin(projects, eq(projects.id, checklists.projectId))
+    .where(inArray(checklists.id, checklistIds));
+  const names = new Map<string, string>();
+  for (const row of rows) if (row.projectName != null) names.set(row.id, row.projectName);
+  return names;
 }
 
 // ── Guards ──────────────────────────────────────────────────────────────────
@@ -191,17 +222,18 @@ export async function listChecklists(user: AuthenticatedUser): Promise<Checklist
 
 /** Checklists with their items, by checklist. */
 async function withItems(rows: ChecklistRow[]): Promise<Checklist[]> {
-  const items = await itemsRepository.listChecklistItems(
-    db,
-    rows.map((row) => row.id),
-  );
+  const ids = rows.map((row) => row.id);
+  const [items, names] = await Promise.all([
+    itemsRepository.listChecklistItems(db, ids),
+    checklistProjectNames(db, ids),
+  ]);
   const byChecklist = new Map<string, ChecklistItemRow[]>();
   for (const item of items) {
     const list = byChecklist.get(item.checklistId) ?? [];
     list.push(item);
     byChecklist.set(item.checklistId, list);
   }
-  return rows.map((row) => toChecklist(row, byChecklist.get(row.id) ?? []));
+  return rows.map((row) => toChecklist(row, byChecklist.get(row.id) ?? [], names.get(row.id) ?? null));
 }
 
 /** One page of live checklists in the `listChecklists` order, with their items. Errors: `INVALID` (cursor). */
@@ -230,7 +262,8 @@ export async function createChecklist(user: AuthenticatedUser, input: unknown): 
       projectId: data.projectId ?? null,
     });
     const items = await itemsRepository.appendChecklistItems(tx, row.id, data.items ?? []);
-    return toChecklist(row, items);
+    const names = await checklistProjectNames(tx, [row.id]);
+    return toChecklist(row, items, names.get(row.id) ?? null);
   });
 }
 

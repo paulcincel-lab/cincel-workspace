@@ -44,6 +44,7 @@ export function newTaskInvalidations(projectId: string, created?: { taskId: stri
     qk.proyectos.list(),
     qk.inicio(),
     qk.shell.badges(),
+    qk.me.tasks(),
   ];
   if (created?.withSubtasks) keys.push(qk.tasks.detail(created.taskId), qk.tasks.subtasks(created.taskId));
   return keys;

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { index, jsonb, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import type { AssistantMessageMeta } from "../../types/asistente";
 import type { AssistantContext } from "../../types/redesign";
 import { assistantActionStatus, assistantRole, core, soft, stamps } from "./_schema";
 import { staff } from "./people";
@@ -16,10 +17,17 @@ export const assistantThreads = core.table(
     context: jsonb("context").$type<AssistantContext>(),
     /** "localStorage" for `importLegacyAssistantThreadAction`. */
     importedFrom: text("imported_from"),
+    /** Pinned in the Visual threads rail ("Fijadas"); null = not pinned. */
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    /** When the owner last read the thread: an assistant message after it is "Nueva respuesta". */
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }),
     ...stamps,
     ...soft,
   },
-  (t) => [index("idx_assistant_threads_staff").on(t.staffId, t.updatedAt).where(sql`${t.deletedAt} is null`)]
+  (t) => [
+    index("idx_assistant_threads_staff").on(t.staffId, t.updatedAt).where(sql`${t.deletedAt} is null`),
+    index("idx_assistant_threads_staff_pinned").on(t.staffId, t.pinnedAt.desc().nullsLast(), t.updatedAt.desc()),
+  ]
 );
 
 /** AI SDK UIMessages per thread; the id is unique per thread only (review R2-4). */
@@ -32,6 +40,8 @@ export const assistantMessages = core.table(
       .references(() => assistantThreads.id, { onDelete: "cascade" }),
     role: assistantRole("role").notNull(),
     parts: jsonb("parts").$type<unknown[]>().notNull(),
+    /** Tool durations, response time and token usage; null on rows written before it existed. */
+    metadata: jsonb("metadata").$type<Omit<AssistantMessageMeta, "createdAt">>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

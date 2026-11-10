@@ -141,4 +141,34 @@ describe("POST /api/asistente/chat", () => {
     expect(keys).toContain("create_task");
     expect(keys).not.toContain("assign_task");
   });
+
+  it("finish metadata carries toolMs from onToolExecutionEnd and usage", async () => {
+    process.env.LLM_BASE_URL = "http://llm";
+    process.env.LLM_API_KEY = "k";
+    getSessionMock.mockResolvedValue({ user: { id: "u1" } });
+    const toResponse = vi.fn(() => new Response("stream"));
+    streamTextMock.mockReturnValue({ toUIMessageStreamResponse: toResponse });
+
+    await POST(req({ messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "Hola" }] }] }) as never);
+
+    const arg = streamTextMock.mock.calls[0][0];
+    const options = (toResponse.mock.calls[0] as unknown[])[0] as {
+      messageMetadata: (o: { part: unknown }) => Record<string, unknown> | undefined;
+    };
+    const start = options.messageMetadata({ part: { type: "start" } });
+    expect(typeof start?.createdAt).toBe("string");
+
+    arg.onToolExecutionEnd({ toolCall: { toolCallId: "call-1", toolName: "list_projects" }, toolExecutionMs: 420 });
+    arg.onToolExecutionEnd({ toolCall: { toolCallId: "call-2", toolName: "list_projects" }, toolExecutionMs: 35 });
+    expect(options.messageMetadata({ part: { type: "text-delta", text: "x" } })).toBeUndefined();
+
+    const finish = options.messageMetadata({
+      part: { type: "finish", finishReason: "stop", totalUsage: { inputTokens: 1200, outputTokens: 80 } },
+    });
+    expect(finish).toMatchObject({
+      toolMs: { "call-1": 420, "call-2": 35 },
+      usage: { inputTokens: 1200, outputTokens: 80 },
+    });
+    expect(typeof finish?.responseMs).toBe("number");
+  });
 });

@@ -6,6 +6,7 @@ import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState"
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { LoadBar } from "@/components/v2/status/LoadBar";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
+import { PeopleTeamAnalitico, type PeopleTeamAnaliticoProps } from "@/components/widgets/PeopleTeamAnalitico";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
@@ -51,6 +52,11 @@ export type PeopleWidgetProps = {
   loading?: boolean;
   /** Dashboard override: "chart" = the Visual cards/rows, "table" = the Analítico tables. */
   view?: WidgetView;
+  /**
+   * Personas · Equipo: with it, Analítico renders the grouped table tramo →
+   * persona → proyecto (`PeopleTeamAnalitico`) instead of the plain tables.
+   */
+  team?: Omit<PeopleTeamAnaliticoProps, "people" | "loading">;
 };
 
 export const PEOPLE_EMPTY_TEXT = "Aún no hay personas";
@@ -268,6 +274,7 @@ export function PeopleWidget({
   emptyState,
   loading,
   view,
+  team,
 }: PeopleWidgetProps) {
   if (loading) {
     const rows = Math.max(people.length, 3);
@@ -276,7 +283,9 @@ export function PeopleWidget({
         view={view}
         visual={() => <LoadingSkeleton variant={layout === "rows" ? "list" : "cards"} rows={rows} />}
         esencial={() => <LoadingSkeleton variant="list" rows={rows} />}
-        analitico={() => <LoadingSkeleton variant="table" rows={rows} />}
+        analitico={() =>
+          team ? <PeopleTeamAnalitico people={people} {...team} loading /> : <LoadingSkeleton variant="table" rows={rows} />
+        }
       />
     );
   }
@@ -296,7 +305,13 @@ export function PeopleWidget({
         )
       }
       esencial={() => <EsencialList people={people} show={show} actions={actions} layout={layout} />}
-      analitico={() => <AnaliticoTables people={people} show={show} actions={actions} />}
+      analitico={() =>
+        team ? (
+          <PeopleTeamAnalitico people={people} {...team} />
+        ) : (
+          <AnaliticoTables people={people} show={show} actions={actions} />
+        )
+      }
     />
   );
 }

@@ -30,11 +30,12 @@ export default async function MiEspacioPage({ searchParams }: { searchParams: Pr
   if (!access.user) redirect("/login");
 
   const qc = getQueryClient();
-  seedMiEspacio(qc, await loadMiEspacio(await requireCapabilityUser()));
+  const data = await loadMiEspacio(await requireCapabilityUser());
+  seedMiEspacio(qc, data);
 
   return (
     <Hydrate qc={qc}>
-      <MiEspacioClient noteParam={first(params.nota)} />
+      <MiEspacioClient noteParam={first(params.nota)} canCreateTask={data.canCreateTask} />
     </Hydrate>
   );
 }

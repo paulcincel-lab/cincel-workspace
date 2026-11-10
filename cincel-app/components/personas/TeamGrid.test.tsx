@@ -72,7 +72,6 @@ const PERSIST_KEY = "cincel.ui.dashboard.personas.v1";
 
 import { AvailabilityWeek } from "./AvailabilityWeek";
 import { TeamGrid } from "./TeamGrid";
-import { TeamTable } from "./TeamTable";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 
@@ -107,27 +106,17 @@ describe("Equipo data", () => {
   });
 });
 
-describe("TeamGrid / TeamTable hours", () => {
+describe("TeamGrid hours", () => {
   it("leaves the hours column out when weekHours is null for all rows", () => {
     const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
-    render(
-      <>
-        <TeamGrid people={people} />
-        <TeamTable people={people} />
-      </>,
-    );
-    expect(calls.widget).toHaveLength(2);
+    render(<TeamGrid people={people} />);
+    expect(calls.widget).toHaveLength(1);
     for (const props of calls.widget) expect(props.show).not.toContain("hours");
   });
 
   it("shows the hours column when the server returned hours, even if they are all zero", () => {
     const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
-    render(
-      <>
-        <TeamGrid people={people} />
-        <TeamTable people={people} />
-      </>,
-    );
+    render(<TeamGrid people={people} />);
     for (const props of calls.widget) expect(props.show).toContain("hours");
   });
 });

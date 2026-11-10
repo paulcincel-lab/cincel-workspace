@@ -8,6 +8,7 @@ import {
   inboxRows,
   inboxTabSearch,
   mergeNotifications,
+  mergeUnread,
   parseInboxTab,
 } from "./inbox";
 import type { GmailThreadSummary, NotificationItem } from "@/lib/types/redesign";
@@ -105,5 +106,24 @@ describe("Bandeja labels", () => {
     expect(gmailSyncLabel("2026-11-06T11:55:00.000Z", now)).toBe("Gmail conectado · sincronizado hace 5 min");
     expect(gmailSyncLabel("2026-11-06T09:00:00.000Z", now)).toBe("Gmail conectado · sincronizado hace 3 h");
     expect(gmailSyncLabel(null, now)).toBe("Gmail conectado");
+  });
+});
+
+describe("mergeUnread", () => {
+  it("mergeUnread interleaves by date and keeps 3", () => {
+    const notifications = [
+      n("n1", { createdAt: "2026-11-09T08:00:00.000Z" }),
+      n("n2", { createdAt: "2026-11-09T11:00:00.000Z" }),
+      n("leida", { createdAt: "2026-11-09T12:00:00.000Z", readAt: "2026-11-09T12:05:00.000Z" }),
+    ];
+    const threads = [
+      t("g1", { receivedAt: "2026-11-09T10:00:00.000Z" }),
+      t("g2", { receivedAt: "2026-11-09T07:00:00.000Z" }),
+      t("g-leido", { receivedAt: "2026-11-09T13:00:00.000Z", unread: false }),
+    ];
+    const rows = mergeUnread(notifications, threads, 3);
+    expect(rows.map((r) => r.key)).toEqual(["n:n2", "g:g1", "n:n1"]);
+    expect(rows.every((r) => r.unread)).toBe(true);
+    expect(mergeUnread([], [], 3)).toEqual([]);
   });
 });
