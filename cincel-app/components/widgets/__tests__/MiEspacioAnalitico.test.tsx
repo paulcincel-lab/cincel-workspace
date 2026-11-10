@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 
+import { LOCK_REASON } from "@/components/widgets/editable-cell";
 import type { Group, GroupedTableProps } from "@/components/widgets/GroupedTable";
 import type { QuickAddRowProps } from "@/components/widgets/QuickAddRow";
 import { qk } from "@/lib/query/keys";
@@ -17,7 +18,9 @@ import {
 } from "@/lib/query/options/mi-espacio";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { addDays, localDate, mondayOf, weekDates } from "@/lib/time-tracking/local-time";
-import type { TaskListItem } from "@/lib/types/core";
+import type { TaskRow } from "@/lib/my-space/my-tasks";
+import type { TaskListItem, TaskStatusOption } from "@/lib/types/core";
+import type { RecordColumn } from "@/lib/types/widgets";
 import type { Checklist, NotificationKindSummary, TodayStatus, WeekHours } from "@/lib/types/redesign";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
@@ -30,6 +33,9 @@ vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({ IMPLEMENTED: flags
 const tasksActions = vi.hoisted(() => ({
   fetchMyOpenTasksAction: vi.fn(),
   createUserTaskAction: vi.fn(),
+  updateTaskAction: vi.fn(),
+  setTaskStatusAction: vi.fn(),
+  setTaskCustomStatusAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/tasks-actions", () => tasksActions);
 vi.mock("@/lib/actions/my-space-actions", () => ({
@@ -47,6 +53,10 @@ vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
   fetchCatalogProjectOptions: vi.fn(async () => [
     { id: "p1", name: "Casa Lomas", status: "activo", currentWorkflowId: "w-dis" },
     { id: "p2", name: "Torre Sur", status: "activo", currentWorkflowId: "w-pre" },
+  ]),
+  fetchCatalogTaskStatuses: vi.fn(async (): Promise<TaskStatusOption[]> => [
+    { id: "cs-rev", name: "En revisión cliente", closes: false, countsAsCompleted: false, sortOrder: 1 },
+    { id: "cs-ent", name: "Entregada", closes: true, countsAsCompleted: true, sortOrder: 2 },
   ]),
 }));
 vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: vi.fn() }));
@@ -102,37 +112,42 @@ vi.mock("@/components/tareas/NewTaskDialog", () => ({
   newTaskInvalidations: (projectId: string) => [["tareas"], ["proyectos", projectId, "tareas"], ["me", "tasks"]],
 }));
 // The grouped table (#982): groups, their rows through `renderCell`, the quick add and the totals.
+// The last props are kept so the tests can drive a column's `edit` like the cell editor does.
+const grouped = vi.hoisted(() => ({ props: null as GroupedTableProps<Record<string, unknown>> | null }));
 vi.mock("@/components/widgets/GroupedTable", () => ({
-  GroupedTable: (p: GroupedTableProps<Record<string, unknown>>) => (
-    <div data-testid="grouped-table" data-expanded={(p.expanded ?? []).join(",")}>
-      {p.groups.map((group: Group<Record<string, unknown>>) => (
-        <table key={group.id} aria-label={group.label}>
-          <thead>
-            <tr>
-              {p.columns.map((column) => (
-                <th key={column.key} scope="col">
-                  {column.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          {(group.children ?? []).map((child) => (
-            <tbody key={child.id} aria-label={child.label}>
-              {(child.rows ?? []).map((row) => (
-                <tr key={String(row.id)} data-new={p.isRowNew?.(row) ? "" : undefined}>
-                  {p.columns.map((column) => (
-                    <td key={column.key}>{p.renderCell?.(column.key, row) ?? String(row[column.key])}</td>
-                  ))}
-                </tr>
-              ))}
-              {child.quickAdd}
-            </tbody>
-          ))}
-        </table>
-      ))}
-      {p.totals ? <p data-testid="totals">{`${p.totals.label} | ${p.totals.summary}`}</p> : null}
-    </div>
-  ),
+  GroupedTable: (p: GroupedTableProps<Record<string, unknown>>) => {
+    grouped.props = p;
+    return (
+      <div data-testid="grouped-table" data-expanded={(p.expanded ?? []).join(",")}>
+        {p.groups.map((group: Group<Record<string, unknown>>) => (
+          <table key={group.id} aria-label={group.label}>
+            <thead>
+              <tr>
+                {p.columns.map((column) => (
+                  <th key={column.key} scope="col">
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            {(group.children ?? []).map((child) => (
+              <tbody key={child.id} aria-label={child.label}>
+                {(child.rows ?? []).map((row) => (
+                  <tr key={String(row.id)} data-new={p.isRowNew?.(row) ? "" : undefined}>
+                    {p.columns.map((column) => (
+                      <td key={column.key}>{p.renderCell?.(column.key, row) ?? String(row[column.key])}</td>
+                    ))}
+                  </tr>
+                ))}
+                {child.quickAdd}
+              </tbody>
+            ))}
+          </table>
+        ))}
+        {p.totals ? <p data-testid="totals">{`${p.totals.label} | ${p.totals.summary}`}</p> : null}
+      </div>
+    );
+  },
 }));
 // The smart quick add (#984): Enter hands the context as the draft.
 vi.mock("@/components/widgets/QuickAddRow", () => ({
@@ -294,6 +309,8 @@ beforeEach(() => {
     fetchMyWeekHoursAction: true,
   });
   caps.canCreateActivity = true;
+  caps.statusScope = "all";
+  grouped.props = null;
   tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
   seedSessionUser({ member: { id: "me", name: "Ana López" }, access: "Colaborador" });
 });
@@ -462,5 +479,212 @@ describe("MiEspacioAnalitico", () => {
       const blocking = result.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
       expect(blocking.map((v) => v.id), theme).toEqual([]);
     }
+  });
+});
+
+describe("MiEspacioAnalitico editable cells", () => {
+  const ok = (t: TaskListItem) => ({ ok: true as const, data: detail(t) });
+
+  function column(key: string): RecordColumn<TaskRow> {
+    const found = grouped.props!.columns.find((c) => c.key === key);
+    if (!found) throw new Error(`no column ${key}`);
+    return found as unknown as RecordColumn<TaskRow>;
+  }
+
+  function row(id: string): TaskRow {
+    const rows = grouped.props!.groups.flatMap((g) => (g.children ?? []).flatMap((c) => c.rows ?? []));
+    const found = rows.find((r) => r.id === id);
+    if (!found) throw new Error(`no row ${id}`);
+    return found as unknown as TaskRow;
+  }
+
+  async function commit(key: string, id: string, value: string | null) {
+    const edit = column(key).edit!;
+    let result: Awaited<ReturnType<typeof edit.commit>> | undefined;
+    await act(async () => {
+      result = await edit.commit(row(id), value);
+    });
+    await settle();
+    return result!;
+  }
+
+  /** Lets the query cache notify its observers (batched on a timer). */
+  const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+
+  const kpi = (label: string) =>
+    screen
+      .getAllByText(label)
+      .find((el) => el.tagName === "DT")!
+      .parentElement!.querySelector('[data-slot="kpi-value"]')!.textContent;
+
+  it("Tarea, Estatus, Vence and Prioridad edit; Subtareas and Días de retraso stay calculated", () => {
+    renderAnalitico();
+    const kinds = Object.fromEntries(grouped.props!.columns.map((c) => [c.key, c.edit?.kind ?? null]));
+    expect(kinds).toEqual({ title: "text", estatus: "select", vence: "date", prioridad: "select", subtareas: null, retraso: null });
+    expect(column("title").edit).toMatchObject({ required: true });
+    expect(column("vence").edit).toMatchObject({ quickPicks: true, clearable: true });
+    // Rest state unchanged: the title is still plain text inside the row link.
+    expect(screen.getByText("Revisar presupuesto").tagName).toBe("SPAN");
+  });
+
+  it("Tarea saves the trimmed title through updateTaskAction and shows it at once", async () => {
+    let resolve!: (value: unknown) => void;
+    tasksActions.updateTaskAction.mockReturnValue(new Promise((r) => (resolve = r)));
+    renderAnalitico();
+    const edit = column("title").edit!;
+    expect(edit.value(row("t2"))).toBe("Revisar presupuesto");
+    let pending!: Promise<unknown>;
+    await act(async () => {
+      pending = edit.commit(row("t2"), "  Revisar presupuesto v2 ");
+    });
+    await settle();
+    expect(tasksActions.updateTaskAction).toHaveBeenCalledWith("t2", { title: "Revisar presupuesto v2" });
+    // Optimistic: the new title shows before the server answers.
+    expect(screen.getByText("Revisar presupuesto v2")).toBeTruthy();
+    await act(async () => {
+      resolve(ok(task("t2", "Revisar presupuesto v2")));
+      await pending;
+    });
+    expect(screen.getByText("Revisar presupuesto v2")).toBeTruthy();
+  });
+
+  it("Estatus lists base and custom statuses with colours", async () => {
+    renderAnalitico();
+    await waitFor(() => {
+      const edit = column("estatus").edit!;
+      if (edit.kind !== "select") throw new Error("select");
+      expect(edit.options(row("t2")).map((o) => o.label)).toEqual([
+        "Pendiente",
+        "En proceso",
+        "Completado",
+        "Bloqueado",
+        "En revisión cliente",
+        "Entregada",
+      ]);
+    });
+    const edit = column("estatus").edit!;
+    if (edit.kind !== "select") throw new Error("select");
+    for (const option of edit.options(row("t2"))) expect(option.color).toMatch(/^var\(--/);
+    expect(edit.value(row("t2"))).toBe("pendiente");
+  });
+
+  it("completing a task takes it out of the table and updates the KPI strip", async () => {
+    tasksActions.setTaskStatusAction.mockResolvedValue(ok(task("t1", "Planos de cimentación", { status: "completado" })));
+    tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS.filter((t) => t.id !== "t1"));
+    renderAnalitico();
+    expect(kpi("Mis abiertas")).toBe("4");
+    expect(kpi("Vencidas")).toBe("2");
+    const result = await commit("estatus", "t1", "completado");
+    expect(result.ok).toBe(true);
+    expect(tasksActions.setTaskStatusAction).toHaveBeenCalledWith("t1", "completado");
+    expect(screen.queryByText("Planos de cimentación")).toBeNull();
+    expect(kpi("Mis abiertas")).toBe("3");
+    expect(kpi("Vencidas")).toBe("1");
+    expect(sectionToggle(/Mis tareas/).textContent).toMatch(/3 abiertas · 2 proyectos/);
+    expect(screen.getByTestId("totals").textContent).toBe("Total · 3 tareas | 2 d");
+  });
+
+  it("a status that stays open keeps the row and moves its label", async () => {
+    tasksActions.setTaskCustomStatusAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto")));
+    renderAnalitico();
+    await waitFor(() => expect(column("estatus").edit!.kind).toBe("select"));
+    await waitFor(() => {
+      const edit = column("estatus").edit!;
+      if (edit.kind !== "select") throw new Error("select");
+      expect(edit.options(row("t2")).length).toBe(6);
+    });
+    await commit("estatus", "t2", "custom:cs-rev");
+    expect(tasksActions.setTaskCustomStatusAction).toHaveBeenCalledWith("t2", "cs-rev");
+    expect(within(screen.getByText("Revisar presupuesto").closest("tr")!).getByText("En revisión cliente")).toBeTruthy();
+    expect(kpi("Mis abiertas")).toBe("4");
+  });
+
+  it("a closing custom status takes the task out", async () => {
+    tasksActions.setTaskCustomStatusAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto")));
+    renderAnalitico();
+    await waitFor(() => {
+      const edit = column("estatus").edit!;
+      if (edit.kind !== "select") throw new Error("select");
+      expect(edit.options(row("t2")).length).toBe(6);
+    });
+    tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS.filter((t) => t.id !== "t2"));
+    await commit("estatus", "t2", "custom:cs-ent");
+    expect(screen.queryByText("Revisar presupuesto")).toBeNull();
+    expect(kpi("Mis abiertas")).toBe("3");
+  });
+
+  it("a refused save puts the row and the KPIs back", async () => {
+    tasksActions.setTaskStatusAction.mockResolvedValue({ ok: false, error: "FORBIDDEN: task status change" });
+    renderAnalitico();
+    const result = await commit("estatus", "t1", "completado");
+    expect(result.ok).toBe(false);
+    expect(screen.getByText("Planos de cimentación")).toBeTruthy();
+    expect(kpi("Mis abiertas")).toBe("4");
+    expect(kpi("Vencidas")).toBe("2");
+  });
+
+  it("undoing a completion puts the task back at once", async () => {
+    tasksActions.setTaskStatusAction.mockImplementation(async (id: string, status: TaskListItem["status"]) =>
+      ok(task(id, "Planos de cimentación", { status })),
+    );
+    renderAnalitico();
+    await commit("estatus", "t1", "completado");
+    expect(screen.queryByText("Planos de cimentación")).toBeNull();
+    // Deshacer commits the previous value with the row it had.
+    const edit = column("estatus").edit!;
+    const previous = { ...row("t2"), id: "t1", projectId: "p1", title: "Planos de cimentación" };
+    await act(async () => {
+      await edit.commit(previous, "pendiente");
+    });
+    await settle();
+    expect(tasksActions.setTaskStatusAction).toHaveBeenLastCalledWith("t1", "pendiente");
+    expect(screen.getByText("Planos de cimentación")).toBeTruthy();
+    expect(kpi("Mis abiertas")).toBe("4");
+  });
+
+  it("Vence saves the commitment date and the overdue figures follow", async () => {
+    tasksActions.updateTaskAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto")));
+    renderAnalitico();
+    expect(column("vence").edit!.value(row("t2"))).toBe(addDays(TODAY, 3));
+    const past = addDays(TODAY, -6);
+    await commit("vence", "t2", past);
+    expect(tasksActions.updateTaskAction).toHaveBeenCalledWith("t2", { commitmentDate: past });
+    expect(kpi("Vencidas")).toBe("3");
+    const cell = within(screen.getByText("Revisar presupuesto").closest("tr")!).getByText("6");
+    expect(cell.className).toMatch(/bg-warning/);
+    // Sin fecha clears it.
+    await commit("vence", "t2", null);
+    expect(tasksActions.updateTaskAction).toHaveBeenLastCalledWith("t2", { commitmentDate: null });
+    expect(kpi("Vencidas")).toBe("2");
+  });
+
+  it("Prioridad offers Alta, Media and Baja and saves through updateTaskAction", async () => {
+    tasksActions.updateTaskAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto", { priority: "alta" })));
+    renderAnalitico();
+    const edit = column("prioridad").edit!;
+    if (edit.kind !== "select") throw new Error("select");
+    expect(edit.options(row("t2")).map((o) => o.value)).toEqual(["alta", "media", "baja"]);
+    expect(edit.value(row("t2"))).toBe("media");
+    await commit("prioridad", "t2", "alta");
+    expect(tasksActions.updateTaskAction).toHaveBeenCalledWith("t2", { priority: "alta" });
+    expect(within(screen.getByText("Revisar presupuesto").closest("tr")!).getByText("Alta")).toBeTruthy();
+  });
+
+  it("locks the cells the viewer can't change, with the reason", () => {
+    caps.canCreateActivity = false;
+    caps.statusScope = "none";
+    renderAnalitico();
+    const t2 = row("t2");
+    expect(column("title").canEdit!(t2)).toBe(LOCK_REASON.taskWriter);
+    expect(column("vence").canEdit!(t2)).toBe(LOCK_REASON.taskWriter);
+    expect(column("prioridad").canEdit!(t2)).toBe(LOCK_REASON.taskWriter);
+    expect(column("estatus").canEdit!(t2)).toBe(LOCK_REASON.status);
+  });
+
+  it("an owner with status rights edits every editable column", () => {
+    caps.statusScope = "assigned_or_participant";
+    renderAnalitico();
+    const t2 = row("t2");
+    for (const key of ["title", "estatus", "vence", "prioridad"]) expect(column(key).canEdit!(t2)).toBe(true);
   });
 });

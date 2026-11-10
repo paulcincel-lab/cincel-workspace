@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Download, Lock, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
@@ -32,8 +32,10 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
 import { KpiStrip, type KpiStripItem } from "@/components/widgets/KpiStrip";
+import { MI_ESPACIO_COMMIT_KEYS, miEspacioTaskColumns } from "@/components/widgets/mi-espacio-task-columns";
 import { PageHeader } from "@/components/widgets/PageHeader";
 import { QuickAddRow, type QuickAddCreated, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
+import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import { createChecklistAction } from "@/lib/actions/my-space-actions";
 import { IMPLEMENTED as MY_SPACE } from "@/lib/actions/my-space-actions.flags";
@@ -85,7 +87,6 @@ import type {
   NotificationKindSummary,
   WeekHours,
 } from "@/lib/types/redesign";
-import type { RecordColumn } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
 /**
@@ -121,15 +122,6 @@ export const BANDEJA_KINDS: readonly { kind: NotificationKind; label: string }[]
   { kind: "aprobacion_cliente", label: "Aprobaciones del cliente" },
   { kind: "recordatorio", label: "Recordatorios" },
   { kind: "sistema", label: "Sistema" },
-];
-
-const TASK_COLUMNS: RecordColumn[] = [
-  { key: "title", label: "Tarea", width: 320 },
-  { key: "estatus", label: "Estatus", width: 140 },
-  { key: "vence", label: "Vence", mono: true, width: 90 },
-  { key: "prioridad", label: "Prioridad", width: 90 },
-  { key: "subtareas", label: "Subtareas", align: "right", mono: true, width: 90 },
-  { key: "retraso", label: "Días de retraso", align: "right", mono: true, width: 120 },
 ];
 
 // Analítico kit cells (frame tokens).
@@ -275,7 +267,8 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
 
   const user = useSessionStore(selectAuthenticatedUser);
   const viewerId = user?.member.id ?? null;
-  const canCreateTask = resolveActivitiesCapabilities(user).canCreateActivity;
+  const capabilities = resolveActivitiesCapabilities(user);
+  const canCreateTask = capabilities.canCreateActivity;
   const openNewTask = useNewTaskUi((s) => s.openNewTask);
 
   // ── Queries ──
@@ -313,6 +306,20 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   const projectsQuery = useQuery({ ...catalogOptions.projectOptions(), enabled: canCreateTask || MY_SPACE.createChecklistAction });
 
   // ── Tasks ──
+  const queryClient = useQueryClient();
+  const statusesQuery = useQuery(catalogOptions.taskStatuses());
+  const { canCreateActivity, statusScope } = capabilities;
+  const [closedTasks] = useState(() => new Map<string, TaskListItem>());
+  const taskColumns = useMemo(
+    () =>
+      miEspacioTaskColumns({
+        qc: queryClient,
+        capabilities: { canCreateActivity, statusScope },
+        statuses: statusesQuery.data ?? [],
+        left: closedTasks,
+      }),
+    [queryClient, canCreateActivity, statusScope, statusesQuery.data, closedTasks],
+  );
   const [created, setCreated] = useState<ReadonlySet<string>>(() => new Set());
   const allTasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const tramoOptions = useMemo(() => {
@@ -444,7 +451,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     const quickAdd = (
       <QuickAddRow
         variant="row"
-        colSpan={TASK_COLUMNS.length}
+        colSpan={taskColumns.length}
         context={{
           label: `Agregar tarea en ${group.label}`,
           projectId: group.id,
@@ -638,18 +645,20 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
           <EmptyState title={NO_MATCH} action={{ label: CLEAR_FILTERS, onClick: clearFilters }} />
         ) : (
           <div className="p-3">
-            <GroupedTable<TaskRow>
-              label="Mis tareas"
-              columns={TASK_COLUMNS}
-              groups={tableGroups}
-              expanded={expanded}
-              onExpandedChange={onExpandedChange}
-              getRowId={(row) => row.id}
-              rowHref={(row) => taskSheetHref("/mi-espacio", search, row.id)}
-              isRowNew={(row) => created.has(row.id)}
-              totals={{ label: totalsLabel, summary: `${lateSum} d` }}
-              renderCell={(key, row) => renderTaskCell(key, row)}
-            />
+            <CellCommitProvider<TaskRow> queryKeys={MI_ESPACIO_COMMIT_KEYS}>
+              <GroupedTable<TaskRow>
+                label="Mis tareas"
+                columns={taskColumns}
+                groups={tableGroups}
+                expanded={expanded}
+                onExpandedChange={onExpandedChange}
+                getRowId={(row) => row.id}
+                rowHref={(row) => taskSheetHref("/mi-espacio", search, row.id)}
+                isRowNew={(row) => created.has(row.id)}
+                totals={{ label: totalsLabel, summary: `${lateSum} d` }}
+                renderCell={(key, row) => renderTaskCell(key, row)}
+              />
+            </CellCommitProvider>
           </div>
         )}
       </SectionCard>
