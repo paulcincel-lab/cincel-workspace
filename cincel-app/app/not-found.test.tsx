@@ -16,7 +16,17 @@ vi.mock("@/lib/actions/search-actions.flags", () => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
 vi.mock("@/lib/actions/search-actions", () => ({ searchWorkspaceAction: vi.fn(async () => []) }));
 vi.mock("@/lib/actions/time-tracking-actions", () => ({
-  fetchMyTodayAction: vi.fn(),
+  // The palette reads today's status; time tracking is off here.
+  fetchMyTodayAction: vi.fn(async () => ({
+    state: "off",
+    startedAt: null,
+    workedSeconds: 0,
+    required: false,
+    promptAtLogin: false,
+    enabled: false,
+    requiredFrom: null,
+    hoursPerDay: 8,
+  })),
   clockInAction: vi.fn(),
   pauseWorkAction: vi.fn(),
   resumeWorkAction: vi.fn(),

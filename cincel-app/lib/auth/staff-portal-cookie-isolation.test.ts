@@ -17,6 +17,8 @@ vi.mock("next/navigation", () => ({
     throw new Error(`NEXT_REDIRECT ${url}`);
   },
 }));
+// The saved permission matrix (#971) is read from the DB; these tests run on the defaults.
+vi.mock("@/lib/auth/permissions-matrix", () => ({ getRolePermissionOverrides: async () => undefined }));
 vi.mock("@/lib/repositories/auth-repository", () => ({ findSessionByToken, deleteStaffSessions: vi.fn() }));
 
 import { getSession, getSessionAccess, requireSession } from "./session";

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -26,6 +26,7 @@ import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-u
 import { sliceToRange } from "@/lib/stores/dashboard-store";
 import { useInicioDashboard } from "@/lib/stores/inicio-dashboard-store";
 import type { InicioData } from "@/lib/types/redesign";
+import { settle } from "@/tests/helpers/settle";
 
 import { ANALITICO_DATA } from "./inicio-analitico-fixtures";
 import { InicioAnalitico } from "./InicioAnalitico";
@@ -146,16 +147,18 @@ describe("InicioAnalitico", () => {
     expect(cell.closest(".text-destructive")).toBeTruthy();
   });
 
-  it("Ir a focuses section", () => {
+  it("Ir a focuses section", async () => {
     renderAnalitico();
+    await settle();
     const nav = screen.getByRole("navigation", { name: "Ir a sección" });
     fireEvent.click(within(nav).getByRole("link", { name: /Por tramo/ }));
     expect(section("s-tramos").contains(document.activeElement)).toBe(true);
     // A collapsed section opens when reached from "Ir a".
-    useInicioDashboard.getState().setCollapsed("attention", true);
+    act(() => useInicioDashboard.getState().setCollapsed("attention", true));
     fireEvent.click(within(nav).getByRole("link", { name: /Atención/ }));
     expect(useInicioDashboard.getState().collapsed.attention).toBe(false);
     expect(section("s-atencion").contains(document.activeElement)).toBe(true);
+    await settle();
   });
 
   it("Carga hidden without showTeamWorkload", () => {

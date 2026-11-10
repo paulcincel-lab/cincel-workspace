@@ -5,14 +5,14 @@
  * 10/29/12 templates, and every `legacyTitle` is the old TS template
  * description at the same position (frozen in fixtures/project-flow-catalog.ts).
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_CATALOG } from "@/scripts/default-catalog.mjs";
 
-import { EXPECTED_CATALOG, LEGACY_TS_TEMPLATES, type LegacyTemplate } from "./fixtures/project-flow-catalog";
+import { EXPECTED_CATALOG, LEGACY_TS_TEMPLATES } from "./fixtures/project-flow-catalog";
 
 const ROOT = resolve(__dirname, "../..");
 const MIGRATIONS = resolve(ROOT, "lib/db/migrations");
@@ -206,22 +206,3 @@ describe("0024 mirrors DEFAULT_CATALOG", () => {
   });
 });
 
-// While lib/templates/*.ts still exist, the frozen fixture must equal them.
-const LIVE_TEMPLATE_FILES: Array<[string, string, string]> = [
-  ["presale", "lib/templates/presale.ts", "presaleTemplate"],
-  ["diseno", "lib/templates/diseno.ts", "disenoTemplate"],
-  ["construccion", "lib/templates/operativas.ts", "operativasTemplate"],
-];
-const liveTemplatesPresent = LIVE_TEMPLATE_FILES.every(([, file]) => existsSync(resolve(ROOT, file)));
-
-describe.skipIf(!liveTemplatesPresent)("frozen legacy fixture vs lib/templates", () => {
-  it("equals the TS template files", async () => {
-    for (const [workflowKey, file, exportName] of LIVE_TEMPLATE_FILES) {
-      const mod = (await import(/* @vite-ignore */ resolve(ROOT, file))) as Record<string, LegacyTemplate[]>;
-      expect(
-        mod[exportName].map((t) => ({ phase: t.phase, description: t.description })),
-        file
-      ).toEqual(LEGACY_TS_TEMPLATES[workflowKey]);
-    }
-  });
-});

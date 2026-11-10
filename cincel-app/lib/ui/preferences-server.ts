@@ -17,12 +17,12 @@ import type {
   TextSize,
   UserPreferences,
 } from "@/lib/types/redesign";
+import { parseAppearanceCookie } from "@/lib/ui/appearance-cookie";
 import { DEFAULT_ORG_APPEARANCE } from "@/lib/ui/themes";
 import {
   APPEARANCE_COOKIE,
   APPEARANCE_COOKIE_OPTIONS,
   DEFAULT_USER_PREFERENCES,
-  parseAppearanceCookie,
   resolveAppearance,
   serializeAppearanceCookie,
 } from "@/lib/ui/preferences";

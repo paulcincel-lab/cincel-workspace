@@ -90,7 +90,8 @@ describe("ProjectsEsencialLayout", () => {
   it("moves the focus with the arrows and selects with Space", () => {
     const { container } = renderLayout();
     const radios = within(screen.getByRole("radiogroup", { name: "Filtrar por tramo" })).getAllByRole("radio");
-    radios[0].focus();
+    // Focusing a pill sets its roving focus index, a state update.
+    act(() => radios[0].focus());
     fireEvent.keyDown(radios[0], { key: "ArrowRight" });
     expect(document.activeElement).toBe(radios[1]);
     expect(radios[1].getAttribute("aria-checked")).toBe("false");
@@ -180,6 +181,9 @@ describe("ProjectsEsencialLayout", () => {
   });
 
   it("shows the skeleton while loading and the error with Reintentar", async () => {
+    const { getProyectosPageData } = await import("@/lib/actions/page-data/proyectos-actions");
+    // The first load never answers, so the skeleton stays up.
+    vi.mocked(getProyectosPageData).mockReturnValue(new Promise(() => {}));
     const pending = renderWithQueryClient(
       <StyleProvider style="esencial" scope="staff">
         <ProjectsEsencialLayout />
@@ -188,7 +192,6 @@ describe("ProjectsEsencialLayout", () => {
     expect(pending.container.querySelector('[data-slot="projects-esencial-skeleton"]')).not.toBeNull();
     pending.unmount();
 
-    const { getProyectosPageData } = await import("@/lib/actions/page-data/proyectos-actions");
     vi.mocked(getProyectosPageData).mockRejectedValue(new Error("boom"));
     renderWithQueryClient(
       <StyleProvider style="esencial" scope="staff">

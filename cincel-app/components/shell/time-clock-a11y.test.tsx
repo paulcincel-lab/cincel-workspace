@@ -8,6 +8,7 @@ import { THEME_IDS } from "@/lib/ui/themes";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TodayStatus } from "@/lib/types/redesign";
+import { settle } from "@/tests/helpers/settle";
 
 const actions = vi.hoisted(() => ({
   fetchTimeTrackingSettingsAction: vi.fn(),
@@ -69,6 +70,7 @@ const STATES: TodayStatus[] = [
 ];
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout, which happy-dom doesn't provide; token pairs are covered by lib/ui/contrast.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
   return results.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
@@ -98,10 +100,13 @@ const originalMatchMedia = window.matchMedia;
 
 beforeEach(() => {
   mockReducedMotion(false);
+  // The running clock ticks every second; hold the interval so a tick can't land in the middle of an axe pass.
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
 });
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   window.matchMedia = originalMatchMedia;
   const html = document.documentElement;
   html.removeAttribute("data-theme-id");

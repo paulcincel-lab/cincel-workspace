@@ -113,12 +113,17 @@ test.describe("Proyecto · Resumen y pestañas", () => {
   });
 });
 
-/** Counts the RSC fetches (`_rsc` / `RSC: 1`) and server-action POSTs (`next-action`) the page sends from now on. */
+/**
+ * Counts the RSC fetches (`_rsc` / `RSC: 1`) and server-action POSTs (`next-action`) the page sends
+ * from now on. Link prefetches (`Next-Router-Prefetch: 1`) are not renders of the current view and
+ * fire whenever a link scrolls or un-hides into view, so they are left out.
+ */
 function trackServerRequests(page: import("@playwright/test").Page) {
   const counts = { rsc: 0, actions: 0 };
   page.on("request", (request) => {
     const headers = request.headers();
     if (request.method() === "POST" && headers["next-action"]) counts.actions += 1;
+    else if (headers["next-router-prefetch"] === "1") return;
     else if (headers["rsc"] === "1" || request.url().includes("_rsc=")) counts.rsc += 1;
   });
   return counts;
@@ -203,6 +208,9 @@ test.describe("Proyectos · list, Resumen and Tareas on the query cache (5a, #95
     await add.click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
+    // Opening loads the dialog's catalogs; only closing must send nothing.
+    // `waitForLoadState("networkidle")` resolves at once after the first load.
+    await expect(dialog.getByText("Cargando…")).toHaveCount(0, { timeout: 30_000 });
     await page.waitForLoadState("networkidle");
     const counts = trackServerRequests(page);
     await page.keyboard.press("Escape");

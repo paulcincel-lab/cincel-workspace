@@ -198,13 +198,30 @@ describe("ProjectsAnaliticoLayout", () => {
   });
 
   it("shows the budget column and its legend only for admins", () => {
-    renderLayout({ canSeeAdminData: true });
-    expect(screen.getAllByRole("columnheader").some((th) => th.textContent?.includes("Presup. ejercido"))).toBe(true);
+    const { container } = renderLayout({ canSeeAdminData: true });
+    const budget = screen.getAllByRole("columnheader").find((th) => th.textContent?.includes("Presup. ejercido"))!;
+    expect(within(budget).getByText("ADMIN")).toBeTruthy();
+    expect(container.querySelector('tfoot td[data-column="budgetSpentPct"]')?.textContent).toMatch(/%|—/);
     expect(screen.getByText(/La columna de presupuesto solo la ven administradores\./)).toBeTruthy();
     cleanup();
     renderLayout({ canSeeAdminData: false });
     expect(screen.getAllByRole("columnheader").some((th) => th.textContent?.includes("Presup. ejercido"))).toBe(false);
     expect(screen.queryByText(/La columna de presupuesto/)).toBeNull();
+    expect(screen.queryByText("ADMIN")).toBeNull();
+    expect(document.querySelector('tfoot td[data-column="budgetSpentPct"]')).toBeNull();
+  });
+
+  it("one table: group rows per tramo and the totals in its tfoot", () => {
+    const { container } = renderLayout();
+    const tables = container.querySelectorAll("table");
+    expect(tables.length).toBe(1);
+    const table = tables[0]!;
+    expect(table.querySelector("caption")?.textContent).toBe("Portafolio por tramo");
+    expect([...table.querySelectorAll("tr[id]")].map((tr) => tr.id)).toEqual(["t-presale", "t-diseno"]);
+    const footer = table.querySelector("tfoot");
+    expect(footer?.querySelector('td[data-column="name"]')?.textContent).toBe("Total · 2 proyectos");
+    expect(footer?.querySelector('td[data-column="real"]')?.textContent).toMatch(/% prom\.$/);
+    expect(container.querySelector('[data-slot="grouped-table-totals"]')).toBeNull();
   });
 
   it("empty database: EmptyState with Nuevo proyecto, no KPIs and no table", () => {
@@ -224,9 +241,9 @@ describe("ProjectsAnaliticoLayout", () => {
       return document.querySelector<HTMLElement>(`td[data-cell-row="${id}"][data-cell-column="${column}"]`)!;
     }
 
-    /** The tramo group (its section) a project's row sits in. */
+    /** The tramo group a project's row sits in (the id of the group row above its rows). */
     function groupOf(id: string): string | undefined {
-      return cell(id, "tramo")?.closest("section")?.id;
+      return cell(id, "tramo")?.closest("tbody")?.previousElementSibling?.querySelector("tr")?.id;
     }
 
     it("shows Tramo actual and Responsable after Proyecto; calculated columns stay inert", () => {

@@ -137,6 +137,20 @@ describe("InicioVisual", () => {
     expect(card.getByRole("link", { name: "Ver todos →" }).getAttribute("href")).toBe("/proyectos");
   });
 
+  it("project and attention cards lift on hover and focus; KPI tiles (no link) do not", () => {
+    const { container } = renderVisual();
+    const projects = [...container.querySelectorAll<HTMLElement>('[data-slot="project-card"]')];
+    expect(projects.length).toBeGreaterThan(1);
+    for (const card of projects) {
+      expect(card.classList.contains("lift")).toBe(true);
+      expect(card.className).toContain("focus-within:");
+      expect(card.classList.contains("anim-in")).toBe(true);
+    }
+    expect(projects.map((card) => card.style.getPropertyValue("--anim-delay"))).toEqual(["0ms", "60ms"]);
+    for (const card of container.querySelectorAll('[data-slot="attention-card"]')) expect(card.classList.contains("lift")).toBe(true);
+    for (const tile of container.querySelectorAll('[data-slot="inicio-tile"]')) expect(tile.classList.contains("lift")).toBe(false);
+  });
+
   it("shows the team agenda with team access and the viewer's day without it", () => {
     renderVisual();
     const agenda = within(screen.getByRole("region", { name: "Agenda de hoy" }));

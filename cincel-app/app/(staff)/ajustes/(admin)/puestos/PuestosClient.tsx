@@ -378,7 +378,6 @@ export function PuestosClient() {
           ]
         : []),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [canManage, workflowsById],
   );
 

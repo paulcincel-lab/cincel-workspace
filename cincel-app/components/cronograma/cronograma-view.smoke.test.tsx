@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { settle } from "@/tests/helpers/settle";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
@@ -57,8 +58,9 @@ describe("Cronograma Phase 2 components — smoke render against real MD22 data"
     expect(container.querySelector("svg")).toBeTruthy();
   });
 
-  it("WeekBoards renders three columns with the HOY badge on the current week", () => {
+  it("WeekBoards renders three columns with the HOY badge on the current week", async () => {
     render(<WeekBoards tasks={tasks} today={today} weekOffset={0} />);
+    await settle();
     expect(screen.getByText("Semana anterior")).toBeTruthy();
     expect(screen.getByText("Esta semana")).toBeTruthy();
     expect(screen.getByText("Próxima semana")).toBeTruthy();

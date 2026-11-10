@@ -4,8 +4,7 @@ import { usePathname } from "next/navigation";
 
 import { RouteLoading } from "@/components/shell/RouteLoading";
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
-import { ProjectsEsencialSkeleton } from "@/components/widgets/ProjectsEsencialLayout";
-import { ProjectsVisualSkeleton } from "@/components/widgets/ProjectsVisualLayout";
+import { ProjectsEsencialSkeleton, ProjectsVisualSkeleton } from "@/components/widgets/route-skeletons";
 
 /**
  * /proyectos loading state: the list's skeleton for the active Estilo (Visual:

@@ -33,6 +33,7 @@ import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 
 import { PersonasContacts } from "./PersonasContacts";
 import { PERSONAS_COUNTS, personasContactsFixture } from "./personas-contacts.fixtures";
+import { settle } from "@/tests/helpers/settle";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
@@ -74,6 +75,7 @@ function resetTheme() {
 }
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout and rendering, which happy-dom doesn't
   // provide; token contrast is checked with `checkContrast` instead.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

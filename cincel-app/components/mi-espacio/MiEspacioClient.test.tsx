@@ -140,6 +140,9 @@ vi.mock("@/components/tareas/TaskSheet", () => ({ TaskSheetRoute: () => null, ta
 vi.mock("@/components/tareas/NewTaskDialog", () => ({ newTaskInvalidations: () => [] }));
 
 import { MiEspacioClient, type MiEspacioClientProps } from "./MiEspacioClient";
+// The client loads each style's layout on demand; the real Esencial layout
+// (not mocked) is loaded up front so its chunk resolves at once in the tests.
+import "@/components/widgets/MiEspacioEsencial";
 
 const NOW = new Date();
 
@@ -236,18 +239,18 @@ afterEach(() => {
 });
 
 describe("MiEspacioClient", () => {
-  it("Analítico renders its layout with the shared notice and reader", () => {
+  it("Analítico renders its layout with the shared notice and reader", async () => {
     nav.search = "correo=t1";
     renderClient("analitico");
-    expect(screen.getByTestId("analitico-layout")).toBeTruthy();
+    expect(await screen.findByTestId("analitico-layout")).toBeTruthy();
     expect(screen.getByTestId("reader").textContent).toBe("t1");
     expect(screen.queryByTestId("visual-board")).toBeNull();
   });
 
-  it("Visual renders the Mi espacio board instead of the sections", () => {
+  it("Visual renders the Mi espacio board instead of the sections", async () => {
     nav.search = "correo=t1";
     renderClient("visual");
-    expect(screen.getByTestId("visual-board")).toBeTruthy();
+    expect(await screen.findByTestId("visual-board")).toBeTruthy();
     expect(screen.getByTestId("reader").textContent).toBe("t1");
     expect(screen.queryByTestId("quick-capture")).toBeNull();
   });
@@ -306,36 +309,36 @@ describe("MiEspacioClient", () => {
     expect(screen.getByTestId("editor-note").textContent).toBe("nueva");
   });
 
-  it("?nota=<unknown id> shows the NOT_FOUND copy and no editor", () => {
+  it("?nota=<unknown id> shows the NOT_FOUND copy and no editor", async () => {
     nav.search = "nota=otra";
     renderClient();
-    expect(screen.getByText("Ya no existe. Recarga la página.")).toBeTruthy();
+    expect(await screen.findByText("Ya no existe. Recarga la página.")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(params.replaceMiEspacioParam).toHaveBeenCalledWith("nota", null);
   });
 
-  it("?correo=<id> opens the Gmail reader", () => {
+  it("?correo=<id> opens the Gmail reader", async () => {
     nav.search = "correo=t1";
     renderClient();
-    expect(screen.getByTestId("reader").textContent).toBe("t1");
+    expect((await screen.findByTestId("reader")).textContent).toBe("t1");
   });
 
-  it("stub phase: no section and no editor while the read actions are stubs", () => {
+  it("stub phase: no section and no editor while the read actions are stubs", async () => {
     for (const key of Object.keys(flags)) flags[key] = false;
     nav.search = "nota=n1&correo=t1";
     renderClient();
-    expect(screen.getByTestId("analitico-layout")).toBeTruthy();
+    expect(await screen.findByTestId("analitico-layout")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByTestId("reader")).toBeNull();
     expect(screen.queryByText("Ya no existe. Recarga la página.")).toBeNull();
   });
 
-  it("Esencial: header copy and greeting", () => {
+  it("Esencial: header copy and greeting", async () => {
     seedSessionUser({ member: { id: "me", name: "Ana López" }, access: "Colaborador" });
     renderClient("esencial");
-    expect(screen.getByRole("heading", { level: 1, name: "Mi espacio" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 1, name: "Mi espacio" })).toBeTruthy();
     expect(screen.getByText("Solo tú lo ves")).toBeTruthy();
     expect(screen.getByText(/^Buen(?:os días|as tardes|as noches), Ana\. Tu día en un vistazo\.$/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Nueva nota" })).toBeTruthy();
@@ -347,6 +350,7 @@ describe("MiEspacioClient", () => {
 
   it("has no serious axe violations", async () => {
     const { container } = renderClient();
+    await screen.findByTestId("analitico-layout");
     const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
     expect(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical")).toEqual([]);
   });

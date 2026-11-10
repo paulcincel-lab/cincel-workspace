@@ -2,13 +2,11 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
-import { MiEspacioEsencial } from "@/components/widgets/MiEspacioEsencial";
-import { MiEspacioAnalitico } from "@/components/widgets/MiEspacioAnalitico";
-import { MiEspacioBoard } from "@/components/widgets/MiEspacioBoard";
+import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import { IMPLEMENTED } from "@/lib/actions/my-space-actions.flags";
@@ -27,6 +25,27 @@ export type MiEspacioClientProps = {
   canCreateTask?: boolean;
 };
 
+// One chunk per style: a viewer downloads only the layout of the style they see.
+const MiEspacioBoard = lazy(() =>
+  import("@/components/widgets/MiEspacioBoard").then((m) => ({ default: m.MiEspacioBoard })),
+);
+const MiEspacioEsencial = lazy(() =>
+  import("@/components/widgets/MiEspacioEsencial").then((m) => ({ default: m.MiEspacioEsencial })),
+);
+const MiEspacioAnalitico = lazy(() =>
+  import("@/components/widgets/MiEspacioAnalitico").then((m) => ({ default: m.MiEspacioAnalitico })),
+);
+
+/** While a style's chunk loads (a style switch): the route's loading skeleton. */
+function LayoutFallback() {
+  return (
+    <div className="flex flex-col gap-4" aria-busy="true">
+      <LoadingSkeleton variant="list" rows={6} />
+      <LoadingSkeleton variant="cards" />
+    </div>
+  );
+}
+
 export const MI_ESPACIO_TITLE = "Mi espacio";
 export const MI_ESPACIO_DESCRIPTION = "Tu bandeja, notas, checklists y recordatorios.";
 export const MI_ESPACIO_PRIVATE_CHIP = "Solo tú lo ves";
@@ -36,9 +55,10 @@ export const MI_ESPACIO_PRIVATE_CHIP = "Solo tú lo ves";
  * through `PageStyleLayout` (Visual `MiEspacioBoard`, Esencial
  * `MiEspacioEsencial`, Analítico `MiEspacioAnalitico`), plus what every
  * style shares: the `?nota=` not-found notice, the `?correo=` Gmail reader
- * and the note editor. Every list reads its query (`me.*`, seeded by the
- * page); mutations patch those queries, so nothing here keeps a copy of
- * server data. This component never branches on the style.
+ * and the note editor. Each style's layout loads as its own chunk (the
+ * server still renders it; the fallback only shows on a style switch).
+ * Every list reads its query (`me.*`, seeded by the page); mutations patch
+ * those queries, so nothing here keeps a copy of server data. This component never branches on the style.
  */
 export function MiEspacioClient(props: MiEspacioClientProps) {
   const searchParams = useSearchParams();
@@ -98,11 +118,13 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
 
   return (
     <>
-      <PageStyleLayout
-        visual={() => <MiEspacioBoard notice={notice} reader={reader} canCreateTask={props.canCreateTask ?? false} />}
-        esencial={() => <MiEspacioEsencial notice={notice} reader={reader} />}
-        analitico={() => <MiEspacioAnalitico notice={notice} reader={reader} />}
-      />
+      <Suspense fallback={<LayoutFallback />}>
+        <PageStyleLayout
+          visual={() => <MiEspacioBoard notice={notice} reader={reader} canCreateTask={props.canCreateTask ?? false} />}
+          esencial={() => <MiEspacioEsencial notice={notice} reader={reader} />}
+          analitico={() => <MiEspacioAnalitico notice={notice} reader={reader} />}
+        />
+      </Suspense>
       {editor}
     </>
   );

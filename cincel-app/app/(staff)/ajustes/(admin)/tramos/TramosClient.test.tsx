@@ -16,7 +16,8 @@ vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => null,
 }));
 
-vi.mock("@/lib/auth/permissions", () => ({
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveWorkflowsCapabilities: () => ({ canViewWorkflows: true, canManageWorkflows: true }),
 }));
 

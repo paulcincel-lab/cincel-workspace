@@ -233,6 +233,11 @@ function TableView({
         header: () => (
           <span style={column.width ? { display: "inline-block", minWidth: column.width } : undefined}>
             {column.label}
+            {column.badge ? (
+              <Badge variant="secondary" className="ml-1.5 px-1.5 py-px align-middle">
+                {column.badge}
+              </Badge>
+            ) : null}
           </span>
         ),
         cell: RecordCell,

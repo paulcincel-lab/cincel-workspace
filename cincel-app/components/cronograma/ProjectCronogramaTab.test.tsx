@@ -37,6 +37,7 @@ import rawPagos from "@/scripts/data/md22-pagos-calendar.json";
 import rawAdicionales from "@/scripts/data/md22-adicionales.json";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { Adicional, CronogramaData, PaymentRow, ScheduleTask } from "@/lib/types/schedule";
+import { settle } from "@/tests/helpers/settle";
 
 import CronogramaView from "./cronograma-view";
 import { CronogramaReport } from "./cronograma-report";
@@ -78,8 +79,9 @@ function renderTab(style: PresentationStyle, ui: ReactNode = <CronogramaView pro
 }
 
 describe("Proyecto · Cronograma tab", () => {
-  it("Visual: the existing panels, unchanged, inside the new cards", () => {
+  it("Visual: the existing panels, unchanged, inside the new cards", async () => {
     renderTab("visual");
+    await settle();
     expect(screen.getByText("Cronograma general")).toBeTruthy();
     expect(screen.getByText("Avance del proyecto")).toBeTruthy();
     expect(screen.getByText(/Resumen 1/)).toBeTruthy();
@@ -120,8 +122,9 @@ describe("Proyecto · Cronograma tab", () => {
 });
 
 describe("Proyecto · Reporte (sheet)", () => {
-  it("prints a token-styled sheet with a screen-only toolbar and no style switch", () => {
+  it("prints a token-styled sheet with a screen-only toolbar and no style switch", async () => {
     const { container } = renderSeeded(<CronogramaReport projectId="p1" asOf="2026-09-18" />);
+    await settle();
     expect(screen.getByRole("heading", { level: 1, name: "Reporte de avance" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Imprimir" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Hoja del reporte" })).toBeTruthy();

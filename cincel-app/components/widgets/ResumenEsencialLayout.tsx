@@ -7,6 +7,11 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
+import {
+  RESUMEN_ESENCIAL_FILES,
+  RESUMEN_ESENCIAL_NEXT_TASKS,
+  ResumenEsencialSkeleton,
+} from "@/components/widgets/route-skeletons";
 import { TaskSheetRoute, taskSheetHref } from "@/components/tareas/TaskSheet";
 import { useQuickAddCreate } from "@/components/tareas/quick-add-create";
 import { EsencialCard } from "@/components/widgets/EsencialCard";
@@ -43,8 +48,7 @@ import { cn } from "@/lib/utils";
  */
 export type ResumenEsencialLayoutProps = { data: ProjectSummaryInput };
 
-export const RESUMEN_ESENCIAL_NEXT_TASKS = 5;
-export const RESUMEN_ESENCIAL_FILES = 3;
+export { RESUMEN_ESENCIAL_FILES, RESUMEN_ESENCIAL_NEXT_TASKS };
 export const SECTION_ERROR_TITLE = "No se pudo cargar esta sección";
 export const QUICK_ADD_HINT = "@persona · #fase · viernes";
 
@@ -179,8 +183,8 @@ function TramoCard({ data, tasks }: { data: ProjectSummaryInput; tasks: TaskList
 // ── 2a. Próximas tareas ──────────────────────────────────────────────────────
 
 function taskStatus(task: NextTask): EsencialStatus {
-  if (task.daysLate > 0) return { kind: "text", label: `${task.daysLate} d tarde`, tone: "destructive" };
-  if (task.blocked) return { kind: "text", label: "Bloqueada", tone: "destructive" };
+  if (task.daysLate > 0) return { kind: "text", label: `${task.daysLate} d tarde`, tone: "destructive", chip: true };
+  if (task.blocked) return { kind: "text", label: "Bloqueada", tone: "destructive", chip: true };
   if (task.dueDate) return { kind: "text", label: shortDate(task.dueDate), tone: "muted" };
   return null;
 }
@@ -444,28 +448,7 @@ function SectionError({ label, onRetry }: { label: string; onRetry(): void }) {
   );
 }
 
-/** Loading layout: 130 px tramo block, then 5 rows + quick-add | 110 px + 3 rows. */
-export function ResumenEsencialSkeleton(): ReactNode {
-  return (
-    <div role="status" aria-busy="true" aria-label="Cargando…" className="flex flex-col gap-5">
-      <Skeleton className="h-[130px] rounded-lg" />
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="flex min-w-0 flex-[2_1_480px] flex-col gap-2">
-          {Array.from({ length: RESUMEN_ESENCIAL_NEXT_TASKS }, (_, i) => (
-            <Skeleton key={i} className="h-10" />
-          ))}
-          <Skeleton className="h-11 rounded-md" />
-        </div>
-        <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
-          <Skeleton className="h-[110px] rounded-lg" />
-          {Array.from({ length: RESUMEN_ESENCIAL_FILES }, (_, i) => (
-            <Skeleton key={i} className="h-9" />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
+export { ResumenEsencialSkeleton };
 
 function NextTasksSkeleton() {
   return (

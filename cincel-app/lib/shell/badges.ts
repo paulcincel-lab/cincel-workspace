@@ -34,6 +34,7 @@ export function capabilityUserOf(user: NonNullable<SessionAccess["user"]>): Capa
     },
     email: user.email ?? "",
     access: user.access,
+    ...(user.permissionOverrides ? { permissionOverrides: user.permissionOverrides } : {}),
   };
 }
 

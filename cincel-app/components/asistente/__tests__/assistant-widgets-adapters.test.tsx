@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, waitFor } from "@testing-library/react";
 
 // The library widgets are replaced by spies so these tests pin down which
 // widget each message renders through and with what data.
@@ -45,6 +45,8 @@ vi.mock("@/components/widgets/AttentionListWidget", () => ({
 
 import { AssistantCardMessage } from "../AssistantCardMessage";
 import { AssistantChartMessage } from "../AssistantChartMessage";
+// Loaded on demand by AssistantChartMessage; loaded up front here so the chunk resolves at once.
+import "../AssistantLineChart";
 import { AssistantListMessage } from "../AssistantListMessage";
 import { AssistantStatGridMessage } from "../AssistantStatGridMessage";
 import { CARD, CHART_BAR, CHART_LINE, LIST, STAT_GRID, STYLES, renderInStyle } from "./fixtures";
@@ -70,14 +72,14 @@ describe.each(STYLES)("assistant widgets render through the library (%s)", (styl
     });
   });
 
-  it("render_chart line → chart.tsx line inside a WidgetCard", () => {
-    const { container } = renderInStyle(style, <AssistantChartMessage {...CHART_LINE} />);
-    expect(calls.WidgetCard).toHaveLength(1);
+  it("render_chart line → chart.tsx line inside a WidgetCard", async () => {
+    const { container, getByRole } = renderInStyle(style, <AssistantChartMessage {...CHART_LINE} />);
     expect(calls.WidgetCard[0]).toMatchObject({ title: "Tareas cerradas por semana" });
     expect(calls.DistributionWidget).toHaveLength(0);
-    const chart = container.querySelector('[data-slot="chart"]');
-    expect(chart?.getAttribute("role")).toBe("img");
-    expect(chart?.getAttribute("aria-label")).toBe("Tareas cerradas por semana: S1 4, S2 9, S3 6");
+    expect(getByRole("img").getAttribute("aria-label")).toBe("Tareas cerradas por semana: S1 4, S2 9, S3 6");
+    // The recharts line arrives as its own chunk, inside the labelled box.
+    await waitFor(() => expect(getByRole("img").querySelector('[data-slot="chart"]')).not.toBeNull());
+    expect(container.querySelector('[data-slot="chart-placeholder"]')).toBeNull();
   });
 
   it("render_card → WidgetCard with the badge as a plain shadcn variant and the fields", () => {

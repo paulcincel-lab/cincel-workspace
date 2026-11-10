@@ -119,4 +119,24 @@ describe("buildScheduleTable", () => {
     expect(table.rows.filter((r) => r.kind === "tarea")).toHaveLength(tasks.length);
     expect(table.totals).not.toHaveProperty("holgura");
   });
+
+  it("gives every row a unique id even when two tareas share an id", () => {
+    const table = buildScheduleTable({
+      tasks: [
+        task({ id: "PB-dup", tarea: "Llave angular", responsable: "Cincel" }),
+        task({ id: "PB-dup", tarea: "Llave angular", responsable: "Chava" }),
+      ],
+      payments: [],
+      today,
+    });
+    const ids = table.rows.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(expect.arrayContaining(["tarea-PB-dup", "tarea-PB-dup-2"]));
+  });
+
+  it("has unique row ids for the Madrid 22 schedule (which repeats two task ids)", () => {
+    const table = buildScheduleTable({ tasks: md22Tasks as unknown as ScheduleTask[], payments: [], today });
+    const ids = table.rows.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

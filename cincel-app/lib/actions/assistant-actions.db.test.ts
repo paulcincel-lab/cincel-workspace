@@ -11,6 +11,8 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unwrapActions } from "@/tests/helpers/action-result";
+
 const url = process.env.TEST_DATABASE_URL;
 
 // `lib/db/client` reads DATABASE_URL when it is first imported.
@@ -44,7 +46,7 @@ describe.skipIf(!url)("assistant actions (test DB)", async () => {
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
   const repo = await import("@/lib/repositories/assistant-repository");
-  const actions = await import("@/lib/actions/assistant-actions");
+  const actions = unwrapActions(await import("@/lib/actions/assistant-actions"));
   const { revalidatePath } = await import("next/cache");
 
   const staffIds: string[] = [];

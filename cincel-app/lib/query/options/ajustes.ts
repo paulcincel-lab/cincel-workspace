@@ -204,7 +204,7 @@ export function ajustesTramosOptions() {
   });
 }
 
-/** Read-only (#950): no mutation writes it. */
+/** `savePermissionsMatrixAction` / `restoreDefaultPermissionsAction` write it back (#971). */
 export function ajustesPermisosOptions() {
   return queryOptions<AjustesPermisosPageData>({
     queryKey: qk.ajustes.page("permisos"),

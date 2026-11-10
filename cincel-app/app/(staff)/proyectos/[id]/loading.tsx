@@ -3,7 +3,7 @@
 import { RouteLoading } from "@/components/shell/RouteLoading";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
-import { ResumenEsencialSkeleton } from "@/components/widgets/ResumenEsencialLayout";
+import { ResumenEsencialSkeleton } from "@/components/widgets/route-skeletons";
 
 /**
  * `/proyectos/[id]` loading state (Resumen), per Estilo: Visual draws the

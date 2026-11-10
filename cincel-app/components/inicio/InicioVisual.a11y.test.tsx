@@ -21,6 +21,7 @@ import type { InicioData } from "@/lib/types/redesign";
 import { InicioVisual } from "./InicioVisual";
 import { INICIO_EMPTY } from "./inicio-fixtures";
 import { INICIO_VISUAL, VISUAL_NOW } from "./inicio-visual-fixtures";
+import { settle } from "@/tests/helpers/settle";
 
 const MODES = ["light", "dark"] as const;
 
@@ -41,6 +42,7 @@ function applyTheme(mode: (typeof MODES)[number]) {
 }
 
 async function seriousViolations() {
+  await settle();
   const results = await axe.run(document.body, { resultTypes: ["violations"] });
   return results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")

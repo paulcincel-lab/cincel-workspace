@@ -104,6 +104,13 @@ describe("TimeClock states", () => {
     expect(screen.getByText("de 8 h · entrada 9:02")).toBeTruthy();
   });
 
+  it("on: the card carries the running state and Salida is the dark button (frame `Sidebar`)", () => {
+    renderClock(<TimeClock />, status({ state: "on", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 600 }));
+    expect(screen.getByRole("region", { name: "Jornada" }).getAttribute("data-state")).toBe("on");
+    expect(screen.getByRole("button", { name: "Salida" }).className).toContain("bg-foreground");
+    expect(screen.getByRole("button", { name: "Pausa" }).className).not.toContain("bg-foreground");
+  });
+
   it("pausa: En pausa pill with Reanudar and Salida", () => {
     renderClock(<TimeClock />, status({ state: "pausa", startedAt: "2026-11-07T15:02:00.000Z", workedSeconds: 600 }));
     expect(screen.getByText("En pausa")).toBeTruthy();

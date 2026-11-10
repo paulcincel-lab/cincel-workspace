@@ -127,6 +127,7 @@ import { integracionesGoogleDriveSection } from "@/lib/shell/settings-sections/i
 import { integracionesMondaySection } from "@/lib/shell/settings-sections/integraciones/monday";
 import type { GmailStatus } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
+import { settle } from "@/tests/helpers/settle";
 
 const RATE_LIMITED_COPY = "Se sincronizó hace un momento. Intenta de nuevo en unos minutos.";
 const SCOPE_MISSING_COPY = "Falta dar permiso para leer el correo. Vuelve a conectar Gmail.";
@@ -628,8 +629,10 @@ describe("accessibility", () => {
         document.documentElement.setAttribute("data-theme-id", themeId);
         document.documentElement.setAttribute("data-theme", mode);
         if (mode === "dark") document.documentElement.classList.add("dark");
-        renderPage();
+        const { client } = renderPage();
         fireEvent.click(screen.getByRole("button", { name: "Desconectar" }));
+        // The calendar feed section fetches its status on mount; check the page once that has landed.
+        await settle(client);
 
         const results = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
         const serious = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");

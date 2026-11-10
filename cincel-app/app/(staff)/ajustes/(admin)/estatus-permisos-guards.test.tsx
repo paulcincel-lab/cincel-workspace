@@ -151,6 +151,8 @@ describe("Ajustes › Estatus / Permisos pages", () => {
     const data = {
       staff: [{ id: "a1", name: "Alejandro", lastName: null, active: true, access: "Administrador" }],
       defaultPermissions: { Dirección: {} },
+      permissions: { Dirección: {} },
+      hasCustom: false,
     };
     loaders.loadAjustesPermisos.mockResolvedValueOnce(data);
 
@@ -163,7 +165,8 @@ describe("Ajustes › Estatus / Permisos pages", () => {
   });
 
   it("/ajustes/permisos still renders when the loader fails (the client query shows the error)", async () => {
-    loaders.loadAjustesPermisos.mockRejectedValueOnce(new Error("FORBIDDEN"));
+    // The query client retries once, so the retry must fail too.
+    loaders.loadAjustesPermisos.mockRejectedValue(new Error("FORBIDDEN"));
     const page = (await AjustesPermisosPage()) as HydratedPage;
     expect(page.props.children.type).toBe(PermisosSettings);
     expect(page.props.qc.getQueryData(qk.ajustes.page("permisos"))).toBeUndefined();

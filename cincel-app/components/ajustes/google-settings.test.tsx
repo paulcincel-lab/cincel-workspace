@@ -232,6 +232,12 @@ describe("Ajustes › Google", () => {
 
   it("runs the same backfill action as before", async () => {
     actions.ensureMissingProjectFoldersAction.mockResolvedValue({ created: 2, skipped: 0, failed: 0 });
+    // The backfill invalidates the Google page; its refetch answers with the folders in place.
+    pageData.getAjustesGooglePageData.mockResolvedValue({
+      mappings: [],
+      positions: [],
+      health: { ...HEALTH, projectsWithoutFolder: 0, projectsWithFolder: 24 },
+    });
     renderSettings({ mappings: [], positions: [], health: HEALTH });
     fireEvent.click(screen.getByRole("button", { name: "Crear carpetas faltantes" }));
     await waitFor(() => expect(screen.getByText("2 creadas")).toBeTruthy());

@@ -16,6 +16,7 @@ import {
   contactKind,
   contactType,
   core,
+  foldedTrgm,
   providerStatus,
   providerSubtype,
   soft,
@@ -47,6 +48,8 @@ export const contacts = core.table(
       .on(t.type, sql`lower(${t.name})`)
       .where(sql`${t.deletedAt} is null`),
     index("idx_contacts_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
+    // Workspace search compares the folded name (lib/search/search.ts).
+    index("idx_contacts_name_folded_trgm").using("gin", foldedTrgm(t.name)),
     index("idx_contacts_type").on(t.type),
   ]
 );

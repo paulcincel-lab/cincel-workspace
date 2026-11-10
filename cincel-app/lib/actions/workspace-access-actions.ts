@@ -1,5 +1,6 @@
 "use server";
 
+import { toActionResult } from "@/lib/actions/action-result";
 import { recheckStaffAccess } from "@/lib/auth/access-recheck";
 import { recordDirectoryError } from "@/lib/auth/directory-error-log";
 import { loadGoogleHealth } from "@/lib/auth/google-health";
@@ -11,6 +12,7 @@ import type { EnsureMissingProjectFoldersCounts } from "@/lib/google/project-fol
 import { positionExists } from "@/lib/repositories/positions-repository";
 import * as mappingsRepository from "@/lib/repositories/workspace-group-mappings-repository";
 import type { GroupMappingValues } from "@/lib/repositories/workspace-group-mappings-repository";
+import type { ActionResult } from "@/lib/types/schedule";
 import type {
   GoogleHealth,
   GroupMapping,
@@ -185,7 +187,13 @@ export async function getGoogleHealthAction(): Promise<GoogleHealth> {
  * Crear carpetas faltantes (BE §A.6.1, §A.7): creates the Drive folders of
  * every project still `pending` or `failed`, one at a time, and reports counts.
  */
-export async function ensureMissingProjectFoldersAction(): Promise<EnsureMissingProjectFoldersCounts> {
+export async function ensureMissingProjectFoldersAction(
+  ...args: Parameters<typeof ensureMissingProjectFoldersActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof ensureMissingProjectFoldersActionImpl>>>> {
+  return toActionResult(() => ensureMissingProjectFoldersActionImpl(...args));
+}
+
+async function ensureMissingProjectFoldersActionImpl(): Promise<EnsureMissingProjectFoldersCounts> {
   if (!(await isAdministrator())) throw new Error("FORBIDDEN: ensure project folders");
   const counts = await ensureMissingProjectFolders();
   return counts;

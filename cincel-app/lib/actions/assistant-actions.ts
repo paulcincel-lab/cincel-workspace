@@ -87,7 +87,13 @@ export async function deleteAssistantThreadAction(id: string): Promise<ActionRes
  * its list row. `updated_at` doesn't change. Errors: `NOT_FOUND` (missing,
  * deleted or another user's thread), `INVALID` (`pinned` not a boolean).
  */
-export async function pinAssistantThreadAction(input: { id: string; pinned: boolean }): Promise<AssistantThreadSummary> {
+export async function pinAssistantThreadAction(
+  ...args: Parameters<typeof pinAssistantThreadActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof pinAssistantThreadActionImpl>>>> {
+  return toActionResult(() => pinAssistantThreadActionImpl(...args));
+}
+
+async function pinAssistantThreadActionImpl(input: { id: string; pinned: boolean }): Promise<AssistantThreadSummary> {
   const staffId = await sessionStaffId();
   const threadId = threadIdOrNotFound(input?.id);
   if (typeof input.pinned !== "boolean") throw new Error("INVALID: pinned");
@@ -102,7 +108,13 @@ export async function pinAssistantThreadAction(input: { id: string; pinned: bool
  * Marks the caller's thread read now (on open and after each turn), so its
  * rail row stops showing "Nueva respuesta". Errors: `NOT_FOUND`.
  */
-export async function markAssistantThreadReadAction(input: { id: string }): Promise<void> {
+export async function markAssistantThreadReadAction(
+  ...args: Parameters<typeof markAssistantThreadReadActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof markAssistantThreadReadActionImpl>>>> {
+  return toActionResult(() => markAssistantThreadReadActionImpl(...args));
+}
+
+async function markAssistantThreadReadActionImpl(input: { id: string }): Promise<void> {
   const staffId = await sessionStaffId();
   const threadId = threadIdOrNotFound(input?.id);
   const updated = await assistantRepository.markOwnedAssistantThreadRead(db, staffId, threadId);

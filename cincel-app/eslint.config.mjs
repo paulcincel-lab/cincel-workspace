@@ -5,6 +5,21 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Unused bindings stay a warning (and CI fails on any warning); a leading `_` marks a parameter or
+  // binding that has to exist (a mock's signature, an omitted destructured key) but is not read.
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
   // Cutto boundary (redesign BE §11.2): client code links to Cutto through lib/integrations/cutto-links.ts
   // and never imports the server-only adapter (also checked by tests/guards/cutto-server-only.test.ts).
   // Listed before the portal block so the portal patterns win on components/portal/**.

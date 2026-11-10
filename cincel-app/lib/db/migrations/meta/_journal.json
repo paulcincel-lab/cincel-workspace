@@ -225,6 +225,13 @@
       "when": 1794281350200,
       "tag": "0031_estilos",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794325796247,
+      "tag": "0032_broken_bucky",
+      "breakpoints": true
     }
   ]
 }

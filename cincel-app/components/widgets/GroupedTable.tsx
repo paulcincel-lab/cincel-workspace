@@ -38,7 +38,9 @@ import { cn } from "@/lib/utils";
  * Analítico grouped table (ADR 0005, frames `Main`, `Analitico-Vencidas`,
  * `Proyectos-Analitico`): one card per top group, a second collapsible level
  * (e.g. project → tramo), metrics in each group header, heat cells, footer
- * totals, "Ir a" anchors and a totals bar under the last card.
+ * totals, "Ir a" anchors and a totals bar under the last card. `layout:
+ * "table"` puts every top group in one table instead (group rows, one
+ * `tfoot` from `footerRow`).
  *
  * Expansion is uncontrolled by default (`defaultExpanded`) or controlled with
  * `expanded` + `onExpandedChange`; `onGroupExpand` fires on each expand so
@@ -82,6 +84,14 @@ export type GroupedTableProps<Row extends Record<string, unknown>> = {
   columns: RecordColumn<Row>[];
   groups: Group<Row>[];
   totals?: { label: string; summary: string };
+  /**
+   * "cards" (default): one card per top group. "table": one card and one
+   * table, each top group a collapsible group row (`tr id={group id}`) over
+   * its rows, `footerRow` as the table's `tfoot` (frame `Proyectos-Analitico`).
+   */
+  layout?: "cards" | "table";
+  /** "table" layout: the footer cell of each column (preformatted strings, or numbers in the column's format). */
+  footerRow?: Record<string, string | number>;
   anchors?: GroupAnchor[];
   anchorsCaption?: string;
   /** "Expandir todo" / "Contraer todo" above the groups (default true); false when the page has its own. */
@@ -274,6 +284,82 @@ function cellClass(column: RecordColumn, first: boolean, heat: HeatLevel): strin
   );
 }
 
+/** The `<thead>` row: sortable headers are buttons with `aria-sort`; `badge` draws a pill after the label. */
+function HeaderRow<Row extends Record<string, unknown>>({ ctx }: { ctx: Ctx<Row> }) {
+  return (
+    <tr>
+      {ctx.columns.map((column, index) => {
+        const sortable = ctx.props.sortable?.includes(column.key) ?? false;
+        const label = (
+          <>
+            {column.label}
+            {column.badge ? (
+              <Badge variant="secondary" className="ml-1.5 px-1.5 py-px font-mono text-[10px] tracking-[.08em]">
+                {column.badge}
+              </Badge>
+            ) : null}
+          </>
+        );
+        return (
+          <th
+            key={column.key}
+            scope="col"
+            style={column.width ? { width: column.width } : undefined}
+            className={cn(
+              "border-b bg-muted px-3 py-2 font-mono text-[11px] font-medium tracking-[.08em] whitespace-nowrap text-muted-foreground uppercase",
+              index === 0 && "pl-10",
+              columnAlign(column) === "right" ? "text-right" : "text-left",
+            )}
+            aria-sort={sortable ? ariaSortOf(column.key, ctx.props.sort) : undefined}
+          >
+            {sortable ? (
+              <button
+                type="button"
+                onClick={() => ctx.props.onSortChange?.(column.key)}
+                className="inline-flex items-center gap-1 uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {label}
+              </button>
+            ) : (
+              label
+            )}
+          </th>
+        );
+      })}
+    </tr>
+  );
+}
+
+/** A `tfoot` row from totals per column (first column indented like the rows). */
+function FooterCells<Row extends Record<string, unknown>>({
+  ctx,
+  totals,
+  slot,
+}: {
+  ctx: Ctx<Row>;
+  totals: Record<string, string | number>;
+  slot: string;
+}) {
+  return (
+    <tr data-slot={slot}>
+      {ctx.columns.map((column, index) => (
+        <td
+          key={column.key}
+          data-column={column.key}
+          className={cn(
+            "bg-muted px-3 py-2 text-[12.5px] font-semibold whitespace-nowrap",
+            index === 0 && "pl-10",
+            columnAlign(column) === "right" && "text-right tabular-nums",
+            index !== 0 && isMonoColumn(column) && "font-mono",
+          )}
+        >
+          {formatTotal(column, totals)}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
 function LeafRow<Row extends Record<string, unknown>>({
   ctx,
   row,
@@ -399,16 +485,28 @@ function GroupRows<Row extends Record<string, unknown>>({ ctx, group }: { ctx: C
   );
 }
 
-function ChildGroup<Row extends Record<string, unknown>>({ ctx, group }: { ctx: Ctx<Row>; group: Group<Row> }) {
+function ChildGroup<Row extends Record<string, unknown>>({
+  ctx,
+  group,
+  anchorId,
+  setHeaderRef,
+}: {
+  ctx: Ctx<Row>;
+  group: Group<Row>;
+  /** "table" layout: the group row is the "Ir a" target. */
+  anchorId?: string;
+  setHeaderRef?(id: string, el: HTMLButtonElement | null): void;
+}) {
   const open = ctx.isOpen(group.id);
   const toggle = () => ctx.toggle(group.id);
   const bodyId = domId("grupo-filas", group.id);
   return (
     <>
       <tbody data-slot="child-group" data-group-id={group.id}>
-        <tr>
+        <tr id={anchorId} className={anchorId ? "scroll-mt-12" : undefined}>
           <td colSpan={ctx.columns.length} className="border-b border-border p-0">
             <button
+              ref={setHeaderRef ? (el) => setHeaderRef(group.id, el) : undefined}
               type="button"
               aria-expanded={open}
               aria-controls={bodyId}
@@ -447,22 +545,7 @@ function GroupFooterRow<Row extends Record<string, unknown>>({ ctx, group }: { c
   const totals = group.footer === "auto" ? auto : { ...auto, ...group.footer };
   return (
     <tfoot>
-      <tr data-slot="group-footer">
-        {ctx.columns.map((column, index) => (
-          <td
-            key={column.key}
-            data-column={column.key}
-            className={cn(
-              "bg-muted px-3 py-2 text-[12.5px] font-semibold whitespace-nowrap",
-              index === 0 && "pl-10",
-              columnAlign(column) === "right" && "text-right tabular-nums",
-              index !== 0 && isMonoColumn(column) && "font-mono",
-            )}
-          >
-            {formatTotal(column, totals)}
-          </td>
-        ))}
-      </tr>
+      <FooterCells ctx={ctx} totals={totals} slot="group-footer" />
     </tfoot>
   );
 }
@@ -517,33 +600,7 @@ function TopGroup<Row extends Record<string, unknown>>({
               style={{ minWidth }}
             >
               <thead className="sticky top-0">
-                <tr>
-                  {ctx.columns.map((column, index) => (
-                    <th
-                      key={column.key}
-                      scope="col"
-                      style={column.width ? { width: column.width } : undefined}
-                      className={cn(
-                        "border-b bg-muted px-3 py-2 font-mono text-[11px] font-medium tracking-[.08em] whitespace-nowrap text-muted-foreground uppercase",
-                        index === 0 && "pl-10",
-                        columnAlign(column) === "right" ? "text-right" : "text-left",
-                      )}
-                      aria-sort={ctx.props.sortable?.includes(column.key) ? ariaSortOf(column.key, ctx.props.sort) : undefined}
-                    >
-                      {ctx.props.sortable?.includes(column.key) ? (
-                        <button
-                          type="button"
-                          onClick={() => ctx.props.onSortChange?.(column.key)}
-                          className="inline-flex items-center gap-1 uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {column.label}
-                        </button>
-                      ) : (
-                        column.label
-                      )}
-                    </th>
-                  ))}
-                </tr>
+                <HeaderRow ctx={ctx} />
               </thead>
               {ownRows ? (
                 <tbody data-slot="group-rows">
@@ -650,6 +707,10 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
   const topIds = new Set(groups.map((group) => group.id));
   const anchors = (p.anchors ?? []).filter((anchor) => topIds.has(anchor.groupId));
   const ctx: Ctx<Row> = { props: p, columns, grid: editable ? grid : null, isOpen, toggle };
+  const setHeaderRef = (id: string, el: HTMLButtonElement | null) => {
+    if (el) headers.current.set(id, el);
+    else headers.current.delete(id);
+  };
 
   const body = (
     <div data-slot="grouped-table" className="flex min-w-0 flex-col gap-3" {...(editable ? grid.rootProps : {})}>
@@ -692,17 +753,32 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
         ) : null}
       </div>
       ) : null}
-      {groups.map((group) => (
-        <TopGroup
-          key={group.id}
-          ctx={ctx}
-          group={group}
-          setHeaderRef={(id, el) => {
-            if (el) headers.current.set(id, el);
-            else headers.current.delete(id);
-          }}
-        />
-      ))}
+      {p.layout === "table" ? (
+        <section aria-label={p.label} data-slot="group-card" className="overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-card)]">
+          <div className="overflow-x-auto">
+            <table
+              role={editable ? "grid" : undefined}
+              className="w-full border-collapse text-[12.5px]"
+              style={{ minWidth: columns.reduce((sum, column) => sum + (column.width ?? DEFAULT_COLUMN_WIDTH), 0) }}
+            >
+              <caption className="sr-only">{p.label}</caption>
+              <thead className="sticky top-0 z-10">
+                <HeaderRow ctx={ctx} />
+              </thead>
+              {groups.map((group) => (
+                <ChildGroup key={group.id} ctx={ctx} group={group} anchorId={groupAnchorId(group.id)} setHeaderRef={setHeaderRef} />
+              ))}
+              {p.footerRow ? (
+                <tfoot>
+                  <FooterCells ctx={ctx} totals={p.footerRow} slot="table-footer" />
+                </tfoot>
+              ) : null}
+            </table>
+          </div>
+        </section>
+      ) : (
+        groups.map((group) => <TopGroup key={group.id} ctx={ctx} group={group} setHeaderRef={setHeaderRef} />)
+      )}
       {p.totals ? (
         <div
           data-slot="grouped-table-totals"

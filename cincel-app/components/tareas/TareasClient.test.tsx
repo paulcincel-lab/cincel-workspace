@@ -58,7 +58,8 @@ vi.mock("@/lib/auth/auth-service", () => ({
 }));
 
 const caps = vi.hoisted(() => ({ canCreateActivity: true }));
-vi.mock("@/lib/auth/permissions", () => ({
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: caps.canCreateActivity }),
 }));
 
@@ -78,15 +79,25 @@ vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
 
 // The task sheet (R3-08) opens from `?tarea=`; none here.
 vi.mock("./TaskSheet", () => ({ TaskSheetRoute: () => null }));
+// The start slot reads its own query (`TareasStartSlot.test.tsx`); here it only shows which tramo it was mounted for.
+vi.mock("./TareasStartSlot", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./TareasStartSlot")>()),
+  TareasStartSlot: ({ workflow }: { workflow: { id: string } }) => (
+    <div data-testid="tareas-start-slot" data-workflow={workflow.id} />
+  ),
+}));
 // The per-style layouts read their own queries (their own tests); here they show the props they get.
 vi.mock("./TareasVisual", () => ({
-  TareasVisual: (p: { actions?: ReactNode } & Record<string, unknown>) => (
+  TareasVisual: (p: { actions?: ReactNode; startSlot?: ReactNode } & Record<string, unknown>) => (
     <section data-testid="view-visual" data-props={Object.keys(p).sort().join(",")}>
       {p.actions}
+      {p.startSlot}
     </section>
   ),
 }));
-vi.mock("./TareasEsencial", () => ({ TareasEsencial: () => <section data-testid="view-esencial" /> }));
+vi.mock("./TareasEsencial", () => ({
+  TareasEsencial: (p: { startSlot?: ReactNode }) => <section data-testid="view-esencial">{p.startSlot}</section>,
+}));
 vi.mock("./TareasAnalitico", () => ({
   TareasAnalitico: (
     p: {
@@ -94,10 +105,12 @@ vi.mock("./TareasAnalitico", () => ({
       search?: string;
       onSearch?(v: string): void;
       empty?: { title: string; action?: { label: string; href?: string } };
+      startSlot?: ReactNode;
     } & Record<string, unknown>,
   ) => (
     <section data-testid="view-analitico" data-props={Object.keys(p).sort().join(",")}>
       {p.actions}
+      {p.startSlot}
       <input aria-label="Buscar tareas" value={p.search ?? ""} onChange={(e) => p.onSearch?.(e.target.value)} />
       {p.empty?.action?.href ? (
         <div role="status">
@@ -215,7 +228,7 @@ describe("TareasClient data", () => {
   it("passes the Analítico layout no data props: the query, the facets and the shell only", () => {
     renderClient();
     expect(screen.getByTestId("view-analitico").getAttribute("data-props")).toBe(
-      "actions,canCreate,empty,facets,onQuery,onSearch,query,search,staff,tramos",
+      "actions,canCreate,empty,facets,onQuery,onSearch,query,search,staff,startSlot,tramos",
     );
   });
 
@@ -269,7 +282,7 @@ describe("TareasClient per style", () => {
     style = "visual";
     renderClient({ tramo: "presale" });
     const visual = screen.getByTestId("view-visual");
-    expect(visual.getAttribute("data-props")).toBe("actions,empty,facets,onQuery,onSearch,query,search,tramos");
+    expect(visual.getAttribute("data-props")).toBe("actions,empty,facets,onQuery,onSearch,query,search,startSlot,tramos");
     expect(within(visual).getByRole("button", { name: "Nueva tarea" })).toBeTruthy();
     expect(screen.queryByTestId("view-tablero")).toBeNull();
     expect(pageData.getTareasPageData).not.toHaveBeenCalled();
@@ -299,6 +312,44 @@ describe("TareasClient per style", () => {
       expect(pageData.getTareasPageData).not.toHaveBeenCalled();
       cleanup();
     }
+  });
+});
+
+describe("TareasClient start slot", () => {
+  const VIEWS = { visual: "view-visual", esencial: "view-esencial", analitico: "view-analitico" } as const;
+
+  for (const [s, testId] of Object.entries(VIEWS) as [PresentationStyle, string][]) {
+    it(`${s}: one tramo filter mounts the slot for that tramo inside the layout`, () => {
+      style = s;
+      renderClient({ tramo: "diseno" });
+      const slot = within(screen.getByTestId(testId)).getByTestId("tareas-start-slot");
+      expect(slot.getAttribute("data-workflow")).toBe("w-diseno");
+      expect(screen.getAllByTestId("tareas-start-slot")).toHaveLength(1);
+    });
+
+    it(`${s}: no slot without a tramo filter`, () => {
+      style = s;
+      renderClient();
+      expect(screen.getByTestId(testId)).toBeTruthy();
+      expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
+    });
+  }
+
+  it("no slot for several tramos or an unknown tramo", () => {
+    for (const tramo of ["presale,diseno", "nope"]) {
+      renderClient({ tramo });
+      expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("keeps ?project=X&iniciar=1 in the URL for the slot to open the sheet", () => {
+    navigation.search = "tramo=diseno&project=p9&iniciar=1";
+    const client = createTestQueryClient();
+    seed(client, parseTareasQuery(new URLSearchParams(navigation.search)), FACETS);
+    renderWithQueryClient(styled(<TareasClient />), { client });
+    expect(screen.getByTestId("tareas-start-slot").getAttribute("data-workflow")).toBe("w-diseno");
+    expect(replaceState).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 
 vi.mock("@/lib/actions/preferences-actions", () => ({
@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { Button } from "@/components/ui/shadcn/button";
 import { PageHeader as WidgetPageHeader } from "@/components/widgets/PageHeader";
+import { settle } from "@/tests/helpers/settle";
 
 function renderStaff(ui: ReactElement, opts: { fixedByOrg?: boolean } = {}) {
   return render(
@@ -69,16 +70,19 @@ describe("PageHeader", () => {
     expect(screen.getByRole("radiogroup", { name: "Estilo" })).toBeTruthy();
   });
 
-  it("keeps the switch keyboard operable from the header (one tab stop, arrows, Home, End)", () => {
+  it("keeps the switch keyboard operable from the header (one tab stop, arrows, Home, End)", async () => {
     renderStaff(<PageHeader title="Tareas" />);
     const radios = within(screen.getByRole("radiogroup", { name: "Estilo" })).getAllByRole("radio");
     expect(radios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
-    radios[0].focus();
+    act(() => radios[0].focus());
     fireEvent.keyDown(radios[0], { key: "End" });
     expect(document.activeElement).toBe(radios[2]);
     fireEvent.keyDown(radios[2], { key: "Home" });
     expect(document.activeElement).toBe(radios[0]);
     fireEvent.keyDown(radios[0], { key: "ArrowRight" });
+    expect(document.activeElement).toBe(radios[1]);
+    // Each selection saves the style; let those saves answer before the test ends.
+    await settle();
     expect(document.activeElement).toBe(radios[1]);
   });
 

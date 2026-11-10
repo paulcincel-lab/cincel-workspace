@@ -17,6 +17,8 @@ const pageData = vi.hoisted(() => ({
   getAjustesTramosPageData: vi.fn(),
   getAjustesPermisosPageData: vi.fn(),
 }));
+const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
 
 const mutations = vi.hoisted(() => ({
@@ -43,6 +45,7 @@ const mutations = vi.hoisted(() => ({
 vi.mock("@/lib/actions/task-statuses-actions", () => mutations);
 vi.mock("@/lib/actions/positions-actions", () => mutations);
 vi.mock("@/lib/actions/workflows-actions", () => mutations);
+vi.mock("@/lib/actions/permissions-actions", () => ({ savePermissionsMatrixAction: vi.fn(), restoreDefaultPermissionsAction: vi.fn() }));
 
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 vi.mock("@/components/patterns/SettingsRow", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
@@ -156,6 +159,8 @@ describe("Ajustes catalog hydration", () => {
     const data = {
       staff: [{ id: "a1", name: "Alejandro", lastName: null, active: true, access: "Administrador" as const }],
       defaultPermissions: buildDefaultPermissionsState(),
+      permissions: buildDefaultPermissionsState(),
+      hasCustom: false,
     };
     const { client, state } = await hydrationRoundtrip((qc) =>
       prefetch(qc, ajustesPermisosOptions(), async () => data),

@@ -1,3 +1,4 @@
+import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { customType, pgSchema, timestamp } from "drizzle-orm/pg-core";
 
 /**
@@ -105,3 +106,22 @@ export const stamps = {
 export const soft = {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 };
+
+// ── Search folding (lib/search/search.ts) ────────────────────────────────────
+/** Accented letters and their plain forms, folded by `translate(lower(x))` in search. */
+export const FOLD_FROM_CHARS = "áàäâãåéèëêíìïîóòöôõúùüûñç";
+export const FOLD_TO_CHARS = "aaaaaaeeeeiiiiooooouuuunc";
+
+/**
+ * The folded text search compares: lower case, accents removed, null as ''.
+ * The translate strings are literals so trigram indexes on this expression
+ * (`foldedTrgm`) match the search queries exactly.
+ */
+export function foldedText(column: SQLWrapper): SQL<string> {
+  return sql<string>`translate(lower(coalesce(${column}, '')), ${sql.raw(`'${FOLD_FROM_CHARS}'`)}, ${sql.raw(`'${FOLD_TO_CHARS}'`)})`;
+}
+
+/** Index expression for a GIN trigram index on `foldedText(column)`. */
+export function foldedTrgm(column: SQLWrapper): SQL {
+  return sql`${foldedText(column)} gin_trgm_ops`;
+}

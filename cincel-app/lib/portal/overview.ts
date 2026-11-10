@@ -400,9 +400,12 @@ export function formatPortalDesvio(days: number): string {
   return "0";
 }
 
-/** True once the DTO carries real dates (the `started_on` / `finished_on` change); until then Real and Desvío hide. */
+/**
+ * True once some section carries a real date (`schedule_tasks.started_on` / `finished_on`); until then Real and
+ * Desvío hide, so a schedule nobody has moved since the change shows no empty columns.
+ */
 export function portalScheduleHasRealDates(schedule: PortalScheduleDTO): boolean {
-  return (schedule?.sections ?? []).some((s) => s.actualStart !== undefined || s.actualEnd !== undefined);
+  return (schedule?.sections ?? []).some((s) => Boolean(s.actualStart) || Boolean(s.actualEnd));
 }
 
 /**

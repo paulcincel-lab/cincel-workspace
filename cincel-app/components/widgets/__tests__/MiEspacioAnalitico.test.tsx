@@ -23,6 +23,7 @@ import type { TaskListItem, TaskStatusOption } from "@/lib/types/core";
 import type { RecordColumn } from "@/lib/types/widgets";
 import type { Checklist, NotificationKindSummary, TodayStatus, WeekHours } from "@/lib/types/redesign";
 import { seedSessionUser } from "@/tests/helpers/session-user";
+import { settle } from "@/tests/helpers/settle";
 
 const flags = vi.hoisted(() => ({}) as Record<string, boolean>);
 vi.mock("@/lib/actions/my-space-actions.flags", () => ({ IMPLEMENTED: flags }));
@@ -174,6 +175,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
   ),
 }));
 
+import { fetchMyWeekHoursAction } from "@/lib/actions/time-tracking-actions";
 import { MiEspacioAnalitico } from "@/components/widgets/MiEspacioAnalitico";
 
 const NOW = new Date();
@@ -312,6 +314,8 @@ beforeEach(() => {
   caps.statusScope = "all";
   grouped.props = null;
   tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
+  // A test that leaves the week-hours cache empty still gets a week back from the fetch.
+  vi.mocked(fetchMyWeekHoursAction).mockImplementation(async (input) => week(input?.weekStart ?? THIS_MONDAY, []));
   seedSessionUser({ member: { id: "me", name: "Ana López" }, access: "Colaborador" });
 });
 
@@ -471,7 +475,8 @@ describe("MiEspacioAnalitico", () => {
   });
 
   it("renders table headers and has no serious or critical axe violations, light and dark", async () => {
-    const { container } = renderAnalitico();
+    const { container, client } = renderAnalitico();
+    await settle(client);
     for (const header of screen.getAllByRole("columnheader")) expect(header.getAttribute("scope")).toBe("col");
     for (const theme of ["light", "dark"]) {
       document.documentElement.classList.toggle("dark", theme === "dark");

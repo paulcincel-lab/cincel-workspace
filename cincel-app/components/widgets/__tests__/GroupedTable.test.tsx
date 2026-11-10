@@ -333,4 +333,18 @@ describe("GroupedTable", () => {
     );
     expect(screen.getByText("Sin tareas vencidas")).toBeTruthy();
   });
+  it("table layout: one table, top groups as group rows, footerRow in tfoot, header badge", () => {
+    const columns = groupedTaskColumns.map((c, i) => (i === groupedTaskColumns.length - 1 ? { ...c, badge: "ADMIN" } : c));
+    const groups = groupedTaskGroups.map((g) => ({ ...g, children: undefined, rows: (g.children ?? []).flatMap((c) => c.rows ?? []) }));
+    const first = columns[0]!.key;
+    const { container } = renderTable({ layout: "table", columns, groups, totals: undefined, footerRow: { [first]: "Total · 8" } });
+    expect(container.querySelectorAll("table").length).toBe(1);
+    expect(container.querySelector("caption")?.textContent).toBe("Tareas");
+    expect([...container.querySelectorAll("tbody > tr[id]")].map((tr) => tr.id)).toEqual(groups.filter((g) => !g.hidden).map((g) => groupAnchorId(g.id)));
+    expect(container.querySelector(`tfoot td[data-column="${first}"]`)?.textContent).toBe("Total · 8");
+    expect(within(screen.getAllByRole("columnheader").at(-1)!).getByText("ADMIN")).toBeTruthy();
+    const toggle = screen.getAllByRole("button").find((b) => b.getAttribute("aria-expanded") === "true")!;
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  });
 });

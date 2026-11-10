@@ -221,6 +221,8 @@ function renderBoard(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // A clock write invalidates `me.weekHours`; the refetch needs a week (a query function never resolves to undefined).
+  actions.fetchMyWeekHoursAction.mockResolvedValue(LAST_WEEK);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(NOW);
 });

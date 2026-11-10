@@ -12,6 +12,7 @@
  */
 import type { SystemAccessRole } from "@/lib/data/roles";
 import type { TeamMemberPublic } from "@/lib/data/team-public";
+import type { PermissionOverrides } from "@/lib/auth/permissions";
 import type { SessionAccess, SessionAccessStatus } from "@/lib/auth/session";
 import { useSessionStore } from "@/lib/stores/session-store";
 
@@ -28,6 +29,8 @@ export type AuthenticatedUser = {
   member: TeamMember;
   email: string;
   access: SystemAccessRole;
+  /** The saved matrix overrides of this access (#971); absent means the defaults. */
+  permissionOverrides?: PermissionOverrides;
 };
 
 export type { SessionAccessStatus };
@@ -73,7 +76,12 @@ function toAuthenticatedUser(access: SessionAccess): AuthenticatedUser | null {
     institutionalEmail: u.email ?? "",
     phone: "",
   };
-  return { member, email: normalizeEmail(u.email ?? ""), access: u.access };
+  return {
+    member,
+    email: normalizeEmail(u.email ?? ""),
+    access: u.access,
+    ...(u.permissionOverrides ? { permissionOverrides: u.permissionOverrides } : {}),
+  };
 }
 
 export function resolveCurrentSessionAccess(): SessionAccessResolution {

@@ -28,7 +28,7 @@ import { ErrorState } from "@/components/shell/ErrorState";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/shadcn/input-group";
-import { Skeleton } from "@/components/ui/shadcn/skeleton";
+import { ProjectsEsencialSkeleton } from "@/components/widgets/route-skeletons";
 import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { PageHeader } from "@/components/widgets/PageHeader";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
@@ -97,30 +97,10 @@ function replaceSearchParam(pathname: string, key: string, value: string | null)
   window.history.replaceState(window.history.state, "", `${pathname}${search ? `?${search}` : ""}${window.location.hash}`);
 }
 
+export { ProjectsEsencialSkeleton };
+
 function projectsCountText(n: number): string {
   return `${n} ${n === 1 ? "proyecto" : "proyectos"}`;
-}
-
-/** Loading: header, one pill row and six card blocks in the card grid. */
-export function ProjectsEsencialSkeleton(): ReactNode {
-  return (
-    <div role="status" aria-busy="true" aria-label="Cargando proyectos" className="flex flex-col gap-5" data-slot="projects-esencial-skeleton">
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-9 w-48" />
-        <Skeleton className="h-4 w-80 max-w-full" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {[96, 112, 104, 128].map((w) => (
-          <Skeleton key={w} className="h-8 rounded-full" style={{ width: w }} />
-        ))}
-      </div>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap-4">
-        {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton key={i} className="h-[190px] rounded-[14px]" />
-        ))}
-      </div>
-    </div>
-  );
 }
 
 type PillWithColor = TramoPill & { colorVar?: string };

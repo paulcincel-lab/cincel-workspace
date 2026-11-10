@@ -22,11 +22,12 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => {
 
 import * as permissions from "@/lib/auth/permissions";
 
-import {
-  fetchGeneralSettingsAction,
-  restoreGeneralSettingsAction,
-  saveGeneralSettingsAction,
-} from "./app-settings-actions";
+import { unwrapActions } from "@/tests/helpers/action-result";
+
+import * as appSettingsActions from "./app-settings-actions";
+
+const { fetchGeneralSettingsAction, restoreGeneralSettingsAction, saveGeneralSettingsAction } =
+  unwrapActions(appSettingsActions);
 
 const ADMIN = { member: { role: "Administrador" }, access: "Administrador" };
 const COLLABORATOR = { member: { role: "Arquitecto" }, access: "Colaborador" };

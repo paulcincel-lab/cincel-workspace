@@ -5,7 +5,7 @@
 
 /**
  * @typedef {{ title: string; legacyTitle: string }} CatalogTemplate
- *   `legacyTitle` is the spelling of the old TS templates (lib/templates/*.ts),
+ *   `legacyTitle` is the spelling of the old (deleted) TS templates,
  *   used only to link existing tasks to their template (0024 step 5e).
  * @typedef {{ key: string; name: string; templates: ReadonlyArray<CatalogTemplate> }} CatalogPhase
  * @typedef {{ workflowKey: string; phases: ReadonlyArray<CatalogPhase> }} CatalogTramo

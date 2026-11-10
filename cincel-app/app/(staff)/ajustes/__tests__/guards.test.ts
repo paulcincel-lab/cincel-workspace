@@ -48,6 +48,9 @@ vi.mock("@/lib/repositories/auth-repository", () => ({
   deleteSessionByToken: vi.fn(),
 }));
 
+// No saved permission overrides: every access uses the defaults (#971).
+vi.mock("@/lib/auth/permissions-matrix", () => ({ getRolePermissionOverrides: vi.fn(async () => undefined) }));
+
 vi.mock("@/lib/auth/access-recheck", () => ({
   accessRecheckHours: () => 24,
   isAccessCheckDue: () => false,

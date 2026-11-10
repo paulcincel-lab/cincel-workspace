@@ -5,7 +5,8 @@ import { isNull } from "drizzle-orm";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { AJUSTES_SEGMENT_CAPABILITY } from "@/lib/auth/ajustes-segments";
 import { resolveTaskStatusesCapabilities, resolveWorkflowsCapabilities } from "@/lib/auth/permissions";
-import { buildDefaultPermissionsState } from "@/lib/auth/permissionsState";
+import { getPermissionsMatrix } from "@/lib/auth/permissions-matrix";
+import { defaultPermissionsState } from "@/lib/auth/permissionsState";
 import {
   DEFAULT_SYSTEM_ACCESS_ROLE,
   hasDefaultSystemAdministratorAccess,
@@ -104,25 +105,28 @@ function accessOf(row: { role: string | null; email: string | null }): SystemAcc
 }
 
 /**
- * Permisos (read-only, #950): every live person, active or not, with the
- * access the server resolves for them, plus the default permission matrix.
- * The email is read only to resolve the access and never leaves the server.
- * 1 q. FORBIDDEN for anyone but an Administrador.
+ * Permisos (#950, #971): every live person, active or not, with the access
+ * the server resolves for them, the default matrix and the saved matrix the
+ * server enforces. The email is read only to resolve the access and never
+ * leaves the server. 2 q. FORBIDDEN for anyone but an Administrador.
  */
 export async function loadAjustesPermisos(user: AuthenticatedUser): Promise<AjustesPermisosPageData> {
   requireSegment(user, "permisos");
-  const rows = await db
-    .select({
-      id: staff.id,
-      name: staff.name,
-      lastName: staff.lastName,
-      active: staff.active,
-      role: staff.role,
-      email: staff.email,
-    })
-    .from(staff)
-    .where(isNull(staff.deletedAt))
-    .orderBy(...STAFF_ORDER);
+  const [rows, matrix] = await Promise.all([
+    db
+      .select({
+        id: staff.id,
+        name: staff.name,
+        lastName: staff.lastName,
+        active: staff.active,
+        role: staff.role,
+        email: staff.email,
+      })
+      .from(staff)
+      .where(isNull(staff.deletedAt))
+      .orderBy(...STAFF_ORDER),
+    getPermissionsMatrix(),
+  ]);
   const people: PermisosStaffRow[] = rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -130,5 +134,10 @@ export async function loadAjustesPermisos(user: AuthenticatedUser): Promise<Ajus
     active: row.active,
     access: accessOf(row),
   }));
-  return { staff: people, defaultPermissions: buildDefaultPermissionsState() };
+  return {
+    staff: people,
+    defaultPermissions: defaultPermissionsState(),
+    permissions: matrix.permissions,
+    hasCustom: matrix.hasCustom,
+  };
 }

@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { bytea, core, soft, stamps, taskKind, taskPriority, taskStatus } from "./_schema";
+import { bytea, core, foldedTrgm, soft, stamps, taskKind, taskPriority, taskStatus } from "./_schema";
 import { staff } from "./people";
 import { projects, projectSpaces, tramoStartBatches } from "./projects";
 import { workflowPhases, workflows, workflowTaskTemplates } from "./workflows";
@@ -156,6 +156,8 @@ export const tasks = core.table(
     index("idx_tasks_delivery_date").on(t.deliveryDate),
     index("idx_tasks_parent_task_id").on(t.parentTaskId),
     index("idx_tasks_title_trgm").using("gin", sql`${t.title} gin_trgm_ops`),
+    // Workspace search compares the folded title (lib/search/search.ts).
+    index("idx_tasks_title_folded_trgm").using("gin", foldedTrgm(t.title)),
     // The hot set: live, unarchived tasks by status and commitment.
     index("idx_tasks_hot")
       .on(t.status, t.commitmentDate)

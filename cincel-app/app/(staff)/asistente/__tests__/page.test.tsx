@@ -70,7 +70,6 @@ vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn() } 
 // useChat is replaced by a local state holder so the tests never hit the network.
 vi.mock("@ai-sdk/react", () => ({
   useChat: (opts: { messages?: UIMessage[]; onFinish?: typeof mocks.onFinish }) => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [messages, setMessages] = useState<UIMessage[]>(opts.messages ?? []);
     mocks.onFinish = opts.onFinish ?? null;
     return { messages, setMessages, sendMessage: mocks.sendMessage, status: "ready", addToolApprovalResponse: vi.fn() };

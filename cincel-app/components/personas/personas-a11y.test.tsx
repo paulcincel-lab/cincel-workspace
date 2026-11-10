@@ -57,6 +57,7 @@ import { EquipoView } from "./EquipoView";
 import { EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_STAFF, EQUIPO_TRAMOS } from "./fixtures/equipo";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { seedSessionUser } from "@/tests/helpers/session-user";
+import { settle } from "@/tests/helpers/settle";
 
 // The components read the signed-in user from the session store; seed it with the mocked user.
 beforeEach(() => {
@@ -103,6 +104,7 @@ function resetTheme() {
 }
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout and rendering, which happy-dom doesn't
   // provide; token contrast is checked with `checkContrast` instead.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

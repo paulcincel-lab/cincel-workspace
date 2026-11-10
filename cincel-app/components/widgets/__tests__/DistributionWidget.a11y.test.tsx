@@ -10,6 +10,7 @@ import { distributionEmptyFixture, distributionFixture } from "@/components/widg
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS, TOKEN_NAMES } from "@/lib/ui/themes";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
+import { settle } from "@/tests/helpers/settle";
 
 // happy-dom has no layout, so ResponsiveContainer measures 0×0 and renders
 // nothing. Pass children straight through so the donut is part of the scan.
@@ -45,6 +46,8 @@ function themeStyle(theme: ThemeId, mode: (typeof MODES)[number]): CSSProperties
 }
 
 async function seriousViolations(container: HTMLElement) {
+  // Let the lazy donut replace its placeholder so axe audits the settled widget.
+  await settle();
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide;
   // the token pairs are checked with checkContrast below.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

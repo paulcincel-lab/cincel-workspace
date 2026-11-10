@@ -1,21 +1,40 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { Fragment, useMemo, useState } from "react";
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { CheckIcon, ChevronDownIcon, EyeIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 
+import { SettingsSaveBar } from "@/components/ajustes/SettingsSaveBar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/shadcn/alert-dialog";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
-import { PERMISSIONS_CUSTOM_STORAGE_KEY } from "@/lib/auth/permissions";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
+import { restoreDefaultPermissionsAction, savePermissionsMatrixAction } from "@/lib/actions/permissions-actions";
+import { isPermissionLocked, isProtectedPermissionRole } from "@/lib/auth/permissions";
 import {
   PERMISSIONS_MODULES_REGISTRY,
   type PermissionActionDefinition,
   type PermissionValue,
 } from "@/lib/auth/permissionsRegistry";
+import { describePermissionChanges, type PermissionsState } from "@/lib/auth/permissionsState";
 import { SYSTEM_ACCESS_ROLES, type SystemAccessRole } from "@/lib/data/roles";
+import { qk } from "@/lib/query/keys";
+import { useActionMutation } from "@/lib/query/mutation";
 import { ajustesPermisosOptions } from "@/lib/query/options/ajustes";
-import { removeStorage } from "@/lib/repositories/browser-state-repository";
-import type { PermisosStaffRow } from "@/lib/types/ajustes-catalogs";
+import { PermisosFormStoreProvider, usePermisosForm, usePermisosFormApi } from "@/lib/stores/ajustes/permisos-form-store";
+import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
+import type { AjustesPermisosPageData, PermisosStaffRow } from "@/lib/types/ajustes-catalogs";
 import { cn } from "@/lib/utils";
 
 export const ACCESS_DESCRIPTIONS: Record<SystemAccessRole, string> = {
@@ -139,27 +158,114 @@ function capabilitiesLabel(n: number): string {
   return n === 1 ? "1 capacidad" : `${n} capacidades`;
 }
 
+/** Whether a save from `before` to `after` changes what `role` may do. */
+function roleChanged(before: PermissionsState, after: PermissionsState, role: SystemAccessRole): boolean {
+  const pick = (state: PermissionsState) => ({ [role]: state[role] }) as PermissionsState;
+  return describePermissionChanges(pick(before), pick(after)).length > 0;
+}
+
+/** The editable control of one capability for one access. */
+function EditableCell({
+  role,
+  moduleId,
+  action,
+  value,
+}: {
+  role: SystemAccessRole;
+  moduleId: string;
+  action: PermissionActionDefinition;
+  value: PermissionValue | undefined;
+}) {
+  const form = usePermisosFormApi();
+  const label = `${action.label} · ${role}`;
+
+  if (action.type === "select") {
+    const items = Object.fromEntries((action.options ?? []).map((option) => [option.value, option.label]));
+    return (
+      <Select
+        items={items}
+        value={typeof value === "string" ? value : null}
+        onValueChange={(next) => {
+          if (typeof next === "string") form.getState().setCell(role, moduleId, action.id, next);
+        }}
+      >
+        <SelectTrigger aria-label={label} className="h-8 w-[150px] rounded-lg px-2 text-[12px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(action.options ?? []).map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  return (
+    <Checkbox
+      aria-label={label}
+      checked={value === true}
+      onCheckedChange={(checked) => form.getState().setCell(role, moduleId, action.id, checked === true)}
+    />
+  );
+}
+
 /**
- * Ajustes › Permisos (redesign FE §3.8, #950, frame `Ajustes-Permisos`): the
- * target permission matrix, read only. It shows the default permissions,
- * which are the ones the server enforces today; editing waits for the server
- * model (#971). Reads `qk.ajustes.page('permisos')`, hydrated by the page.
- *
- * The old per-role editor saved its matrix only in this browser and enforced
- * nothing; the value it left in the browser is removed once, on mount.
+ * Ajustes › Permisos (redesign FE §3.8, #950, #971, frame `Ajustes-Permisos`):
+ * the permission matrix per access, saved on the server and enforced by every
+ * server check and the client gating. Reads `qk.ajustes.page('permisos')`,
+ * hydrated by the page; the draft lives in a page-scoped store
+ * (`permisos-form-store`). Administrador and the capped exports are read only.
  */
 export function PermisosSettings() {
-  const { staff, defaultPermissions } = useSuspenseQuery(ajustesPermisosOptions()).data;
+  const { permissions } = useSuspenseQuery(ajustesPermisosOptions()).data;
+  return (
+    <PermisosFormStoreProvider initial={{ saved: permissions }}>
+      <PermisosEditor />
+    </PermisosFormStoreProvider>
+  );
+}
+
+function PermisosEditor() {
+  const { staff, permissions: saved, hasCustom } = useSuspenseQuery(ajustesPermisosOptions()).data;
   const byAccess = useMemo(() => groupByAccess(staff), [staff]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const form = usePermisosFormApi();
+  const draft = usePermisosForm((s) => s.draft);
+  const error = usePermisosForm((s) => s.error);
+  const dirtyCount = useMemo(() => describePermissionChanges(saved, draft).length, [saved, draft]);
+  const viewer = useSessionStore(selectCurrentUser);
+  const queryClient = useQueryClient();
+  const router = useRouter();
 
-  useEffect(() => {
-    try {
-      removeStorage(PERMISSIONS_CUSTOM_STORAGE_KEY);
-    } catch {
-      // Storage can be blocked (private mode); there is nothing to remove then.
+  function applySaved(next: { permissions: PermissionsState; hasCustom: boolean }, before: PermissionsState) {
+    queryClient.setQueryData<AjustesPermisosPageData>(qk.ajustes.page("permisos"), (page) =>
+      page ? { ...page, permissions: next.permissions, hasCustom: next.hasCustom } : page,
+    );
+    form.getState().replace(next.permissions);
+    // A change to the viewer's own access: drop every cached screen and re-read the session (plan §4.8).
+    if (viewer && !isProtectedPermissionRole(viewer.access) && roleChanged(before, next.permissions, viewer.access)) {
+      queryClient.clear();
+      router.refresh();
     }
-  }, []);
+  }
+
+  const save = useActionMutation(savePermissionsMatrixAction, {
+    setData: (_qc, next) => applySaved(next, saved),
+    invalidate: [qk.ajustes.page("permisos")],
+    onFormError: (text) => form.getState().setError(text),
+    successToast: "Permisos guardados",
+  });
+
+  const restore = useActionMutation(restoreDefaultPermissionsAction, {
+    setData: (_qc, next) => applySaved(next, saved),
+    invalidate: [qk.ajustes.page("permisos")],
+    onFormError: (text) => form.getState().setError(text),
+    successToast: "Permisos restaurados",
+  });
 
   function toggle(moduleId: string) {
     setExpanded((current) => {
@@ -170,23 +276,37 @@ export function PermisosSettings() {
     });
   }
 
+  function submit() {
+    if (save.isPending || restore.isPending) return;
+    form.getState().setError(null);
+    save.mutate({ permissions: draft });
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div role="note" className="rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] text-foreground">
-        <strong className="font-semibold">Próximamente: permisos aplicados en el servidor.</strong> Esta matriz es el
-        diseño objetivo y se mantiene oculta en la app hasta que exista el modelo en el servidor (#950, #971). Hoy el
-        acceso de cada persona lo define su cuenta.
-      </div>
-
       <section
         aria-labelledby="permisos-por-acceso"
         className="flex min-w-0 flex-col gap-4 rounded-[14px] border border-border bg-card p-5 text-card-foreground shadow-xs"
       >
-        <div className="flex flex-col gap-1">
-          <h2 id="permisos-por-acceso" className="text-[15px] font-semibold text-foreground">
-            Permisos por acceso
-          </h2>
-          <p className="text-[13px] text-muted-foreground">Qué puede ver y hacer cada nivel de acceso en cada módulo.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 id="permisos-por-acceso" className="text-[15px] font-semibold text-foreground">
+              Permisos por acceso
+            </h2>
+            <p className="text-[13px] text-muted-foreground">
+              Qué puede ver y hacer cada nivel de acceso en cada módulo. Los cambios aplican a todas las personas con
+              ese acceso desde su siguiente acción.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!hasCustom || restore.isPending || save.isPending}
+            onClick={() => setConfirmRestore(true)}
+          >
+            Restaurar valores por defecto
+          </Button>
         </div>
 
         <ul aria-label="Leyenda" className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-muted-foreground">
@@ -260,7 +380,7 @@ export function PermisosSettings() {
                       {SYSTEM_ACCESS_ROLES.map((role) => (
                         <td key={role} className="px-2 py-2 text-center">
                           <span className="inline-flex justify-center">
-                            <Cell cell={moduleSummary(module.actions, defaultPermissions[role]?.[module.id])} />
+                            <Cell cell={moduleSummary(module.actions, draft[role]?.[module.id])} />
                           </span>
                         </td>
                       ))}
@@ -271,13 +391,20 @@ export function PermisosSettings() {
                             <th scope="row" className="py-2 pr-3 pl-9 text-left font-normal text-foreground">
                               {action.label}
                             </th>
-                            {SYSTEM_ACCESS_ROLES.map((role) => (
-                              <td key={role} className="px-2 py-2 text-center">
-                                <span className="inline-flex justify-center">
-                                  <Cell cell={permissionCell(action, defaultPermissions[role]?.[module.id]?.[action.id])} />
-                                </span>
-                              </td>
-                            ))}
+                            {SYSTEM_ACCESS_ROLES.map((role) => {
+                              const value = draft[role]?.[module.id]?.[action.id];
+                              return (
+                                <td key={role} className="px-2 py-2 text-center">
+                                  <span className="inline-flex justify-center">
+                                    {isPermissionLocked(role, module.id, action.id) ? (
+                                      <Cell cell={permissionCell(action, value)} />
+                                    ) : (
+                                      <EditableCell role={role} moduleId={module.id} action={action} value={value} />
+                                    )}
+                                  </span>
+                                </td>
+                              );
+                            })}
                           </tr>
                         ))
                       : null}
@@ -288,20 +415,43 @@ export function PermisosSettings() {
           </table>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-          <p className="text-[13px] text-muted-foreground">
-            Admin tiene acceso completo y no se puede editar.
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" disabled>
-              Descartar
-            </Button>
-            <Button type="button" disabled>
-              Guardar permisos
-            </Button>
-          </div>
-        </div>
+        <p className="text-[13px] text-muted-foreground">
+          Admin tiene acceso completo y no se puede editar. Exportar datos solo está disponible para Administrador y
+          Dirección.
+        </p>
       </section>
+
+      <SettingsSaveBar
+        dirtyCount={dirtyCount}
+        saving={save.isPending}
+        onDiscard={() => form.getState().replace(saved)}
+        onSave={submit}
+        saveLabel="Guardar permisos"
+        error={error}
+      />
+
+      <AlertDialog open={confirmRestore} onOpenChange={setConfirmRestore}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Restaurar los permisos por defecto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos los accesos vuelven a sus permisos por defecto y se descartan los cambios sin guardar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmRestore(false);
+                form.getState().setError(null);
+                restore.mutate(undefined);
+              }}
+            >
+              Restaurar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

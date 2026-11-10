@@ -7,6 +7,7 @@ import { db } from "@/lib/db/client";
 import {
   projectMembers,
   projectPortalAccess,
+  projectProgressSnapshots,
   projects,
   projectSchedules,
   projectStages,
@@ -42,6 +43,19 @@ import type { PortalProjectAccess } from "./session-store";
  */
 
 const manager = alias(staff, "manager");
+const scheduleTramo = alias(workflows, "schedule_tramo");
+
+/**
+ * Progress of the project's first snapshot this month (Mexico City calendar), for `progressDeltaMonth`;
+ * null without one. A correlated subquery, so both project reads stay one query.
+ */
+const progressMonthStart = sql<number | null>`(
+  select ${projectProgressSnapshots.progressPct} from ${projectProgressSnapshots}
+  where ${projectProgressSnapshots.projectId} = ${projects.id}
+    and ${projectProgressSnapshots.takenOn} >= date_trunc('month', now() at time zone 'America/Mexico_City')::date
+  order by ${projectProgressSnapshots.takenOn} asc
+  limit 1
+)`.mapWith(Number);
 
 function visibleTo(portalUserId: string): SQL {
   return and(
@@ -67,6 +81,7 @@ const PROJECT_COLUMNS = {
   managerName: manager.name,
   managerLastName: manager.lastName,
   managerEmail: manager.email,
+  progressMonthStart,
 };
 
 const managerJoin = and(eq(manager.id, projects.managerId), isNull(manager.deletedAt));
@@ -98,7 +113,8 @@ export async function getPortalProject(access: PortalProjectAccess): Promise<Por
  * The project's schedule per `planta` / `seccion`, or null when the project
  * has no schedule. One query: the schedule row left-joined with its tasks.
  * Only the columns the section summary needs are read: no `tarea`,
- * `responsable`, flags, payment rows, imprevistos or adicionales.
+ * `responsable`, flags, payment rows, imprevistos or adicionales. The real
+ * dates and the linked tramo's key feed Real / Desvío and "Fases por tramo".
  */
 export async function getPortalSchedule(access: PortalProjectAccess): Promise<PortalScheduleDTO> {
   const rows = await db
@@ -111,9 +127,13 @@ export async function getPortalSchedule(access: PortalProjectAccess): Promise<Po
       inicio: scheduleTasks.inicio,
       fin: scheduleTasks.fin,
       status: scheduleTasks.status,
+      startedOn: scheduleTasks.startedOn,
+      finishedOn: scheduleTasks.finishedOn,
+      tramoKey: scheduleTramo.key,
     })
     .from(projectSchedules)
     .leftJoin(scheduleTasks, eq(scheduleTasks.scheduleId, projectSchedules.id))
+    .leftJoin(scheduleTramo, and(eq(scheduleTramo.id, scheduleTasks.workflowId), isNull(scheduleTramo.deletedAt)))
     .where(eq(projectSchedules.projectId, access.projectId))
     .orderBy(asc(scheduleTasks.sortOrder));
   if (rows.length === 0) return null;
@@ -124,7 +144,8 @@ export async function getPortalSchedule(access: PortalProjectAccess): Promise<Po
     if (row.planta === null || row.seccion === null || row.seccionOrder === null || row.sortOrder === null ||
       row.inicio === null || row.fin === null || row.status === null) continue;
     tasks.push({ planta: row.planta, seccion: row.seccion, seccionOrder: row.seccionOrder, sortOrder: row.sortOrder,
-      inicio: row.inicio, fin: row.fin, status: row.status });
+      inicio: row.inicio, fin: row.fin, status: row.status, startedOn: row.startedOn, finishedOn: row.finishedOn,
+      tramoKey: row.tramoKey });
   }
   return toPortalScheduleDTO(tasks);
 }

@@ -8,13 +8,14 @@ import {
   integer,
   numeric,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { contactType, core, projectStatus, soft, stamps } from "./_schema";
+import { contactType, core, foldedTrgm, projectStatus, soft, stamps } from "./_schema";
 import { contacts } from "./contacts";
 import { staff } from "./people";
 import { driveFiles } from "./shared";
@@ -101,6 +102,9 @@ export const projects = core.table(
       .on(sql`lower(${t.name})`)
       .where(sql`${t.deletedAt} is null and ${t.status} in ('activo','pausado')`),
     index("idx_projects_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
+    // Workspace search compares the folded name and code (lib/search/search.ts).
+    index("idx_projects_name_folded_trgm").using("gin", foldedTrgm(t.name)),
+    index("idx_projects_code_folded_trgm").using("gin", foldedTrgm(t.code)),
     index("idx_projects_client_id").on(t.clientId),
     index("idx_projects_origin_staff_id").on(t.originStaffId),
     index("idx_projects_manager_id").on(t.managerId),
@@ -280,6 +284,22 @@ export const tramoStartBatches = core.table(
     index("idx_tramo_start_batches_undone_by_id").on(t.undoneById),
     index("idx_tramo_start_batches_previous_current").on(t.previousCurrentWorkflowId),
   ]
+);
+
+/**
+ * One row per project per day with its overall progress (written by the daily `progress-snapshots` producer),
+ * so the client portal can show the change this month: today's progress minus the month's first snapshot.
+ */
+export const projectProgressSnapshots = core.table(
+  "project_progress_snapshots",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    takenOn: date("taken_on").notNull(),
+    progressPct: smallint("progress_pct").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.takenOn] })]
 );
 
 export const projectSpacesRelations = relations(projectSpaces, ({ one }) => ({

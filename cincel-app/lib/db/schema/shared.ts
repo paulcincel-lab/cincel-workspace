@@ -10,7 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { core, historyEntity, historyEventKind, soft, stamps } from "./_schema";
+import { core, foldedTrgm, historyEntity, historyEventKind, soft, stamps } from "./_schema";
 import { staff } from "./people";
 import { projects } from "./projects";
 
@@ -43,19 +43,24 @@ export const historyEvents = core.table(
 );
 
 /** Cached Google Drive metadata, shared by project_links and resource_links. */
-export const driveFiles = core.table("drive_files", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  googleFileId: text("google_file_id").notNull().unique(),
-  fileName: text("file_name"),
-  mimeType: text("mime_type"),
-  iconLink: text("icon_link"),
-  thumbnailLink: text("thumbnail_link"),
-  webViewLink: text("web_view_link"),
-  /** Bytes reported by Drive (`size`); null for Google-native documents and folders. */
-  sizeBytes: bigint("size_bytes", { mode: "number" }),
-  syncedAt: timestamp("synced_at", { withTimezone: true }),
-  ...stamps,
-});
+export const driveFiles = core.table(
+  "drive_files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    googleFileId: text("google_file_id").notNull().unique(),
+    fileName: text("file_name"),
+    mimeType: text("mime_type"),
+    iconLink: text("icon_link"),
+    thumbnailLink: text("thumbnail_link"),
+    webViewLink: text("web_view_link"),
+    /** Bytes reported by Drive (`size`); null for Google-native documents and folders. */
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
+    ...stamps,
+  },
+  // Workspace search compares the folded file name (lib/search/search.ts).
+  (t) => [index("idx_drive_files_file_name_folded_trgm").using("gin", foldedTrgm(t.fileName))]
+);
 
 /** Recursos sections. */
 export const resourceLinks = core.table(

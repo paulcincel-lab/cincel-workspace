@@ -236,7 +236,7 @@ type SaveTramoVars = {
 
 /** The tramo's own fields, then each renamed fase, in sequence. */
 async function saveTramo({ workflowId, patch, renames }: SaveTramoVars): Promise<void> {
-  if (Object.keys(patch).length > 0) await updateWorkflowAction(workflowId, patch);
+  if (Object.keys(patch).length > 0) unwrapActionResult(await updateWorkflowAction(workflowId, patch));
   for (const rename of renames) {
     unwrapActionResult(await updateWorkflowPhaseAction(rename.phaseId, { name: rename.name }));
   }
@@ -439,7 +439,6 @@ export function TramosClient() {
     };
     return [...base, actions];
     // `askDelete` only sets state; the columns change with the capability and the counts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage, activeProjects]);
 
   if (!capabilities.canViewWorkflows) {

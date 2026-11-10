@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import type { OrgAppearance, UserPreferences } from "@/lib/types/redesign";
 import { toCssVars } from "@/lib/ui/appearance-css";
+import { parseAppearanceCookie } from "@/lib/ui/appearance-cookie";
 import {
   APPEARANCE_COOKIE,
   APPEARANCE_COOKIE_OPTIONS,
   appearanceCookieValue,
   DEFAULT_USER_PREFERENCES,
-  parseAppearanceCookie,
   resolveAppearance,
   serializeAppearanceCookie,
 } from "@/lib/ui/preferences";

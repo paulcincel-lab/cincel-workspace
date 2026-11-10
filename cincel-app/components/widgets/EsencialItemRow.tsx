@@ -17,7 +17,13 @@ import { cn } from "@/lib/utils";
 export type EsencialMeta = { key: string; label: string; dot?: string; mono?: boolean; tone?: "muted" | "destructive" };
 export type EsencialStatus =
   | { kind: "task"; value: TaskStatusRef }
-  | { kind: "text"; label: string; tone?: "default" | "destructive" | "warning" | "success" | "muted" }
+  | {
+      kind: "text";
+      label: string;
+      tone?: "default" | "destructive" | "warning" | "success" | "muted";
+      /** Render as a soft pill (tinted fill, 2 px 8 px, full radius) instead of plain text. */
+      chip?: boolean;
+    }
   | null;
 export type EsencialItemRowProps = {
   title: string;
@@ -44,6 +50,14 @@ const TEXT_TONE_CLASS: Record<TextTone, string> = {
   muted: "text-muted-foreground",
 };
 
+const CHIP_TONE_CLASS: Record<TextTone, string> = {
+  default: "bg-muted",
+  destructive: "bg-tint-destructive",
+  warning: "bg-tint-warning",
+  success: "bg-tint-success",
+  muted: "bg-muted",
+};
+
 const ROW_CLASS =
   "relative flex items-center gap-3 rounded-md text-sm transition-[background-color] duration-150 hover:bg-accent motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring";
 
@@ -68,7 +82,14 @@ function RowStatus({ status }: { status: EsencialStatus }) {
       {status?.kind === "task" ? (
         <StatusChip status={status.value} variant="dot" />
       ) : status?.kind === "text" ? (
-        <span className={TEXT_TONE_CLASS[status.tone ?? "default"]}>{status.label}</span>
+        <span
+          className={cn(
+            TEXT_TONE_CLASS[status.tone ?? "default"],
+            status.chip && cn("rounded-full px-2 py-0.5", CHIP_TONE_CLASS[status.tone ?? "default"]),
+          )}
+        >
+          {status.label}
+        </span>
       ) : null}
     </span>
   );

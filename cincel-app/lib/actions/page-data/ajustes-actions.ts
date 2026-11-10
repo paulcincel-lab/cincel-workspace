@@ -150,7 +150,7 @@ export async function getAjustesTramosPageData(input: z.input<typeof EmptyInput>
 }
 
 /**
- * Ajustes › Permisos (read-only): people per access and the default
+ * Ajustes › Permisos: people per access, the default and the saved
  * permissions; no emails. FORBIDDEN for anyone but an Administrador.
  */
 export async function getAjustesPermisosPageData(

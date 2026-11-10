@@ -52,7 +52,7 @@ export const REPORT_KIND_INFO: Record<(typeof PROJECT_FLOW_REPORT_KINDS)[number]
     action: "Administrador, en Tramos y fases",
   },
   project_phases: {
-    title: "Valores anteriores de projects.phases",
+    title: "Valores anteriores de las fases del proyecto",
     action: "Solo revisar (se eliminan en la versión B)",
   },
   project_without_tramo: {

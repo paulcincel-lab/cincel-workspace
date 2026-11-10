@@ -51,7 +51,7 @@ export function ReportToolbar({ projectId, projectName }: ReportToolbarProps) {
         <h1 className="text-[22px] font-semibold text-foreground">Reporte de avance</h1>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" render={<Link href={`${base}/cronograma`} />}>
+        <Button variant="outline" nativeButton={false} render={<Link href={`${base}/cronograma`} />}>
           <ChevronLeft aria-hidden="true" />
           Volver
         </Button>

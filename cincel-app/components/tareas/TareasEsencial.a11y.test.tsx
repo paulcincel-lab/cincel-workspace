@@ -64,6 +64,7 @@ import { tareasEsencialFilters, tareasListFiltersOf } from "@/lib/query/options/
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { DEFAULT_TAREAS_QUERY } from "@/lib/tareas/query";
 import { seedSessionUser } from "@/tests/helpers/session-user";
+import { settle } from "@/tests/helpers/settle";
 
 function renderEsencial() {
   const client = createTestQueryClient();
@@ -79,6 +80,7 @@ function renderEsencial() {
 }
 
 async function seriousViolations(container: HTMLElement) {
+  await settle();
   // Color contrast needs real layout/rendering, which happy-dom doesn't provide.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
   return results.violations.filter((v) => v.impact === "critical" || v.impact === "serious");

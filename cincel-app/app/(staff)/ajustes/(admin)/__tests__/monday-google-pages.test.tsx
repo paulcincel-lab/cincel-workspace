@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 
 const navigation = vi.hoisted(() => ({
@@ -129,10 +129,6 @@ const PAGES: { name: string; Page: Page; Layout: Layout }[] = [
   { name: "tramos", Page: TramosPage, Layout: TramosLayout },
   { name: "puestos", Page: PuestosPage, Layout: PuestosLayout },
 ];
-
-async function renderPage(Page: Page) {
-  render(await Page());
-}
 
 beforeEach(() => {
   vi.clearAllMocks();

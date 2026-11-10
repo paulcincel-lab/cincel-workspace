@@ -16,6 +16,7 @@ import {
   portalPhaseTotals,
   formatPortalFileSize,
   portalFileType,
+  portalScheduleHasRealDates,
 } from "@/lib/portal/overview";
 import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
 import type { AgendaItem } from "@/lib/types/widgets";
@@ -365,6 +366,15 @@ describe("Analítico builders", () => {
       ["27 oct–", 5],
     ]);
     expect(portalPhaseTotals([group]).desvio).toBe(5);
+  });
+
+  it("Real and Desvío stay hidden while every emitted real date is null", () => {
+    const emptyReal: PortalScheduleDTO = {
+      sections: sections.map((s) => ({ ...s, actualStart: null, actualEnd: null, tramoKey: null })),
+    };
+    expect(portalScheduleHasRealDates(emptyReal)).toBe(false);
+    expect(buildPortalPhaseTable(emptyReal, today).flatMap((g) => g.rows ?? []).every((r) => r.desvio === null)).toBe(true);
+    expect(portalScheduleHasRealDates({ sections: [{ ...sections[0], actualStart: "2026-10-06", actualEnd: null }] })).toBe(true);
   });
 
   it("buildPortalEntregables orders by end", () => {

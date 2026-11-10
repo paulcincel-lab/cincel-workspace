@@ -94,24 +94,23 @@ test.describe("Accesibilidad — Ajustes › Estatus y Permisos (catálogos)", (
     }
   });
 
-  test(`${PERMISOS} is a read-only summary, drops the browser matrix, and is axe clean`, async ({ browser }) => {
+  test(`${PERMISOS} edits the server-stored matrix, ignores the old browser matrix, and is axe clean`, async ({
+    browser,
+  }) => {
     const admin = await createStaffUser({ tag: "AxePermisos", role: "Administrador" });
     await setAppearanceFor(admin.email, { theme: "azul", mode: "light" });
     const { context, page } = await signedInContext(browser, admin, { colorScheme: "light" });
     try {
-      // A matrix the removed editor saved in this browser (#950).
-      await page.evaluate(
-        (key) => window.localStorage.setItem(key, JSON.stringify({ version: 1, roles: {} })),
-        LEGACY_MATRIX_KEY,
-      );
+      // A matrix the removed browser-only editor saved (#950). Since #971 nothing reads or writes it.
+      const legacy = JSON.stringify({ version: 1, roles: {} });
+      await page.evaluate(([key, value]) => window.localStorage.setItem(key, value), [LEGACY_MATRIX_KEY, legacy]);
       await page.goto(`${BASE_URL}${PERMISOS}`, { waitUntil: "load" });
-      await expect(page.getByRole("heading", { name: "Personas por acceso" })).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByRole("button", { name: /Configurar/ })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Guardar cambios" })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Restaurar permisos por defecto" })).toHaveCount(0);
-      await expect
-        .poll(() => page.evaluate((key) => window.localStorage.getItem(key), LEGACY_MATRIX_KEY))
-        .toBeNull();
+      const section = page.getByRole("region", { name: "Permisos por acceso" });
+      await expect(section.getByRole("table", { name: "Permisos por acceso" })).toBeVisible({ timeout: 30_000 });
+      // The editor starts from the server matrix: nothing pending, so saving is disabled.
+      await expect(page.getByRole("button", { name: "Guardar permisos" })).toBeDisabled();
+      await expect(page.getByText(/cambios? sin guardar/)).toHaveCount(0);
+      expect(await page.evaluate((key) => window.localStorage.getItem(key), LEGACY_MATRIX_KEY)).toBe(legacy);
       await page.waitForLoadState("networkidle");
 
       // Switching windows and back refetches nothing.

@@ -14,6 +14,7 @@ import { core, stamps } from "./_schema";
 import { contacts } from "./contacts";
 import { staff } from "./people";
 import { projects } from "./projects";
+import { workflows } from "./workflows";
 
 /**
  * Obra-level construction schedule for a project ("Cronograma de Obra"),
@@ -65,11 +66,18 @@ export const scheduleTasks = core.table(
     flagged: boolean("flagged").notNull().default(false),
     statusUpdatedAt: timestamp("status_updated_at", { withTimezone: true }),
     statusUpdatedBy: uuid("status_updated_by").references(() => staff.id),
+    /** Real start: set the day the status first leaves `pending`; cleared when it goes back to `pending`. */
+    startedOn: date("started_on"),
+    /** Real end: set the day the status reaches `done`; cleared when it leaves `done`. */
+    finishedOn: date("finished_on"),
+    /** The tramo this row belongs to (portal "Fases por tramo"); null until staff link it. */
+    workflowId: uuid("workflow_id").references(() => workflows.id, { onDelete: "set null" }),
     sortOrder: integer("sort_order").notNull(),
     ...stamps,
   },
   (t) => [
     uniqueIndex("schedule_tasks_key_uq").on(t.scheduleId, t.stableKey),
+    index("idx_schedule_tasks_workflow_id").on(t.workflowId),
     index("idx_schedule_tasks_schedule_id").on(t.scheduleId),
     index("idx_schedule_tasks_fin").on(t.fin),
     index("idx_schedule_tasks_responsable_contact_id").on(t.responsableContactId),

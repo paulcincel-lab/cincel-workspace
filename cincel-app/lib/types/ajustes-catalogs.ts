@@ -39,6 +39,10 @@ export type PermisosStaffRow = Pick<Staff, "id" | "name" | "lastName" | "active"
 
 export type AjustesPermisosPageData = {
   staff: PermisosStaffRow[];
-  /** The default permission matrix, which is what the server enforces for every role. */
+  /** The default permission matrix ("Restaurar" goes back to it). */
   defaultPermissions: PermissionsState;
+  /** The saved matrix merged over the defaults: what the server enforces for every role (#971). */
+  permissions: PermissionsState;
+  /** Whether any role differs from the defaults. */
+  hasCustom: boolean;
 };

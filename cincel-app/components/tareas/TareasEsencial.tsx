@@ -309,7 +309,12 @@ function ProjectCard({
   );
 }
 
-export function TareasEsencial() {
+export type TareasEsencialProps = {
+  /** Project Flow's start slot under the header (only with one tramo filter). */
+  startSlot?: ReactNode;
+};
+
+export function TareasEsencial({ startSlot }: TareasEsencialProps = {}) {
   const query = useTareasQuery();
   const urlFilters = useTareasFilters(query);
   const filters = useMemo(() => tareasEsencialFilters(urlFilters), [urlFilters]);
@@ -480,6 +485,7 @@ export function TareasEsencial() {
   return (
     <div data-slot="tareas-esencial" className="flex flex-col gap-5">
       <PageHeader title="Tareas" description={esencialDescription(firstName)} actions={actions} />
+      {startSlot}
       {filtersRow}
       {body}
       <p role="status" aria-live="polite" className="sr-only">
