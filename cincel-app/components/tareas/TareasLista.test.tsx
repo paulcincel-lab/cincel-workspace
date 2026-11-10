@@ -194,9 +194,21 @@ describe("TareasLista", () => {
       expect(spec.data.groupBy).toBe("estatus");
       expect(spec.data.rows).toHaveLength(5);
     }
-    const [visual, esencial, analitico] = specs.map((s) => (s.kind === "table" ? s.data : null));
+    // The same data (the editors are new functions each render: compare the columns by key).
+    const [visual, esencial, analitico] = specs.map((s) =>
+      s.kind === "table" ? { ...s.data, columns: s.data.columns.map((c) => `${c.key}:${c.edit?.kind ?? "-"}`) } : null,
+    );
     expect(esencial).toEqual(visual);
     expect(analitico).toEqual(visual);
+    expect(visual?.columns.slice(0, 7)).toEqual([
+      "tarea:text",
+      "proyecto:-",
+      "tramo:select",
+      "fase:select",
+      "responsable:person",
+      "plazo:-",
+      "vence:date",
+    ]);
   });
 
   it("links each task to its sheet over the current view and shows its tramo", () => {

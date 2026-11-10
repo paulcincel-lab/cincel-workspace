@@ -4,18 +4,22 @@ import { useCallback, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { ArrowUpRight } from "lucide-react";
 
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import type { PageHeaderProps } from "@/components/shell/PageHeader";
 import { ListPage, type ListSpec } from "@/components/patterns/ListPage";
+import { OPEN_TASK_LABEL } from "@/components/widgets/editable-cell";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions } from "@/lib/query/options/tareas";
 import { listItemOfRow } from "@/lib/tareas/page-data";
 import type { TareasQuery } from "@/lib/tareas/query";
-import type { WorkflowRef } from "@/lib/types/core";
+import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
 
 import { listaTable, listaTasks } from "./lista-table";
 import { TareasStartSlot, startSlotTramo } from "./TareasStartSlot";
+import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
 import { useTareasFilters, useTareasPage, useTareasPageReady } from "./use-tareas-page";
 
 /** Empty state when the filters leave no task (FE §3.4). */
@@ -31,6 +35,7 @@ export type TareasListaProps = {
 };
 
 const NO_TRAMOS: WorkflowRef[] = [];
+const NO_STAFF: { id: string; name: string }[] = [];
 
 /**
  * Tareas · Lista (FE §3.4, §4.10.2): `ListPage` with
@@ -47,7 +52,9 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
   const searchParams = useSearchParams();
   const f = useTareasFilters(query);
   const ready = useTareasPageReady(query);
-  const tramos = useTareasPage(query).data?.tramos ?? NO_TRAMOS;
+  const page = useTareasPage(query).data;
+  const tramos = page?.tramos ?? NO_TRAMOS;
+  const staff = page?.staff ?? NO_STAFF;
   const list = useInfiniteQuery({ ...tareasListInfiniteOptions(f), enabled: ready });
 
   const pages = list.data?.pages;
@@ -57,8 +64,18 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
     () => listaTasks(loaded, { tramo: query.tramo, proyecto: query.proyecto }),
     [loaded, query.tramo, query.proyecto],
   );
-  const data = useMemo(() => listaTable(tasks), [tasks]);
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+
+  // ── Editable cells (#1025): the task columns; Proyecto and the calculated ones stay as they are.
+  const taskOf = useCallback(
+    (row: Record<string, unknown>): TaskListItem | undefined => tasksById.get(String(row.id)),
+    [tasksById],
+  );
+  const cells = useTaskCellEdits<Record<string, unknown>>({ taskOf, tramos, staff });
+  const data = useMemo(() => {
+    const table = listaTable(tasks);
+    return { ...table, columns: cells.withEdits(table.columns) };
+  }, [tasks, cells]);
 
   // `/tareas?…&tarea=<id>`: the task sheet opens over the mounted list.
   const taskHref = useCallback(
@@ -76,19 +93,30 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
       if (!task) return undefined;
       if (columnKey === "tarea") {
         const href = taskHref(task.id);
+        // Shallow: the sheet opens from `?tarea=` and the list under it stays as it is.
+        const onNavigate = (e: { preventDefault(): void }) => {
+          e.preventDefault();
+          window.history.pushState(null, "", href);
+        };
+        // In the grid a plain click on the title edits it; ⌘/Ctrl-click and the open icon open the task.
         return (
-          <Link
-            href={href}
-            scroll={false}
-            onNavigate={(e) => {
-              // Shallow: the sheet opens from `?tarea=` and the list under it stays as it is.
-              e.preventDefault();
-              window.history.pushState(null, "", href);
-            }}
-            className="underline-offset-4 hover:underline"
-          >
-            {task.title}
-          </Link>
+          <>
+            <Link href={href} scroll={false} onNavigate={onNavigate} className="underline-offset-4 hover:underline">
+              {task.title}
+            </Link>
+            <Link
+              href={href}
+              scroll={false}
+              onNavigate={onNavigate}
+              tabIndex={-1}
+              data-cell-open=""
+              aria-label={OPEN_TASK_LABEL}
+              title={OPEN_TASK_LABEL}
+              className="absolute top-1/2 right-1 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover/cell:opacity-100 group-focus-visible/cell:opacity-100 hover:bg-muted hover:text-foreground"
+            >
+              <ArrowUpRight aria-hidden="true" className="size-3.5" />
+            </Link>
+          </>
         );
       }
       if (columnKey === "tramo" && task.workflow) return <TramoBadge tramo={task.workflow} />;
@@ -113,21 +141,25 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
   const slot = slotTramo ? <TareasStartSlot key={slotTramo.id} workflow={slotTramo} /> : null;
 
   return (
-    <ListPage
-      header={header}
-      filters={
-        slot ? (
-          <>
-            {filters}
-            {slot}
-          </>
-        ) : (
-          filters
-        )
-      }
-      tabs={tabs}
-      spec={spec}
-      empty={empty}
-    />
+    <CellCommitProvider queryKeys={TAREAS_CELL_KEYS}>
+      <div className="contents" {...cells.primeProps}>
+        <ListPage
+          header={header}
+          filters={
+            slot ? (
+              <>
+                {filters}
+                {slot}
+              </>
+            ) : (
+              filters
+            )
+          }
+          tabs={tabs}
+          spec={spec}
+          empty={empty}
+        />
+      </div>
+    </CellCommitProvider>
   );
 }
