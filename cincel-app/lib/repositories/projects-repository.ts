@@ -37,7 +37,7 @@ import { startTramo } from "@/lib/project-flow/start-tramo";
 import { UNSCOPED_VIEWER, scopeProjectDto } from "@/lib/auth/viewer-scope";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import { closeAssignClientTask, ensureAssignClientTask } from "@/lib/project-flow/admin-tasks";
-import { autoStartOnCreate } from "@/lib/project-flow/auto-start";
+import { autoStartOnCreate, startChosenOnCreate } from "@/lib/project-flow/auto-start";
 import type { FlowExecutor } from "@/lib/project-flow/db";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import { parseInput, ProjectCreateInputSchema } from "@/lib/validation/project-flow";
@@ -400,12 +400,16 @@ export function isProjectNameTaken(err: unknown): boolean {
 
 /**
  * Create a project with only a name (BE §9.4), in one transaction: the row
- * (no client), the admin task "Asignar cliente y origen", the Presale start
- * when its auto-start is on, and the history `created` change. Drive folders
- * are the action's `after()` work. Errors: EMPTY, INVALID, NAME_TAKEN.
+ * (no client), the admin task "Asignar cliente y origen", the starting tramo
+ * and the history `created` change. Without `startWorkflowId` the first
+ * tramo starts when its auto-start is on; `null` starts none; an id starts
+ * that tramo with `phaseIds` (#1034). Drive folders are the action's
+ * `after()` work. Errors: EMPTY, INVALID, NAME_TAKEN, PHASE_MISMATCH,
+ * NO_PHASES.
  */
 export async function createProject(input: ProjectCreateInput, actorId: string): Promise<ProjectDetail> {
-  const { name } = parseInput(ProjectCreateInputSchema, input);
+  const { name, startWorkflowId, phaseIds } = parseInput(ProjectCreateInputSchema, input);
+  if (phaseIds !== undefined && !startWorkflowId) throw flowError(FLOW_ERROR.INVALID, "phaseIds");
 
   let projectId: string;
   try {
@@ -416,7 +420,8 @@ export async function createProject(input: ProjectCreateInput, actorId: string):
         .values({ name, status: "activo", clientId: null })
         .returning({ id: projects.id, name: projects.name });
       await ensureAssignClientTask(tx, row.id, actorId);
-      await autoStartOnCreate(tx, row.id, actorId);
+      if (startWorkflowId === undefined) await autoStartOnCreate(tx, row.id, actorId);
+      else if (startWorkflowId !== null) await startChosenOnCreate(tx, row.id, actorId, startWorkflowId, phaseIds);
       await recordChanges(
         {
           entity: "project",

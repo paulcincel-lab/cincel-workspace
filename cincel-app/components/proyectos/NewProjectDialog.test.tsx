@@ -17,7 +17,10 @@ vi.mock("@/lib/actions/projects-actions", () => ({
   updateProjectAction: vi.fn(async () => undefined),
 }));
 vi.mock("@/lib/tramos/compat", () => ({ tramoColorVar: () => "var(--chart-1)" }));
-vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
+  getProyectosPageData: vi.fn(),
+  getProjectCreateStartOptions: vi.fn(async () => START_OPTIONS),
+}));
 vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
   fetchCatalogContacts: vi.fn(async () => [{ id: "c1", name: "Familia Gómez", type: "cliente" }]),
   fetchCatalogStaff: vi.fn(async () => [{ id: "s1", name: "Ana López" }]),
@@ -59,6 +62,7 @@ import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 
 import { NewProjectDialog } from "./NewProjectDialog";
+import { projectStartInput } from "./project-create-form";
 import { ProjectsPortfolio } from "./ProjectsPortfolio";
 import { portfolioPageData } from "./projects-portfolio.fixtures";
 
@@ -68,6 +72,29 @@ function renderPortfolio(patch: Partial<ProyectosPageData> = {}) {
   client.setQueryData(qk.proyectos.list(), portfolioPageData({ projects: [], portfolio: [], ...patch }));
   return renderWithQueryClient(<ProjectsPortfolio />, { client });
 }
+
+const START_OPTIONS = vi.hoisted(() => ({
+  defaultWorkflowId: "wf-presale",
+  tramos: [
+    {
+      id: "wf-presale",
+      key: "presale",
+      name: "Presale",
+      sortOrder: 0,
+      phases: [
+        { id: "ph-a", name: "Levantamiento", sortOrder: 0, templateCount: 3 },
+        { id: "ph-b", name: "Propuesta", sortOrder: 1, templateCount: 2 },
+      ],
+    },
+    {
+      id: "wf-diseno",
+      key: "diseno",
+      name: "Diseño",
+      sortOrder: 1,
+      phases: [{ id: "ph-c", name: "Anteproyecto", sortOrder: 0, templateCount: 4 }],
+    },
+  ],
+}));
 
 const ADMIN_OPTIONS = {
   clients: [{ id: "c1", name: "Familia Gómez" }],
@@ -155,6 +182,60 @@ describe("NewProjectDialog", () => {
   });
 });
 
+describe("NewProjectDialog · Tramo inicial (#1034)", () => {
+  it("shows the default tramo with every fase checked; untouched it sends the name only", async () => {
+    const { onConfirm } = renderDialog({ startOptions: START_OPTIONS });
+    expect(screen.getByRole("combobox", { name: "Tramo inicial" })).toBeTruthy();
+    const levantamiento = screen.getByRole("checkbox", { name: "Levantamiento · 3 tareas" });
+    expect(levantamiento.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("checkbox", { name: "Propuesta · 2 tareas" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Nombre del proyecto"), { target: { value: "Casa Lomas" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear proyecto" }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ name: "Casa Lomas" }));
+  });
+
+  it("sends the tramo and the checked fases once a fase is unchecked", async () => {
+    const { onConfirm } = renderDialog({ startOptions: START_OPTIONS });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Propuesta · 2 tareas" }));
+    fireEvent.change(screen.getByLabelText("Nombre del proyecto"), { target: { value: "Casa Lomas" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear proyecto" }));
+    await waitFor(() =>
+      expect(onConfirm).toHaveBeenCalledWith({ name: "Casa Lomas", startWorkflowId: "wf-presale", phaseIds: ["ph-a"] }),
+    );
+  });
+
+  it("asks for a fase when every fase is unchecked", async () => {
+    const { onConfirm } = renderDialog({ startOptions: START_OPTIONS });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Levantamiento · 3 tareas" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Propuesta · 2 tareas" }));
+    fireEvent.change(screen.getByLabelText("Nombre del proyecto"), { target: { value: "Casa Lomas" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear proyecto" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Elige al menos una fase.");
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("hides the select without start options", () => {
+    renderDialog();
+    expect(screen.queryByRole("combobox", { name: "Tramo inicial" })).toBeNull();
+  });
+
+  it("maps the choice to the create input", () => {
+    const none = new Set<string>();
+    expect(projectStartInput(START_OPTIONS, { uncheckedPhaseIds: none })).toEqual({});
+    expect(projectStartInput(null, { workflowId: "wf-diseno", uncheckedPhaseIds: none })).toEqual({});
+    expect(projectStartInput(START_OPTIONS, { workflowId: null, uncheckedPhaseIds: none })).toEqual({
+      startWorkflowId: null,
+    });
+    expect(projectStartInput(START_OPTIONS, { workflowId: "wf-diseno", uncheckedPhaseIds: none })).toEqual({
+      startWorkflowId: "wf-diseno",
+      phaseIds: ["ph-c"],
+    });
+    expect(
+      projectStartInput({ ...START_OPTIONS, defaultWorkflowId: null }, { uncheckedPhaseIds: new Set(["x"]) }),
+    ).toEqual({ startWorkflowId: null });
+  });
+});
+
 describe("/proyectos?nuevo=1", () => {
   it("opens NewProjectDialog on load; non-admins see the name only", () => {
     nav.params = new URLSearchParams("nuevo=1");
@@ -168,6 +249,12 @@ describe("/proyectos?nuevo=1", () => {
     nav.params = new URLSearchParams("nuevo=1");
     renderPortfolio({ canSeeAdminData: true });
     expect(screen.getByRole("combobox", { name: "Cliente" })).toBeTruthy();
+  });
+
+  it("shows Tramo inicial to staff who can start tramos", async () => {
+    nav.params = new URLSearchParams("nuevo=1");
+    renderPortfolio({ canPickStartTramo: true });
+    expect(await screen.findByRole("combobox", { name: "Tramo inicial" })).toBeTruthy();
   });
 
   it("stays closed without ?nuevo=1", () => {

@@ -97,6 +97,8 @@ export const qk = {
   proyectos: {
     all: ["proyectos"] as const,
     list: () => ["proyectos", "list"] as const,
+    /** The create dialog's "Tramo inicial" options (#1034). */
+    createStart: () => ["proyectos", "create-start"] as const,
     detail: (id: string) => ["proyectos", id] as const,
     shell: (id: string) => ["proyectos", id, "shell"] as const,
     resumen: (id: string) => ["proyectos", id, "resumen"] as const,

@@ -18,11 +18,13 @@ import { ARCHIVOS_STALE_MS, seedArchivosCount } from "@/lib/query/options/proyec
 import type { PortalActivityRow } from "@/lib/types/portal";
 // List, Resumen and Tareas (5a, #959)
 import {
+  getProjectCreateStartOptions,
   getProyectoResumenData,
   getProyectoTareasData,
   getProyectosPageData,
 } from "@/lib/actions/page-data/proyectos-actions";
 import type { ProyectoTareasData, ProyectosPageData } from "@/lib/loaders/proyectos";
+import type { ProjectCreateStartOptions } from "@/lib/types/core";
 import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 // Resumen Analítico quick-add hint (#997)
@@ -137,6 +139,15 @@ export function proyectosPageOptions() {
     queryKey: qk.proyectos.list(),
     queryFn: () => getProyectosPageData({}),
     staleTime: STALE.screen,
+  });
+}
+
+/** The create dialog's "Tramo inicial" options (#1034); the dialog enables it while open. Catalog data, 5 min stale. */
+export function projectCreateStartOptions() {
+  return queryOptions<ProjectCreateStartOptions | null>({
+    queryKey: qk.proyectos.createStart(),
+    queryFn: () => getProjectCreateStartOptions({}),
+    staleTime: STALE.catalog,
   });
 }
 
