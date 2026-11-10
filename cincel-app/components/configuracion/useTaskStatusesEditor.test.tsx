@@ -9,7 +9,8 @@ import { createTestQueryClient } from "@/lib/query/test-utils";
 import type { TaskStatusOption } from "@/lib/types/core";
 
 const caps = vi.hoisted(() => ({ canViewTaskStatuses: true, canManageTaskStatuses: true }));
-vi.mock("@/lib/auth/permissions", () => ({ resolveTaskStatusesCapabilities: () => caps }));
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()), resolveTaskStatusesCapabilities: () => caps }));
 
 const actions = vi.hoisted(() => ({
   fetchTaskStatusesAction: vi.fn(),

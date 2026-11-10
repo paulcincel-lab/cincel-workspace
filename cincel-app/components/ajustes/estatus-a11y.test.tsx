@@ -8,6 +8,7 @@ import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-u
 import type { AjustesEstatusPageData } from "@/lib/types/ajustes-catalogs";
 import type { TaskStatusOption } from "@/lib/types/core";
 import { THEME_IDS } from "@/lib/ui/themes";
+import { settle } from "@/tests/helpers/settle";
 
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => null,
@@ -17,7 +18,8 @@ const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 
 const caps = vi.hoisted(() => ({ canViewTaskStatuses: true, canManageTaskStatuses: true }));
-vi.mock("@/lib/auth/permissions", () => ({
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveTaskStatusesCapabilities: () => caps,
 }));
 
@@ -127,6 +129,8 @@ describe("Ajustes › Estatus", () => {
   it("has no serious or critical axe violations with the editor open", async () => {
     renderPage();
     await openRowAction("Entregado", "Editar");
+    // Let the menu finish closing and the editor panel settle before axe reads the page.
+    await settle();
     expect(editorPanel()).toBeTruthy();
     expect(await seriousViolations(document.body)).toEqual([]);
   });

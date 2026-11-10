@@ -76,13 +76,18 @@ import type { ThemeId } from "@/lib/types/redesign";
 import { TaskSheet } from "./TaskSheet";
 import { SPACES, makeSheetData } from "./task-sheet.fixtures";
 import { seedSessionUser } from "@/tests/helpers/session-user";
+import { settle } from "@/tests/helpers/settle";
 
 // The components read the signed-in user from the session store.
 beforeEach(() => seedSessionUser({ member: { id: "s-1", name: "Ana López" } }));
 
 /** The sheet's one call already answered: the task, its catalogs (with espacios), no subtareas or dependencies. */
+/** The last rendered sheet's client, so `seriousViolations` can wait for its fetches. */
+let lastClient: ReturnType<typeof createTestQueryClient> | undefined;
+
 function render(ui: React.ReactElement) {
   const client = createTestQueryClient();
+  lastClient = client;
   const data = makeSheetData(undefined, { spaces: SPACES });
   seedTaskSheet(client, data);
   client.setQueryData(qk.tasks.detail(data.task.id), data.task);
@@ -127,6 +132,8 @@ function resetTheme() {
 }
 
 async function seriousViolations() {
+  // Let the queries and Base UI finish their pending updates so axe audits the settled sheet.
+  await settle(lastClient);
   const results = await axe.run(
     {
       include: [document.body],

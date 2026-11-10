@@ -14,6 +14,7 @@ import { CronogramaReport } from "./cronograma-report";
 import type { ScheduleViewData } from "@/lib/actions/schedule-actions";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { settle } from "@/tests/helpers/settle";
 import md22Tasks from "@/lib/cronograma/__fixtures__/md22-schedule-tasks.json";
 import rawPagos from "@/scripts/data/md22-pagos-calendar.json";
 import rawAdicionales from "@/scripts/data/md22-adicionales.json";
@@ -36,16 +37,21 @@ const data: CronogramaData = {
   adicionales,
 };
 
-/** Renders the report over a cache holding `view`, as after the page's prefetch (or a visit to Cronograma). */
-function renderReport(asOf: string | null = "2026-09-18", view: ScheduleViewData | null = { data, today: "2026-10-01" }) {
+/**
+ * Renders the report over a cache holding `view`, as after the page's prefetch (or a visit to Cronograma), and waits
+ * for the lazy charts and the ScrollArea measurements to settle.
+ */
+async function renderReport(asOf: string | null = "2026-09-18", view: ScheduleViewData | null = { data, today: "2026-10-01" }) {
   const client = createTestQueryClient();
   client.setQueryData(qk.proyectos.cronograma("p1"), view);
-  return renderWithQueryClient(<CronogramaReport projectId="p1" asOf={asOf} />, { client });
+  const result = renderWithQueryClient(<CronogramaReport projectId="p1" asOf={asOf} />, { client });
+  await settle(client);
+  return result;
 }
 
 describe("CronogramaReport", () => {
-  it("renders every section read-only against the real MD22 dataset", () => {
-    renderReport();
+  it("renders every section read-only against the real MD22 dataset", async () => {
+    await renderReport();
 
     const sheet = within(screen.getByRole("article", { name: "Hoja del reporte" }));
     expect(sheet.getByText("Madrid 22")).toBeTruthy();
@@ -64,29 +70,29 @@ describe("CronogramaReport", () => {
     expect(screen.queryByRole("button", { name: "Eliminar" })).toBeNull();
   });
 
-  it("expands adicionales accordion items by default (report mode)", () => {
-    renderReport();
+  it("expands adicionales accordion items by default (report mode)", async () => {
+    await renderReport();
     // With defaultOpen, the first item's content (a list entry) should already be visible without clicking.
     expect(screen.getByText(adicionales[0].items[0])).toBeTruthy();
   });
 
-  it("reads the cached schedule: no action call", () => {
-    renderReport();
+  it("reads the cached schedule: no action call", async () => {
+    await renderReport();
     expect(getProyectoCronogramaData).not.toHaveBeenCalled();
   });
 
-  it("cuts at ?asOf=", () => {
-    renderReport("2026-09-18");
+  it("cuts at ?asOf=", async () => {
+    await renderReport("2026-09-18");
     expect(screen.getAllByText("Corte al 18 sep 2026").length).toBeGreaterThan(0);
   });
 
-  it("falls back to the schedule's today", () => {
-    renderReport("not-a-date");
+  it("falls back to the schedule's today", async () => {
+    await renderReport("not-a-date");
     expect(screen.getAllByText("Corte al 1 oct 2026").length).toBeGreaterThan(0);
   });
 
-  it("shows the no-schedule message for a null schedule", () => {
-    renderReport("2026-09-18", null);
+  it("shows the no-schedule message for a null schedule", async () => {
+    await renderReport("2026-09-18", null);
     expect(screen.getByText(/todavía no tiene un cronograma importado, o no tienes acceso/)).toBeTruthy();
   });
 });

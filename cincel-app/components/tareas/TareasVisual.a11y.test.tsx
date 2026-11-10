@@ -38,6 +38,7 @@ vi.mock("@/components/tareas/quick-add-create", () => ({
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { TareasVisual } from "@/components/tareas/TareasVisual";
+import { getTareasTrend } from "@/lib/actions/page-data/tareas-actions";
 import { qk } from "@/lib/query/keys";
 import { tareasListFiltersOf, tareasPageKeyInputOf } from "@/lib/query/options/tareas";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
@@ -185,6 +186,8 @@ async function seriousViolations(container: HTMLElement) {
 
 beforeEach(() => {
   seedSessionUser({ member: { id: "s1", name: "Ana Ruiz" }, access: "Administrador" });
+  // A move invalidates the tareas queries; the trend refetch gets the same trend back.
+  vi.mocked(getTareasTrend).mockResolvedValue(TREND);
   actions.setTaskStatusAction
     .mockReset()
     .mockImplementation(async (id: string, status: string) => ({ ok: true, data: { id, projectId: "p1", status } }));

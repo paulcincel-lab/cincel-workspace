@@ -280,6 +280,14 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     idSql: "c.id",
     owner: "cascade",
   },
+  // The daily progress snapshots of a batch project are derived data (#1013).
+  {
+    table: "project_progress_snapshots",
+    column: "project_id",
+    target: "project",
+    idSql: "c.project_id || ':' || c.taken_on",
+    owner: "cascade",
+  },
   {
     table: "import_files",
     column: "project_id",

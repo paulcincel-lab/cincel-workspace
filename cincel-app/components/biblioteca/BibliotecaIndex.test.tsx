@@ -8,6 +8,7 @@ import type { BibliotecaData } from "@/lib/biblioteca/load";
 import { qk } from "@/lib/query/keys";
 import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { useRecentDocs } from "@/lib/stores/recent-docs-store";
+import { settle } from "@/tests/helpers/settle";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { ResourceLink } from "@/lib/types/resource";
 import type { MyVacations } from "@/lib/vacations/reads";
@@ -179,6 +180,7 @@ describe("BibliotecaIndex", () => {
       await useRecentDocs.persist.rehydrate();
     });
     renderIndex(bibliotecaFixture());
+    await settle();
     const recent = within(screen.getByRole("region", { name: "Abiertos recientemente" }));
     const link = recent.getByRole("link", { name: /^Cómo abrimos un proyecto · La empresa/ });
     expect(link.getAttribute("href")).toBe("/biblioteca/empresa/manual-de-la-empresa?parte=manual-2");

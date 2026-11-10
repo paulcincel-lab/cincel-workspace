@@ -273,6 +273,8 @@ beforeEach(() => {
   toastError.mockReset();
   onQuery.mockReset();
   for (const fn of Object.values(pageData)) fn.mockReset();
+  // A move invalidates the tareas queries; the trend refetch gets the same trend back.
+  pageData.getTareasTrend.mockResolvedValue(TREND);
   quickAdd.create.mockReset().mockImplementation(async (d: { title: string }) => ({ id: "new-1", title: d.title }));
   actions.setTaskStatusAction
     .mockReset()

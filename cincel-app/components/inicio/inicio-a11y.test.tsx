@@ -28,6 +28,8 @@ import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { InicioData, PresentationStyle, ThemeId } from "@/lib/types/redesign";
 
+import { settle } from "@/tests/helpers/settle";
+
 import { InicioClient } from "./InicioClient";
 import { INICIO_EMPTY, INICIO_NON_ADMIN } from "./inicio-fixtures";
 
@@ -66,6 +68,8 @@ function applyTheme(theme: ThemeId, mode: (typeof MODES)[number]) {
 }
 
 async function seriousViolations() {
+  // Let the lazy charts replace their placeholders so axe audits the settled page.
+  await settle();
   const results = await axe.run(document.body, { resultTypes: ["violations"] });
   return results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")

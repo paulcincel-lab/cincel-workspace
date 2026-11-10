@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 
 import { buildDefaultPermissionsState, getEnabledModuleNames } from "@/lib/auth/permissionsState";
@@ -8,6 +8,7 @@ import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { AjustesPermisosPageData, PermisosStaffRow } from "@/lib/types/ajustes-catalogs";
 import { THEME_IDS } from "@/lib/ui/themes";
+import { settle } from "@/tests/helpers/settle";
 
 const pageData = vi.hoisted(() => ({ getAjustesPermisosPageData: vi.fn() }));
 vi.mock("@/lib/actions/page-data/ajustes-actions", () => pageData);
@@ -133,11 +134,12 @@ describe("Ajustes › Permisos (#950, #971)", () => {
     expect(screen.getByText("1 cambio sin guardar")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar permisos" }));
-    await vi.waitFor(() => expect(writes.savePermissionsMatrixAction).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(writes.savePermissionsMatrixAction).toHaveBeenCalledTimes(1));
     const sent = writes.savePermissionsMatrixAction.mock.calls[0]![0].permissions;
     expect(sent.Colaborador.projects.canCreateProject).toBe(true);
     expect(sent.Dirección.projects.canCreateProject).toBe(true);
-    await vi.waitFor(() => expect(screen.queryByText("1 cambio sin guardar")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("1 cambio sin guardar")).toBeNull());
+    await settle();
     expect(setItem).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(LEGACY_MATRIX_KEY)).toBeNull();
   });

@@ -17,6 +17,7 @@ import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-u
 import type { TaskListItem } from "@/lib/types/core";
 import type { Checklist, Note, NotificationItem } from "@/lib/types/redesign";
 import { seedSessionUser } from "@/tests/helpers/session-user";
+import { settle } from "@/tests/helpers/settle";
 
 import type { QuickAddRowProps } from "@/components/widgets/QuickAddRow";
 
@@ -414,7 +415,8 @@ describe("MiEspacioEsencial", () => {
 
   it.each(["light", "dark"])("has no serious axe violations (%s)", async (theme) => {
     if (theme === "dark") document.documentElement.classList.add("dark");
-    const { container } = renderEsencial();
+    const { container, client } = renderEsencial();
+    await settle(client);
     const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
     expect(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical")).toEqual([]);
   });

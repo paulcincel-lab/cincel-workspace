@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -219,7 +219,8 @@ describe("Proyectos list accessibility · Esencial (#993)", () => {
     expect(live?.textContent).toBe("2 proyectos");
     fireEvent.click(screen.getByRole("radio", { name: /Diseño/ }));
     expect(live?.textContent).toBe("1 proyecto");
-    useProyectosDashboard.getState().reset();
+    // The reset re-renders the mounted list, so it runs inside act.
+    act(() => useProyectosDashboard.getState().reset());
   });
 });
 

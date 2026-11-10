@@ -10,6 +10,7 @@ import { documentToc, empresaDoc, empresaDocLinks } from "@/lib/biblioteca/catal
 import { renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
+import { settle } from "@/tests/helpers/settle";
 
 import { bibliotecaFixture, resourcesCapabilities, seededBibliotecaClient } from "./biblioteca.fixtures";
 import { BibliotecaIndex } from "./BibliotecaIndex";
@@ -101,9 +102,9 @@ describe("Biblioteca accessibility", () => {
       it(`has no serious or critical axe violations (${theme}, ${mode}, every style)`, async () => {
         for (const style of STYLES) {
           for (const screen of SCREENS) {
-            const { container, unmount } = renderWithQueryClient(themed(theme, mode, style, screen.node()), {
-              client: screen.client(),
-            });
+            const client = screen.client();
+            const { container, unmount } = renderWithQueryClient(themed(theme, mode, style, screen.node()), { client });
+            await settle(client);
             expect({ screen: screen.name, style, violations: await seriousViolations(container) }).toEqual({
               screen: screen.name,
               style,
@@ -149,6 +150,7 @@ describe("Biblioteca Esencial accessibility", () => {
   for (const mode of MODES) {
     it(`Esencial has no serious axe violations (${mode})`, async () => {
       const { container } = renderWithQueryClient(themed("azul", mode, "esencial", <BibliotecaEsencial {...esencialProps()} />));
+      await settle();
       expect(await seriousViolations(container)).toEqual([]);
     });
   }
@@ -209,6 +211,7 @@ describe("Biblioteca Visual accessibility", () => {
   for (const mode of MODES) {
     it(`Visual has no serious axe violations (${mode})`, async () => {
       const { container } = renderWithQueryClient(themed("azul", mode, "visual", <BibliotecaVisual {...visualProps()} />));
+      await settle();
       expect(await seriousViolations(container)).toEqual([]);
     });
   }
@@ -260,6 +263,7 @@ describe("Biblioteca Analítico accessibility", () => {
       const { container } = renderWithQueryClient(themed("azul", mode, "analitico", <BibliotecaAnalitico {...analiticoProps()} />), {
         client: seededBibliotecaClient(null, links),
       });
+      await settle();
       expect(await seriousViolations(container)).toEqual([]);
     });
   }
