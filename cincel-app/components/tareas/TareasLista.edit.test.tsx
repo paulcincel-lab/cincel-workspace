@@ -92,7 +92,7 @@ import { TareasLista } from "./TareasLista";
 import { analiticoTaskRow } from "./fixtures/analitico-summary";
 import { DISENO, LISTA_TRAMOS, PRESALE } from "./fixtures/lista-tasks";
 
-const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, vista: "lista", tramo: "diseno" };
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo: "diseno" };
 
 function renderLista() {
   const client = createTestQueryClient();
