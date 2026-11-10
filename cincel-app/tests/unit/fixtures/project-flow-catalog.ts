@@ -1,8 +1,7 @@
 /**
  * Frozen copies of the project flow seed catalog (BE §5.1, §5.2) and of the
- * old TS templates it replaces (lib/templates/presale.ts, diseno.ts,
- * operativas.ts). The drift guard compares `DEFAULT_CATALOG` and 0024 against
- * these, so the check keeps working after the TS files are deleted.
+ * old TS templates it replaced (presale, diseño and operativas, now deleted).
+ * The drift guard compares `DEFAULT_CATALOG` and 0024 against these.
  */
 
 export type ExpectedPhase = { key: string; name: string; titles: string[] };

@@ -40,8 +40,9 @@ se sobrescribe.
 | `create_rfc` | escritura externa | `canCreateActivity` | todos |
 
 `onboard_client` da de alta el cliente y, en el mismo paso, siembra el checklist
-estándar del flujo elegido (`lib/templates/{presale,diseno,operativas}.ts`,
-Presale por defecto) como tareas `Pendiente` contra un proyecto nuevo, más
+estándar del tramo elegido (las plantillas de `workflow_task_templates` de sus
+fases activas, vía `startTramoAction`; Presale por defecto) como tareas
+`Pendiente` contra un proyecto nuevo, más
 `extraTasks` opcionales. Es **idempotente**: si el cliente ya existe (mismo
 nombre) lo reutiliza, y omite las tareas de plantilla que el proyecto ya tenga
 para ese flujo — una llamada reintentada no duplica nada.

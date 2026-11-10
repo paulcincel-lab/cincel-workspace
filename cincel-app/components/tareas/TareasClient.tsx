@@ -23,6 +23,7 @@ import type { WorkflowRef } from "@/lib/types/core";
 import { TareasEsencial } from "./TareasEsencial";
 import { TareasVisual } from "./TareasVisual";
 import { TareasAnalitico } from "./TareasAnalitico";
+import { TareasStartSlot, startSlotTramo } from "./TareasStartSlot";
 import { TaskSheetRoute } from "./TaskSheet";
 import {
   replaceTareasUrl,
@@ -49,7 +50,10 @@ const NO_FACETS: TareasFacets = { total: 0, byTramo: {}, projects: [] };
  * takes no data: the query comes from the URL, the counts and options from
  * `tareas.facets(f)` and `tareas.page(q)`, and each layout reads its own
  * query. Filters write the URL with `history.replaceState` (no server
- * render); the key change refetches.
+ * render); the key change refetches. With exactly one tramo filter, Project
+ * Flow's start slot ("Listos para iniciar", "Próximos" and the Iniciar tramo
+ * sheet, its own `qk.tareas.startSlot` query) sits under the header in every
+ * style; `?project=X&iniciar=1` opens the sheet for X.
  */
 export function TareasClient() {
   const query = useTareasQuery();
@@ -114,6 +118,10 @@ export function TareasClient() {
       }
     : { title: TAREAS_EMPTY_TITLE };
 
+  // ── Project Flow's start slot: one per tramo, remounted when the tramo changes.
+  const slotTramo = startSlotTramo(query.tramo, tramos);
+  const startSlot = slotTramo ? <TareasStartSlot key={slotTramo.id} workflow={slotTramo} /> : null;
+
   return (
     <>
       {/* One layout per style (ADR 0004): Visual is the team board, Esencial the cards per project. */}
@@ -128,9 +136,10 @@ export function TareasClient() {
             onSearch={setSearch}
             onQuery={replaceQuery}
             empty={empty}
+            startSlot={startSlot}
           />
         )}
-        esencial={() => <TareasEsencial />}
+        esencial={() => <TareasEsencial startSlot={startSlot} />}
         analitico={() => (
           // Analítico is the tables by project and tramo.
           <TareasAnalitico
@@ -144,6 +153,7 @@ export function TareasClient() {
             onQuery={replaceQuery}
             empty={empty}
             canCreate={canCreate}
+            startSlot={startSlot}
           />
         )}
       />

@@ -151,12 +151,14 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
 
           {nav.tramos.length > 0 ? (
             <SidebarGroup>
-              <SidebarGroupLabel id="sidebar-tramos">Áreas</SidebarGroupLabel>
+              <SidebarGroupLabel id="sidebar-tramos" className="h-auto px-2.5 pb-1 text-muted-foreground">
+                Áreas
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu aria-labelledby="sidebar-tramos">
                   {nav.tramos.map((tramo) => (
                     <SidebarMenuItem key={tramo.key}>
-                      <SidebarMenuButton render={<Link href={tramo.href} />}>
+                      <SidebarMenuButton className="h-8 gap-2.5 text-[13.5px]" render={<Link href={tramo.href} />}>
                         <span
                           aria-hidden="true"
                           className="size-[9px] shrink-0 rounded-[3px]"
@@ -193,7 +195,7 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
             ) : (
               <span className="truncate text-[13px] font-medium">{session.name}</span>
             )}
-            <span className="truncate text-xs text-sidebar-foreground/80">{session.role}</span>
+            {session.role ? <span className="truncate text-xs text-muted-foreground">{session.role}</span> : null}
           </span>
         </div>
       </SidebarFooter>

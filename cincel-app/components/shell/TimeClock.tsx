@@ -12,6 +12,7 @@ import { meTodayOptions, ME_TODAY_REFETCH_MS } from "@/lib/query/options/me";
 import { mutationErrorText } from "@/lib/query/mutation";
 import { formatDayMonthYear } from "@/lib/time-tracking/horario-copy";
 import { localDate, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/local-time";
+import { cn } from "@/lib/utils";
 import type { TodayStatus } from "@/lib/types/redesign";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
@@ -67,6 +68,14 @@ const STATE_BADGE: Record<ClockState, BadgeVariant> = {
   done: "default",
 };
 
+/** Progress fill per state (frame `Sidebar`: green while the day runs). */
+const STATE_PROGRESS: Record<ClockState, string | undefined> = {
+  on: "bg-success",
+  pausa: "bg-warning",
+  off: undefined,
+  done: undefined,
+};
+
 /** `HH:MM:SS` for a number of seconds. */
 export function formatClockTime(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -106,6 +115,9 @@ const HOURS_FORMAT = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 }
 function formatHours(hours: number): string {
   return HOURS_FORMAT.format(hours);
 }
+
+/** Pausa / Salida / Registrar entrada as in frame `Sidebar` (32 px, 12.5 px text). */
+const CLOCK_BUTTON = "h-8 flex-1 rounded-[9px] text-[12.5px]";
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
@@ -203,13 +215,16 @@ export function TimeClock({ variant = "card" }: TimeClockProps) {
       <div className="flex items-center gap-1.5 text-muted-foreground">
         <Clock aria-hidden="true" className="size-3.5" strokeWidth={2} />
         <span className="flex-1 text-xs font-medium">Jornada</span>
-        <Badge variant={STATE_BADGE[status.state]}>{STATE_LABEL[status.state]}</Badge>
+        <Badge variant={STATE_BADGE[status.state]} className="gap-[5px] px-2 text-[11px]">
+          <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
+          {STATE_LABEL[status.state]}
+        </Badge>
       </div>
       <div
         role="timer"
         aria-live="off"
         aria-label="Tiempo trabajado hoy"
-        className="font-mono text-2xl font-medium tabular-nums"
+        className="font-mono text-2xl font-medium tracking-[-0.02em] tabular-nums"
       >
         {time}
       </div>
@@ -217,29 +232,34 @@ export function TimeClock({ variant = "card" }: TimeClockProps) {
         <Progress
           value={percent}
           aria-label="Avance de la jornada"
-          indicatorClassName={reducedMotion ? "transition-none" : undefined}
+          trackClassName="h-1.5"
+          indicatorClassName={cn("rounded-full", STATE_PROGRESS[status.state], reducedMotion && "transition-none")}
         />
         <p className="text-[11.5px] text-muted-foreground">{subLine}</p>
       </div>
       <div className="flex gap-1.5">
         {idle ? (
-          <Button className="flex-1" disabled={pending} onClick={() => run("clockIn")}>
+          <Button className={CLOCK_BUTTON} disabled={pending} onClick={() => run("clockIn")}>
             Registrar entrada
           </Button>
         ) : (
           <>
             {status.state === "on" ? (
-              <Button variant="outline" className="flex-1" disabled={pending} onClick={() => run("pause")}>
+              <Button variant="outline" className={CLOCK_BUTTON} disabled={pending} onClick={() => run("pause")}>
                 Pausa
               </Button>
             ) : (
-              <Button className="flex-1" disabled={pending} onClick={() => run("resume")}>
+              <Button className={CLOCK_BUTTON} disabled={pending} onClick={() => run("resume")}>
                 Reanudar
               </Button>
             )}
             <Button
               variant={status.state === "on" ? "default" : "outline"}
-              className="flex-1"
+              // While the day runs, Salida is the dark button of frame `Sidebar`.
+              className={cn(
+                CLOCK_BUTTON,
+                status.state === "on" && "bg-foreground text-background hover:bg-foreground/80",
+              )}
               disabled={pending}
               onClick={() => run("clockOut")}
             >
@@ -275,7 +295,13 @@ export function TimeClock({ variant = "card" }: TimeClockProps) {
   }
 
   return (
-    <Card size="sm" role="region" aria-label="Jornada">
+    <Card
+      size="sm"
+      role="region"
+      aria-label="Jornada"
+      data-state={status.state}
+      className="rounded-[14px] shadow-xs data-[state=on]:ring-success/40"
+    >
       <CardContent>{body}</CardContent>
     </Card>
   );

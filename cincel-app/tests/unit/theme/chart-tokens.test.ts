@@ -7,7 +7,7 @@ import { THEME_PRESETS } from "@/lib/ui/themes";
 
 const css = readFileSync(resolve(__dirname, "../../../app/globals.css"), "utf8");
 const componentSrc = readFileSync(
-  resolve(__dirname, "../../../components/asistente/AssistantChartMessage.tsx"),
+  resolve(__dirname, "../../../components/asistente/AssistantLineChart.tsx"),
   "utf8",
 );
 
@@ -60,12 +60,12 @@ describe("chart color tokens", () => {
     }
   });
 
-  it("AssistantChartMessage reads chart tokens, not hard-coded hex", () => {
+  it("AssistantLineChart reads chart tokens, not hard-coded hex", () => {
     expect(componentSrc).toContain("var(--chart-1)");
     expect(componentSrc).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
-  it("AssistantChartMessage renders through the shadcn ChartContainer", () => {
+  it("AssistantLineChart renders through the shadcn ChartContainer", () => {
     expect(componentSrc).toContain('from "@/components/ui/shadcn/chart"');
     expect(componentSrc).toContain("<ChartContainer");
     expect(componentSrc).not.toContain("ResponsiveContainer");

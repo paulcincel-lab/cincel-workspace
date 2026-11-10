@@ -3,8 +3,9 @@
  * Charts load on demand (issue 922): recharts and the shadcn chart wrapper
  * are imported only by the modules in components/widgets/charts/ (loaded
  * through `charts/lazy`), the shadcn wrapper itself and the assistant's
- * chart message (already its own chunk). Any other static import would put
- * recharts back into the first-load JS of every route that shows a widget.
+ * line chart (loaded on demand by `AssistantChartMessage`). Any other
+ * static import would put recharts back into the first-load JS of every
+ * route that shows a widget.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -23,7 +24,7 @@ const ALLOWED = new Set([
   "components/ui/shadcn/chart.tsx",
   "components/widgets/charts/DonutChart.tsx",
   "components/widgets/charts/AreaSeriesChart.tsx",
-  "components/asistente/AssistantChartMessage.tsx",
+  "components/asistente/AssistantLineChart.tsx",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -53,5 +54,7 @@ describe("charts are lazy-loaded", () => {
     const lazy = readFileSync(join(ROOT, "components/widgets/charts/lazy.tsx"), "utf8");
     expect(lazy).toMatch(/import\(["']\.\/DonutChart["']\)/);
     expect(lazy).toMatch(/import\(["']\.\/AreaSeriesChart["']\)/);
+    const assistant = readFileSync(join(ROOT, "components/asistente/AssistantChartMessage.tsx"), "utf8");
+    expect(assistant).toMatch(/import\(["']\.\/AssistantLineChart["']\)/);
   });
 });

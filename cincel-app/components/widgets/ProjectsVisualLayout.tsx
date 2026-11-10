@@ -32,7 +32,7 @@ import { EmptyState } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/shadcn/avatar";
 import { Button } from "@/components/ui/shadcn/button";
-import { Skeleton } from "@/components/ui/shadcn/skeleton";
+import { ProjectsVisualSkeleton } from "@/components/widgets/route-skeletons";
 import { DeliveryTimelineWidget } from "@/components/widgets/DeliveryTimelineWidget";
 import { PageHeader } from "@/components/widgets/PageHeader";
 import { PortfolioBoardWidget } from "@/components/widgets/PortfolioBoardWidget";
@@ -104,49 +104,7 @@ function plural(n: number, one: string, many: string): string {
 
 // ── Loading ────────────────────────────────────────────────────────────────
 
-/**
- * The Visual skeleton (also `app/(staff)/proyectos/loading.tsx`): header, four
- * summary blocks, three attention blocks, four board columns of three cards
- * and the timeline. `Skeleton` pulses only without reduced motion.
- */
-export function ProjectsVisualSkeleton(): ReactNode {
-  const blocks = (n: number) => Array.from({ length: n }, (_, i) => i);
-  return (
-    <div role="status" aria-busy="true" aria-live="polite" data-slot="projects-visual-skeleton" className="flex flex-col gap-5">
-      <span className="sr-only">Cargando…</span>
-      <div aria-hidden="true" className="flex flex-col gap-5 [&_[data-slot=skeleton]]:motion-reduce:animate-none">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-80 max-w-full" />
-          </div>
-          <Skeleton className="h-9 w-36" />
-        </div>
-        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-          {blocks(4).map((i) => (
-            <Skeleton key={i} data-skeleton="summary" className="h-[138px] rounded-[14px]" />
-          ))}
-        </div>
-        <div className="grid gap-[18px] [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))]">
-          {blocks(3).map((i) => (
-            <Skeleton key={i} data-skeleton="attention" className="h-[300px] rounded-[14px]" />
-          ))}
-        </div>
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-          {blocks(4).map((c) => (
-            <div key={c} data-skeleton="column" className="flex flex-col gap-2.5 rounded-[14px] bg-accent p-3">
-              <Skeleton className="h-4 w-1/2" />
-              {blocks(3).map((i) => (
-                <Skeleton key={i} data-skeleton="card" className="h-24 rounded-[10px]" />
-              ))}
-            </div>
-          ))}
-        </div>
-        <Skeleton data-skeleton="timeline" className="h-[180px] rounded-[14px]" />
-      </div>
-    </div>
-  );
-}
+export { ProjectsVisualSkeleton };
 
 // ── Pieces ─────────────────────────────────────────────────────────────────
 

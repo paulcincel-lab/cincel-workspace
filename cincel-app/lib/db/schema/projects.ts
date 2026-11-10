@@ -15,7 +15,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { contactType, core, projectStatus, soft, stamps } from "./_schema";
+import { contactType, core, foldedTrgm, projectStatus, soft, stamps } from "./_schema";
 import { contacts } from "./contacts";
 import { staff } from "./people";
 import { driveFiles } from "./shared";
@@ -102,6 +102,9 @@ export const projects = core.table(
       .on(sql`lower(${t.name})`)
       .where(sql`${t.deletedAt} is null and ${t.status} in ('activo','pausado')`),
     index("idx_projects_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
+    // Workspace search compares the folded name and code (lib/search/search.ts).
+    index("idx_projects_name_folded_trgm").using("gin", foldedTrgm(t.name)),
+    index("idx_projects_code_folded_trgm").using("gin", foldedTrgm(t.code)),
     index("idx_projects_client_id").on(t.clientId),
     index("idx_projects_origin_staff_id").on(t.originStaffId),
     index("idx_projects_manager_id").on(t.managerId),

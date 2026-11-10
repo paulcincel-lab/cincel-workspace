@@ -34,8 +34,9 @@ export type TareasStartSlotProps = {
 };
 
 /**
- * Project Flow's start slot inside Tareas · Lista (FE §3.4, §21.2):
- * "Listos para iniciar" and "Próximos" above the table, and the Iniciar tramo
+ * Project Flow's start slot in Tareas (FE §3.4, §21.2): "Listos para
+ * iniciar" and "Próximos" under the page header in every style
+ * (`TareasClient` mounts it with one tramo filter), and the Iniciar tramo
  * sheet. The board, the sheet's candidates and `canStart` are one query
  * (`qk.tareas.startSlot(tramoId)`, 30 s stale); a start or an undo
  * invalidates it, so nothing here reloads by hand. `?project=X&iniciar=1`

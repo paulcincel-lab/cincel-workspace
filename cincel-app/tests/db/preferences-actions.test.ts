@@ -72,7 +72,8 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
   const { fetchOrgAppearanceAction } = await import("@/lib/actions/org-appearance-actions");
   const { IMPLEMENTED: PREFERENCES_FLAGS } = await import("@/lib/actions/preferences-actions.flags");
   const { IMPLEMENTED: ORG_FLAGS } = await import("@/lib/actions/org-appearance-actions.flags");
-  const { APPEARANCE_COOKIE, parseAppearanceCookie } = await import("@/lib/ui/preferences");
+  const { APPEARANCE_COOKIE } = await import("@/lib/ui/preferences");
+  const { parseAppearanceCookie } = await import("@/lib/ui/appearance-cookie");
 
   beforeAll(async () => {
     const [member] = await db

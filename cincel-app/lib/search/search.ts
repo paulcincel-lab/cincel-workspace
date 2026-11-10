@@ -15,7 +15,7 @@ import {
 } from "@/lib/auth/permissions";
 import { createRateLimiter } from "@/lib/auth/rate-limit";
 import { db } from "@/lib/db/client";
-import { contacts, driveFiles, notes, projectLinks, projects, staff, tasks, workflows } from "@/lib/db/schema";
+import { contacts, driveFiles, foldedText, notes, projectLinks, projects, staff, tasks, workflows } from "@/lib/db/schema";
 import type { SearchResult, SearchResultType } from "@/lib/types/redesign";
 
 export const SEARCH_TYPES: readonly SearchResultType[] = ["proyecto", "tarea", "persona", "archivo", "nota"];
@@ -31,9 +31,7 @@ export type RankedResult = SearchResult & { score: number; recency: number };
 
 // ── Query normalisation ─────────────────────────────────────────────────────
 
-// The same folding runs in SQL (`translate(lower(x))`) and in JS (`foldText`).
-const ACCENTED = "áàäâãåéèëêíìïîóòöôõúùüûñç";
-const PLAIN = "aaaaaaeeeeiiiiooooouuuunc";
+// The same folding runs in SQL (`foldedText`, lib/db/schema) and in JS (`foldText`).
 
 /** Lower case, no accents, single spaces. */
 export function foldText(value: string): string {
@@ -70,9 +68,7 @@ export function searchTerms(query: string): SearchTerms {
   };
 }
 
-function fold(column: SQLWrapper): SQL<string> {
-  return sql<string>`translate(lower(coalesce(${column}, '')), ${ACCENTED}, ${PLAIN})`;
-}
+const fold = foldedText;
 
 /** Match weight of one field: exact 3, prefix 2, word-start 1.5, contains 1, else 0 (BE §8.9). */
 function fieldMatch(column: SQLWrapper, q: SearchTerms): SQL {
@@ -93,8 +89,17 @@ function rankOf(fields: SQLWrapper[], q: SearchTerms) {
     fields.map((f) => sql`similarity(${fold(f)}, ${q.folded})`),
     sql`, `
   )})`;
+  // A one-word query matches iff some field contains it (exact, prefix and
+  // word-start all imply contains), so the predicate can be the plain LIKE the
+  // trigram indexes serve; other queries keep the full match weight.
+  const matches = /^[a-z0-9]+$/.test(q.folded)
+    ? sql`(${sql.join(
+        fields.map((f) => sql`${fold(f)} like ${q.contains}`),
+        sql` or `
+      )})`
+    : sql`${match} > 0`;
   return {
-    matches: sql`${match} > 0`,
+    matches,
     score: sql<number>`(${match} + ${similarity})::float8`,
   };
 }

@@ -89,6 +89,8 @@ export type TareasAnaliticoProps = {
   empty: EmptyStateProps;
   /** Quick-add rows only for viewers who can create tasks. */
   canCreate: boolean;
+  /** Project Flow's start slot under the header (only with one tramo filter). */
+  startSlot?: ReactNode;
 };
 
 /** What one tramo group's rows query reports to the page. */
@@ -163,6 +165,7 @@ export function TareasAnalitico({
   onQuery,
   empty,
   canCreate,
+  startSlot,
 }: TareasAnaliticoProps) {
   const f = useTareasFilters(query);
   const ready = useTareasPageReady(query);
@@ -467,6 +470,7 @@ export function TareasAnalitico({
       {...cells.primeProps}
     >
       <PageHeader title="Tareas" description={ANALITICO_DESCRIPTION} actions={actions} />
+      {startSlot}
       <FilterCard
         groups={filterGroups}
         onChange={onFilterChange}

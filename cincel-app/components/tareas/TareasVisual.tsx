@@ -75,6 +75,8 @@ export type TareasVisualProps = {
   onQuery(patch: Partial<TareasQuery>): void;
   /** "No hay tareas con estos filtros" with "Quitar filtros". */
   empty: EmptyStateProps;
+  /** Project Flow's start slot under the header (only with one tramo filter). */
+  startSlot?: ReactNode;
 };
 
 /** True when the target of a key press is a field (the `n` shortcut leaves typing alone). */
@@ -95,7 +97,17 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * focuses the first column's quick-add. The board stays usable when the
  * trend fails.
  */
-export function TareasVisual({ query, facets, tramos, actions, search, onSearch, onQuery, empty }: TareasVisualProps) {
+export function TareasVisual({
+  query,
+  facets,
+  tramos,
+  actions,
+  search,
+  onSearch,
+  onQuery,
+  empty,
+  startSlot,
+}: TareasVisualProps) {
   const f = useTareasFilters(query);
   const ready = useTareasPageReady(query);
   const boardQuery = useQuery({ ...tareasBoardOptions(f), enabled: ready });
@@ -244,6 +256,7 @@ export function TareasVisual({ query, facets, tramos, actions, search, onSearch,
   return (
     <div ref={rootRef} data-testid="tareas-visual" className="flex flex-col gap-5">
       <PageHeader {...header} />
+      {startSlot}
       <section
         aria-label={TAREAS_VISUAL_SUMMARY_LABEL}
         className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.4fr_1fr_1.6fr]"
