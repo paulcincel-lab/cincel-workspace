@@ -12,7 +12,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
   getProyectoResumenData: vi.fn(),
-  getProyectoTareasData: vi.fn(),
+  getProyectoResumenSummary: vi.fn(),
 }));
 vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
@@ -78,10 +78,10 @@ vi.mock("@/lib/actions/tramo-start-actions", () => ({
 }));
 vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasStartSlotData: vi.fn(() => new Promise(() => {})) }));
 
-import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskListRow } from "@/lib/types/core";
 import { TRAMOS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { seedResumenTasks } from "@/tests/unit/fixtures/resumen-summary";
 
 import { ResumenEsencialLayout } from "../ResumenEsencialLayout";
 
@@ -113,7 +113,7 @@ const TASKS: TaskListRow[] = [
 function renderLayout(opts: { tasks?: TaskListRow[]; input?: ReturnType<typeof fixtureSummaryInput> } = {}) {
   const client = createTestQueryClient();
   const input = opts.input ?? fixtureSummaryInput();
-  client.setQueryData(qk.proyectos.tab(input.project.id, "tareas"), { tasks: opts.tasks ?? TASKS, includeAdmin: false });
+  seedResumenTasks(client, input, opts.tasks ?? TASKS);
   return renderWithQueryClient(<ResumenEsencialLayout data={input} />, { client });
 }
 

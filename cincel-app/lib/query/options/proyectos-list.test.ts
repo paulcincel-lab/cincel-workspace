@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 const actions = vi.hoisted(() => ({
   getProyectosPageData: vi.fn(),
   getProyectoResumenData: vi.fn(),
-  getProyectoTareasData: vi.fn(),
+  getProyectoResumenSummary: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
 
@@ -17,7 +17,7 @@ import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import { STALE, qk } from "@/lib/query/keys";
 import { createTestQueryClient } from "@/lib/query/test-utils";
 
-import { proyectoResumenOptions, proyectoTareasOptions, proyectosPageOptions, seedResumenArchivosCount } from "./proyectos";
+import { proyectoResumenOptions, proyectoResumenSummaryOptions, proyectosPageOptions, seedResumenArchivosCount } from "./proyectos";
 
 const ID = "33333333-3333-4333-8333-333333333333";
 
@@ -34,8 +34,10 @@ describe("Proyectos 5a query options", () => {
   it("use their keys and the screen stale time", () => {
     expect(proyectosPageOptions().queryKey).toEqual(qk.proyectos.list());
     expect(proyectoResumenOptions(ID).queryKey).toEqual(qk.proyectos.resumen(ID));
-    expect(proyectoTareasOptions(ID).queryKey).toEqual(qk.proyectos.tab(ID, "tareas"));
-    for (const opts of [proyectosPageOptions(), proyectoResumenOptions(ID), proyectoTareasOptions(ID)]) {
+    expect(proyectoResumenSummaryOptions(ID).queryKey).toEqual(qk.proyectos.resumenSummary(ID));
+    // Under the project's Tareas prefix: every task invalidation of the project refreshes it.
+    expect(qk.proyectos.resumenSummary(ID).slice(0, 3)).toEqual(qk.proyectos.tab(ID, "tareas"));
+    for (const opts of [proyectosPageOptions(), proyectoResumenOptions(ID), proyectoResumenSummaryOptions(ID)]) {
       expect(opts.staleTime).toBe(STALE.screen);
     }
   });
@@ -44,13 +46,13 @@ describe("Proyectos 5a query options", () => {
     const client = createTestQueryClient();
     actions.getProyectosPageData.mockResolvedValueOnce({ projects: [] });
     actions.getProyectoResumenData.mockResolvedValueOnce(null);
-    actions.getProyectoTareasData.mockResolvedValueOnce({ tasks: [], includeAdmin: false });
+    actions.getProyectoResumenSummary.mockResolvedValueOnce(null);
     await client.fetchQuery(proyectosPageOptions());
     await client.fetchQuery(proyectoResumenOptions(ID));
-    await client.fetchQuery(proyectoTareasOptions(ID));
+    await client.fetchQuery(proyectoResumenSummaryOptions(ID));
     expect(actions.getProyectosPageData).toHaveBeenCalledWith({});
     expect(actions.getProyectoResumenData).toHaveBeenCalledWith({ id: ID });
-    expect(actions.getProyectoTareasData).toHaveBeenCalledWith({ id: ID });
+    expect(actions.getProyectoResumenSummary).toHaveBeenCalledWith({ id: ID });
   });
 
   it("the Resumen fetch writes its root listing count into the cached shell", async () => {

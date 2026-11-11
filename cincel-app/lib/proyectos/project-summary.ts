@@ -1124,7 +1124,8 @@ function pctOf(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;
 }
 
-function tramoRunState(project: ProjectDetail, tramo: WorkflowRef): "done" | "current" | "next" {
+/** A started tramo's state: current, done (closed or before the current one) or next. */
+export function tramoRunState(project: ProjectDetail, tramo: WorkflowRef): "done" | "current" | "next" {
   const run = project.tramos.find((t) => t.id === tramo.id) ?? null;
   const current = project.tramos.find((t) => t.current) ?? null;
   if (run?.current) return "current";
@@ -1310,7 +1311,8 @@ export type TaskRow = {
   customStatus: TaskListRow["customStatus"];
 };
 
-function taskRowOf(task: TaskListRow, today: string): TaskRow {
+/** A "Tareas por tramo" row of a task. */
+export function taskRowOf(task: TaskListRow, today: string): TaskRow {
   return {
     id: task.id,
     title: task.title,

@@ -443,6 +443,28 @@ export function tareasListInfiniteOptions(f: TareasListFilters) {
 }
 
 /**
+ * Every row of `qk.tareas.list(f)`, page after page, without touching the
+ * cache (the loaded groups keep their "Cargar más"): what an export of the
+ * whole list reads, on demand only. Stops after `maxPages`.
+ */
+export async function fetchAllTareasListRows(f: TareasListFilters, maxPages = 100): Promise<TaskListRow[]> {
+  const rows: TaskListRow[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < maxPages; i++) {
+    const page: TareasRowsPage = await getTareasListPage({
+      filters: f,
+      cursor,
+      ...(f.orderBy ? { orderBy: f.orderBy } : {}),
+      ...(f.orderDir ? { orderDir: f.orderDir } : {}),
+    });
+    rows.push(...page.rows);
+    cursor = page.nextCursor;
+    if (!cursor) break;
+  }
+  return rows;
+}
+
+/**
  * Loads the first page of every list in `lists` that has no cached pages yet,
  * in one `getTareasListFirstPages` request, and seeds each
  * `qk.tareas.list(f)` (#1051). "Expandir todo" calls it before it opens the

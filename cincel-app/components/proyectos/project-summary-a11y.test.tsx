@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
   getProyectoResumenData: vi.fn(),
-  getProyectoTareasData: vi.fn(),
+  getProyectoResumenSummary: vi.fn(),
   getProyectoHistoryPage: vi.fn(async () => ({ events: [], nextCursor: null })),
   // The Analítico quick-add hint (#997): someone under 60 % for an overloaded responsable.
   getProyectoAssigneeSuggestion: vi.fn(async () => ({
@@ -73,6 +73,7 @@ import { HISTORY_EVENTS, TASK_ROWS } from "@/tests/unit/fixtures/project-summary
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { THEME_IDS } from "@/lib/ui/themes";
 import { fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { seedResumenTasks } from "@/tests/unit/fixtures/resumen-summary";
 import { settle } from "@/tests/helpers/settle";
 
 import { ProjectSummaryContent } from "./ProjectSummary";
@@ -115,9 +116,9 @@ function setTheme(theme: string, mode: "light" | "dark") {
 
 function Page({ style, restricted }: { style: PresentationStyle; restricted: boolean }) {
   const input = fixtureSummaryInput(restricted ? { showBudget: false, showClientContacts: false } : {});
-  // The Analítico layout (and the Visual one) read the project's task rows, prefetched by the page.
+  // The layouts read the task numbers and the group rows, prefetched by the page.
   const client = createTestQueryClient();
-  client.setQueryData(qk.proyectos.tab(input.project.id, "tareas"), { tasks: TASK_ROWS, includeAdmin: !restricted });
+  seedResumenTasks(client, input, TASK_ROWS, { includeAdmin: !restricted });
   return (
     <QueryClientProvider client={client}>
       <StyleProvider style={style} scope="staff">
@@ -195,7 +196,7 @@ describe("Resumen Visual accessibility (#995)", () => {
   function VisualPage({ restricted }: { restricted: boolean }) {
     const input = fixtureSummaryInput(restricted ? { showBudget: false, showClientContacts: false } : {});
     const client = createTestQueryClient();
-    client.setQueryData(qk.proyectos.tab(input.project.id, "tareas"), { tasks: TASK_ROWS, includeAdmin: !restricted });
+    seedResumenTasks(client, input, TASK_ROWS, { includeAdmin: !restricted });
     client.setQueryData(qk.proyectos.history(input.project.id), {
       pages: [{ events: HISTORY_EVENTS, nextCursor: null }],
       pageParams: [null],

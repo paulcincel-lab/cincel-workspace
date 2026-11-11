@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
   getProyectoResumenData: vi.fn(),
-  getProyectoTareasData: vi.fn(),
+  getProyectoResumenSummary: vi.fn(),
 }));
 vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
@@ -26,10 +26,10 @@ vi.mock("@/components/tareas/quick-add-create", async (importOriginal) => ({
 }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
-import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskListRow } from "@/lib/types/core";
 import { TRAMOS, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { seedResumenTasks } from "@/tests/unit/fixtures/resumen-summary";
 
 import { ResumenEsencialLayout } from "../ResumenEsencialLayout";
 
@@ -61,7 +61,7 @@ async function seriousViolations(container: HTMLElement) {
 function renderPage() {
   const client = createTestQueryClient();
   const input = fixtureSummaryInput();
-  client.setQueryData(qk.proyectos.tab(input.project.id, "tareas"), { tasks: TASKS, includeAdmin: false });
+  seedResumenTasks(client, input, TASKS);
   return renderWithQueryClient(
     <StyleProvider style="esencial" scope="staff">
       <main>

@@ -24,15 +24,15 @@ import type { PortalActivityRow } from "@/lib/types/portal";
 // List, Resumen and Tareas (5a, #959)
 import {
   loadProyectoResumen,
-  loadProyectoTareas,
+  loadProyectoResumenSummary,
   loadProyectoTareasSummary,
   loadProjectCreateStartOptions,
   loadProyectosPage,
-  type ProyectoTareasData,
   type ProyectosPageData,
 } from "@/lib/loaders/proyectos";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import type { ProyectoTareasSummary } from "@/lib/proyectos/project-tasks-by-fase";
+import type { ResumenTareasSummary } from "@/lib/proyectos/resumen-summary";
 import type { ProjectCreateStartOptions } from "@/lib/types/core";
 import { suggestAssignee, type AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
@@ -148,10 +148,13 @@ export async function getProyectoResumenData(
   return loadProyectoResumen(await requireCapabilityUser(), parsed);
 }
 
-/** `qk.proyectos.tab(id, 'tareas')`: the slim task rows; null for a project out of scope or deleted. */
-export async function getProyectoTareasData(input: z.input<typeof ProyectoTareasInput>): Promise<ProyectoTareasData | null> {
+/**
+ * `qk.proyectos.resumenSummary(id)` (#1051): the Resumen's task numbers as
+ * server aggregates; null for a project out of scope or deleted.
+ */
+export async function getProyectoResumenSummary(input: z.input<typeof ProyectoTareasInput>): Promise<ResumenTareasSummary | null> {
   const parsed = parseInput(ProyectoTareasInput, input);
-  return loadProyectoTareas(await requireCapabilityUser(), parsed);
+  return loadProyectoResumenSummary(await requireCapabilityUser(), parsed);
 }
 
 const ProyectoTareasSummaryInput = z.object({

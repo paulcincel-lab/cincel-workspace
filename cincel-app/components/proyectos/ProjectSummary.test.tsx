@@ -82,14 +82,14 @@ vi.mock("@/components/widgets/ResumenEsencialLayout", () => ({
 vi.mock("@/components/widgets/ResumenVisualLayout", () => ({
   ResumenVisualLayout: (props: {
     data: { project: { name: string } };
-    tasks: { id: string }[];
+    summary: { next: { id: string }[] };
     history: { events: { id: string }[]; status: string };
     canCreate: boolean;
   }) => (
     <section
       aria-label="Resumen visual"
       data-layout="visual"
-      data-tasks={props.tasks.map((t) => t.id).join(",")}
+      data-next={props.summary.next.map((t) => t.id).join(",")}
       data-events={props.history.events.map((e) => e.id).join(",")}
       data-history={props.history.status}
       data-can-create={String(props.canCreate)}
@@ -105,10 +105,10 @@ vi.mock("@/lib/stores/quick-add-store", () => ({
   useQuickAddRecent: (select: (state: { recent: string[] }) => unknown) => select({ recent: [] }),
 }));
 
-// The page prefetches the Resumen, the task list and the history; a client call here would be a bug.
+// The page prefetches the Resumen, the task numbers and the history; a client call here would be a bug.
 const actions = vi.hoisted(() => ({
   getProyectoResumenData: vi.fn(),
-  getProyectoTareasData: vi.fn(),
+  getProyectoResumenSummary: vi.fn(),
   getProyectoHistoryPage: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
@@ -126,11 +126,12 @@ vi.mock("@/lib/proyectos/project-summary", async (importOriginal) => {
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
-import { proyectoHistoryOptions, proyectoResumenOptions, proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { proyectoHistoryOptions, proyectoResumenOptions, proyectoResumenSummaryOptions } from "@/lib/query/options/proyectos";
 import { prefetch } from "@/lib/query/server";
 import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import { fixtureSummaryInput, HISTORY_EVENTS, TASK_ROWS } from "@/tests/unit/fixtures/project-summary";
+import { resumenSummaryOfRows } from "@/tests/unit/fixtures/resumen-summary";
 
 import { ProjectSummary, ProjectSummaryContent, RESUMEN_NOT_FOUND_TITLE } from "./ProjectSummary";
 import { ProjectSummaryWidgets } from "./ProjectSummaryWidgets";
@@ -219,12 +220,12 @@ describe("ProjectSummary · styles", () => {
     expect(container.querySelector("[data-widget]")).toBeNull();
   });
 
-  it("renders the Visual layout with the hydrated task list and history, 0 client action calls", async () => {
+  it("renders the Visual layout with the hydrated task numbers and history, 0 client action calls", async () => {
     const input = fixtureSummaryInput();
     const { client, state } = await hydrationRoundtrip(async (server) => {
       await Promise.all([
         prefetch(server, proyectoResumenOptions("p1"), async () => input),
-        prefetch(server, proyectoTareasOptions("p1"), async () => ({ tasks: TASK_ROWS, includeAdmin: true })),
+        prefetch(server, proyectoResumenSummaryOptions("p1"), async () => resumenSummaryOfRows(TASK_ROWS, "2026-11-06")),
         server.prefetchInfiniteQuery({
           ...proyectoHistoryOptions("p1"),
           queryFn: async () => ({ events: HISTORY_EVENTS, nextCursor: null }),
@@ -238,13 +239,13 @@ describe("ProjectSummary · styles", () => {
       { client, hydrate: state },
     );
     const layout = screen.getByRole("region", { name: "Resumen visual" });
-    expect(layout.getAttribute("data-tasks")).toBe(TASK_ROWS.map((t) => t.id).join(","));
+    expect(layout.getAttribute("data-next")).toBe(resumenSummaryOfRows(TASK_ROWS, "2026-11-06").next.map((t) => t.id).join(","));
     expect(layout.getAttribute("data-events")).toBe("h1,h2");
     expect(layout.getAttribute("data-history")).toBe("success");
     expect(layout.getAttribute("data-can-create")).toBe("false");
     expect(container.querySelector("[data-widget]")).toBeNull();
     expect(actions.getProyectoResumenData).not.toHaveBeenCalled();
-    expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+    expect(actions.getProyectoResumenSummary).not.toHaveBeenCalled();
     expect(actions.getProyectoHistoryPage).not.toHaveBeenCalled();
   });
 

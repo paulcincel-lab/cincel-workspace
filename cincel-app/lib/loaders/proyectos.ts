@@ -11,6 +11,8 @@ import * as projectsRepository from "@/lib/repositories/projects-repository";
 import { listTaskRows } from "@/lib/repositories/tasks-repository";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import { summarizeProjectTasks, type ProyectoTareasSummary } from "@/lib/proyectos/project-tasks-by-fase";
+import { EMPTY_RESUMEN_SUMMARY, type ResumenTareasSummary } from "@/lib/proyectos/resumen-summary";
+import { resumenTaskAggregates } from "@/lib/proyectos/resumen-summary-repository";
 import type { ImportData, ProjectDetail, ProjectSpace, TaskKind, TaskListRow } from "@/lib/types/core";
 // Cronograma (5c, #961)
 import type { ScheduleViewData } from "@/lib/actions/schedule-actions";
@@ -418,4 +420,26 @@ export async function loadProyectoTareasSummary(
     responsable: input.responsable,
     q: input.q,
   });
+}
+
+/**
+ * `qk.proyectos.resumenSummary(id)` loader (#1051): every task number of the
+ * Resumen (KPIs, tramos and fases, team load, "Lo que sigue") as SQL
+ * aggregates, four grouped statements, so the Resumen never reads the
+ * project's task list. Null like `loadProyectoTareas`; without
+ * `canViewActivities`, an empty summary.
+ */
+export async function loadProyectoResumenSummary(
+  user: AuthenticatedUser,
+  input: { id: string },
+): Promise<ResumenTareasSummary | null> {
+  const project = await visibleProject(user, input.id);
+  if (!project) return null;
+  const includeAdmin = canSeeAdminData(user);
+  const today = todayInAppTimeZone();
+  if (!resolveActivitiesCapabilities(user).canViewActivities) {
+    return { ...EMPTY_RESUMEN_SUMMARY, includeAdmin, today };
+  }
+  const aggregates = await resumenTaskAggregates(project.id, includeAdmin, today);
+  return { canViewTasks: true, includeAdmin, today, ...aggregates };
 }
