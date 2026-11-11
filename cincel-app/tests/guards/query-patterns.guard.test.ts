@@ -6,6 +6,8 @@
  * - no sort over `useInfiniteQuery` pages (the server sorts; "Cargar más"
  *   must append, never reorder). A sort that keeps the server's order is
  *   marked `// data-patterns: server-order`.
+ * - no full task read in the Proyecto · Resumen (its numbers come from
+ *   `qk.proyectos.resumenSummary(id)`).
  * Plus: every task list pages through `tareasListInfiniteOptions` (or the
  * Mi espacio closed-task pages) instead of a full-list read.
  */
@@ -16,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { checkSource } from "../../scripts/check-data-patterns.mjs";
 
 const ROOT = join(__dirname, "../..");
-const RULES = [/ without a selector$/, /^queryFn → /, / over paged rows$/];
+const RULES = [/ without a selector$/, /^queryFn → /, / over paged rows$/, /^Resumen full task read → /];
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -58,5 +60,13 @@ describe("query patterns (#1051)", () => {
     expect(rows).toMatch(/tareasListInfiniteOptions\(/);
     expect(rows).not.toMatch(/sortByDueDate/);
     expect(read("components/widgets/ProjectsAnaliticoLayout.tsx")).toMatch(/prefetchTareasListFirstPages\(/);
+    // Resumen: server task numbers, and "Tareas por tramo" pages per group.
+    for (const file of ["components/widgets/ResumenVisualLayout.tsx", "components/proyectos/ProjectSummary.tsx", "components/widgets/ResumenEsencialLayout.tsx"]) {
+      expect(read(file)).not.toMatch(/proyectoTareasOptions|tramoProgress\(tasks|nextTasks\(/);
+    }
+    const resumen = read("components/widgets/ResumenAnaliticoLayout.tsx");
+    expect(resumen).toMatch(/proyectoResumenSummaryOptions\(/);
+    expect(resumen).toMatch(/tareasListInfiniteOptions\(/);
+    expect(read("app/(staff)/proyectos/[id]/page.tsx")).toMatch(/proyectoResumenSummaryOptions\(/);
   });
 });

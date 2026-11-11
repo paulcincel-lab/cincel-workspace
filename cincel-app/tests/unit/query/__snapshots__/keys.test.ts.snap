@@ -181,6 +181,25 @@ exports[`qk > builds every key shape 1`] = `
     "me",
     "tasks",
   ],
+  "me.tasksList": [
+    "me",
+    "tasks",
+    "list",
+    {
+      "orderBy": "retraso",
+      "proyecto": "p1",
+      "tramo": "diseno",
+    },
+  ],
+  "me.tasksSummary": [
+    "me",
+    "tasks",
+    "summary",
+    {
+      "q": null,
+      "tramo": "diseno",
+    },
+  ],
   "me.today": [
     "me",
     "today",
@@ -353,6 +372,12 @@ exports[`qk > builds every key shape 1`] = `
     "proyectos",
     "p1",
     "resumen",
+  ],
+  "proyectos.resumenSummary": [
+    "proyectos",
+    "p1",
+    "tareas",
+    "resumen-summary",
   ],
   "proyectos.shell": [
     "proyectos",
@@ -542,6 +567,8 @@ exports[`qk > covers every key of the factory 1`] = `
   "me.today",
   "me.weekHours",
   "me.tasks",
+  "me.tasksSummary",
+  "me.tasksList",
   "me.preferences",
   "me.profile",
   "me.notifications",
@@ -582,6 +609,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "proyectos.resumen",
   "proyectos.tab",
   "proyectos.tareasSummary",
+  "proyectos.resumenSummary",
   "proyectos.archivos",
   "proyectos.cronograma",
   "proyectos.history",

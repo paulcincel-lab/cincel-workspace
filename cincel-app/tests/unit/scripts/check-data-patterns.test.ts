@@ -203,6 +203,26 @@ export function plain(rows: number[]) {
 `;
     expect(patterns("components/a.tsx", text)).toEqual(["2 sortByDueDate( over paged rows"]);
   });
+
+  it("flags a full task read in the Resumen, not the task numbers nor an invalidation key list", () => {
+    const text = `export function Resumen({ id }: { id: string }) {
+  const tareas = useQuery(proyectoTareasOptions(id));
+  const cached = qc.getQueryData(qk.proyectos.tab(id, "tareas"));
+  const numbers = useQuery(proyectoResumenSummaryOptions(id));
+  const invalidate = [qk.proyectos.tab(id, "tareas"), qk.proyectos.resumen(id)];
+  const ficha = useQuery({ queryKey: qk.proyectos.tab(id, "ficha") });
+  return null;
+}
+`;
+    const flagged = ["2 Resumen full task read → proyectoTareasOptions(", '3 Resumen full task read → qk.proyectos.tab(…, "tareas")'];
+    expect(patterns("components/widgets/ResumenAnaliticoLayout.tsx", text)).toEqual(flagged);
+    expect(patterns("components/proyectos/ProjectSummary.tsx", text)).toEqual(flagged);
+    expect(patterns("app/(staff)/proyectos/[id]/page.tsx", "const rows = await listTaskRows({ projectId: id }, viewer);\n")).toEqual([
+      "1 Resumen full task read → listTaskRows(",
+    ]);
+    // Other screens may read the project's Tareas tab key.
+    expect(patterns("components/proyectos/ProjectTasksByFase.tsx", text)).toEqual([]);
+  });
 });
 
 describe("CLI", () => {
