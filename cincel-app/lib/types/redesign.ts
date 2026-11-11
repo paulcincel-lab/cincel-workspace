@@ -4,6 +4,7 @@
  * shapes live in `lib/types/widgets.ts`.
  */
 import type { CalendarEvent } from "@/lib/types/calendar";
+import type { AssistantCalendarContext } from "@/lib/types/calendario";
 import type { HistoryEntity, Staff, TaskListItem, TaskStatus } from "@/lib/types/core";
 import type {
   AgendaItem,
@@ -97,7 +98,7 @@ export type AppearanceCookie = {
 
 // ── Notifications ───────────────────────────────────────────────────────────
 export type NotificationKind =
-  | "asignacion" | "mencion" | "vencimiento" | "comentario" | "aprobacion_cliente" | "recordatorio" | "sistema";
+  | "asignacion" | "mencion" | "vencimiento" | "comentario" | "aprobacion_cliente" | "recordatorio" | "sistema" | "reunion";
 
 export type NotificationItem = {
   id: string;
@@ -299,7 +300,14 @@ export type SearchResult = {
 };
 
 // ── Assistant ───────────────────────────────────────────────────────────────
-export type AssistantContext = { route: string; projectId?: string; taskId?: string; personId?: string };
+export type AssistantContext = {
+  route: string;
+  projectId?: string;
+  taskId?: string;
+  personId?: string;
+  /** Present on /calendario (Calendario BE §6.1): dates, ids and enums only. */
+  calendar?: AssistantCalendarContext;
+};
 
 export type AssistantActionStatus = "proposed" | "confirmed" | "cancelled" | "done" | "failed";
 

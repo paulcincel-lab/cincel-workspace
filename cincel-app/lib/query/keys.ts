@@ -18,6 +18,7 @@ import type { MeTasksListFilters, MyTasksSummaryInput } from "@/lib/my-space/my-
 import type { ImportDataEntity } from "@/lib/repositories/import-repository";
 import type { TareasMostrar } from "@/lib/tareas/query";
 import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
+import type { CalView, CalendarioFilters } from "@/lib/types/calendario";
 import type { TaskStatus } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
@@ -212,6 +213,22 @@ export const qk = {
     contacts: (type?: string) => ["catalog", "contacts", type ?? null] as const,
   },
   search: (q: string, types?: string[]) => ["search", q, types ?? null] as const,
+  /** Calendario (FE §9.1). Filters are normalised (`normalizeCalendarioFilters`) before they enter a key. */
+  calendario: {
+    all: ["calendario"] as const,
+    range: (i: { view: CalView; from: string; to: string; filters: CalendarioFilters }) => ["calendario", "range", i] as const,
+    list: (i: { from: string; to: string; filters: CalendarioFilters; orderDir: "asc" | "desc" }) =>
+      ["calendario", "list", i] as const,
+    day: (date: string) => ["calendario", "day", date] as const,
+    week: (from: string) => ["calendario", "week", from] as const,
+    load: (i: { from: string; to: string; staffIds: string[] }) => ["calendario", "load", i] as const,
+    meeting: (id: string) => ["calendario", "meeting", id] as const,
+    prep: (id: string) => ["calendario", "meeting", id, "prep"] as const,
+    minutes: (id: string) => ["calendario", "meeting", id, "minutes"] as const,
+    planWeek: (i: { weekStart: string; staffIds: string[] }) => ["calendario", "plan-week", i] as const,
+    proposals: () => ["calendario", "proposals"] as const,
+    proposal: (id: string) => ["calendario", "proposals", id] as const,
+  },
   portal: {
     projects: () => ["portal", "projects"] as const,
     project: (id: string, tab: string) => ["portal", "project", id, tab] as const,

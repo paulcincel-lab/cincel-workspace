@@ -25,6 +25,7 @@ const HREFS: Record<NavItemKey, string> = {
   inicio: "/inicio",
   "mi-espacio": "/mi-espacio",
   tareas: "/tareas",
+  calendario: "/calendario",
   proyectos: "/proyectos",
   personas: "/personas",
   biblioteca: "/biblioteca",

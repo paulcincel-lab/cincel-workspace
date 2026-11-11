@@ -21,7 +21,8 @@ export type NewTaskSource =
   | "url"
   | "inicio"
   | "quick-add"
-  | "mi-espacio";
+  | "mi-espacio"
+  | "calendario";
 
 export type NewTaskUiState = {
   open: boolean;

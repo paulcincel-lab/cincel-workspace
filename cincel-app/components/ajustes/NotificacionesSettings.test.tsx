@@ -105,7 +105,7 @@ afterEach(() => {
 });
 
 describe("withNotificationDefaults", () => {
-  it("returns the 7 kinds in matrix order, defaults for kinds without a row", () => {
+  it("returns the 8 kinds in matrix order, defaults for kinds without a row", () => {
     const filled = withNotificationDefaults({
       rows: [{ kind: "mencion", inApp: false, email: false, digest: true }],
       quietHours: null,
@@ -118,6 +118,7 @@ describe("withNotificationDefaults", () => {
       "aprobacion_cliente",
       "recordatorio",
       "sistema",
+      "reunion",
     ]);
     expect(filled.rows[1]).toEqual({ kind: "mencion", inApp: false, email: false, digest: true });
     expect(filled.rows[0]).toEqual({ kind: "asignacion", ...NOTIFICATION_DEFAULTS.asignacion });
@@ -126,10 +127,10 @@ describe("withNotificationDefaults", () => {
 });
 
 describe("NotificacionesClient", () => {
-  it("loads the 7 kinds × 3 channels with saved values and defaults", () => {
+  it("loads the 8 kinds × 3 channels with saved values and defaults", () => {
     renderClient();
 
-    expect(matrixSwitches()).toHaveLength(21);
+    expect(matrixSwitches()).toHaveLength(24);
     for (const [key, kind] of Object.entries(NOTIFICATION_KIND_LABELS)) {
       const header = screen.getByRole("rowheader", { name: new RegExp(`^${kind}`) });
       expect(header.textContent).toContain(NOTIFICATION_KIND_DESCRIPTIONS[key as keyof typeof NOTIFICATION_KIND_DESCRIPTIONS]);
@@ -153,7 +154,7 @@ describe("NotificacionesClient", () => {
     const names = matrixSwitches().map((el) => el.getAttribute("aria-label"));
     expect(names.slice(0, 3)).toEqual(["Asignación en la app", "Asignación por correo", "Asignación en el resumen diario"]);
     expect(names).toContain("Aprobación del cliente en el resumen diario");
-    expect(new Set(names).size).toBe(21);
+    expect(new Set(names).size).toBe(24);
   });
 
   it("quiet hours disabled when off", () => {
@@ -222,7 +223,7 @@ describe("NotificacionesClient", () => {
 
     expect(updateNotificationPreferencesAction).toHaveBeenCalledTimes(1);
     const input = updateNotificationPreferencesAction.mock.calls[0][0] as NotificationPreferences;
-    expect(input.rows).toHaveLength(7);
+    expect(input.rows).toHaveLength(8);
     expect(input.rows.find((r) => r.kind === "mencion")).toEqual({ kind: "mencion", inApp: true, email: true, digest: true });
     expect(input.rows.find((r) => r.kind === "asignacion")).toEqual({
       kind: "asignacion",

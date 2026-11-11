@@ -15,6 +15,7 @@ export type NavItemKey =
   | "inicio"
   | "mi-espacio"
   | "tareas"
+  | "calendario"
   | "proyectos"
   | "personas"
   | "biblioteca"

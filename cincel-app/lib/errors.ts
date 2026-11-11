@@ -33,7 +33,7 @@ export function reportRepositoryError(error: RepositoryError): void {
  * Where the failing call came from, for codes whose copy depends on it
  * (`INVALID` in search, `RATE_LIMITED` in Gmail sync, `DISABLED` for Cutto).
  */
-export type ErrorContextName = "search" | "cutto" | "photo" | "gmail" | "vacations";
+export type ErrorContextName = "search" | "cutto" | "photo" | "gmail" | "vacations" | "calendario";
 
 /** The one context argument of `actionErrorText`: a redesign context name or Project Flow's keys. */
 export type ErrorContext = ErrorContextName | ActionErrorContext;
@@ -157,7 +157,23 @@ function codeText(code: string, context: ActionErrorContext): string {
     case "CONFIRM_REQUIRED":
       return "Confirma el envío antes de continuar.";
     case "EXPIRED":
+      if (context.area === "calendario") return "La propuesta expiró. Pide una nueva.";
       return "Esta confirmación venció. Vuelve a intentarlo.";
+    // Calendario (BE §16).
+    case "STALE":
+      return "Esta propuesta ya no está vigente.";
+    case "UNDO_EXPIRED":
+      return "Ya no se puede deshacer.";
+    case "NO_INTENT":
+      return "No entendí qué cambiar. Prueba con \"Pasa lo vencido al jueves\".";
+    case "GOOGLE_REAUTH":
+      return "Vuelve a conectar Google Calendar.";
+    case "GOOGLE_UNAVAILABLE":
+      return "Google Calendar no respondió. Guardé el cambio en Cincel.";
+    case "NOT_ORGANIZER":
+      return "Solo quien organizó el evento puede modificarlo o cancelarlo.";
+    case "RANGE_TOO_LONG":
+      return "El rango es demasiado largo.";
     case "ALREADY_ON":
       return "Ya registraste tu entrada hoy.";
     case "NOT_ON":
@@ -170,6 +186,7 @@ function codeText(code: string, context: ActionErrorContext): string {
     case "NOT_IMPLEMENTED":
       return "Esta función todavía no está disponible.";
     case "RATE_LIMITED":
+      if (context.area === "calendario") return "Demasiadas solicitudes. Intenta de nuevo en unos minutos.";
       return context.area === "gmail"
         ? "Se sincronizó hace un momento. Intenta de nuevo en unos minutos."
         : "Demasiados intentos seguidos. Espera unos segundos e intenta de nuevo.";

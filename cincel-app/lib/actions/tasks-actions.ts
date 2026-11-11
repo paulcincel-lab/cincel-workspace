@@ -340,6 +340,9 @@ async function bulkUpdateOne(
     if (task.parentTaskId) throw new Error("SUBTASK_PHASE");
     return tasksRepository.updateTask(id, { phaseId: patch.phaseId }, actorId);
   }
+  if ("estimatedHours" in patch) {
+    return tasksRepository.updateTask(id, { estimatedHours: patch.estimatedHours }, actorId);
+  }
   // "Vence" writes the date it shows (the commitment date when set, else the delivery date),
   // or the one named by Deshacer, which restores the date a clear removed.
   const field =

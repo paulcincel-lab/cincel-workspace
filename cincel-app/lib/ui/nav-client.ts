@@ -6,6 +6,7 @@
  */
 import {
   BookOpen,
+  CalendarDays,
   Folder,
   House,
   Inbox,
@@ -24,6 +25,7 @@ export const NAV_ICONS: Record<NavItemKey, LucideIcon> = {
   inicio: House,
   "mi-espacio": Inbox,
   tareas: SquareCheck,
+  calendario: CalendarDays,
   proyectos: Folder,
   personas: Users,
   biblioteca: BookOpen,
@@ -36,6 +38,7 @@ export const NAV_LABELS: Record<NavItemKey, string> = {
   inicio: "Inicio",
   "mi-espacio": "Mi espacio",
   tareas: "Tareas",
+  calendario: "Calendario",
   proyectos: "Proyectos",
   personas: "Personas",
   biblioteca: "Biblioteca",

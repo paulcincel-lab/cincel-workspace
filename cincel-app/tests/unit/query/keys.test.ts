@@ -5,8 +5,10 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_CALENDARIO_FILTERS } from "@/lib/calendario/url-state";
 import { qk, type TareasListFilters } from "@/lib/query/keys";
 
+const CAL_FILTERS = DEFAULT_CALENDARIO_FILTERS;
 const F: TareasListFilters = { tramo: "diseno", proyecto: null, responsable: "yo", estado: "pendiente", q: null };
 
 function shapes() {
@@ -107,6 +109,18 @@ function shapes() {
     "catalog.contacts(type)": qk.catalog.contacts("cliente"),
     "search()": qk.search("casa"),
     "search(types)": qk.search("casa", ["project"]),
+    "calendario.all": qk.calendario.all,
+    "calendario.range": qk.calendario.range({ view: "semana", from: "2026-11-09", to: "2026-11-15", filters: CAL_FILTERS }),
+    "calendario.list": qk.calendario.list({ from: "2026-11-09", to: "2026-11-15", filters: CAL_FILTERS, orderDir: "asc" }),
+    "calendario.day": qk.calendario.day("2026-11-11"),
+    "calendario.week": qk.calendario.week("2026-11-09"),
+    "calendario.load": qk.calendario.load({ from: "2026-11-09", to: "2026-11-13", staffIds: ["s1"] }),
+    "calendario.meeting": qk.calendario.meeting("e1"),
+    "calendario.prep": qk.calendario.prep("e1"),
+    "calendario.minutes": qk.calendario.minutes("e1"),
+    "calendario.planWeek": qk.calendario.planWeek({ weekStart: "2026-11-16", staffIds: ["s1"] }),
+    "calendario.proposals": qk.calendario.proposals(),
+    "calendario.proposal": qk.calendario.proposal("p1"),
     "portal.projects": qk.portal.projects(),
     "portal.project": qk.portal.project("p1", "resumen"),
     "portal.files": qk.portal.files("p1", null),

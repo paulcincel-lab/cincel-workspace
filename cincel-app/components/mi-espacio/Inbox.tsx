@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Bell,
   CalendarClock,
+  CalendarDays,
   CheckCheck,
   Info,
   Mail,
@@ -107,6 +108,7 @@ const KIND_CHIP: Record<NotificationKind | "gmail", { icon: LucideIcon; tint: st
   aprobacion_cliente: { icon: BadgeCheck, tint: "tint-chart-1 ink-chart-1" },
   recordatorio: { icon: Bell, tint: "tint-chart-3 ink-chart-3" },
   sistema: { icon: Info, tint: "bg-muted text-muted-foreground" },
+  reunion: { icon: CalendarDays, tint: "tint-chart-2 ink-chart-2" },
 };
 
 /**

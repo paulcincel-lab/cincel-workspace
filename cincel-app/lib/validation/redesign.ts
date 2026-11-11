@@ -50,6 +50,7 @@ export const NotificationKindSchema = z.enum([
   "aprobacion_cliente",
   "recordatorio",
   "sistema",
+  "reunion",
 ]);
 export const NoteColorSchema = z.enum(["neutral", "blue", "amber", "violet", "cyan"]);
 export const ReminderRepeatSchema = z.enum(["none", "daily", "weekly", "monthly"]);
@@ -268,7 +269,7 @@ export const NotificationPreferencesSchema = z
           .object({ kind: NotificationKindSchema, inApp: z.boolean(), email: z.boolean(), digest: z.boolean() })
           .strict(),
       )
-      .max(7),
+      .max(8),
     quietHours: QuietHoursSchema.nullable(),
   })
   .strict();

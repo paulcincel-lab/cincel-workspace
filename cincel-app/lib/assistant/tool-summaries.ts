@@ -340,6 +340,121 @@ Object.assign(toolSummaries, {
   schedule_site_visit: summarizeScheduleSiteVisit,
 } satisfies Record<string, ToolSummary>);
 
+// ── Calendario y planeación (17) (Calendario BE §11) ────────────────────────
+
+function summarizeCalendarRange(input: unknown): string {
+  const from = text(input, "from");
+  const to = text(input, "to");
+  return from && to ? `Ver el calendario del ${formatDueDate(from)} al ${formatDueDate(to)}` : "Ver el calendario";
+}
+
+function summarizeSummarizeDay(input: unknown): string {
+  const date = text(input, "date");
+  return date ? `Resumir el día ${formatDueDate(date)}` : "Resumir el día de hoy";
+}
+
+function summarizeSummarizeWeek(input: unknown): string {
+  const from = text(input, "from");
+  return from ? `Resumir la semana del ${formatDueDate(from)}` : "Resumir esta semana";
+}
+
+function summarizeDayLoad(input: unknown): string {
+  const from = text(input, "from");
+  const to = text(input, "to");
+  return from && to ? `Ver la carga del ${formatDueDate(from)} al ${formatDueDate(to)}` : "Ver la carga por día";
+}
+
+function summarizeFindOverloads(input: unknown): string {
+  const from = text(input, "from");
+  const to = text(input, "to");
+  return from && to ? `Buscar días sobrecargados del ${formatDueDate(from)} al ${formatDueDate(to)}` : "Buscar días sobrecargados";
+}
+
+function summarizeMeetingPrep(): string {
+  return "Preparar la reunión";
+}
+
+function summarizeMoveTasks(input: unknown): string {
+  const toDate = text(input, "toDate");
+  const moves = field(input, "moves");
+  const taskIds = field(input, "taskIds");
+  const count = Array.isArray(moves) ? moves.length : Array.isArray(taskIds) ? taskIds.length : 0;
+  const what = count === 1 ? "1 tarea" : count > 1 ? `${count} tareas` : "tareas";
+  return toDate ? `Proponer mover ${what} al ${formatDueDate(toDate)}` : `Proponer mover ${what}`;
+}
+
+function summarizeProposeFromText(input: unknown): string {
+  const request = text(input, "text");
+  return request ? `Proponer un cambio: ${quoted(request, 120)}` : "Proponer un cambio al calendario";
+}
+
+function summarizeProposeRedistribution(input: unknown): string {
+  const date = text(input, "date");
+  return date ? `Proponer repartir la carga del ${formatDueDate(date)}` : "Proponer repartir la carga";
+}
+
+function summarizeResolveOverlap(): string {
+  return "Proponer cómo resolver el traslape";
+}
+
+function summarizePlanWeek(input: unknown): string {
+  const weekStart = text(input, "weekStart");
+  return weekStart ? `Proponer el plan de la semana del ${formatDueDate(weekStart)}` : "Proponer el plan de la semana";
+}
+
+function summarizeExtractMinutes(): string {
+  return "Proponer la minuta de la reunión";
+}
+
+function summarizeApplyProposal(input: unknown): string {
+  const ids = field(input, "changeIds");
+  return Array.isArray(ids) && ids.length > 0
+    ? `Aplicar ${ids.length === 1 ? "1 cambio" : `${ids.length} cambios`} de la propuesta`
+    : "Aplicar la propuesta";
+}
+
+function summarizeUndoProposal(): string {
+  return "Deshacer los cambios de la propuesta";
+}
+
+function summarizeCreateTasksFromMinutes(input: unknown): string {
+  return field(input, "scheduleFollowUp") === true
+    ? "Crear las tareas de la minuta y agendar la junta de seguimiento"
+    : "Crear las tareas de la minuta";
+}
+
+function summarizeSendAgenda(input: unknown): string {
+  const items = field(input, "items");
+  const count = Array.isArray(items) ? items.length : 0;
+  return count > 0
+    ? `Enviar el orden del día (${count === 1 ? "1 punto" : `${count} puntos`}) a los asistentes`
+    : "Enviar el orden del día a los asistentes";
+}
+
+function summarizeSendMinutes(): string {
+  return "Enviar la minuta a los asistentes";
+}
+
+Object.assign(toolSummaries, {
+  calendar_range: summarizeCalendarRange,
+  summarize_day: summarizeSummarizeDay,
+  summarize_week: summarizeSummarizeWeek,
+  day_load: summarizeDayLoad,
+  find_overloads: summarizeFindOverloads,
+  meeting_prep: summarizeMeetingPrep,
+  move_tasks: summarizeMoveTasks,
+  propose_from_text: summarizeProposeFromText,
+  propose_redistribution: summarizeProposeRedistribution,
+  resolve_overlap: summarizeResolveOverlap,
+  plan_week: summarizePlanWeek,
+  extract_minutes: summarizeExtractMinutes,
+  apply_proposal: summarizeApplyProposal,
+  undo_proposal: summarizeUndoProposal,
+  create_tasks_from_minutes: summarizeCreateTasksFromMinutes,
+  send_agenda: summarizeSendAgenda,
+  send_minutes: summarizeSendMinutes,
+} satisfies Record<string, ToolSummary>);
+
 // ── Mi espacio y jornada (BE §10.3) ─────────────────────────────────────────
 
 function curlyQuoted(text: string | undefined, max = 60): string {

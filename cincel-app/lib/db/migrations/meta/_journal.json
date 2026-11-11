@@ -246,6 +246,13 @@
       "when": 1794364274587,
       "tag": "0034_oval_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794433452348,
+      "tag": "0035_calendario_contracts",
+      "breakpoints": true
     }
   ]
 }

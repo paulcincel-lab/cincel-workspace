@@ -1888,6 +1888,7 @@ export async function updateTask(
   if (patch.notes !== undefined) set.notes = clean(patch.notes);
   const movedFrom = await applyFlowPatch(before, patch, set, opts.canMoveTramo ?? false);
   if (patch.priority !== undefined) set.priority = patch.priority;
+  if (patch.estimatedHours !== undefined) set.estimatedHours = patch.estimatedHours;
   // Picking a built-in status leaves any custom one.
   if (patch.status !== undefined) {
     set.status = patch.status;
