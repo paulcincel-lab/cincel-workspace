@@ -53,6 +53,8 @@ export type QuickAddContext = {
   status?: string;
   assigneeId?: string | null;
   placeholder?: string;
+  /** "+ Subtarea…" under an expanded parent row (#1048): the draft creates a subtask of it. */
+  parentTaskId?: string;
 };
 export type QuickAddDraft = {
   title: string;
@@ -62,6 +64,8 @@ export type QuickAddDraft = {
   dueDate: string | null;
   priority: TaskPriority;
   status?: string;
+  /** Set from `context.parentTaskId`: create a subtask of this task. */
+  parentTaskId?: string;
 };
 export type QuickAddCreated = { id: string; title: string };
 export type QuickAddRowProps = {
@@ -218,7 +222,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
   const meId = me?.member.id ?? null;
   const markCreated = useQuickAddRecent((s) => s.markCreated);
   const openNewTask = useNewTaskUi((s) => s.openNewTask);
-  const undo = useQuickAddUndo(context.projectId);
+  const undo = useQuickAddUndo(context.projectId, context.parentTaskId);
 
   const workflowsQuery = useQuery({
     queryKey: newTaskWorkflowsKey(),
@@ -267,6 +271,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
     dueDate: parsed.dueDate ?? null,
     priority: parsed.priority ?? "media",
     ...(context.status !== undefined ? { status: context.status } : {}),
+    ...(context.parentTaskId ? { parentTaskId: context.parentTaskId } : {}),
   };
 
   const slashMode = parsed.slash !== null;
@@ -377,7 +382,8 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
 
   const chipsId = `${id}-chips`;
   const hintId = `${id}-hint`;
-  const label = `Nueva tarea en ${context.label}`;
+  // A subtask's line names its parent itself ("Nueva subtarea de «…»", #1048).
+  const label = context.parentTaskId ? context.label : `Nueva tarea en ${context.label}`;
   const placeholder =
     context.placeholder ??
     (variant === "row"

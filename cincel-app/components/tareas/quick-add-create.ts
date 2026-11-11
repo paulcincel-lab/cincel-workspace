@@ -107,10 +107,26 @@ export function quickAddTaskVars(draft: QuickAddDraft, workflows: readonly Workf
   };
 }
 
+/** The `createSubtaskAction` input of a "+ Subtarea…" draft (#1048): title, responsable, date and priority. */
+export function quickAddSubtaskInput(draft: QuickAddDraft): SubtaskInput {
+  return {
+    title: draft.title,
+    managerId: draft.assigneeId,
+    deliveryDate: draft.dueDate,
+    priority: draft.priority ?? "media",
+  };
+}
+
+/** Keys a subtask created inline makes stale: the parent's rows and counts, and the Tareas views. */
+export function quickAddSubtaskInvalidations(parentId: string, projectId: string) {
+  return [qk.tasks.children(parentId), qk.tasks.detail(parentId), ...newTaskInvalidations(projectId, { taskId: parentId, withSubtasks: true })];
+}
+
 /** Deletes a just-created task ("Deshacer") and refreshes the views showing tasks. */
-export function useQuickAddUndo(projectId: string | null): (id: string) => Promise<void> {
+export function useQuickAddUndo(projectId: string | null, parentTaskId?: string): (id: string) => Promise<void> {
   const mutation = useActionMutation((id: string) => deleteTaskAction(id), {
-    invalidate: () => newTaskInvalidations(projectId ?? ""),
+    invalidate: () =>
+      parentTaskId ? quickAddSubtaskInvalidations(parentTaskId, projectId ?? "") : newTaskInvalidations(projectId ?? ""),
   });
   return async (id: string) => {
     await mutation.mutateAsync(id);
@@ -132,7 +148,12 @@ export function useQuickAddCreate(): {
   const projects = useRef(new Map<string, string>());
 
   const createMutation = useActionMutation(
-    async (draft: QuickAddDraft) => {
+    async (draft: QuickAddDraft): Promise<CreateTaskResult> => {
+      if (draft.parentTaskId) {
+        const parentId = draft.parentTaskId;
+        const task = await runAction((v: SubtaskInput) => createSubtaskAction(parentId, v), quickAddSubtaskInput(draft));
+        return { task, partialError: null };
+      }
       const rows = await qc.ensureQueryData({
         queryKey: newTaskWorkflowsKey(),
         queryFn: () => runAction(fetchWorkflowsAction, {}),
@@ -142,7 +163,11 @@ export function useQuickAddCreate(): {
     },
     {
       invalidate: (draft, data) =>
-        data && draft.projectId ? newTaskInvalidations(draft.projectId, { taskId: data.task.id, withSubtasks: false }) : [],
+        !data || !draft.projectId
+          ? []
+          : draft.parentTaskId
+            ? quickAddSubtaskInvalidations(draft.parentTaskId, draft.projectId)
+            : newTaskInvalidations(draft.projectId, { taskId: data.task.id, withSubtasks: false }),
       partialFailure: (data) => (data.partialError ? mutationErrorText(data.partialError) : null),
     },
   );

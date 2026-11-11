@@ -16,13 +16,15 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ErrorState } from "@/components/shell/ErrorState";
+import { Button } from "@/components/ui/shadcn/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { renderAnaliticoTaskCell } from "@/components/widgets/analitico-task-cell";
 import { HiddenCompletedLine, HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
-import { GroupedTable, type Group, type GroupAnchor } from "@/components/widgets/GroupedTable";
+import { GroupedTable, type Group, type GroupAnchor, type RowDetail } from "@/components/widgets/GroupedTable";
 import { IncludeSupportSwitch } from "@/components/widgets/IncludeSupportSwitch";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
+import { ProjectFilter } from "@/components/widgets/ProjectFilter";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions, tareasSummaryOptions } from "@/lib/query/options/tareas";
@@ -34,12 +36,15 @@ import {
   hiddenCompletedCount,
   hideCompletedPatch,
   isHidingCompleted,
+  proyectosPatch,
   responsableFilter,
+  selectedProyectos,
   type TareasMostrar,
   type TareasQuery,
 } from "@/lib/tareas/query";
 import { EMPTY_TAREAS_SUMMARY, summaryTramoKey, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
 import { tramoColorVar } from "@/lib/tramos/compat";
+import { TASK_TABLE_SORT_KEYS, describeSort, nextSort, tableSortOf } from "@/lib/tareas/sort";
 import type { TareasListFilters } from "@/lib/query/keys";
 import type { TaskListRow, WorkflowRef } from "@/lib/types/core";
 
@@ -71,7 +76,8 @@ import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
 import { deleteTargetOf, useDeleteTasks } from "./use-delete-tasks";
 import { TaskBulkBar } from "./TaskBulkBar";
 import { useTaskSelection } from "./use-task-selection";
-import { useTareasFilters, useTareasPageReady } from "./use-tareas-page";
+import { SUBTASKS_COLLAPSE_ALL, SUBTASKS_EXPAND_ALL, subtaskQuickAddCopy, subtasksAnnouncement, useSubtaskRows } from "./use-subtask-rows";
+import { useTareasFilters, useTareasPageReady, useTareasSort } from "./use-tareas-page";
 
 export const ANALITICO_SEARCH_LABEL = "Buscar tareas";
 export const ANALITICO_RESPONSABLE_LABEL = "Responsable";
@@ -150,12 +156,20 @@ function GroupRowsLoader({
 
 const taskOfRow = (row: AnaliticoRow) => row.task;
 
+/** Every Analítico column with a server sort (all but Apoyo). */
+const ANALITICO_SORTABLE = ANALITICO_COLUMNS.map((c) => c.key).filter((key) => key in TASK_TABLE_SORT_KEYS);
+
 /** Cells of a full-width row: the data columns, the checkbox column (#1040) and the `⋯` column (#1041). */
 const ANALITICO_SPAN = ANALITICO_COLUMNS.length + 2;
 
 /** The rows of every tramo group, in table order. */
 function analiticoRows(groups: Group<AnaliticoRow>[]): AnaliticoRow[] {
   return groups.flatMap((group) => [...(group.rows ?? []), ...analiticoRows(group.children ?? [])]);
+}
+
+/** The rows in table order with each open parent's subtask rows after it (#1048). */
+function withOpenSubtasks(rows: AnaliticoRow[], detail: RowDetail<AnaliticoRow>): AnaliticoRow[] {
+  return rows.flatMap((row) => [row, ...((detail.hasDetail?.(row) ?? true) && detail.isOpen(row) ? (detail.rows?.(row) ?? []) : [])]);
 }
 
 /** A tramo group's last rows: "n completadas ocultas · Mostrar", then its quick-add (or error) row. */
@@ -198,6 +212,17 @@ export function TareasAnalitico({
   startSlot,
 }: TareasAnaliticoProps) {
   const f = useTareasFilters(query);
+  // ── Header sort (#1044): `?orden=`, applied on the server inside every tramo group.
+  const sort = useTareasSort(query);
+  const tableSort = useMemo(() => tableSortOf(sort), [sort]);
+  const onSortChange = useCallback(
+    (key: string) => {
+      const column = TASK_TABLE_SORT_KEYS[key];
+      if (column) onQuery({ orden: nextSort(sort, column) });
+    },
+    [onQuery, sort],
+  );
+  const description = sort ? `Por proyecto y tramo, ${describeSort(sort.orderBy, sort.orderDir)}.` : ANALITICO_DESCRIPTION;
   const ready = useTareasPageReady(query);
   const summaryQuery = useQuery({ ...tareasSummaryOptions(f), enabled: ready });
   const summary: TareasSummary = summaryQuery.data ?? EMPTY_TAREAS_SUMMARY;
@@ -264,9 +289,9 @@ export function TareasAnalitico({
           ? []
           : p.tramos
               .filter((t) => !collapsedSet.has(tramoGroupId(p.project.id, t.tramo.id)))
-              .map((t) => ({ id: tramoGroupId(p.project.id, t.tramo.id), filters: tareasGroupFilters(f, p.project.id, t.tramo.key) })),
+              .map((t) => ({ id: tramoGroupId(p.project.id, t.tramo.id), filters: tareasGroupFilters(f, p.project.id, t.tramo.key, sort) })),
       ),
-    [summary.projects, collapsedSet, f],
+    [summary.projects, collapsedSet, f, sort],
   );
 
   // ── Quick-add: rows it created enter with `row-new` and a "Nueva" tag.
@@ -317,6 +342,8 @@ export function TareasAnalitico({
               : state?.rows?.filter((row) => !isHidden(row.id, row.parentTaskId)).map((row) => analiticoRow(row, today)),
             loading: !failed && (state?.loading ?? false),
             hasMore: state?.hasMore ?? false,
+            // "Cargar más (n restantes)" (#1051): the summary counts the group, the rows are what loaded.
+            remaining: state?.rows ? Math.max(0, t.total - state.rows.length) : undefined,
             quickAdd: withHiddenLine(hiddenLine, failed ? (
               <tr>
                 <td colSpan={ANALITICO_SPAN} className="border-b border-border px-3 py-2">
@@ -342,8 +369,35 @@ export function TareasAnalitico({
     [summary, mostrar, groupRows, tramos, today, canCreate, late, onCreate, countsHidden, onHideCompleted, isHidden],
   );
 
+  // ── Subtasks (#1048): a collapsible block of nested rows under each parent, "+ Subtarea…" last.
+  const loadedParents = useMemo(
+    () =>
+      openGroups.flatMap((g) => (groupRows[g.id]?.rows ?? []).filter((row) => !isHidden(row.id, row.parentTaskId))),
+    [openGroups, groupRows, isHidden],
+  );
+  const toAnaliticoRow = useCallback((task: TaskListRow) => analiticoRow(task, today), [today]);
+  const subtaskAdd = useCallback(
+    (parent: TaskListRow) =>
+      canCreate && !late ? (
+        <QuickAddRow
+          variant="row"
+          colSpan={ANALITICO_SPAN}
+          context={{ ...subtaskQuickAddCopy(parent.title), projectId: parent.projectId, tramoId: parent.workflowId, parentTaskId: parent.id }}
+          onCreate={onCreate}
+        />
+      ) : null,
+    [canCreate, late, onCreate],
+  );
+  const subtasks = useSubtaskRows<AnaliticoRow>({ parents: loadedParents, toRow: toAnaliticoRow, taskOf: taskOfRow, isHidden, after: subtaskAdd });
+  const { toggleAll: toggleAllSubtasks, allOpen: allSubtasksOpen } = subtasks;
+  const onToggleAllSubtasks = useCallback(async () => {
+    const opening = !allSubtasksOpen;
+    const moved = await toggleAllSubtasks();
+    if (moved > 0) setAnnouncement(subtasksAnnouncement(opening, moved));
+  }, [allSubtasksOpen, toggleAllSubtasks]);
+
   // ── Row checkboxes and the bulk bar (#1040): a filter change clears the selection.
-  const shownRows = useMemo(() => analiticoRows(groups), [groups]);
+  const shownRows = useMemo(() => withOpenSubtasks(analiticoRows(groups), subtasks.rowDetail), [groups, subtasks.rowDetail]);
   const visibleIds = useMemo(() => shownRows.map((row) => row.id), [shownRows]);
   const selection = useTaskSelection({ visibleIds, resetKey: JSON.stringify(f) });
   const taskOfId = useMemo(() => {
@@ -480,7 +534,7 @@ export function TareasAnalitico({
       onClickCapture={onRowsClickCapture}
       {...cells.primeProps}
     >
-      <PageHeader title="Tareas" description={ANALITICO_DESCRIPTION} actions={actions} />
+      <PageHeader title="Tareas" description={description} actions={actions} />
       {startSlot}
       <FilterCard
         groups={filterGroups}
@@ -488,6 +542,13 @@ export function TareasAnalitico({
         extra={
           <>
             {responsable}
+            <ProjectFilter
+              showLabel
+              options={facets.projects}
+              selected={selectedProyectos(query)}
+              onChange={(ids) => onQuery(proyectosPatch(ids))}
+              triggerClassName="h-[34px] rounded-[8px]"
+            />
             <HideCompletedSwitch checked={hiding} onCheckedChange={onHideCompleted} />
           </>
         }
@@ -504,9 +565,20 @@ export function TareasAnalitico({
           expanded={expanded}
           onExpandedChange={onExpandedChange}
           heat={[ANALITICO_DAYS_LATE_HEAT]}
+          sortable={ANALITICO_SORTABLE}
+          sort={tableSort}
+          onSortChange={onSortChange}
           getRowId={(row) => row.id}
           renderCell={renderAnaliticoTaskCell}
           rowHref={rowHref}
+          rowDetail={subtasks.rowDetail}
+          toolbar={
+            subtasks.parentCount > 0 ? (
+              <Button type="button" variant="link" size="sm" onClick={() => void onToggleAllSubtasks()}>
+                {allSubtasksOpen ? SUBTASKS_COLLAPSE_ALL : SUBTASKS_EXPAND_ALL}
+              </Button>
+            ) : null
+          }
           isRowNew={(row) => created.has(row.id)}
           isRowMuted={(row) => row.closed}
           getRowLabel={(row) => row.tarea}

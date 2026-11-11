@@ -15,6 +15,12 @@ const DATE = new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short" })
 /** Shown for a missing value. */
 export const EMPTY_CELL = "—";
 
+/**
+ * Row field of a nested row (#1048, e.g. a subtask under its parent): the
+ * parent row's id. `RecordTable` draws such rows lighter.
+ */
+export const NESTED_ROW_PARENT = "__parentRowId";
+
 /** Formats whose values are numbers (right-aligned, mono in Analítico, totaled by "auto"). */
 const NUMERIC_FORMATS: readonly RecordColumnFormat[] = ["count", "percent", "hours", "days", "delta", "mxn"];
 

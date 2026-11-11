@@ -25,6 +25,7 @@ import type {
   ProjectSpaceRef,
   StaffRef,
   TaskDetail,
+  TaskListRow,
   TaskStatusOption,
   WorkflowPhaseRef,
   WorkflowRef,
@@ -136,7 +137,19 @@ async function patchTaskCaches(
     snapshot.push([detailKey, detail]);
     qc.setQueryData(detailKey, patch(detail));
   }
+  // A subtask row under its expanded parent (#1048): its parent's `qk.tasks.children` list.
+  for (const [key, rows] of qc.getQueriesData<TaskListRow[]>({ predicate: isChildrenQuery })) {
+    if (!rows?.some((r) => r.id === taskId)) continue;
+    snapshot.push([key, rows]);
+    qc.setQueryData(key, rows.map((r) => (r.id === taskId ? patch(r) : r)));
+  }
   return snapshot;
+}
+
+/** `qk.tasks.children(parentId)` = `["tasks", parentId, "children"]`. */
+function isChildrenQuery(query: { queryKey: QueryKey }): boolean {
+  const key = query.queryKey;
+  return key.length === 3 && key[0] === "tasks" && key[2] === "children";
 }
 
 function runAction(taskId: string, action: Exclude<TaskCellAction, { kind: "none" }>): Promise<ActionResult<TaskDetail>> {
@@ -279,6 +292,8 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
       const detailKey = qk.tasks.detail(task.id);
       if (qc.getQueryData(detailKey)) qc.setQueryData(detailKey, result.data);
       for (const queryKey of extraInvalidations(task.projectId, action)) void qc.invalidateQueries({ queryKey });
+      // A subtask's parent list re-reads it (its order follows the due date).
+      for (const [queryKey] of snapshot) if (isChildrenQuery({ queryKey })) void qc.invalidateQueries({ queryKey, exact: true });
       // The task moved to a tramo its fase isn't in: pick the new fase next.
       if (moves && task.phaseId !== null && result.data.phaseId === null) openTaskCell(task.id, "fase");
       return result;

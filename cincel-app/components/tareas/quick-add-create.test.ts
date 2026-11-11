@@ -27,7 +27,15 @@ import type { QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { createTestQueryClient } from "@/lib/query/test-utils";
 
 import { DISENO, PRESALE, WORKFLOWS } from "./new-task-fixtures";
-import { newTaskInvalidations, newTaskWorkflowsKey, quickAddTaskVars, useQuickAddCreate } from "./quick-add-create";
+import {
+  newTaskInvalidations,
+  newTaskWorkflowsKey,
+  quickAddSubtaskInput,
+  quickAddSubtaskInvalidations,
+  quickAddTaskVars,
+  useQuickAddCreate,
+} from "./quick-add-create";
+import { qk } from "@/lib/query/keys";
 
 const DRAFT: QuickAddDraft = {
   title: "  Revisar plafones ",
@@ -125,5 +133,35 @@ describe("useQuickAddCreate", () => {
       await expect(result.current.create(DRAFT)).rejects.toThrow("INVALID");
     });
     expect(toasts.error).toHaveBeenCalled();
+  });
+});
+
+describe("useQuickAddCreate · \"+ Subtarea…\" (#1048)", () => {
+  it("a draft with parentTaskId creates a subtask of it and refreshes the parent's rows", async () => {
+    actions.createSubtaskAction.mockResolvedValue({ id: "t-2", title: "Detalle", status: "pendiente", customStatus: null });
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+    const { result } = renderHook(() => useQuickAddCreate(), { wrapper });
+    const draft: QuickAddDraft = { ...DRAFT, title: "Detalle", parentTaskId: "t-1" };
+    let created: unknown;
+    await act(async () => {
+      created = await result.current.create(draft);
+    });
+    expect(created).toEqual({ id: "t-2", title: "Detalle" });
+    expect(actions.createUserTaskAction).not.toHaveBeenCalled();
+    expect(actions.createSubtaskAction).toHaveBeenCalledWith("t-1", quickAddSubtaskInput(draft));
+    const keys = invalidate.mock.calls.map((call) => (call[0] as { queryKey: unknown }).queryKey);
+    expect(keys).toEqual(quickAddSubtaskInvalidations("t-1", "p-roble"));
+    expect(keys).toContainEqual(qk.tasks.children("t-1"));
+  });
+
+  it("maps the draft to the subtask input", () => {
+    expect(quickAddSubtaskInput({ ...DRAFT, title: "Detalle", parentTaskId: "t-1" })).toEqual({
+      title: "Detalle",
+      managerId: "p-ana",
+      deliveryDate: "2026-11-13",
+      priority: "alta",
+    });
   });
 });
