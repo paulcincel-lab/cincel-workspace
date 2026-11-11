@@ -46,6 +46,7 @@ export const NOTIFICATION_KIND_LABELS: Readonly<Record<NotificationKind, string>
   aprobacion_cliente: "Aprobación del cliente",
   recordatorio: "Recordatorio",
   sistema: "Sistema",
+  reunion: "Reuniones",
 };
 
 type Channel = NotificationChannel;
@@ -59,6 +60,7 @@ export const NOTIFICATION_KIND_DESCRIPTIONS: Readonly<Record<NotificationKind, s
   aprobacion_cliente: "El cliente aprueba o rechaza desde el portal",
   recordatorio: "Recordatorios que creaste en Mi espacio",
   sistema: "Importaciones, accesos y avisos del despacho",
+  reunion: "Te invitan a una reunión o cambia una reunión tuya",
 };
 
 /** Matrix columns (FE §3.8). There is no Cutto column (RD-9). */

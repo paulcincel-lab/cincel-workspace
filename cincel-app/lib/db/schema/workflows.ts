@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  numeric,
   smallint,
   text,
   unique,
@@ -87,6 +88,8 @@ export const workflowTaskTemplates = core.table(
     commitmentOffsetDays: integer("commitment_offset_days"),
     reviewOffsetDays: integer("review_offset_days"),
     deliveryOffsetDays: integer("delivery_offset_days"),
+    /** Planned hours a task stamped from this template starts with (Calendario BE §3.5); copied at tramo start. */
+    defaultEstimatedHours: numeric("default_estimated_hours", { precision: 5, scale: 2, mode: "number" }),
     sortOrder: integer("sort_order").notNull().default(0),
     active: boolean("active").notNull().default(true),
     ...stamps,
@@ -107,6 +110,10 @@ export const workflowTaskTemplates = core.table(
       .where(sql`${t.active} = true`),
     index("idx_workflow_task_templates_order").on(t.workflowId, t.sortOrder),
     index("idx_workflow_task_templates_phase_id").on(t.phaseId),
+    check(
+      "workflow_task_templates_estimated_hours_check",
+      sql`${t.defaultEstimatedHours} is null or (${t.defaultEstimatedHours} > 0 and ${t.defaultEstimatedHours} <= 80)`
+    ),
   ]
 );
 

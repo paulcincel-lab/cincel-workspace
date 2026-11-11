@@ -21,7 +21,7 @@ describe("keysForToolParts", () => {
     ["cancel_reminder", [REMINDERS_PREFIX, qk.shell.badges(), qk.inicio()]],
     ["clock_in", [qk.me.today()]],
     ["pause_or_clock_out", [qk.me.today()]],
-    ["create_task", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
+    ["create_task", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks(), qk.calendario.all]],
     ["update_task_status", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
     ["create_tasks_from_notes", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
     ["create_event", [INICIO]],
@@ -75,7 +75,7 @@ describe("keysForToolParts", () => {
 
   it("dedupes keys across tool families, first seen first", () => {
     const keys = keysForToolParts([done("create_reminder"), done("create_task"), done("create_note"), done("create_task")]);
-    expect(keys).toEqual([REMINDERS_PREFIX, qk.shell.badges(), qk.inicio(), qk.tareas.all, qk.me.tasks(), qk.me.notes()]);
+    expect(keys).toEqual([REMINDERS_PREFIX, qk.shell.badges(), qk.inicio(), qk.tareas.all, qk.me.tasks(), qk.calendario.all, qk.me.notes()]);
   });
 
   it("is empty for no parts", () => {

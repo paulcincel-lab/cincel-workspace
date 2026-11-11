@@ -59,6 +59,8 @@ export const historyEntity = core.enum("history_entity", [
   "reminder",
   "time_entry",
   "vacation_request",
+  // Calendario (BE §3.1): meetings keep their own history.
+  "calendar_event",
 ]);
 export const historyEventKind = core.enum("history_event_kind", ["comentario", "cambio"]);
 
@@ -75,6 +77,8 @@ export const notificationKind = core.enum("notification_kind", [
   "aprobacion_cliente",
   "recordatorio",
   "sistema",
+  // Calendario (BE §3.1): an invitation to a meeting or a change to one.
+  "reunion",
 ]);
 export const noteColor = core.enum("note_color", ["neutral", "blue", "amber", "violet", "cyan"]);
 export const reminderRepeat = core.enum("reminder_repeat", ["none", "daily", "weekly", "monthly"]);
@@ -125,3 +129,28 @@ export function foldedText(column: SQLWrapper): SQL<string> {
 export function foldedTrgm(column: SQLWrapper): SQL {
   return sql`${foldedText(column)} gin_trgm_ops`;
 }
+
+// ── Calendario enums (BE §3.1) ──────────────────────────────────────────────
+export const calendarEventSource = core.enum("calendar_event_source", ["cincel", "google"]);
+export const calendarEventStatus = core.enum("calendar_event_status", ["confirmada", "cancelada"]);
+export const attendeeResponse = core.enum("attendee_response", ["pendiente", "acepta", "rechaza", "tentativo"]);
+export const meetingMinutesStatus = core.enum("meeting_minutes_status", ["borrador", "lista", "enviada"]);
+export const proposalKind = core.enum("proposal_kind", [
+  "mover_tareas",
+  "crear_reunion",
+  "editar_reunion",
+  "cancelar_reunion",
+  "repartir",
+  "resolver_traslape",
+  "pasar_a_manana",
+  "planear_semana",
+  "crear_tareas_minuta",
+]);
+export const proposalStatus = core.enum("proposal_status", [
+  "propuesta",
+  "aplicada",
+  "parcial",
+  "cancelada",
+  "expirada",
+  "deshecha",
+]);

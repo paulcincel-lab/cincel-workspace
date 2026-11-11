@@ -49,6 +49,7 @@ const KINDS = [
   "aprobacion_cliente",
   "recordatorio",
   "sistema",
+  "reunion",
 ] as const;
 
 describe("notifications actions: input validation", async () => {
@@ -346,7 +347,7 @@ describe.skipIf(!url)("notifications actions (test DB)", async () => {
 
       const fetched = await actions.fetchNotificationPreferencesAction();
       expect(fetched).toEqual(saved);
-      expect(fetched.rows).toHaveLength(7);
+      expect(fetched.rows).toHaveLength(8);
       expect(fetched.rows.find((row) => row.kind === "mencion")).toEqual({
         kind: "mencion",
         inApp: false,

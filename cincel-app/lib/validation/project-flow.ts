@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 /** zod messages that are action error codes: the first issue with one of these throws it as is. */
-const KNOWN_CODES = new Set(["EMPTY"]);
+const KNOWN_CODES = new Set(["EMPTY", "RANGE_TOO_LONG"]);
 
 /**
  * Parses an action input. A first issue whose message is a known code

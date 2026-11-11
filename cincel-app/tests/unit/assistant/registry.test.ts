@@ -74,6 +74,26 @@ const NEW_BY_GROUP: Record<string, string[]> = {
     "progress_report",
   ],
   widgets: ["render_table", "render_timeline", "render_confirmation"],
+  /** Calendario BE §11: reading, proposing and writing tools of the Calendario page. */
+  calendario: [
+    "calendar_range",
+    "summarize_day",
+    "summarize_week",
+    "day_load",
+    "find_overloads",
+    "meeting_prep",
+    "move_tasks",
+    "propose_from_text",
+    "propose_redistribution",
+    "resolve_overlap",
+    "plan_week",
+    "extract_minutes",
+    "apply_proposal",
+    "undo_proposal",
+    "create_tasks_from_minutes",
+    "send_agenda",
+    "send_minutes",
+  ],
 };
 
 /** Client visual of approval requests; counted in the catalog, never offered to the model. */
@@ -113,10 +133,10 @@ afterEach(() => {
 });
 
 describe("assistant tool catalog (BE §10.2–§10.3)", () => {
-  it("totals 81 tools, 15 of them Cutto", () => {
+  it("totals 98 tools, 15 of them Cutto", () => {
     expect(EXISTING).toHaveLength(16);
-    expect(NEW).toHaveLength(65);
-    expect(new Set([...EXISTING, ...NEW]).size).toBe(81);
+    expect(NEW).toHaveLength(82);
+    expect(new Set([...EXISTING, ...NEW]).size).toBe(98);
     expect(NEW_BY_GROUP.cutto).toHaveLength(15);
     expect(NEW_BY_GROUP.widgets).toHaveLength(3);
   });

@@ -19,6 +19,9 @@ const CHECKLISTS: readonly QueryKey[] = [qk.me.checklists()];
 const REMINDERS: readonly QueryKey[] = [ME_REMINDERS_PREFIX, qk.shell.badges(), qk.inicio()];
 const CLOCK: readonly QueryKey[] = [qk.me.today()];
 const TASKS: readonly QueryKey[] = [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()];
+/** The Calendario page: every range, summary, load, meeting and proposal (Calendario BE §11). */
+const CALENDARIO: readonly QueryKey[] = [qk.calendario.all];
+const PROPOSALS: readonly QueryKey[] = [qk.calendario.proposals()];
 /** Calendar events show in Inicio's agenda. */
 const EVENTS: readonly QueryKey[] = [qk.inicio()];
 const EMAIL: readonly QueryKey[] = [qk.me.gmail.all];
@@ -47,18 +50,23 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
   clock_in: [CLOCK],
   pause_or_clock_out: [CLOCK],
   // Tasks
-  create_task: [TASKS],
-  assign_task: [TASKS],
+  create_task: [TASKS, CALENDARIO],
+  assign_task: [TASKS, CALENDARIO],
   merge_duplicate_activities: [TASKS],
   update_task_status: [TASKS],
-  reschedule_task: [TASKS],
+  reschedule_task: [TASKS, CALENDARIO],
   add_task_comment: [TASKS],
   add_subtask: [TASKS],
   create_tasks_from_notes: [TASKS],
   rebalance_workload: [TASKS],
   meeting_to_tasks: [TASKS],
-  schedule_site_visit: [TASKS, EVENTS],
+  schedule_site_visit: [TASKS, EVENTS, CALENDARIO],
   schedule_from_template: [TASKS],
+  // Calendario y planeación (BE §11.3): the proposing tools write nothing, so they have no entry.
+  apply_proposal: [CALENDARIO, PROPOSALS, TASKS, EVENTS],
+  undo_proposal: [CALENDARIO, PROPOSALS, TASKS, EVENTS],
+  create_tasks_from_minutes: [CALENDARIO, PROPOSALS, TASKS, EVENTS, PROJECTS],
+  send_minutes: [CALENDARIO],
   // Calendar events
   create_event: [EVENTS],
   update_event: [EVENTS],
@@ -86,6 +94,7 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
 export const WRITES_WITHOUT_LOCAL_CACHE: Readonly<Record<string, string>> = {
   create_rfc: "Crea un issue en GitHub.",
   notify_people: "Escribe en la bandeja de otras personas.",
+  send_agenda: "Solo envía correo.",
   create_meeting: "Cutto.",
   start_call: "Cutto.",
   invite_to_meeting: "Cutto.",

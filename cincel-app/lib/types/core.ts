@@ -30,7 +30,9 @@ export type HistoryEntity =
   | "note"
   | "reminder"
   | "time_entry"
-  | "vacation_request";
+  | "vacation_request"
+  // Calendario (BE §3.1): meetings keep their own history.
+  | "calendar_event";
 export type HistoryEventKind = "comentario" | "cambio";
 export type ContactTagKind = "categoria" | "habilidad";
 
@@ -613,7 +615,7 @@ export type TaskPatch = Partial<
     | "deliveryDate"
     | "workflowId"
   >
->;
+> & { /** Planned hours (Calendario BE §3.5); null clears it. */ estimatedHours?: number | null };
 // `workflowId`: setting a tramo on a task without one is open to task writers;
 // changing an existing tramo is admins only (`FORBIDDEN: task tramo change`)
 // and clears `phaseId` when the fase isn't in the new tramo, subtasks moving
@@ -634,7 +636,9 @@ export type TaskBulkPatch =
   | { supportIds: string[] }
   | { phaseId: string | null }
   /** `dueField` names the date to write (Deshacer restores the one it cleared); default: the one "Vence" shows. */
-  | { dueDate: string | null; dueField?: "commitmentDate" | "deliveryDate" };
+  | { dueDate: string | null; dueField?: "commitmentDate" | "deliveryDate" }
+  /** Planned hours (Calendario BE §3.5); null clears it. */
+  | { estimatedHours: number | null };
 
 /** What `bulkUpdateTasksAction` did: the ids changed and the ones skipped, with why (an error code). */
 export type TaskBulkResult = {

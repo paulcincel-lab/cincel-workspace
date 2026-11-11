@@ -424,6 +424,7 @@ const HREF_LABELS: Record<string, string> = {
   "mi-espacio": "Ver en Mi espacio",
   inicio: "Ver en Inicio",
   biblioteca: "Ver en Biblioteca",
+  calendario: "Ver en Calendario",
 };
 
 /** "Ver en Tareas" for `/tareas?…`; "Abrir" for any other path. */
@@ -448,6 +449,7 @@ type Entry = {
 
 const TASKS_NOUN: [string, string] = ["encontrada", "encontradas"];
 const toTareas = () => "/tareas";
+const toCalendario = () => "/calendario";
 
 function urlOf(output: unknown): string | null {
   const url = str(unwrapOutput(output), "url");
@@ -613,6 +615,25 @@ const ENTRIES: Record<string, Entry> = {
   update_event: { icon: CalendarRange, tone: 3, running: "Cambiando el evento…", short: "Cambio de evento" },
   cancel_event: { icon: CalendarX, tone: "warning", running: "Cancelando el evento…", short: "Evento cancelado" },
   schedule_site_visit: { icon: MapPin, tone: 3, running: "Agendando la visita de obra…", short: "Visita de obra" },
+
+  // Calendario y planeación
+  calendar_range: { icon: CalendarDays, tone: 3, running: "Revisando el calendario…", short: "Calendario", label: () => "Revisó el calendario", href: toCalendario },
+  summarize_day: { icon: ListChecks, tone: 3, running: "Resumiendo tu día…", short: "Resumen del día", label: () => "Resumió tu día", href: toCalendario },
+  summarize_week: { icon: ListChecks, tone: 3, running: "Resumiendo tu semana…", short: "Resumen de la semana", label: () => "Resumió tu semana", href: toCalendario },
+  day_load: { icon: ChartColumn, tone: 3, running: "Calculando la carga…", short: "Carga por día", label: () => "Calculó la carga por día", href: toCalendario },
+  find_overloads: { icon: CalendarClock, tone: 4, running: "Buscando días sobrecargados…", short: "Días sobrecargados", label: () => "Buscó días sobrecargados", href: toCalendario },
+  meeting_prep: { icon: ClipboardList, tone: 3, running: "Preparando la reunión…", short: "Preparación de reunión", href: toCalendario },
+  move_tasks: { icon: CalendarRange, tone: 2, running: "Preparando los cambios de fecha…", short: "Cambios de fecha propuestos", href: toCalendario },
+  propose_from_text: { icon: CalendarPlus, tone: 3, running: "Preparando la propuesta…", short: "Propuesta", href: toCalendario },
+  propose_redistribution: { icon: Shuffle, tone: 4, running: "Repartiendo la carga…", short: "Reparto propuesto", href: toCalendario },
+  resolve_overlap: { icon: GitMerge, tone: 4, running: "Buscando un horario sin traslape…", short: "Traslape resuelto", href: toCalendario },
+  plan_week: { icon: CalendarRange, tone: 3, running: "Planeando la semana…", short: "Plan de la semana", href: toCalendario },
+  extract_minutes: { icon: FileText, tone: 3, running: "Leyendo las notas de la reunión…", short: "Minuta propuesta", href: toCalendario },
+  apply_proposal: { icon: SquareCheck, tone: 2, running: "Aplicando la propuesta…", short: "Propuesta aplicada", href: toCalendario },
+  undo_proposal: { icon: Reply, tone: "warning", running: "Deshaciendo los cambios…", short: "Cambios deshechos", href: toCalendario },
+  create_tasks_from_minutes: { icon: ListTodo, tone: 2, running: "Creando las tareas de la minuta…", short: "Tareas de la minuta", href: toCalendario },
+  send_agenda: { icon: Send, tone: 4, running: "Enviando el orden del día…", short: "Orden del día enviado", href: toCalendario },
+  send_minutes: { icon: Mail, tone: 4, running: "Enviando la minuta…", short: "Minuta enviada", href: toCalendario },
 
   // Notificaciones
   list_notifications: { icon: Bell, tone: 1, running: "Revisando tus notificaciones…", short: "Notificaciones", label: () => "Revisó tus notificaciones" },

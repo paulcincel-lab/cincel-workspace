@@ -17,3 +17,4 @@ export * from "./gmail";
 export * from "./time";
 export * from "./vacations";
 export * from "./assistant";
+export * from "./calendar";

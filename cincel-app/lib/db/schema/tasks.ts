@@ -7,6 +7,7 @@ import {
   foreignKey,
   index,
   integer,
+  numeric,
   primaryKey,
   text,
   timestamp,
@@ -87,6 +88,8 @@ export const tasks = core.table(
     sortOrder: integer("sort_order"),
     // No ordering check between the three dates, by design.
     commitmentDate: date("commitment_date"),
+    /** Planned hours (Calendario BE §3.5); null = the template default, else 1 h. */
+    estimatedHours: numeric("estimated_hours", { precision: 5, scale: 2, mode: "number" }),
     reviewDate: date("review_date"),
     deliveryDate: date("delivery_date"),
     archived: boolean("archived").notNull().default(false),
@@ -119,6 +122,7 @@ export const tasks = core.table(
       foreignColumns: [projectSpaces.id, projectSpaces.projectId],
     }).onDelete("restrict"),
     // MATCH SIMPLE skips a composite FK when any column is null: a fase without a tramo would slip through.
+    check("tasks_estimated_hours_check", sql`${t.estimatedHours} is null or (${t.estimatedHours} > 0 and ${t.estimatedHours} <= 80)`),
     check("tasks_phase_needs_workflow_check", sql`${t.phaseId} is null or ${t.workflowId} is not null`),
     // Rule 4: a workflow task, a user task or an admin task. Compares kind::text:
     // 0023 adds 'admin' in the same transaction, and Postgres refuses to use a
@@ -154,6 +158,10 @@ export const tasks = core.table(
     index("idx_tasks_commitment_date").on(t.commitmentDate),
     index("idx_tasks_review_date").on(t.reviewDate),
     index("idx_tasks_delivery_date").on(t.deliveryDate),
+    // Calendario range reads (BE §4): the due date a task shows is commitment, else delivery.
+    index("idx_tasks_due")
+      .on(sql`(coalesce(${t.commitmentDate}, ${t.deliveryDate}))`)
+      .where(sql`${t.deletedAt} is null and ${t.archived} = false`),
     index("idx_tasks_parent_task_id").on(t.parentTaskId),
     index("idx_tasks_title_trgm").using("gin", sql`${t.title} gin_trgm_ops`),
     // Workspace search compares the folded title (lib/search/search.ts).

@@ -26,6 +26,7 @@ export const NOTIFICATION_MATRIX_KINDS: readonly NotificationKind[] = [
   "aprobacion_cliente",
   "recordatorio",
   "sistema",
+  "reunion",
 ];
 
 /** Matrix columns in order. There is no Cutto column (RD-9). */

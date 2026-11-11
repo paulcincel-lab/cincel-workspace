@@ -16,4 +16,6 @@ export const NOTIFICATION_DEFAULTS: Record<NotificationKind, NotificationChannel
   aprobacion_cliente: { inApp: true, email: false, digest: false },
   recordatorio: { inApp: true, email: true, digest: false },
   sistema: { inApp: true, email: false, digest: false },
+  // Placeholder until #1094 sets the final channels.
+  reunion: { inApp: true, email: false, digest: false },
 };

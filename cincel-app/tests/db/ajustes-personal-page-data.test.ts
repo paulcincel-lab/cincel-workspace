@@ -128,7 +128,7 @@ describe.skipIf(!url)("ajustes personal page data (test DB)", async () => {
 
   it("Notificaciones returns one row per kind for the caller", async () => {
     const data = await asViewer(viewer(me), () => actions.getAjustesNotificacionesPageData({}));
-    expect(data.preferences.rows).toHaveLength(7);
+    expect(data.preferences.rows).toHaveLength(8);
   });
 
   it("Integraciones reads the DB only: no token refresh, no write", async () => {

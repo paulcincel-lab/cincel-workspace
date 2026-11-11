@@ -13,6 +13,7 @@ export const NOTIFICATION_KIND_ORDER: readonly NotificationKind[] = [
   "aprobacion_cliente",
   "recordatorio",
   "sistema",
+  "reunion",
 ];
 
 /** One row per kind in matrix order; kinds without a stored row get `NOTIFICATION_DEFAULTS`. */

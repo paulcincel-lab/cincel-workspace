@@ -108,6 +108,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   aprobacion_cliente: "Aprobación del cliente",
   recordatorio: "Recordatorio",
   sistema: "Sistema",
+  reunion: "Reunión",
 };
 
 /** "Origen" of a row (Analítico column and the source chip). */

@@ -474,6 +474,49 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     idSql: "c.staff_id || ':' || c.id",
     owner: null,
   },
+  // Calendario (reuniones and actas): never imported, so any pointer blocks the rollback.
+  {
+    table: "calendar_events",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "calendar_event_attendees",
+    column: "contact_id",
+    target: "contact",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "meeting_minutes",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "meeting_decisions",
+    column: "project_id",
+    target: "project",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "meeting_decisions",
+    column: "history_event_id",
+    target: "history_event",
+    idSql: "c.id",
+    owner: null,
+  },
+  {
+    table: "meeting_minute_tasks",
+    column: "task_id",
+    target: "task",
+    idSql: "c.minutes_id || ':' || c.task_id",
+    owner: null,
+  },
 ];
 
 /** The batch rows of one entity, as a subquery over `import_refs` for `exists`. */

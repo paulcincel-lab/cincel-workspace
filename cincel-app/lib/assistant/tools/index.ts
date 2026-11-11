@@ -9,6 +9,7 @@ import { buildToolSet, type DefinedTool, type ToolRunContext } from "@/lib/assis
 
 import { tools as agenda } from "./agenda";
 import { tools as arquitectura } from "./arquitectura";
+import { tools as calendario } from "./calendario";
 import { tools as consulta } from "./consulta";
 import { tools as correo } from "./correo";
 import { tools as cutto } from "./cutto";
@@ -22,6 +23,7 @@ export const DEFINED_TOOLS: readonly DefinedTool[] = [
   ...consulta,
   ...tareas,
   ...agenda,
+  ...calendario,
   ...notificaciones,
   ...correo,
   ...miEspacio,

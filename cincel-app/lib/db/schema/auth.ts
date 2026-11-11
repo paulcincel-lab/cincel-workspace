@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, jsonb, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, jsonb, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { core, stamps } from "./_schema";
 import { staff } from "./people";
 
@@ -94,6 +94,13 @@ export const googleCalendarSyncs = core.table("google_calendar_syncs", {
   enabled: boolean("enabled").notNull().default(true),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   lastError: text("last_error"),
+  /** Primary-calendar read cache (Calendario BE §3.7, §7.2). */
+  primarySyncToken: text("primary_sync_token"),
+  primarySyncedAt: timestamp("primary_synced_at", { withTimezone: true }),
+  /** ACCESS_DENIED, REAUTH, UNAVAILABLE, RATE_LIMITED. */
+  primaryError: text("primary_error"),
+  primaryWindowFrom: date("primary_window_from"),
+  primaryWindowTo: date("primary_window_to"),
   ...stamps,
 });
 
