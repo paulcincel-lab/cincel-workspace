@@ -38,7 +38,7 @@ export function ProjectBitacoraCard({ projectId }: { projectId: string }) {
     () =>
       (history.data?.pages ?? [])
         .flatMap((page) => page.events)
-        .sort((a, b) => b.eventAt.localeCompare(a.eventAt)),
+        .sort((a, b) => b.eventAt.localeCompare(a.eventAt)), // data-patterns: server-order
     [history.data],
   );
 

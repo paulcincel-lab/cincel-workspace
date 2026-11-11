@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +38,7 @@ import {
   portfolioHeatLegend,
   portfolioKpis,
   portfolioTable,
+  projectOpenTasksFilters,
   sortPortfolioRows,
   type PortfolioFilters,
   type PortfolioMostrar,
@@ -51,7 +52,8 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
-import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
+import { GroupedTable, type Group, type RowDetail } from "@/components/widgets/GroupedTable";
+import { useDeleteProject } from "@/components/proyectos/use-delete-project";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
 import { PageHeader } from "@/components/widgets/PageHeader";
 import { ProjectAnaliticoTasks } from "@/components/widgets/ProjectAnaliticoTasks";
@@ -62,6 +64,7 @@ import { HEAT_CELL_CLASS } from "@/components/widgets/record-table-format";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import { catalogStaffOptions } from "@/lib/query/options/catalog";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
+import { prefetchTareasListFirstPages } from "@/lib/query/options/tareas";
 import { tramoColorVar } from "@/lib/tramos/compat";
 import { cn } from "@/lib/utils";
 
@@ -273,6 +276,8 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
   const createdAt = useMemo(() => new Map(projects.map((p) => [p.id, Date.parse(p.createdAt)])), [projects]);
 
   const staffRefs = useMemo(() => staff.map((s) => ({ id: s.id, name: s.name })), [staff]);
+  // Row menu "Eliminar proyecto" (#1050), only with `canDeleteProject`.
+  const deleteProject = useDeleteProject();
 
   function writeUrl(next: PortfolioFilters) {
     const search = portfolioFiltersSearch(next, new URLSearchParams(window.location.search));
@@ -312,14 +317,40 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
     );
   }
 
-  function toggleProject(id: string) {
-    setOpenProjects((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // "Expandir todo" (#1051): one request seeds the first page of every project, then the rows open
+  // (one query per project otherwise).
+  const [expandingAll, setExpandingAll] = useState(false);
+  async function expandAll(ids: string[]) {
+    setExpandingAll(true);
+    try {
+      await prefetchTareasListFirstPages(qc, ids.map(projectOpenTasksFilters));
+    } catch {
+      // Each row then loads its own page and shows its own error.
+    } finally {
+      setExpandingAll(false);
+      setOpenProjects(new Set(ids));
+    }
   }
+
+  // Stable across renders (#1051): a new `rowDetail` / `isRowMuted` each render redrew every row.
+  const rowDetail = useMemo<RowDetail<PortfolioTableRow>>(
+    () => ({
+      isOpen: (row) => openProjects.has(row.id),
+      onToggle: (row) =>
+        setOpenProjects((current) => {
+          const next = new Set(current);
+          if (next.has(row.id)) next.delete(row.id);
+          else next.add(row.id);
+          return next;
+        }),
+      label: (row) => PROJECT_TASKS_TOGGLE_LABEL(row.name),
+      render: (row) => (
+        <ProjectAnaliticoTasks project={{ id: row.id, name: row.name }} tramos={tramos} staff={staffRefs} overdue={row.overdue} />
+      ),
+    }),
+    [openProjects, tramos, staffRefs],
+  );
+  const isRowMuted = useCallback((row: PortfolioTableRow) => projectsById.get(row.id)?.status === "pausado", [projectsById]);
 
   function handleExport() {
     downloadText(portfolioCsvFileName(new Date()), portfolioCsv(tableRows, { canSeeAdminData }), "text/csv;charset=utf-8");
@@ -525,7 +556,8 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
                   variant="ghost"
                   size="sm"
                   className="text-secondary-foreground"
-                  onClick={() => setOpenProjects(new Set(tableRows.map((row) => row.id)))}
+                  disabled={expandingAll}
+                  onClick={() => void expandAll(tableRows.map((row) => row.id))}
                 >
                   {ANALITICO_EXPAND_ALL}
                 </Button>
@@ -545,15 +577,12 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
                   layout="table"
                   footerRow={table.totals}
                   getRowId={(row) => row.id}
-                  rowDetail={{
-                    isOpen: (row) => openProjects.has(row.id),
-                    onToggle: (row) => toggleProject(row.id),
-                    label: (row) => PROJECT_TASKS_TOGGLE_LABEL(row.name),
-                    render: (row) => <ProjectAnaliticoTasks project={{ id: row.id, name: row.name }} tramos={tramos} staff={staffRefs} />,
-                  }}
+                  getRowLabel={(row) => row.name}
+                  rowActions={deleteProject.canDelete ? (row) => deleteProject.rowActions({ id: row.id, name: row.name }) : undefined}
+                  rowDetail={rowDetail}
                   renderCell={renderCell}
                   isRowNew={(row) => mountedAt - (createdAt.get(row.id) ?? 0) < NEW_ROW_MS}
-                  isRowMuted={(row) => projects.find((p) => p.id === row.id)?.status === "pausado"}
+                  isRowMuted={isRowMuted}
                   sortable={[...PORTFOLIO_SORTABLE_COLUMNS].filter((key) => columns.some((c) => c.key === key))}
                   sort={sort}
                   onSortChange={handleSort}
@@ -568,6 +597,7 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
               </div>
             )}
             <p className="text-xs text-muted-foreground">{portfolioHeatLegend({ canSeeAdminData })}</p>
+            {deleteProject.dialog}
           </div>
         </>
       )}

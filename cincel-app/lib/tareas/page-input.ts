@@ -19,7 +19,7 @@ const TramoKey = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const TareasFilterFields = {
   tramo: TramoKey.nullable(),
   proyecto: UuidSchema.nullable(),
-  responsable: z.union([z.literal("yo"), z.literal("todos"), UuidSchema]).nullable(),
+  responsable: z.union([z.literal("yo"), z.literal("todos"), z.literal("sin"), UuidSchema]).nullable(),
   estado: z.enum(["pendiente", "en_proceso", "completado", "bloqueado"]).nullable(),
   q: z.string().max(TAREAS_SEARCH_MAX).nullable(),
   /** Left out for "todas" (`TareasListFilters.mostrar`). */
@@ -30,6 +30,8 @@ const TareasFilterFields = {
   proyectos: z.array(UuidSchema).max(TAREAS_PROYECTOS_MAX).optional(),
   /** Subtasks as rows of their own; left out for top-level only (#1047). */
   topLevelOnly: z.literal(false).optional(),
+  /** Admin tasks too, honoured for administrators only (#1051, `TareasListFilters.incluirAdmin`). */
+  incluirAdmin: z.literal(true).optional(),
 };
 
 /** The sort column and direction (#1044); left out for the default order. */
@@ -76,3 +78,11 @@ export const TareasBoardColumnInput = z.object({
 });
 
 export const TareasFiltersInput = z.object({ filters: TareasListFiltersSchema });
+
+/** Most lists one `getTareasListFirstPages` call reads (#1051). */
+export const TAREAS_FIRST_PAGES_MAX = 50;
+
+/** The first page of several lists at once (#1051): each with its own filters and sort. */
+export const TareasListFirstPagesInput = z.object({
+  lists: z.array(TareasListFiltersSchema.extend(SortFields)).min(1).max(TAREAS_FIRST_PAGES_MAX),
+});

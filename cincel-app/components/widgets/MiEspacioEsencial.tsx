@@ -504,7 +504,7 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
 
 function NotesCard({ now }: { now: Date }) {
   const query = useInfiniteQuery(meNotesOptions());
-  const notes = useMemo(() => sortNotes(flattenPages(query.data?.pages)), [query.data]);
+  const notes = useMemo(() => sortNotes(flattenPages(query.data?.pages)), [query.data]); // data-patterns: server-order
   const newest = notes.slice(0, 3);
   const canCreate = IMPLEMENTED.createNoteAction;
 

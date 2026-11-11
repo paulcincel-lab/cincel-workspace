@@ -58,7 +58,7 @@ export async function loadMiEspacio(user: AuthenticatedUser, now: Date = new Dat
     listReminders(user, todayTomorrowRange(now), now),
     listChecklistsPage(user),
     listNotesPage(user),
-    listMyTasks(staffId, {}, viewerScopeOf(user)),
+    listMyTasks(staffId, { mostrar: "abiertas" }, viewerScopeOf(user)),
   ]);
   return {
     notifications,

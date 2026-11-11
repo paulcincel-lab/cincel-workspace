@@ -881,11 +881,12 @@ export function sortPortfolioRows(
 
 /**
  * The open tasks of one project, as the Tareas tables read them
- * (`qk.tareas.list`): every tramo, every responsable, completed ones out.
- * Loaded on the row's first expand.
+ * (`qk.tareas.list`): every tramo, every responsable, completed ones out,
+ * sorted by due date on the server (#1051), so "Cargar más" appends rows in
+ * order. Loaded on the row's first expand.
  */
 export function projectOpenTasksFilters(projectId: string): TareasListFilters {
-  return { tramo: null, proyecto: projectId, responsable: null, estado: null, q: null, mostrar: "abiertas" };
+  return { tramo: null, proyecto: projectId, responsable: null, estado: null, q: null, mostrar: "abiertas", orderBy: "vence" };
 }
 
 type DueTask = { title: string; commitmentDate: string | null; deliveryDate?: string | null };

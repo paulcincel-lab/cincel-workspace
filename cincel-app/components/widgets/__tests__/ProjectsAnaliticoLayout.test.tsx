@@ -22,8 +22,16 @@ vi.mock("@/lib/actions/projects-actions", () => ({
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({}));
 // A project's tasks come seeded in the cache; a refetch stays in flight.
-const tareas = vi.hoisted(() => ({ getTareasListPage: vi.fn(() => new Promise(() => {})) }));
-vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasListPage: tareas.getTareasListPage }));
+const tareas = vi.hoisted(() => ({
+  getTareasListPage: vi.fn(() => new Promise(() => {})),
+  getTareasListFirstPages: vi.fn(async (input: { lists: unknown[] }) =>
+    input.lists.map(() => ({ rows: [], nextCursor: null, total: 0 })),
+  ),
+}));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTareasListPage: tareas.getTareasListPage,
+  getTareasListFirstPages: tareas.getTareasListFirstPages,
+}));
 vi.mock("@/lib/actions/page-data/catalog-actions", () => ({ fetchCatalogStaff: actions.fetchCatalogStaff }));
 const toasts = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toasts }));
@@ -50,10 +58,10 @@ import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 
 const LOMAS_REF = { id: "p-lomas", name: "Casa Lomas", clientName: null };
-/** Casa Lomas's open tasks, out of due-date order on purpose. */
+/** Casa Lomas's open tasks as the server pages them: by due date (#1051, `orderBy: "vence"`). */
 const LOMAS_TASKS = [
-  analiticoTaskRow({ id: "t-late", title: "Planos", project: LOMAS_REF, projectId: "p-lomas", commitmentDate: "2026-11-20" }),
   analiticoTaskRow({ id: "t-soon", title: "Contrato", project: LOMAS_REF, projectId: "p-lomas", commitmentDate: "2026-11-01" }),
+  analiticoTaskRow({ id: "t-late", title: "Planos", project: LOMAS_REF, projectId: "p-lomas", commitmentDate: "2026-11-20" }),
 ];
 
 function renderLayout(patch: Partial<ProyectosPageData> = {}, onNewProject?: () => void) {
@@ -177,12 +185,18 @@ describe("ProjectsAnaliticoLayout", () => {
     expect(container.querySelector('[data-slot="project-tasks"]')).toBeNull();
   });
 
-  it("Expandir todo and Contraer todo act on the projects", () => {
+  it("Expandir todo and Contraer todo act on the projects", async () => {
     renderLayout();
     const states = () => ["Casa Lomas", "Depto Andares"].map((name) => projectToggle(name).getAttribute("aria-expanded"));
     expect(states()).toEqual(["false", "false"]);
+    tareas.getTareasListPage.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Expandir todo" }));
-    expect(states()).toEqual(["true", "true"]);
+    await waitFor(() => expect(states()).toEqual(["true", "true"]));
+    // One request seeds every project not cached yet (#1051); no row loads its own page.
+    expect(tareas.getTareasListFirstPages).toHaveBeenCalledTimes(1);
+    const lists = (tareas.getTareasListFirstPages.mock.calls[0] as unknown as [{ lists: { proyecto: string }[] }])[0].lists;
+    expect(lists.map((f) => f.proyecto)).not.toContain("p-lomas");
+    expect(tareas.getTareasListPage).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Contraer todo" }));
     expect(states()).toEqual(["false", "false"]);
     expect(screen.queryByRole("navigation", { name: "Ir a tramo" })).toBeNull();

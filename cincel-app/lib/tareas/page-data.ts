@@ -21,15 +21,14 @@ import type { KpiDatum } from "@/lib/types/widgets";
 /** Rows the board loads per column before "Cargar más". */
 export const TAREAS_BOARD_PER_COLUMN = 20;
 
-/** Rows per Lista page. */
-export const TAREAS_LIST_PAGE_SIZE = 50;
-
 /**
  * Rows per "Cargar más" page of every task list (#1051): Tareas, the project
  * Tareas tab, Resumen, Mi espacio and the expanded Proyectos rows.
- * `TAREAS_LIST_PAGE_SIZE` moves to this value with #1051.
  */
 export const TASK_LIST_PAGE_SIZE = 30;
+
+/** Rows per Lista page: the same first page as every other task list. */
+export const TAREAS_LIST_PAGE_SIZE = TASK_LIST_PAGE_SIZE;
 
 /** Chip counts and Proyecto options (`taskFacets`): they ignore the tramo and proyecto filters. */
 export type TareasFacets = {

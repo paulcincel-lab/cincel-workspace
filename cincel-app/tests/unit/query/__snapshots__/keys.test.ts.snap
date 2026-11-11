@@ -364,6 +364,16 @@ exports[`qk > builds every key shape 1`] = `
     "p1",
     "ficha",
   ],
+  "proyectos.tareasSummary": [
+    "proyectos",
+    "p1",
+    "tareas",
+    "summary",
+    {
+      "q": "",
+      "responsable": null,
+    },
+  ],
   "search()": [
     "search",
     "casa",
@@ -571,6 +581,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "proyectos.shell",
   "proyectos.resumen",
   "proyectos.tab",
+  "proyectos.tareasSummary",
   "proyectos.archivos",
   "proyectos.cronograma",
   "proyectos.history",

@@ -58,6 +58,7 @@ function shapes() {
     "proyectos.shell": qk.proyectos.shell("p1"),
     "proyectos.resumen": qk.proyectos.resumen("p1"),
     "proyectos.tab": qk.proyectos.tab("p1", "ficha"),
+    "proyectos.tareasSummary": qk.proyectos.tareasSummary("p1", { responsable: null, q: "" }),
     "proyectos.archivos(null)": qk.proyectos.archivos("p1", null),
     "proyectos.archivos(folder)": qk.proyectos.archivos("p1", "f1"),
     "proyectos.cronograma": qk.proyectos.cronograma("p1"),

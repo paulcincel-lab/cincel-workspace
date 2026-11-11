@@ -9,6 +9,8 @@ import { getImportData } from "@/lib/repositories/import-repository";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import { listTaskRows } from "@/lib/repositories/tasks-repository";
+import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
+import { summarizeProjectTasks, type ProyectoTareasSummary } from "@/lib/proyectos/project-tasks-by-fase";
 import type { ImportData, ProjectDetail, ProjectSpace, TaskKind, TaskListRow } from "@/lib/types/core";
 // Cronograma (5c, #961)
 import type { ScheduleViewData } from "@/lib/actions/schedule-actions";
@@ -396,4 +398,24 @@ export async function loadProyectoTareas(user: AuthenticatedUser, input: { id: s
     viewerScopeOf(user),
   );
   return { tasks, includeAdmin };
+}
+
+/**
+ * `qk.proyectos.tareasSummary(id, { responsable, q })` loader (#1051): the
+ * project Tareas tab's groups, chip counts and Responsable options, so the
+ * tab loads only the rows it shows (`qk.tareas.list`, 30 a page). Null like
+ * `loadProyectoTareas`; without `canViewActivities`, an empty summary.
+ */
+export async function loadProyectoTareasSummary(
+  user: AuthenticatedUser,
+  input: { id: string; responsable: string | null; q: string },
+): Promise<ProyectoTareasSummary | null> {
+  const data = await loadProyectoTareas(user, { id: input.id });
+  if (!data) return null;
+  return summarizeProjectTasks(data.tasks, {
+    includeAdmin: data.includeAdmin,
+    today: todayInAppTimeZone(),
+    responsable: input.responsable,
+    q: input.q,
+  });
 }

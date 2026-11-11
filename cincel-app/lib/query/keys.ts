@@ -24,7 +24,8 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 export type TareasListFilters = {
   tramo: string | null;
   proyecto: string | null;
-  responsable: "yo" | string | null;
+  /** "yo", "todos", a staff id, or "sin" (no Responsable, the project Tareas tab). */
+  responsable: "yo" | "sin" | string | null;
   estado: TaskStatus | null;
   q: string | null;
   /** Left out for "todas", so the keys of the other filters stay as they were. */
@@ -50,6 +51,8 @@ export type TareasListFilters = {
    * return top-level tasks only, each with its subtask counts.
    */
   topLevelOnly?: false;
+  /** Admin tasks too, for an administrator (the project Tareas tab, #1051). Left out otherwise. */
+  incluirAdmin?: true;
 };
 
 /** `TareasPageInput` (plan §4.3) without `cursor` and `limit`: the input part of `qk.tareas.page`. */
@@ -127,6 +130,13 @@ export const qk = {
     shell: (id: string) => ["proyectos", id, "shell"] as const,
     resumen: (id: string) => ["proyectos", id, "resumen"] as const,
     tab: (id: string, tab: "tareas" | "ficha" | "clientes") => ["proyectos", id, tab] as const,
+    /**
+     * The project Tareas tab's counts (#1051): groups, chips and Responsable
+     * options for `{ responsable, q }`, under `tab(id, "tareas")` so every
+     * invalidation of the tab refreshes them.
+     */
+    tareasSummary: (id: string, f: { responsable: string | null; q: string }) =>
+      ["proyectos", id, "tareas", "summary", f] as const,
     archivos: (id: string, folder: string | null) => ["proyectos", id, "archivos", folder ?? "root"] as const,
     cronograma: (id: string) => ["proyectos", id, "cronograma"] as const,
     history: (id: string) => ["proyectos", id, "history"] as const,
