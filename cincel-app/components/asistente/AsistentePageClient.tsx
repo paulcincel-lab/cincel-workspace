@@ -10,6 +10,7 @@ import {
   usePinAssistantThread,
   type AssistantTurn,
 } from "@/components/asistente/use-asistente-cache";
+import { AssistantToolGroupsProvider } from "@/components/asistente/assistant-tool-groups";
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
 import { AsistenteAnaliticoLayout } from "@/components/widgets/asistente/AsistenteAnaliticoLayout";
 import { AsistenteEsencialLayout } from "@/components/widgets/asistente/AsistenteEsencialLayout";
@@ -31,6 +32,8 @@ export type AsistentePageClientProps = {
   missingThread?: boolean;
   /** `?proyecto=<id>` (uuid): prefills the project chip; dropped when the viewer can't see the project. */
   initialProjectId?: string | null;
+  /** The caller's tool names (server): the starters and suggestions offer only these (#1055). */
+  toolNames?: readonly string[] | null;
 };
 
 const PAGE_ROUTE = "/asistente";
@@ -70,6 +73,7 @@ export function AsistentePageClient({
   threadId: seededThreadId,
   missingThread = false,
   initialProjectId = null,
+  toolNames = null,
 }: AsistentePageClientProps) {
   const qc = useQueryClient();
   const setStoreThreadId = useAssistantUi((s) => s.setThreadId);
@@ -230,23 +234,25 @@ export function AsistentePageClient({
   );
 
   return (
-    <PageStyleLayout
-      visual={visual}
-      esencial={() => (
-        <AsistenteEsencialLayout
-          threads={threads}
-          activeId={activeId}
-          busyThreadId={loadingId}
-          onSelectThread={(id) => void selectThread(id)}
-          onNewConversation={startNewConversation}
-          thread={thread}
-          notice={shownNotice}
-          context={context}
-          chips={chipList}
-          onTurnFinished={onTurnFinished}
-        />
-      )}
-      analitico={analitico}
-    />
+    <AssistantToolGroupsProvider toolNames={toolNames}>
+      <PageStyleLayout
+        visual={visual}
+        esencial={() => (
+          <AsistenteEsencialLayout
+            threads={threads}
+            activeId={activeId}
+            busyThreadId={loadingId}
+            onSelectThread={(id) => void selectThread(id)}
+            onNewConversation={startNewConversation}
+            thread={thread}
+            notice={shownNotice}
+            context={context}
+            chips={chipList}
+            onTurnFinished={onTurnFinished}
+          />
+        )}
+        analitico={analitico}
+      />
+    </AssistantToolGroupsProvider>
   );
 }

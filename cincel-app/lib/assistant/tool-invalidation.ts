@@ -18,11 +18,22 @@ const NOTES: readonly QueryKey[] = [qk.me.notes()];
 const CHECKLISTS: readonly QueryKey[] = [qk.me.checklists()];
 const REMINDERS: readonly QueryKey[] = [ME_REMINDERS_PREFIX, qk.shell.badges(), qk.inicio()];
 const CLOCK: readonly QueryKey[] = [qk.me.today()];
-const TASKS: readonly QueryKey[] = [qk.tareas.all, qk.inicio(), qk.shell.badges()];
+const TASKS: readonly QueryKey[] = [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()];
 /** Calendar events show in Inicio's agenda. */
 const EVENTS: readonly QueryKey[] = [qk.inicio()];
 const EMAIL: readonly QueryKey[] = [qk.me.gmail.all];
 const PROJECTS: readonly QueryKey[] = [qk.proyectos.all];
+/** Every `me.notifications(f)` list, the per-kind summary and the bell badge. */
+const NOTIFICATIONS: readonly QueryKey[] = [
+  qk.me.notifications({}).slice(0, 2),
+  qk.me.notificationsSummary(),
+  qk.shell.badges(),
+];
+const NOTIFICATION_PREFS: readonly QueryKey[] = [qk.me.notificationPrefs(), qk.me.preferences()];
+/** The Personas contact lists and every contact's detail and history. */
+const CONTACTS: readonly QueryKey[] = [qk.personas.contacts("clientes", null).slice(0, 2), ["contacts"]];
+/** What a project delete changes (same as `projectDeleteInvalidations`, #1050). */
+const PROJECT_DELETE: readonly QueryKey[] = [qk.catalog.projectOptions(), qk.me.today()];
 
 /** The write tools and the families of keys each one makes stale. */
 export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly QueryKey[])[]>> = {
@@ -30,6 +41,8 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
   create_note: [NOTES],
   create_checklist: [CHECKLISTS],
   create_reminder: [REMINDERS],
+  mark_notifications_read: [NOTIFICATIONS],
+  schedule_digest: [NOTIFICATION_PREFS],
   cancel_reminder: [REMINDERS],
   clock_in: [CLOCK],
   pause_or_clock_out: [CLOCK],
@@ -54,13 +67,32 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
   draft_email: [EMAIL],
   send_email: [EMAIL],
   link_email_to_project: [EMAIL, PROJECTS],
+  request_quotes: [EMAIL, CONTACTS],
   // Projects and the client portal
-  create_client: [PROJECTS],
-  onboard_client: [PROJECTS, TASKS],
-  discard_project: [PROJECTS, TASKS],
-  merge_duplicate_clients: [PROJECTS],
+  create_client: [CONTACTS],
+  onboard_client: [PROJECTS, TASKS, CONTACTS, PROJECT_DELETE],
+  discard_project: [PROJECTS, TASKS, PROJECT_DELETE],
+  merge_duplicate_clients: [PROJECTS, CONTACTS],
+  site_photo_log: [PROJECTS],
   invite_client_to_portal: [PROJECTS],
   request_client_approval: [PROJECTS],
+};
+
+/**
+ * Write tools that change nothing the open page caches: their effect is
+ * outside Cincel's screens (GitHub, other people's inboxes, Cutto). Every
+ * write tool is in `TOOL_INVALIDATIONS` or here (guard test, #1055).
+ */
+export const WRITES_WITHOUT_LOCAL_CACHE: Readonly<Record<string, string>> = {
+  create_rfc: "Crea un issue en GitHub.",
+  notify_people: "Escribe en la bandeja de otras personas.",
+  create_meeting: "Cutto.",
+  start_call: "Cutto.",
+  invite_to_meeting: "Cutto.",
+  send_message: "Cutto.",
+  post_to_project_channel: "Cutto.",
+  reply_in_thread: "Cutto.",
+  create_project_channel: "Cutto.",
 };
 
 type ToolPartLike = { type: string; toolName?: string; state?: string; output?: unknown };

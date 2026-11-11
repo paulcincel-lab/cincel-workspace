@@ -9,6 +9,8 @@ export type AssistantStarterPrompt = {
   label: string;
   description: string;
   prompt: string;
+  /** The registered tools this prompt relies on; it is shown only when the user has all of them (#1055). */
+  tools: readonly string[];
 };
 
 export type AssistantToolGroup = {
@@ -28,8 +30,8 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Consulta y búsqueda",
     description: "Leer el estado del despacho sin cambiar nada.",
     prompts: [
-      { label: "Buscar en Cincel", description: "Tareas, proyectos, personas, archivos y notas", prompt: "Busca en Cincel " },
-      { label: "Mis tareas", description: "Agrupadas por estatus y vencimiento", prompt: "¿Qué tareas tengo pendientes esta semana?" },
+      { label: "Buscar en Cincel", description: "Tareas, proyectos, personas, archivos y notas", prompt: "Busca en Cincel ", tools: ["search_workspace"] },
+      { label: "Mis tareas", description: "Agrupadas por estatus y vencimiento", prompt: "¿Qué tareas tengo pendientes esta semana?", tools: ["list_my_tasks"] },
     ],
   },
   {
@@ -37,9 +39,9 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Tareas",
     description: "Crear, asignar y mover trabajo.",
     prompts: [
-      { label: "Minuta → tareas", description: "Convierte una minuta en varias tareas", prompt: "Convierte esta minuta en tareas con responsable y fecha:\n" },
-      { label: "Reprogramar tarea", description: "Mueve la fecha y avisa al responsable", prompt: "Mueve la fecha de entrega de la tarea " },
-      { label: "Equilibrar carga", description: "Propone mover tareas entre personas", prompt: "Propón cómo equilibrar la carga de trabajo del equipo." },
+      { label: "Minuta → tareas", description: "Convierte una minuta en varias tareas", prompt: "Convierte esta minuta en tareas con responsable y fecha:\n", tools: ["create_tasks_from_notes"] },
+      { label: "Reprogramar tarea", description: "Mueve la fecha y avisa al responsable", prompt: "Mueve la fecha de entrega de la tarea ", tools: ["reschedule_task"] },
+      { label: "Equilibrar carga", description: "Propone mover tareas entre personas", prompt: "Propón cómo equilibrar la carga de trabajo del equipo.", tools: ["team_workload_summary", "rebalance_workload"] },
     ],
   },
   {
@@ -47,8 +49,8 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Agenda y calendario",
     description: "Encontrar horarios en tu agenda.",
     prompts: [
-      { label: "Mi agenda", description: "Eventos y entregas de la semana", prompt: "¿Qué tengo en la agenda esta semana?" },
-      { label: "Horario libre", description: "Huecos comunes dentro de la jornada", prompt: "Busca una hora libre esta semana para reunirme con " },
+      { label: "Mi agenda", description: "Eventos y entregas de la semana", prompt: "¿Qué tengo en la agenda esta semana?", tools: ["list_events"] },
+      { label: "Horario libre", description: "Huecos comunes dentro de la jornada", prompt: "Busca una hora libre esta semana para reunirme con ", tools: ["find_free_slots"] },
     ],
   },
   {
@@ -56,8 +58,8 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Notificaciones y recordatorios",
     description: "Bandeja de Mi espacio y avisos al equipo.",
     prompts: [
-      { label: "Avisos sin leer", description: "Asignaciones, menciones y vencimientos", prompt: "¿Qué notificaciones tengo sin leer?" },
-      { label: "Recordatorio", description: "Con texto natural", prompt: "Recuérdame mañana a las 9:00 " },
+      { label: "Avisos sin leer", description: "Asignaciones, menciones y vencimientos", prompt: "¿Qué notificaciones tengo sin leer?", tools: ["list_notifications"] },
+      { label: "Recordatorio", description: "Con texto natural", prompt: "Recuérdame mañana a las 9:00 ", tools: ["create_reminder"] },
     ],
   },
   {
@@ -65,8 +67,8 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Correo (Gmail)",
     description: "Leer y preparar correo; enviar siempre con confirmación.",
     prompts: [
-      { label: "Buscar correo", description: "Por persona, proyecto o texto", prompt: "Busca los correos de " },
-      { label: "Resumir hilo", description: "Resume un hilo y saca pendientes", prompt: "Resume el último hilo de correo sobre " },
+      { label: "Buscar correo", description: "Por persona, proyecto o texto", prompt: "Busca los correos de ", tools: ["search_email"] },
+      { label: "Resumir hilo", description: "Resume un hilo y saca pendientes", prompt: "Resume el último hilo de correo sobre ", tools: ["search_email", "summarize_email_thread"] },
     ],
   },
   {
@@ -74,8 +76,8 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Mi espacio y jornada",
     description: "Notas, checklists y control de horario.",
     prompts: [
-      { label: "Nota rápida", description: "Crea o agrega texto a una nota", prompt: "Crea una nota con " },
-      { label: "Mis horas", description: "Horas del día o la semana", prompt: "¿Cuántas horas llevo esta semana?" },
+      { label: "Nota rápida", description: "Crea o agrega texto a una nota", prompt: "Crea una nota con ", tools: ["create_note"] },
+      { label: "Mis horas", description: "Horas del día o la semana", prompt: "¿Cuántas horas llevo esta semana?", tools: ["get_my_hours"] },
     ],
   },
   {
@@ -83,8 +85,8 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Personas, clientes y proveedores",
     description: "Directorio, portal y cotizaciones.",
     prompts: [
-      { label: "Ficha de una persona", description: "Carga, horas y disponibilidad", prompt: "¿Cómo está la carga y la disponibilidad de " },
-      { label: "Pedir cotizaciones", description: "A varios proveedores por correo", prompt: "Pide cotización a proveedores de " },
+      { label: "Ficha de una persona", description: "Carga, horas y disponibilidad", prompt: "¿Cómo está la carga y la disponibilidad de ", tools: ["get_person"] },
+      { label: "Pedir cotizaciones", description: "A varios proveedores por correo", prompt: "Pide cotización a proveedores de ", tools: ["request_quotes"] },
     ],
   },
   {
@@ -92,14 +94,14 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     label: "Herramientas de arquitectura",
     description: "Herramientas de arquitectura y obra. Abren un widget en la conversación.",
     prompts: [
-      { label: "Áreas desde el plano", description: "Sube una planta y obtén m² por espacio", prompt: "Calcula los m² por espacio de esta planta." },
-      { label: "Cuantificación", description: "Material, piezas y desperdicio", prompt: "Cuantifica el material para " },
-      { label: "Costo por m²", description: "Estimado paramétrico por gama", prompt: "Estima el costo por m² de " },
-      { label: "Revisión normativa", description: "Compara con la zonificación", prompt: "Revisa la normativa que aplica a " },
-      { label: "Bitácora con fotos", description: "Avance por partida desde fotos", prompt: "Arma la bitácora de obra con las fotos de " },
-      { label: "Cronograma desde plantilla", description: "Tareas y fechas por área", prompt: "Genera el cronograma desde la plantilla para el proyecto " },
-      { label: "Moodboard", description: "Paleta y materiales de referencias", prompt: "Extrae la paleta y los materiales de estas referencias para " },
-      { label: "Comparar cotizaciones", description: "Precio relativo y tiempos", prompt: "Compara las cotizaciones recibidas de " },
+      { label: "Áreas desde el plano", description: "Sube una planta y obtén m² por espacio", prompt: "Calcula los m² por espacio de esta planta.", tools: ["measure_areas_from_plan"] },
+      { label: "Cuantificación", description: "Material, piezas y desperdicio", prompt: "Cuantifica el material para ", tools: ["quantity_takeoff"] },
+      { label: "Costo por m²", description: "Estimado paramétrico por gama", prompt: "Estima el costo por m² de ", tools: ["parametric_cost_estimate"] },
+      { label: "Revisión normativa", description: "Compara con la zonificación", prompt: "Revisa la normativa que aplica a ", tools: ["zoning_check"] },
+      { label: "Bitácora con fotos", description: "Avance por partida desde fotos", prompt: "Arma la bitácora de obra con las fotos de ", tools: ["site_photo_log"] },
+      { label: "Cronograma desde plantilla", description: "Tareas y fechas por área", prompt: "Genera el cronograma desde la plantilla para el proyecto ", tools: ["schedule_from_template"] },
+      { label: "Moodboard", description: "Paleta y materiales de referencias", prompt: "Extrae la paleta y los materiales de estas referencias para ", tools: ["moodboard_from_references"] },
+      { label: "Comparar cotizaciones", description: "Precio relativo y tiempos", prompt: "Compara las cotizaciones recibidas de ", tools: ["compare_quotes"] },
     ],
   },
   {
@@ -109,8 +111,26 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     disabled: true,
     disabledNote: "La integración con Cutto aún no está disponible. Usa el enlace para abrir Cutto.",
     prompts: [
-      { label: "Agendar reunión", description: "Reunión de Cutto con enlace", prompt: "" },
-      { label: "Mandar mensaje", description: "Directo o canal del proyecto", prompt: "" },
+      { label: "Agendar reunión", description: "Reunión de Cutto con enlace", prompt: "", tools: ["create_meeting"] },
+      { label: "Mandar mensaje", description: "Directo o canal del proyecto", prompt: "", tools: ["send_message"] },
     ],
   },
 ];
+
+/**
+ * The groups as one user sees them (#1055): each prompt only when every tool
+ * it relies on is in `toolNames` (the user's tool set), and a group only
+ * while it has prompts left. Disabled groups (Cutto) keep their prompts: they
+ * are drawn disabled with the link, never offered.
+ */
+export function groupsForTools(
+  toolNames: Iterable<string>,
+  groups: readonly AssistantToolGroup[] = ASSISTANT_TOOL_GROUPS,
+): AssistantToolGroup[] {
+  const available = new Set(toolNames);
+  return groups.flatMap((group) => {
+    if (group.disabled) return [group];
+    const prompts = group.prompts.filter((starter) => starter.tools.every((name) => available.has(name)));
+    return prompts.length > 0 ? [{ ...group, prompts }] : [];
+  });
+}

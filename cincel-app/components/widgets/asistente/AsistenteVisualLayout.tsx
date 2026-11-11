@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { useAssistantToolGroups } from "@/components/asistente/assistant-tool-groups";
 import type { AssistantTurn } from "@/components/asistente/use-asistente-cache";
 import { useAssistantConversation } from "@/components/asistente/use-assistant-conversation";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
@@ -46,7 +47,6 @@ import { AssistantContextPicker } from "@/components/widgets/asistente/Assistant
 import { AssistantLog, type AssistantLogHandle } from "@/components/widgets/asistente/AssistantLog";
 import { AssistantThreadRail } from "@/components/widgets/asistente/AssistantThreadRail";
 import { SuggestionCards, type SuggestionCardItem } from "@/components/widgets/asistente/SuggestionCards";
-import { ASSISTANT_TOOL_GROUPS } from "@/lib/assistant/starter-prompts";
 import { pickSuggestions, type SuggestionTopic } from "@/lib/assistant/suggestions";
 import { tramoColorClass } from "@/lib/tramos/tramo-color";
 import type { AssistantUIMessage, ContextChip } from "@/lib/types/asistente";
@@ -293,9 +293,10 @@ function ConversationBody({
   const subline = conversationSubline(toolCallCount(messages), conversation?.pendingApprovalIds.length ?? 0);
   const projectChip = chips.find((chip) => chip.kind === "project") ?? null;
 
+  const toolGroups = useAssistantToolGroups();
   const suggestions = useMemo<SuggestionCardItem[]>(
-    () => pickSuggestions({ hasProject: projectChip !== null }).map((s) => ({ ...s, icon: TOPIC_ICON[s.topic] })),
-    [projectChip],
+    () => pickSuggestions({ hasProject: projectChip !== null }, toolGroups).map((s) => ({ ...s, icon: TOPIC_ICON[s.topic] })),
+    [projectChip, toolGroups],
   );
 
   // "Nueva conversación" focuses the composer; picking a thread focuses the log.
@@ -338,7 +339,7 @@ function ConversationBody({
     });
   };
 
-  const commands = <AssistantCommandList groups={ASSISTANT_TOOL_GROUPS} onPick={fillComposer} />;
+  const commands = <AssistantCommandList groups={toolGroups} onPick={fillComposer} />;
   const turnError = conversation?.error ?? null;
 
   return (

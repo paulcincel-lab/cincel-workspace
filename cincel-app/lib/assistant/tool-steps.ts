@@ -593,9 +593,9 @@ const ENTRIES: Record<string, Entry> = {
   discard_project: {
     icon: Trash2,
     tone: "warning",
-    running: "Descartando el proyecto y sus tareas…",
-    short: "Proyecto descartado",
-    label: (input) => (str(input, "projectName") ? `Descartar ${str(input, "projectName")}` : "Descartar el proyecto"),
+    running: "Eliminando el proyecto y sus tareas…",
+    short: "Proyecto eliminado",
+    label: (input) => (str(input, "projectName") ? `Eliminar ${str(input, "projectName")}` : "Eliminar el proyecto"),
   },
 
   // Tareas

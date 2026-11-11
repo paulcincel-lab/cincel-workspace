@@ -1,50 +1,73 @@
+import type { ToolSet } from "ai";
+
 import type { ResolvedAssistantContext } from "@/lib/assistant/context";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 
-const BASE_PROMPT = `Eres el asistente operativo interno de Cincel, un despacho de arquitectura y construcción. Ayudas al equipo a responder preguntas accionables sobre la operación.
+/** One tool as the prompt lists it: from the tool set of the request, never hand-written. */
+export type AssistantToolInfo = { name: string; description: string; write: boolean };
 
-Puedes consultar:
-- Proyectos: nombre, estado, etapa, avance, si están activos, y su nivel de riesgo (list_projects).
-- Actividades/tareas con entregas o revisiones próximas: qué vence esta semana, tareas bloqueadas, por responsable (list_activities_due).
-- Carga del equipo: quién está saturado, capacidad y ocupación por colaborador y por área (team_workload_summary).
-- Registros duplicados: clientes con el mismo nombre, tareas idénticas, miembros repetidos (find_duplicates).
-
-No tienes acceso a datos de clientes, información financiera, contraseñas, ni a nada fuera de las herramientas que se te dan. Si te preguntan por algo fuera de ese alcance, explica amablemente que no tienes esa información.
-
-Cuando una respuesta visual sea más clara que un párrafo, usa la herramienta que mejor encaje en vez de describir los datos solo en texto:
-- Una sola entidad (un proyecto, un cliente, una persona) → render_card.
-- Varias entidades o cifras para comparar, sin necesidad de ver una tendencia → render_stat_grid.
-- Una enumeración corta (p. ej. qué falta en un checklist) → render_list.
-- Una tendencia en el tiempo o muchas categorías → render_chart ("line" para series de tiempo, "bar" para comparaciones entre categorías).
-No inventes estas herramientas para todo: si la respuesta cabe en una frase, respóndela en texto.`;
-
-const CREATE_LINE =
-  "- Crear tareas nuevas (create_task). Antes de crear, confirma con el usuario la descripción, el flujo, el proyecto, el responsable y las fechas. Verifica los nombres de proyecto y de persona con list_projects / team_workload_summary; no los inventes.";
-const ASSIGN_LINE =
-  "- Reasignar el responsable de una tarea existente (assign_task). Si la búsqueda es ambigua, muestra los candidatos y pide que el usuario aclare.";
-const CREATE_CLIENT_LINE =
-  "- Dar de alta un cliente nuevo (create_client). Confirma el nombre y si es Empresa o Particular antes de crearlo.";
-const ONBOARD_CLIENT_LINE =
-  "- Arrancar un cliente nuevo con su proyecto y el checklist estándar de tareas del flujo (onboard_client). Confirma el nombre del cliente, el nombre del proyecto y el flujo (Presale por defecto) antes de ejecutarlo; explica que se crearán varias tareas de una vez.";
-const CREATE_RFC_LINE =
-  "- Redactar y registrar una RFC (propuesta técnica o de producto) como un GitHub Issue etiquetado 'rfc' (create_rfc). Pide al usuario el problema y la propuesta si no los dio — no los inventes — y confirma el título antes de crearla; explica que quedará visible para el equipo de desarrollo en GitHub.";
-const MERGE_CLIENTS_LINE =
-  "- Fusionar clientes duplicados (merge_duplicate_clients). Es destructivo: reasigna proyectos/contactos/historial y archiva los demás. Confirma con el usuario antes de ejecutarlo.";
-const MERGE_ACTIVITIES_LINE =
-  "- Fusionar tareas duplicadas de un proyecto (merge_duplicate_activities). Destructivo. Confirma antes de ejecutarlo.";
-const DISCARD_PROJECT_LINE =
-  "- Descartar un proyecto de prueba o semilleo con todas sus tareas (discard_project). Es reversible (soft-delete, conserva historial) pero afecta a muchas filas: exige confirmación explícita y el nombre exacto del proyecto.";
-
-function identitySection(user: AuthenticatedUser | null): string {
-  if (!user) return "";
-  const name = user.member.name?.trim() || user.email?.trim();
-  if (!name) return "";
-  const role = user.access?.trim();
-  const area = user.member.area?.trim();
-  const who = [role, area ? `área ${area}` : null].filter(Boolean).join(", ");
-
-  return `\n\nEstás asistiendo a ${name}${who ? ` (${who})` : ""}. Cuando pregunte por "mis tareas", "lo que tengo pendiente" o similar, filtra list_activities_due por su nombre (${name}). Al crear o reasignar trabajo, la bitácora registra automáticamente que la solicitud viene de esta persona; no la nombres como responsable salvo que lo pida.`;
+/**
+ * The prompt's view of a request's tool set (#1055): name, description and
+ * whether it writes. `writes` holds the names of the write tools (the chat
+ * route's approval policy, or the legacy confirm set).
+ */
+export function toolCatalogOf(tools: ToolSet, writes: ReadonlySet<string>): AssistantToolInfo[] {
+  return Object.entries(tools).map(([name, tool]) => ({
+    name,
+    description: typeof tool.description === "string" ? tool.description : "",
+    write: writes.has(name),
+  }));
 }
+
+const BASE_PROMPT = `Eres el asistente interno de Cincel, un despacho de arquitectura, diseño y construcción en México. Ayudas al equipo con dos tipos de preguntas.
+
+1. Conocimiento general de arquitectura, diseño y construcción. Respóndelas con tu propio conocimiento, sin herramientas: dimensiones y alturas estándar, ergonomía, accesibilidad, materiales, procesos constructivos, instalaciones, costos típicos (siempre como rangos aproximados), terminología y referencias normativas. Por ejemplo, la altura de un lavabo, el ancho mínimo de una puerta accesible o el peralte de un escalón.
+- Da el valor o el rango usual y aclara que es una referencia general, no un dato de un proyecto de Cincel.
+- Para México, nombra la referencia aplicable cuando exista: el Reglamento de Construcciones de la Ciudad de México y sus Normas Técnicas Complementarias (NTC), las NOM que apliquen y las normas de accesibilidad (p. ej. la NMX-R-050-SCFI). Si el valor cambia según el reglamento local o el fabricante del mueble o equipo, dilo.
+- Si no estás seguro de un dato o de una norma, dilo en vez de inventar una cifra o un número de norma.
+- No contestes «no tengo esa información» a una pregunta de conocimiento general.
+
+2. Datos de Cincel: proyectos, tareas, personas, clientes, proveedores, archivos, correo, agenda, notificaciones y Mi espacio. Para esto usa siempre las herramientas; nunca inventes nombres, fechas, cifras ni estados.
+- Si la pregunta puede referirse a un proyecto (p. ej. «la altura del lavabo en Madrid 22»), primero búscalo con las herramientas; si el proyecto no tiene ese dato, dilo y da la referencia general marcada como tal.
+- Si una herramienta no devuelve lo que se pide, dilo; no rellenes el hueco con suposiciones.
+
+No tienes acceso a contraseñas, credenciales ni secretos, y no puedes ver nada que el rol del usuario no le permita ver: las herramientas ya filtran por permisos. Nunca pidas ni muestres contraseñas.`;
+
+const WIDGET_LINES: ReadonlyArray<readonly [string, string]> = [
+  ["render_card", "- Una sola entidad (un proyecto, un cliente, una persona) → render_card."],
+  ["render_stat_grid", "- Varias entidades o cifras para comparar, sin necesidad de ver una tendencia → render_stat_grid."],
+  ["render_table", "- Varias filas con varias columnas (p. ej. horas por persona o partidas con monto) → render_table."],
+  ["render_list", "- Una enumeración corta (p. ej. qué subtareas faltan) → render_list."],
+  ["render_timeline", "- Agendas, entregas o cronogramas cortos → render_timeline."],
+  [
+    "render_chart",
+    '- Una tendencia en el tiempo o muchas categorías → render_chart ("line" para series de tiempo, "bar" para comparaciones entre categorías).',
+  ],
+];
+
+/** Rules some tools need on top of their description (only for the tools present). */
+const TOOL_RULES: ReadonlyArray<readonly [string, string]> = [
+  ["create_task", "create_task: verifica el proyecto y el responsable con search_workspace, list_projects o get_person; no los inventes."],
+  ["assign_task", "assign_task: si la búsqueda es ambigua, muestra los candidatos y pide que el usuario aclare."],
+  ["create_client", "create_client: pregunta si es Empresa o Particular cuando no se sepa."],
+  [
+    "onboard_client",
+    "onboard_client: necesita el nombre del cliente, el del proyecto y el tramo (Presale por defecto); avisa que se crearán varias tareas de una vez.",
+  ],
+  [
+    "create_rfc",
+    "create_rfc: pide al usuario el problema y la propuesta si no los dio, no los inventes; avisa que quedará visible para el equipo de desarrollo en GitHub.",
+  ],
+  [
+    "merge_duplicate_clients",
+    "merge_duplicate_clients: es destructivo (reasigna proyectos, contactos e historial y elimina los demás); usa find_duplicates antes.",
+  ],
+  ["merge_duplicate_activities", "merge_duplicate_activities: es destructivo; usa find_duplicates antes."],
+  [
+    "discard_project",
+    "discard_project: elimina el proyecto con todas sus tareas y subtareas y quita el acceso al portal; se puede restaurar durante 30 días desde Proyectos eliminados. Exige el nombre exacto del proyecto.",
+  ],
+];
 
 /**
  * Rule for third-party text inside tool results (review N4): the chat route
@@ -54,6 +77,81 @@ export const UNTRUSTED_CONTENT_RULE = `Algunos resultados de herramientas llegan
 
 const CONFIRMATION_RULE =
   "Las acciones que cambian datos o avisan a otras personas pueden pedir confirmación: la aplicación muestra una tarjeta al usuario. Llama a la herramienta directamente con los datos completos; no pidas un \"sí\" por texto antes. Si el usuario cancela, no lo intentes de nuevo salvo que te lo pida.";
+
+const HISTORY_RULE = "Nunca elimines ni sobrescribas historial: cada cambio queda registrado en la bitácora.";
+
+const READ_ONLY_LINE = "Con este usuario solo puedes consultar información; no puedes crear ni modificar nada.";
+
+/**
+ * Every fixed text of the prompt, for the guard test that each tool name it
+ * mentions exists in the registry (#1055).
+ */
+export const PROMPT_STATIC_TEXTS: readonly string[] = [
+  BASE_PROMPT,
+  ...WIDGET_LINES.map(([, line]) => line),
+  ...TOOL_RULES.map(([, line]) => line),
+  UNTRUSTED_CONTENT_RULE,
+  CONFIRMATION_RULE,
+  HISTORY_RULE,
+  READ_ONLY_LINE,
+];
+
+/** The first sentence of a description, at most `max` characters. */
+export function shortDescription(description: string, max = 200): string {
+  const clean = description.replace(/\s+/g, " ").trim();
+  const sentence = /^(.+?[.!?])(?=\s+[A-ZÁÉÍÓÚÑ¿«`])/.exec(clean)?.[1] ?? clean;
+  if (sentence.length <= max) return sentence;
+  const cut = sentence.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+function isWidget(name: string): boolean {
+  return name.startsWith("render_");
+}
+
+/** "Qué puedes hacer": generated from the tool set of this request. */
+function toolsSection(tools: readonly AssistantToolInfo[]): string {
+  const listed = tools.filter((t) => !isWidget(t.name));
+  const line = (t: AssistantToolInfo) => `- ${t.name}: ${shortDescription(t.description)}`;
+  const reads = listed.filter((t) => !t.write);
+  const writes = listed.filter((t) => t.write);
+  const parts: string[] = [];
+  if (reads.length > 0) parts.push(`Herramientas de consulta (no cambian nada):\n${reads.map(line).join("\n")}`);
+  if (writes.length > 0) {
+    parts.push(`Herramientas que cambian datos o avisan a otras personas:\n${writes.map(line).join("\n")}\n${HISTORY_RULE}`);
+  } else {
+    parts.push(READ_ONLY_LINE);
+  }
+  const names = new Set(tools.map((t) => t.name));
+  const rules = TOOL_RULES.filter(([name]) => names.has(name)).map(([, rule]) => `- ${rule}`);
+  if (rules.length > 0) parts.push(`Reglas de algunas herramientas:\n${rules.join("\n")}`);
+  const widgets = WIDGET_LINES.filter(([name]) => names.has(name)).map(([, rule]) => rule);
+  if (widgets.length > 0) {
+    parts.push(
+      `Cuando una respuesta visual sea más clara que un párrafo, usa el widget que mejor encaje en vez de describir los datos solo en texto:\n${widgets.join("\n")}\nSi la respuesta cabe en una frase, respóndela en texto.`,
+    );
+  }
+  return `\n\nPara los datos de Cincel solo tienes estas herramientas; no ofrezcas acciones que no estén aquí.\n\n${parts.join("\n\n")}`;
+}
+
+function identitySection(user: AuthenticatedUser | null, names: ReadonlySet<string>): string {
+  if (!user) return "";
+  const name = user.member.name?.trim() || user.email?.trim();
+  if (!name) return "";
+  const role = user.access?.trim();
+  const area = user.member.area?.trim();
+  const who = [role, area ? `área ${area}` : null].filter(Boolean).join(", ");
+  const myTasks = names.has("list_my_tasks")
+    ? "usa list_my_tasks"
+    : names.has("list_activities_due")
+      ? `filtra list_activities_due por su nombre (${name})`
+      : null;
+
+  return `\n\nEstás asistiendo a ${name}${who ? ` (${who})` : ""}.${
+    myTasks ? ` Cuando pregunte por "mis tareas", "lo que tengo pendiente" o similar, ${myTasks}.` : ""
+  } Al crear o reasignar trabajo, la bitácora registra automáticamente que la solicitud viene de esta persona; no la nombres como responsable salvo que lo pida.`;
+}
 
 /** The "Contexto" section: only server-resolved names and ids (BE §8.10). */
 function contextSection(resolved: ResolvedAssistantContext | null | undefined): string {
@@ -72,7 +170,8 @@ function contextSection(resolved: ResolvedAssistantContext | null | undefined): 
 }
 
 export type BuildSystemPromptOptions = {
-  toolNames: readonly string[];
+  /** The tools of this request (`toolCatalogOf(tools, writes)`); the prompt lists exactly these. */
+  tools: readonly AssistantToolInfo[];
   user?: AuthenticatedUser | null;
   /** Server-resolved page context (chat route with server threads). */
   context?: ResolvedAssistantContext | null;
@@ -81,35 +180,18 @@ export type BuildSystemPromptOptions = {
 };
 
 export function buildSystemPrompt({
-  toolNames,
+  tools,
   user = null,
   context = null,
   serverThreads = false,
 }: BuildSystemPromptOptions): string {
-  const lines = [
-    toolNames.includes("create_task") ? CREATE_LINE : null,
-    toolNames.includes("assign_task") ? ASSIGN_LINE : null,
-    toolNames.includes("create_client") ? CREATE_CLIENT_LINE : null,
-    toolNames.includes("onboard_client") ? ONBOARD_CLIENT_LINE : null,
-    toolNames.includes("create_rfc") ? CREATE_RFC_LINE : null,
-    toolNames.includes("merge_duplicate_clients") ? MERGE_CLIENTS_LINE : null,
-    toolNames.includes("merge_duplicate_activities") ? MERGE_ACTIVITIES_LINE : null,
-    toolNames.includes("discard_project") ? DISCARD_PROJECT_LINE : null,
-  ].filter(Boolean);
-
-  const writeSection =
-    lines.length > 0
-      ? `\n\nEste usuario también puede pedirte acciones de escritura:\n${lines.join(
-          "\n"
-        )}\nNunca elimines ni sobrescribas historial: cada cambio queda registrado como bitácora.`
-      : "\n\nSolo puedes consultar información; no puedes crear ni modificar nada.";
-
+  const names = new Set(tools.map((t) => t.name));
   const safetySection = serverThreads ? `\n\n${CONFIRMATION_RULE}\n\n${UNTRUSTED_CONTENT_RULE}` : "";
 
-  return `${BASE_PROMPT}${identitySection(user)}${writeSection}${contextSection(context)}${safetySection}\n\nResponde siempre en español, de forma breve y directa. Hoy es ${new Date()
+  return `${BASE_PROMPT}${toolsSection(tools)}${identitySection(user, names)}${contextSection(context)}${safetySection}\n\nResponde siempre en español, de forma breve y directa. Hoy es ${new Date()
     .toISOString()
     .slice(0, 10)}.`;
 }
 
-/** Back-compat: the read-only prompt with no write actions and no known user. */
-export const SYSTEM_PROMPT = buildSystemPrompt({ toolNames: [] });
+/** Back-compat: the prompt with no tools and no known user. */
+export const SYSTEM_PROMPT = buildSystemPrompt({ tools: [] });

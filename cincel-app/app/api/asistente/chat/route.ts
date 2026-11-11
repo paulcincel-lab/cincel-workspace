@@ -13,8 +13,9 @@ import { getSession, requireCapabilityUser } from "@/lib/auth/session";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { getLanguageModel, isAssistantConfigured } from "@/lib/assistant/provider";
 import { buildAssistantTools } from "@/lib/assistant/tools";
-import { buildSystemPrompt } from "@/lib/assistant/prompt";
+import { buildSystemPrompt, toolCatalogOf } from "@/lib/assistant/prompt";
 import {
+  LEGACY_CONFIRM_TOOLS,
   logAssistantAction,
   recordActionDecisions,
   recordActionOutcome,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/assistant/approvals";
 import { buildChatTools } from "@/lib/assistant/chat-tools";
 import { resolveAssistantContext } from "@/lib/assistant/context";
+import { loadOwnerMail } from "@/lib/assistant/owner-mail";
 import {
   applyApprovalResponses,
   changedMessages,
@@ -102,7 +104,7 @@ async function legacyChat(user: AuthenticatedUser, messages: UIMessage[]): Promi
 
   const result = streamText({
     model: getLanguageModel(),
-    system: buildSystemPrompt({ toolNames: Object.keys(tools), user }),
+    system: buildSystemPrompt({ tools: toolCatalogOf(tools, LEGACY_CONFIRM_TOOLS), user }),
     messages: await convertToModelMessages(messages),
     tools,
     // Ceiling on tool-call round-trips per user turn — a cost/availability
@@ -248,7 +250,9 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
   await saveThreadMessages(db, threadId, changedMessages(messages, stored), { titleFrom: messages });
   const saved = threadSnapshot(messages);
 
-  const { tools, toolApproval } = buildChatTools({
+  // The mail tools are offered only when the caller's Gmail is connected: read it before building the set.
+  await loadOwnerMail(user);
+  const { tools, toolApproval, policy } = buildChatTools({
     user,
     threadId,
     resolved,
@@ -282,7 +286,7 @@ async function serverThreadChat(request: Request, user: AuthenticatedUser, body:
 
   const result = streamText({
     model: getLanguageModel(),
-    system: buildSystemPrompt({ toolNames: Object.keys(tools), user, context: resolved, serverThreads: true }),
+    system: buildSystemPrompt({ tools: toolCatalogOf(tools, policy.write), user, context: resolved, serverThreads: true }),
     messages: await convertToModelMessages(messages, { tools }),
     tools,
     toolApproval,
