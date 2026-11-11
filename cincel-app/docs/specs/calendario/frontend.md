@@ -42,7 +42,7 @@ Each Estilo has a Día / Semana / Mes selector and "Hoy". The asistente plans fr
 | `tramo`, `responsable` | id | none |
 | `apoyo` | `0` to exclude support tasks | included |
 | `ocultar` | `1` / `0` | `useHideCompletedPreference()` |
-| `modo` | `planear` | none (Planear mi semana, §7.6) |
+| `modo` | `planear` | none; in Semana it opens the Planear mi semana section expanded and scrolls to it (§7.7) |
 | `evento` | `e:<uuid>` or `t:<uuid>` | event detail open (§5) |
 | `tarea` | `<uuid>` | existing task sheet (`TASK_SHEET_PARAM`) |
 | `propuesta` | `<uuid>` | an open proposal (§7.1) |
@@ -188,7 +188,7 @@ Success of a retry: toast "Ya está en Google Calendar." and the note disappears
 - Data: `qk.calendario.day(date)` / `qk.calendario.week(from)` (`DaySummary` / `WeekSummary`).
 - Content: greeting "Buenos días, Oscar" + lead paragraph (server text); four tiles **Reuniones**, **Vence hoy** (week: **Vence esta semana**), **En riesgo**, **Bloqueas a otros** with counts (risk and blocking counts in `--destructive-ink` when > 0). A tile expands (`aria-expanded`) to its items: title, line ("Proyecto Beta · Jorge Torres", "Bloqueada hace 7 días · frena "Obra negra" (12 nov)"), and one contextual action button: "Prepárame", "Pasar a mañana", "Asignar", "Avisa a Jorge", "Propón fecha", "Resolver", "Reparte esto".
 - Action mapping (all through tools, backend §10.1 `SummaryAction`): Prepárame → Antes tab / `meeting_prep`; Pasar a mañana → `move_tasks` (proposal); Asignar → opens the Responsable cell editor (direct edit, not the asistente); Avisa a {nombre} → `notify_people` via the asistente panel with a prefilled message and its confirmation card; Propón fecha → `move_tasks` proposal; Resolver → `resolve_overlap`; Reparte esto → `propose_redistribution`.
-- Primary button: Día "✦ Pasa a mañana lo que no alcances hoy" (`propose_redistribution { target: "next_day" }`) → after Aplicar, toast "Pasé 2 tareas a mañana jueves 12. Tu día queda en 3 h." + Deshacer. Semana "✦ Planea mi semana" → `?modo=planear` (§7.6), and "Reparte el jueves" when a day is overloaded.
+- Primary button: Día "✦ Pasa a mañana lo que no alcances hoy" (`propose_redistribution { target: "next_day" }`) → after Aplicar, toast "Pasé 2 tareas a mañana jueves 12. Tu día queda en 3 h." + Deshacer. Semana "✦ Planea mi semana" → expands the Planear mi semana section of Semana (`?modo=planear`, §7.7), and "Reparte el jueves" when a day is overloaded.
 - Per Estilo: Visual = a hero row with the four tiles as `KpiWidget`-style cards with sparkless counts and expanding panels over the grid; Esencial = one soft card with greeting, paragraph, tile pills and the big primary action (`P2-Resumen` is this one); Analítico = `KpiStrip` of the four counts + a grouped table "Resumen" (group per tile, action column).
 - Below the summary in Esencial Día: "Tu día" agenda (the §4.2 groups).
 
@@ -212,7 +212,11 @@ Success of a retry: toast "Ya está en Google Calendar." and the note disappears
 - Per Estilo: Visual = tabs inside the floating card enlarged to a side card over the grid; Esencial = the bottom sheet with two tabs and one big action per tab ("Enviar orden del día" / "Crear tareas"); Analítico = drawer with tables (the `P4-Reunion` board).
 
 ### 7.7 Planear mi semana (Phase 7, `P5-Planear`)
-- Entry: Semana view action "Planear la semana" or the Resumen button; URL `?modo=planear&fecha=<monday>`. Title "Planear mi semana", subtitle "Semana 47 · 16 – 20 nov · equipo de Madrid 22 y Proyecto Beta".
+- **Placement (decided 2026-11-11):** a special section of the **Semana** view, in every Estilo, below the week body (and below the Días que avisan banners). It is not a separate mode or page and does not replace the calendar. Día and Mes don't show it.
+- The section is collapsed by default to one header row: "Planear la semana" + "{n} por planear · {h} h" + the button "✦ Planear mi semana" (runs `plan_week` and expands the section). Expanding shows the board below. `?modo=planear` (from the Resumen button or a link) opens it expanded and scrolls to it; collapsing removes the param (`replaceState`).
+- The week planned is the visible Semana (Lun–Vie of `fecha`'s week); Anterior / Siguiente move the calendar and the section together. Subtitle "Semana 47 · 16 – 20 nov · equipo de Madrid 22 y Proyecto Beta".
+- A plan proposal is drawn both in the section (lanes, after-values) and on the week columns above (the overlay of §7.1), so the person sees the result on the calendar before Aplicar.
+- **Fallback:** if embedding the board in Semana turns out to be much trouble during implementation, the section is left for later (the Resumen button and the "Planear la semana" action are hidden) and #1090 stays open as partial. It must not block the rest of the calendar.
 - Data: `qk.calendario.planWeek({ weekStart, staffIds })` (`PlanWeekData`: backlog, people, cells).
 - Left **Por planear**: backlog rows with checkbox, drag handle (`aria-roledescription="arrastrable"`), title, project, est. hours ("2 h"); drop zone "✦ Arrastra tareas aquí para que el asistente las acomode" (adds to `taskIds` of the next `plan_week` call).
 - Right **lanes per person × Lun–Vie**: header PERSONA + days; each cell a load meter "x/6" (label Con espacio / Lleno / Sobrecargado per D10 mapping) and task chips; dragging a backlog task into a cell creates a one-row `move_tasks` proposal (no direct write).
@@ -397,4 +401,5 @@ The asistente page context is built by `useCalendarioAssistantContext()` from th
 | F8 | Google refresh trigger | Once-per-session mutation on mount when older than 5 min, plus "Actualizar" |
 | F9 | Where Resumen and Barra sit in Esencial on mobile | Barra first, Resumen collapsed to the greeting line |
 | F10 | Keep the Nueva reunión draft across the Google grant redirect | Yes: `sessionStorage` draft + `?nueva=reunion` reopens the dialog |
-| F11 | The "Tramos" legend in the sidebar (`Sidebar` board) | Not built: the shell sidebar is shared by every page; the tramo legend lives in the Visual filter row (§3) |
+| F11 | The "Tramos" legend in the sidebar (`Sidebar` board) | **Decided (2026-11-11): not built.** The shell sidebar stays as it is; the tramo legend lives in the Visual filter row (§3) |
+| F12 | Where Planear mi semana lives | **Decided (2026-11-11):** a collapsible section of the Semana view (§7.7); left for later if it is much trouble |
