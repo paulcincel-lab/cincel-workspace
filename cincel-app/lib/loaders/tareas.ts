@@ -10,6 +10,7 @@ import {
   type TareasFacets,
   type TareasPageData,
   type TareasRowsPage,
+  type TaskListPageInput,
   type TareasStaffOption,
 } from "@/lib/tareas/page-data";
 import type { TaskKind, TaskStatusOption, ViewerScope, WorkflowRef } from "@/lib/types/core";
@@ -301,7 +302,7 @@ const EMPTY_PAGE: TareasRowsPage = { rows: [], nextCursor: null, total: 0 };
 /** `qk.tareas.list(f)` page loader (`useInfiniteQuery`, the cursor is the page param). FORBIDDEN without Tareas. */
 export async function loadTareasListPage(
   user: AuthenticatedUser,
-  input: { filters: TareasListFilters; cursor: string | null; limit?: number; orderBy?: "retraso" },
+  input: TaskListPageInput,
 ): Promise<TareasRowsPage> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
@@ -311,7 +312,19 @@ export async function loadTareasListPage(
     cursor: input.cursor,
     limit: input.limit ?? TAREAS_LIST_PAGE_SIZE,
     ...(input.orderBy ? { orderBy: input.orderBy } : {}),
+    ...(input.orderDir ? { orderDir: input.orderDir } : {}),
   });
+}
+
+/**
+ * `qk.tasks.children(parentId)` loader (#1047/#1048): the parent's subtasks
+ * as table rows; `[]` for a parent the viewer can't see. FORBIDDEN without Tareas.
+ */
+export async function loadTaskChildren(user: AuthenticatedUser, parentId: string): Promise<TaskListRow[]> {
+  requireTareasView(user);
+  const viewer = viewerScopeOf(user);
+  const byParent = await tasksRepository.listTaskChildren([parentId], viewer);
+  return byParent.get(parentId) ?? [];
 }
 
 /** `qk.tareas.board(f, columnId)` loader: the rows of one column after the cursor. FORBIDDEN without Tareas. */

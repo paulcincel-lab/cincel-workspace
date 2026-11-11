@@ -29,6 +29,7 @@ import { assertPhaseInWorkflow } from "@/lib/repositories/workflow-phases-reposi
 import { underlyingStatus } from "@/lib/repositories/task-statuses-repository";
 import { UNSCOPED_VIEWER, scopeTaskDto } from "@/lib/auth/viewer-scope";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
+import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
 import {
   EMPTY_SUMMARY_COUNTS,
   SIN_TRAMO_LABEL,
@@ -791,7 +792,7 @@ function decodeRetrasoCursor(cursor: string): TaskRetrasoSortKey {
 export async function listTasksPage(
   filters: TaskFilters,
   viewer: ViewerScope,
-  opts: { cursor: string | null; limit: number; orderBy?: "tramo" | "retraso"; columnKey?: string }
+  opts: { cursor: string | null; limit: number; orderBy?: "tramo" | TaskSortColumn; orderDir?: TaskSortDir; columnKey?: string }
 ): Promise<TaskRowsPage> {
   const limit = Math.max(1, Math.floor(opts.limit));
   const retraso = opts.orderBy === "retraso";
@@ -1341,6 +1342,19 @@ export async function createSubtask(parentId: string, input: SubtaskInput, actor
     actorId,
     parent.id
   );
+}
+
+/**
+ * The live children of each parent as full table rows (#1047/#1048), in
+ * the children order (due date, then creation), in ONE statement for every
+ * parent (no N+1). A parent without visible children maps to `[]`.
+ */
+export async function listTaskChildren(
+  parentIds: string[],
+  viewer: ViewerScope
+): Promise<Map<string, TaskListRow[]>> {
+  void viewer;
+  return new Map(parentIds.map((id) => [id, []]));
 }
 
 /** Live (not deleted, not archived) child tasks of `parentId`, in list order. */

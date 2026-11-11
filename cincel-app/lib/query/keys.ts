@@ -16,6 +16,7 @@ import type { AjustesAdminSegment } from "@/lib/auth/ajustes-segments";
 import type { PersonasContactsTab } from "@/lib/personas/contacts";
 import type { ImportDataEntity } from "@/lib/repositories/import-repository";
 import type { TareasMostrar } from "@/lib/tareas/query";
+import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
 import type { TaskStatus } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
@@ -30,8 +31,25 @@ export type TareasListFilters = {
   mostrar?: TareasMostrar;
   /** "Incluir apoyo" off (#1038): a responsable matches the Responsable only. Left out when on. */
   apoyo?: false;
-  /** `tareas.list` only: "retraso" for the Analítico tramo groups (overdue first); left out for the default order. */
-  orderBy?: "retraso";
+  /**
+   * Proyecto multi-select (#1045): sorted project ids, left out when none.
+   * `proyecto` stays the single-project scope (project Tareas tab, tramo
+   * groups); with both, a task matches when it is in both.
+   */
+  proyectos?: string[];
+  /**
+   * `tareas.list` only: the sort column (#1044); "retraso" is the Analítico
+   * tramo groups' default (overdue first). Left out for the board order
+   * (tramo, fase, manual order, due date).
+   */
+  orderBy?: TaskSortColumn;
+  /** `tareas.list` only (#1044): left out for "asc", so the default keys stay as they were. */
+  orderDir?: TaskSortDir;
+  /**
+   * Subtasks as rows of their own (#1047). Left out for the default: lists
+   * return top-level tasks only, each with its subtask counts.
+   */
+  topLevelOnly?: false;
 };
 
 /** `TareasPageInput` (plan §4.3) without `cursor` and `limit`: the input part of `qk.tareas.page`. */
@@ -92,6 +110,8 @@ export const qk = {
   tasks: {
     detail: (id: string) => ["tasks", id] as const,
     subtasks: (id: string) => ["tasks", id, "subtasks"] as const,
+    /** A parent's subtasks as full table rows (`getTaskChildren`, #1047/#1048); under `detail(id)`. */
+    children: (id: string) => ["tasks", id, "children"] as const,
     dependencies: (id: string) => ["tasks", id, "dependencies"] as const,
     options: (projectId: string, q: string) => ["tasks", "options", projectId, q] as const,
   },
@@ -99,6 +119,8 @@ export const qk = {
   proyectos: {
     all: ["proyectos"] as const,
     list: () => ["proyectos", "list"] as const,
+    /** Admin "Proyectos eliminados" (#1050): projects deleted in the last 30 days. */
+    deleted: () => ["proyectos", "deleted"] as const,
     /** The create dialog's "Tramo inicial" options (#1034). */
     createStart: () => ["proyectos", "create-start"] as const,
     detail: (id: string) => ["proyectos", id] as const,
@@ -111,6 +133,8 @@ export const qk = {
     clientesActivity: (id: string) => ["proyectos", id, "clientes", "activity"] as const,
     /** The ficha's "Reacomodar importación" state (5b), under `detail(id)`. */
     remap: (id: string) => ["proyectos", id, "remap"] as const,
+    /** The delete dialog's counts (#1050): tasks and open tasks of the project. */
+    deletePreview: (id: string) => ["proyectos", id, "delete-preview"] as const,
     /** Resumen Analítico quick-add hint: who could take a task instead of `staffId` in `phaseId`. */
     assigneeSuggestion: (id: string, phaseId: string, staffId: string) =>
       ["proyectos", id, "assignee-suggestion", phaseId, staffId] as const,

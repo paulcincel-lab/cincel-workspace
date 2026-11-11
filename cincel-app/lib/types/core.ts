@@ -491,6 +491,19 @@ export type TaskListRow = Omit<TaskListItem, "notes"> & {
   subtaskCount: number;
   /** Live child tasks in completado; same as `subtaskDoneCount`. */
   subtaskDone: number;
+  /**
+   * Live child tasks still open (not completado, not in a closing custom
+   * status), for the "2/5" chip (#1047). Optional until the list query fills it.
+   */
+  subtaskOpenCount?: number;
+  /** The live children's ids, in the children order (#1047); the rows come from `getTaskChildren`. */
+  subtaskIds?: string[];
+  /**
+   * The children that match the list filters when the row is shown only as
+   * the context of a matching subtask (#1047): the table renders it expanded
+   * with these children (#1048). Left out when the parent itself matches.
+   */
+  matchedSubtaskIds?: string[];
   /** Comentario events in the task's history. */
   commentCount: number;
   attachmentCount: number;
@@ -649,6 +662,13 @@ export type TaskFilters = {
   mostrar?: "abiertas" | "en_retraso";
   /** `YYYY-MM-DD` the overdue rule compares with; default today in America/Mexico_City. */
   today?: string;
+  /** Tareas Proyecto multi-select (#1045): any of these projects; ANDed with `projectId`. */
+  projectIds?: string[];
+  /**
+   * Top-level tasks only, a matching subtask bringing its parent as context
+   * (#1047). The task-list loaders set it unless `TareasListFilters.topLevelOnly` is false.
+   */
+  topLevelOnly?: boolean;
 };
 
 // ── Starting a tramo (FE §7.1, BE §9) ────────────────────────────────────────

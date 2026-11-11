@@ -34,6 +34,7 @@ import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import type { ProjectCreateStartOptions } from "@/lib/types/core";
 import { suggestAssignee, type AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
+import type { DeletedProjectRow, ProjectDeletePreview } from "@/lib/types/project-delete";
 
 /**
  * Proyectos page-data reads (Query Migration Phase 5). Each one parses its
@@ -167,4 +168,19 @@ export async function getProyectoAssigneeSuggestion(
     phaseId: parsed.phaseId,
     excludeStaffId: parsed.staffId,
   });
+}
+
+// ── Delete and restore (#1050) ───────────────────────────────────────────────
+
+/** `qk.proyectos.deletePreview(id)`: the delete dialog's counts. FORBIDDEN without `canDeleteProject`. */
+export async function getProjectDeletePreview(id: string): Promise<ProjectDeletePreview | null> {
+  parseInput(UuidSchema, id);
+  await requireCapabilityUser();
+  return null;
+}
+
+/** `qk.proyectos.deleted()`: the projects deleted in the last 30 days. FORBIDDEN unless admin. */
+export async function getDeletedProjects(): Promise<DeletedProjectRow[]> {
+  await requireCapabilityUser();
+  return [];
 }

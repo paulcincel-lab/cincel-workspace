@@ -8,6 +8,10 @@ import { z } from "zod";
 import { UuidSchema } from "@/lib/validation/project-flow";
 
 import { TAREAS_MOSTRAR, TAREAS_SEARCH_MAX } from "./query";
+import { TASK_SORT_COLUMNS } from "./sort";
+
+/** Most projects the Proyecto multi-select sends (#1045). */
+export const TAREAS_PROYECTOS_MAX = 50;
 
 /** Tramo keys (`workflows.key`), as `parseTareasQuery` keeps them. */
 const TramoKey = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
@@ -22,6 +26,16 @@ const TareasFilterFields = {
   mostrar: z.enum(TAREAS_MOSTRAR).optional(),
   /** "Incluir apoyo" off; left out when on (`TareasListFilters.apoyo`). */
   apoyo: z.literal(false).optional(),
+  /** Proyecto multi-select (#1045, `TareasListFilters.proyectos`). */
+  proyectos: z.array(UuidSchema).max(TAREAS_PROYECTOS_MAX).optional(),
+  /** Subtasks as rows of their own; left out for top-level only (#1047). */
+  topLevelOnly: z.literal(false).optional(),
+};
+
+/** The sort column and direction (#1044); left out for the default order. */
+const SortFields = {
+  orderBy: z.enum(TASK_SORT_COLUMNS).optional(),
+  orderDir: z.enum(["asc", "desc"]).optional(),
 };
 
 /** The URL filters every view shares (`TareasListFilters`). */
@@ -31,6 +45,7 @@ export const TareasListFiltersSchema = z.object(TareasFilterFields);
 export const TareasPageInput = z.object({
   estilo: z.enum(["visual", "esencial", "analitico"]),
   ...TareasFilterFields,
+  ...SortFields,
 });
 
 /** Opaque keyset cursors are base64url. */
@@ -44,8 +59,8 @@ export const TareasListPageInput = z.object({
   filters: TareasListFiltersSchema,
   cursor: Cursor,
   limit: z.number().int().min(10).max(200).optional(),
-  /** "retraso" (Analítico tramo groups): overdue first, then open by due date, then closed. */
-  orderBy: z.literal("retraso").optional(),
+  /** "retraso" (Analítico tramo groups): overdue first, then open by due date, then closed; any other column (#1044). */
+  ...SortFields,
 });
 
 /** A board column: a base status or `custom:<uuid>`. */

@@ -30,6 +30,9 @@ import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 // Resumen Analítico quick-add hint (#997)
 import { getProyectoAssigneeSuggestion } from "@/lib/actions/page-data/proyectos-actions";
 import type { AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
+// Delete and restore (#1050)
+import { getDeletedProjects, getProjectDeletePreview } from "@/lib/actions/page-data/proyectos-actions";
+import type { DeletedProjectRow, ProjectDeletePreview } from "@/lib/types/project-delete";
 
 /**
  * `queryOptions` for the Proyectos screens (Query Migration Phase 5), 30 s
@@ -201,6 +204,26 @@ export function proyectoAssigneeSuggestionOptions(id: string, phaseId: string, s
   return queryOptions<AssigneeSuggestion>({
     queryKey: qk.proyectos.assigneeSuggestion(id, phaseId, staffId),
     queryFn: () => getProyectoAssigneeSuggestion({ id, phaseId, staffId }),
+    staleTime: STALE.screen,
+  });
+}
+
+// ── Delete and restore (#1050) ───────────────────────────────────────────────
+
+/** The delete dialog's counts (`qk.proyectos.deletePreview(id)`), fetched when the dialog opens; always fresh. */
+export function projectDeletePreviewOptions(id: string) {
+  return queryOptions<ProjectDeletePreview | null>({
+    queryKey: qk.proyectos.deletePreview(id),
+    queryFn: () => getProjectDeletePreview(id),
+    staleTime: 0,
+  });
+}
+
+/** The admin "Proyectos eliminados" list (`qk.proyectos.deleted()`), 30 s stale. */
+export function deletedProjectsOptions() {
+  return queryOptions<DeletedProjectRow[]>({
+    queryKey: qk.proyectos.deleted(),
+    queryFn: () => getDeletedProjects(),
     staleTime: STALE.screen,
   });
 }

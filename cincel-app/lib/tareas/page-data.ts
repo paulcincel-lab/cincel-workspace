@@ -15,6 +15,7 @@ import type { TaskBoard } from "@/lib/types/redesign";
 import type { TareasMostrar } from "@/lib/tareas/query";
 import type { TareasSummary } from "@/lib/tareas/summary";
 import type { TareasListFilters } from "@/lib/query/keys";
+import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
 import type { KpiDatum } from "@/lib/types/widgets";
 
 /** Rows the board loads per column before "Cargar más". */
@@ -23,6 +24,13 @@ export const TAREAS_BOARD_PER_COLUMN = 20;
 /** Rows per Lista page. */
 export const TAREAS_LIST_PAGE_SIZE = 50;
 
+/**
+ * Rows per "Cargar más" page of every task list (#1051): Tareas, the project
+ * Tareas tab, Resumen, Mi espacio and the expanded Proyectos rows.
+ * `TAREAS_LIST_PAGE_SIZE` moves to this value with #1051.
+ */
+export const TASK_LIST_PAGE_SIZE = 30;
+
 /** Chip counts and Proyecto options (`taskFacets`): they ignore the tramo and proyecto filters. */
 export type TareasFacets = {
   /** "Todas": the tasks in the selected project, any tramo. */
@@ -30,15 +38,39 @@ export type TareasFacets = {
   /** Per tramo key: the tasks in the selected project. */
   byTramo: Record<string, number>;
   /** The projects with tasks in the selected tramo, by name (the selected one always). */
-  projects: { id: string; name: string; count: number }[];
+  projects: {
+    id: string;
+    name: string;
+    count: number;
+    /** Open and overdue tasks of the project, for the Proyecto dropdown (#1045). */
+    open?: number;
+    overdue?: number;
+  }[];
   /** "Mostrar" counts in the selected tramo and project; they ignore `mostrar` itself. */
   mostrar?: Record<TareasMostrar, number>;
   /** Of those tasks, the ones the viewer manages. */
   mine?: number;
 };
 
-/** One page of slim rows: Lista pages and the per-column pages of the board. */
-export type TareasRowsPage = { rows: TaskListRow[]; nextCursor: string | null; total: number };
+/**
+ * One page of slim rows: Lista pages and the per-column pages of the board.
+ * `rows` and `total` are top-level tasks (#1047); `subtaskTotal` is the
+ * subtasks of every matching parent, for an "n subtareas" count.
+ */
+export type TareasRowsPage = { rows: TaskListRow[]; nextCursor: string | null; total: number; subtaskTotal?: number };
+
+/** The one input of every task list page (`getTareasListPage`), #1044/#1047/#1051. */
+export type TaskListPageInput = {
+  filters: TareasListFilters;
+  /** The previous page's `nextCursor`; null for the first page. */
+  cursor: string | null;
+  /** Default `TAREAS_LIST_PAGE_SIZE`. */
+  limit?: number;
+  /** Default: the board order; "retraso" is the Analítico groups' default. Same as `filters.orderBy`. */
+  orderBy?: TaskSortColumn;
+  /** Default "asc". */
+  orderDir?: TaskSortDir;
+};
 
 /** A board column: its first rows, every matching task counted, and the cursor after the last row. */
 export type TareasBoardColumn = { rows: TaskListRow[]; total: number; nextCursor: string | null };

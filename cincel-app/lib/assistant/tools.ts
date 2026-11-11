@@ -769,7 +769,7 @@ export const discard_project = tool({
   execute: async ({ projectName }) => {
     const resolved = await resolveProject(projectName);
     if (!resolved.ok) return resolved;
-    await deleteProjectAction(resolved.value.id);
+    unwrapActionResult(await deleteProjectAction(resolved.value.id));
     return { ok: true as const, id: resolved.value.id, name: resolved.value.name };
   },
 });

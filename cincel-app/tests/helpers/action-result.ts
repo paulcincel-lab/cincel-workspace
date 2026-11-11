@@ -42,6 +42,8 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "renameProjectSpaceAction",
     "reorderProjectSpacesAction",
     "deleteProjectSpaceAction",
+    "deleteProjectAction",
+    "restoreProjectAction",
   ],
   "staff-actions": [
     "createStaffAction",

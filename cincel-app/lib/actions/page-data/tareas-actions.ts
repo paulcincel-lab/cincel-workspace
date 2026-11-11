@@ -9,6 +9,7 @@ import {
   loadTareasPage,
   loadTareasSummary,
   loadTareasTrend,
+  loadTaskChildren,
 } from "@/lib/loaders/tareas";
 import type { TareasSummary } from "@/lib/tareas/summary";
 import type {
@@ -33,7 +34,7 @@ import { requireCapabilityUser } from "@/lib/auth/session";
 import { loadTareasStartSlot, loadTaskSheet, searchProjectTasks } from "@/lib/loaders/tareas";
 import type { TareasStartSlotData } from "@/lib/types/tareas-start-slot";
 import type { TaskSheetData } from "@/lib/types/task-sheet";
-import type { TaskRef } from "@/lib/types/core";
+import type { TaskListRow, TaskRef } from "@/lib/types/core";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
@@ -112,6 +113,12 @@ export async function getTareasPageData(input: z.input<typeof TareasPageInput>):
 export async function getTareasListPage(input: z.input<typeof TareasListPageInput>): Promise<TareasRowsPage> {
   const parsed = parseInput(TareasListPageInput, input);
   return loadTareasListPage(await requireCapabilityUser(), parsed);
+}
+
+/** `qk.tasks.children(parentId)`: a parent's subtasks as table rows (#1047/#1048). FORBIDDEN without Tareas. */
+export async function getTaskChildren(parentId: string): Promise<TaskListRow[]> {
+  const id = parseInput(UuidSchema, parentId);
+  return loadTaskChildren(await requireCapabilityUser(), id);
 }
 
 /** `qk.tareas.board(f, columnId)` pages: one board column after `cursor`. FORBIDDEN without Tareas. */

@@ -14,6 +14,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 import type {
   StartTramoPreview,
   TaskDetail,
+  TaskListRow,
   TaskRef,
   TaskStatus,
   WorkflowDetail,
@@ -30,6 +31,7 @@ import {
   getTareasListPage,
   getTareasPageData,
   getTareasTrend,
+  getTaskChildren,
 } from "@/lib/actions/page-data/tareas-actions";
 import type { TareasPageKeyInput } from "@/lib/query/keys";
 import { getTareasSummary } from "@/lib/actions/page-data/tareas-actions";
@@ -200,6 +202,24 @@ export function taskSubtasksOptions(id: string) {
     queryFn: () => listSubtasksAction(id),
     staleTime: STALE.screen,
   });
+}
+
+/**
+ * A parent's subtasks as table rows (`qk.tasks.children(id)`, #1047/#1048),
+ * fetched on expand; 30 s stale. A list that loads children in one batch
+ * seeds these keys with `seedTaskChildren` instead of one query per parent.
+ */
+export function taskChildrenOptions(parentId: string) {
+  return queryOptions<TaskListRow[]>({
+    queryKey: qk.tasks.children(parentId),
+    queryFn: () => getTaskChildren(parentId),
+    staleTime: STALE.screen,
+  });
+}
+
+/** Writes batched children into each parent's `qk.tasks.children(id)` key. */
+export function seedTaskChildren(client: QueryClient, byParent: Record<string, TaskListRow[]>): void {
+  for (const [parentId, rows] of Object.entries(byParent)) client.setQueryData(qk.tasks.children(parentId), rows);
 }
 
 /** "Depende de" and "Bloquea a" of a task (`qk.tasks.dependencies(id)`), 30 s stale. */
@@ -408,7 +428,12 @@ export function tareasListInfiniteOptions(f: TareasListFilters) {
   return infiniteQueryOptions<TareasRowsPage, Error, TareasListPages, readonly unknown[], string | null>({
     queryKey: qk.tareas.list(f),
     queryFn: ({ pageParam }) =>
-      getTareasListPage({ filters: f, cursor: pageParam, ...(f.orderBy ? { orderBy: f.orderBy } : {}) }),
+      getTareasListPage({
+        filters: f,
+        cursor: pageParam,
+        ...(f.orderBy ? { orderBy: f.orderBy } : {}),
+        ...(f.orderDir ? { orderDir: f.orderDir } : {}),
+      }),
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
     staleTime: STALE.screen,

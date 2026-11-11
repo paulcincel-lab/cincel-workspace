@@ -32,6 +32,7 @@ import type {
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
 import { OrderedIdsSchema, ProjectSpaceNameSchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
 import { portfolioFor } from "@/lib/projects/portfolio";
+import type { ProjectDeleteResult, ProjectRestoreResult } from "@/lib/types/project-delete";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
 async function requireProjectsCapabilities() {
@@ -182,12 +183,35 @@ export async function archiveProjectAction(id: string, status: "completado" | "c
   return row;
 }
 
-export async function deleteProjectAction(id: string): Promise<void> {
+export async function deleteProjectAction(
+  ...args: Parameters<typeof deleteProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deleteProjectActionImpl>>>> {
+  return toActionResult(() => deleteProjectActionImpl(...args));
+}
+
+async function deleteProjectActionImpl(id: string): Promise<ProjectDeleteResult> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canDeleteProject) {
     throw new Error("FORBIDDEN: project delete");
   }
   await projectsRepository.softDeleteProject(id, user.member.id);
+  return { id };
+}
+
+/**
+ * Restores a deleted project and exactly the tasks deleted with it (#1050):
+ * admins or the person who deleted it, within `PROJECT_RESTORE_DAYS`.
+ * Portal access is not restored.
+ */
+export async function restoreProjectAction(
+  ...args: Parameters<typeof restoreProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof restoreProjectActionImpl>>>> {
+  return toActionResult(() => restoreProjectActionImpl(...args));
+}
+
+async function restoreProjectActionImpl(id: string): Promise<ProjectRestoreResult> {
+  void id;
+  throw new Error("NOT_IMPLEMENTED: project restore");
 }
 
 export async function setProjectMembersAction(
