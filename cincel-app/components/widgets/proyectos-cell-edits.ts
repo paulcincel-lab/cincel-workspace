@@ -3,19 +3,32 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { moveProjectToTramo } from "@/components/proyectos/projects-portfolio-data";
 import type { PortfolioTableRow } from "@/components/proyectos/projects-portfolio-data";
 import {
+  TASK_SUPPORT_COLUMN,
   taskCellAction,
   taskCellLock,
   taskCellOptions,
   taskCellValue,
+  taskSupportExclude,
+  taskSupportIds,
+  taskSupportLock,
+  taskSupportOptions,
   taskWithChange,
+  taskWithSupport,
   type TaskCellAction,
   type TaskCellCatalogs,
   type TaskCellField,
   type TaskCellViewer,
 } from "@/components/tareas/task-cell-edits";
-import { CLEAR_LABEL, LOCK_REASON, type CellEdit, type CellOption } from "@/components/widgets/editable-cell";
+import { SUPPORT_COLUMN_LABEL, SUPPORT_IS_RESPONSIBLE } from "@/components/tareas/task-table-copy";
+import { CLEAR_LABEL, LOCK_REASON, type CellEdit, type CellOption, type PeopleCellEdit } from "@/components/widgets/editable-cell";
 import { setProjectCurrentTramoAction, updateProjectAction } from "@/lib/actions/projects-actions";
-import { assignTaskAction, setTaskCustomStatusAction, setTaskStatusAction, updateTaskAction } from "@/lib/actions/tasks-actions";
+import {
+  assignTaskAction,
+  setTaskCustomStatusAction,
+  setTaskStatusAction,
+  setTaskSupportAction,
+  updateTaskAction,
+} from "@/lib/actions/tasks-actions";
 import type { ProyectoTareasData, ProyectosPageData } from "@/lib/loaders/proyectos";
 import type { TaskRow } from "@/lib/proyectos/project-summary";
 import { qk } from "@/lib/query/keys";
@@ -235,10 +248,64 @@ function runTaskAction(id: string, action: TaskCellAction): Promise<ActionResult
  * edit in place with the Tareas table's values, options, locks and actions
  * (`components/tareas/task-cell-edits`); Días de retraso is calculated.
  */
+/** Views besides the project's Tareas tab that show its tasks. */
+function projectTaskViews(projectId: string): QueryKey[] {
+  return [qk.tareas.all, qk.proyectos.list(), qk.proyectos.shell(projectId), qk.me.tasks(), qk.inicio(), qk.shell.badges()];
+}
+
+export type ProjectSupportEditDeps = {
+  qc: QueryClient;
+  projectId: string;
+  /** The project's tasks (`qk.proyectos.tab(id, "tareas")`), by id. */
+  tasks: Map<string, Pick<TaskListRow, "id" | "managerId" | "support">>;
+  /** People the Apoyo editor lists. */
+  people: StaffRef[];
+  viewer: { caps: Pick<TaskCellViewer["caps"], "canChangeResponsible"> };
+};
+
+/**
+ * The Apoyo column (#1038) of a project's task table (Resumen "Tareas por
+ * tramo", the project Tareas tab): the people multi-select over
+ * `setTaskSupportAction`, patching `qk.proyectos.tab(id, "tareas")` first.
+ * The Responsable can't be picked; the lock is the Responsable's.
+ */
+export function projectTaskSupportColumn<Row extends { id: string }>(
+  deps: ProjectSupportEditDeps,
+  rest: Partial<RecordColumn<Row>> = {},
+): RecordColumn<Row> {
+  const { qc, projectId, tasks, people, viewer } = deps;
+  const key = qk.proyectos.tab(projectId, "tareas");
+  const edit: PeopleCellEdit<Row> = {
+    kind: "people",
+    value: (row) => {
+      const task = tasks.get(row.id);
+      return task ? taskSupportIds(task) : [];
+    },
+    options: () => taskSupportOptions(people),
+    exclude: (row) => {
+      const task = tasks.get(row.id);
+      return task ? taskSupportExclude(task) : [];
+    },
+    excludedLabel: SUPPORT_IS_RESPONSIBLE,
+    commit: (row, ids) => {
+      if (!tasks.has(row.id)) return Promise.resolve({ ok: false, error: "NOT_FOUND" });
+      return optimistic<ProyectoTareasData>(
+        qc,
+        key,
+        (data) => ({ ...data, tasks: data.tasks.map((t) => (t.id === row.id ? taskWithSupport(t, ids, people) : t)) }),
+        () => setTaskSupportAction(row.id, ids),
+        () => invalidate(qc, [...projectTaskViews(projectId), qk.tasks.detail(row.id)]),
+      );
+    },
+  };
+  const canEdit = (row: Row): true | string => (tasks.has(row.id) ? taskSupportLock(viewer) : LOCK_REASON.taskWriter);
+  return { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL, ...rest, edit, canEdit };
+}
+
 export function resumenTaskColumns(deps: ResumenTaskEditDeps): RecordColumn<TaskRow>[] {
   const { qc, projectId, tasks, phasesByTramo, people, statuses, viewer } = deps;
   const key = qk.proyectos.tab(projectId, "tareas");
-  const otherViews: QueryKey[] = [qk.tareas.all, qk.proyectos.list(), qk.proyectos.shell(projectId), qk.me.tasks(), qk.inicio(), qk.shell.badges()];
+  const otherViews = projectTaskViews(projectId);
   const catalogs: TaskCellCatalogs = {
     tramos: [],
     phasesOf: (workflowId) => [...(phasesByTramo[workflowId] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -295,6 +362,7 @@ export function resumenTaskColumns(deps: ResumenTaskEditDeps): RecordColumn<Task
     column("title", "Tarea", { width: 360 }),
     column("phase", "Fase", { width: 160 }),
     column("responsable", "Responsable", { width: 170 }),
+    projectTaskSupportColumn<TaskRow>({ qc, projectId, tasks, people, viewer }, { width: 110 }),
     column("status", "Estatus", { width: 140 }),
     column("due", "Vence", { mono: true, width: 90 }),
     { key: "daysLate", label: "Días de retraso", align: "right", mono: true, format: "count", width: 130 },

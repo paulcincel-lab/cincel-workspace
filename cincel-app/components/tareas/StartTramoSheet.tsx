@@ -43,8 +43,13 @@ import type { StartSlotCandidate } from "@/lib/types/tareas-start-slot";
 export interface StartTramoSheetProps {
   open: boolean;
   projectId: string | null;
-  /** The tramo of the page. */
-  workflow: WorkflowRef;
+  /** The tramo of the page; null until one is picked in `tramoPicker`. */
+  workflow: WorkflowRef | null;
+  /**
+   * A "Tramo" select at the top of the sheet (the project Resumen's "Iniciar
+   * un tramo"): nothing is preselected; picking one sets `workflow`.
+   */
+  tramoPicker?: { tramos: WorkflowRef[]; onPick: (tramoId: string) => void };
   viewerId: string;
   /** Shows the auto-start checkbox. */
   isAdmin: boolean;
@@ -113,6 +118,7 @@ export function StartTramoSheet({
   viewerId,
   isAdmin,
   staff,
+  tramoPicker,
   onClose,
   onStarted,
 }: StartTramoSheetProps) {
@@ -120,12 +126,12 @@ export function StartTramoSheet({
   const start = useActionMutation<StartTramoInput, StartTramoResult>(startTramoAction, {
     // A failed start writes nothing: keep the screen (and the form) as it is.
     invalidate: (vars, data) => (data ? tramoStartInvalidations(vars) : []),
-    errorContext: { tramoName: workflow.name },
+    errorContext: { tramoName: workflow?.name ?? "" },
     onFormError: setError,
   });
   const previewQuery = useQuery({
-    ...startTramoPreviewOptions(projectId ?? "", workflow.id),
-    enabled: open && Boolean(projectId),
+    ...startTramoPreviewOptions(projectId ?? "", workflow?.id ?? ""),
+    enabled: open && Boolean(projectId) && workflow !== null,
   });
   // Every opening (and "Reintentar") waits for a fresh preview; the refetch a
   // successful start triggers keeps the form on screen until the sheet closes.
@@ -134,7 +140,9 @@ export function StartTramoSheet({
   const loadError = !loading && previewQuery.isError;
 
   const projectName = preview?.project.name ?? "";
-  const title = projectName ? `Iniciar ${workflow.name} · ${projectName}` : `Iniciar ${workflow.name}`;
+  const tramoName = workflow?.name ?? "tramo";
+  const title = projectName ? `Iniciar ${tramoName} · ${projectName}` : `Iniciar ${tramoName}`;
+  const picker = tramoPicker ? <TramoPicker {...tramoPicker} value={workflow?.id ?? null} /> : null;
 
   function close() {
     setError("");
@@ -159,9 +167,11 @@ export function StartTramoSheet({
           <SheetDescription>Elige las fases contratadas y quién las hará.</SheetDescription>
         </SheetHeader>
 
-        {preview && projectId ? (
+        {picker}
+
+        {preview && projectId && workflow ? (
           <StartTramoForm
-            key={projectId}
+            key={`${projectId}:${workflow.id}`}
             preview={preview}
             projectId={projectId}
             workflow={workflow}
@@ -185,7 +195,7 @@ export function StartTramoSheet({
               ) : loadError ? (
                 <Alert variant="destructive">
                   <AlertDescription className="flex items-center justify-between gap-2">
-                    <span>No se pudo cargar la plantilla de {workflow.name}.</span>
+                    <span>No se pudo cargar la plantilla de {tramoName}.</span>
                     <Button type="button" size="sm" variant="outline" onClick={() => void previewQuery.refetch()}>
                       Reintentar
                     </Button>
@@ -213,6 +223,37 @@ export function StartTramoSheet({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** The sheet's "Tramo" select (`tramoPicker`); empty until the viewer picks one. */
+function TramoPicker({
+  tramos,
+  value,
+  onPick,
+}: {
+  tramos: WorkflowRef[];
+  value: string | null;
+  onPick: (tramoId: string) => void;
+}) {
+  const ordered = [...tramos].sort((a, b) => a.sortOrder - b.sortOrder);
+  const items = Object.fromEntries(ordered.map((t) => [t.id, t.name]));
+  return (
+    <div className="space-y-1 px-4">
+      <Label htmlFor="start-tramo-picker">Tramo</Label>
+      <Select items={items} value={value} onValueChange={(next) => (next ? onPick(next as string) : undefined)}>
+        <SelectTrigger id="start-tramo-picker" aria-label="Tramo" className="w-full">
+          <SelectValue placeholder="Elige un tramo" />
+        </SelectTrigger>
+        <SelectContent>
+          {ordered.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

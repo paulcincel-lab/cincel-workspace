@@ -25,8 +25,18 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
   ),
 }));
 
+// The empty state's Iniciar tramo sheet (#1043) reads these; no test here starts a tramo.
+vi.mock("@/lib/actions/tramo-start-actions", () => ({
+  previewStartTramoAction: vi.fn(() => new Promise(() => {})),
+  startTramoAction: vi.fn(),
+  undoStartTramoAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasStartSlotData: vi.fn(() => new Promise(() => {})) }));
+
 import { ResumenVisualLayout, type ResumenVisualLayoutProps } from "@/components/widgets/ResumenVisualLayout";
-import { fixtureProject, fixtureSummaryInput, fixtureTaskRow, HISTORY_EVENTS, TASK_ROWS } from "@/tests/unit/fixtures/project-summary";
+import { RESUMEN_NO_TRAMO } from "@/lib/proyectos/project-summary";
+import { renderWithQueryClient } from "@/lib/query/test-utils";
+import { fixtureProject, fixtureSummaryInput, fixtureTaskRow, HISTORY_EVENTS, TASK_ROWS, TRAMOS } from "@/tests/unit/fixtures/project-summary";
 
 afterEach(cleanup);
 
@@ -55,7 +65,8 @@ describe("ResumenVisualLayout", () => {
     expect(hero.textContent).toContain("100 %");
     expect(hero.textContent).toContain("50 % · 1 pendiente");
     expect(hero.textContent).toContain("25 % · en curso");
-    expect(hero.textContent).toContain("Inicia 8 ene");
+    // Decoración was never started (#1043): no "Inicia …" step for it.
+    expect(hero.textContent).not.toContain("Decoración");
     // Chips from the task list; the "Próxima" chip from the portfolio row.
     expect(within(hero).getByText("5 tareas abiertas")).toBeTruthy();
     expect(within(hero).getByText("1 vencida")).toBeTruthy();
@@ -67,7 +78,7 @@ describe("ResumenVisualLayout", () => {
       within(status).getByRole("img", { name: "8 tareas: 1 en proceso, 3 pendientes, 1 bloqueada, 3 completadas" }),
     ).toBeTruthy();
     const tramos = screen.getByRole("region", { name: "Avance por tramo" });
-    expect(within(tramos).getByRole("img", { name: /Presale 100 %, Diseño 50 %, Construcción 25 %, Decoración 0 %/ })).toBeTruthy();
+    expect(within(tramos).getByRole("img", { name: /Presale 100 %, Diseño 50 %, Construcción 25 %$/ })).toBeTruthy();
     const team = screen.getByRole("region", { name: "Equipo y carga" });
     expect(within(team).getByRole("img", { name: "Carga 92 %" })).toBeTruthy();
     expect(team.textContent).toContain("92 % · 1 vencida");
@@ -115,6 +126,39 @@ describe("ResumenVisualLayout", () => {
     // No schedule: the hero's PLAN line goes too.
     expect(screen.getByRole("img", { name: "Avance 82 %" })).toBeTruthy();
     expect(screen.queryByText(/PLAN/)).toBeNull();
+  });
+
+  it("no started tramo: the empty state, no suggested tramos (#1043)", () => {
+    const project = fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [], stages: [] });
+    renderWithQueryClient(
+      <ResumenVisualLayout
+        data={fixtureSummaryInput({ project })}
+        tasks={[]}
+        history={{ events: [], status: "success", onRetry: vi.fn() }}
+        canCreate
+        onQuickAdd={vi.fn()}
+        onNewTask={vi.fn()}
+        now={NOW}
+      />,
+    );
+    const hero = screen.getByRole("region", { name: "Avance del proyecto" });
+    expect(hero.textContent).toContain(RESUMEN_NO_TRAMO);
+    expect(hero.textContent).not.toContain("Presale");
+    expect(screen.getByRole("region", { name: "Avance por tramo" }).textContent).toContain(RESUMEN_NO_TRAMO);
+  });
+
+  it("started in Diseño: only Diseño, plus Siguiente: Construcción (#1043)", () => {
+    const [, diseno] = TRAMOS;
+    const project = fixtureProject({
+      currentWorkflowId: diseno!.id,
+      currentWorkflow: diseno!,
+      tramos: [{ ...diseno!, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
+      stages: [diseno!],
+    });
+    renderLayout({ data: fixtureSummaryInput({ project }), tasks: [] });
+    const hero = screen.getByRole("region", { name: "Avance del proyecto" });
+    expect(hero.textContent).toContain("Siguiente: Construcción");
+    expect(hero.textContent).not.toContain("Presale");
   });
 
   it("new project empty states", () => {

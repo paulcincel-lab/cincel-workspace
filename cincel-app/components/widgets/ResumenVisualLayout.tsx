@@ -5,6 +5,7 @@ import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "re
 import { FileText } from "lucide-react";
 
 import { EmptyState } from "@/components/shell/EmptyState";
+import { ProjectNoTramo } from "@/components/proyectos/ProjectNoTramo";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Button } from "@/components/ui/shadcn/button";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
@@ -18,6 +19,8 @@ import {
   activityItems,
   fileTypeLabel,
   nextTasks,
+  nextTramoHint,
+  RESUMEN_NO_TRAMO,
   shortDate,
   statusCounts,
   TEAM_LOAD_MAX,
@@ -109,6 +112,7 @@ function Hero({
   const real = Math.max(0, Math.min(100, Math.round(portfolio?.real ?? project.progress)));
   const plan = schedule && portfolio?.plan != null ? Math.round(portfolio.plan) : null;
   const current = progress.find((step) => step.state === "current") ?? null;
+  const nextTramo = nextTramoHint(tramoCatalog, project);
   const next = portfolio?.nextDelivery ?? null;
   const chipBase = "inline-flex items-center rounded-full px-3 py-[5px] text-[13px] font-medium";
 
@@ -148,12 +152,17 @@ function Hero({
       </div>
 
       <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-[18px]">
-        <div className="flex flex-col gap-1">
-          <span className="text-[13px] text-muted-foreground">Tramo actual</span>
-          <span className="text-[22px] font-semibold" style={{ color: tone.ink }}>
-            {current ? [current.label, taskStats.currentPhase].filter(Boolean).join(" · ") : "Sin tramo asignado"}
-          </span>
-        </div>
+        {progress.length > 0 ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-[13px] text-muted-foreground">Tramo actual</span>
+            <span className="text-[22px] font-semibold" style={{ color: tone.ink }}>
+              {current ? [current.label, taskStats.currentPhase].filter(Boolean).join(" · ") : "Sin tramo asignado"}
+            </span>
+          </div>
+        ) : (
+          // No started tramo (#1043): no suggested track, the empty state with "Iniciar un tramo".
+          <ProjectNoTramo projectId={project.id} tramos={tramoCatalog} />
+        )}
 
         {progress.length > 0 ? (
           <ol className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -189,6 +198,11 @@ function Hero({
                 </li>
               );
             })}
+            {nextTramo ? (
+              <li data-slot="tramo-next" className="flex min-w-0 flex-col justify-end gap-1.5">
+                <span className="truncate text-[13px] text-muted-foreground">Siguiente: {nextTramo.name}</span>
+              </li>
+            ) : null}
           </ol>
         ) : null}
 
@@ -590,7 +604,7 @@ export function ResumenVisualLayout({
           {progress.length > 0 ? (
             <TramoBars progress={progress} data={data} />
           ) : (
-            <p className="text-sm text-muted-foreground">Este proyecto aún no tiene tramos</p>
+            <p className="text-sm text-muted-foreground">{RESUMEN_NO_TRAMO}</p>
           )}
         </SectionCard>
         <SectionCard title="Equipo y carga" index={3}>

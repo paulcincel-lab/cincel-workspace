@@ -32,6 +32,7 @@ import {
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
 import { WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
+import { PEOPLE_EMPTY } from "@/components/widgets/editable-cell";
 import { ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
@@ -49,6 +50,8 @@ import { taskSheetOptions } from "@/lib/query/options/tareas";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { isDueDateLate, parseStatusValue, statusSelectItems, statusSelectValue } from "@/lib/tasks/status-options";
 import type { StaffRef, TaskChecklistItem, TaskPatch, TaskPriority, TaskRef } from "@/lib/types/core";
+
+import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 
 export type TaskSheetProps = { taskId: string; onClose(): void };
 
@@ -597,6 +600,11 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
             ) : (
               <span className="text-foreground">{task.manager?.name ?? "Sin responsable"}</span>
             )}
+          </dd>
+
+          <dt className="text-muted-foreground">{SUPPORT_COLUMN_LABEL}</dt>
+          <dd data-slot="task-support" className="text-foreground">
+            {task.support.length > 0 ? task.support.map((s) => s.name).join(", ") : <span className="text-muted-foreground">{PEOPLE_EMPTY}</span>}
           </dd>
 
           <dt className="text-muted-foreground">Proyecto</dt>

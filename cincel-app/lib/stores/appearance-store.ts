@@ -6,8 +6,10 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useCallback,
   useRef,
   useState,
+  useSyncExternalStore,
   type JSX,
   type ReactNode,
 } from "react";
@@ -21,6 +23,7 @@ import { mutationErrorText, runAction } from "@/lib/query/mutation";
 import { getBrowserQueryClient, registerUiStoreReset } from "@/lib/query/reset-client-state";
 import type { ColorMode, PresentationStyle, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
 import { appearanceStyleBlock } from "@/lib/ui/appearance-css";
+import { DEFAULT_HIDE_COMPLETED_TASKS } from "@/lib/ui/preferences";
 import { TEXT_SIZES, textSizeClass } from "@/lib/ui/text-size";
 
 /**
@@ -464,4 +467,31 @@ export function useAppearance<T>(selector?: (s: AppearanceState) => T): T | Appe
 /** The store itself, for code that must read it without subscribing (null outside the provider). */
 export function useAppearanceStoreApiOrNull(): StoreApi<AppearanceState> | null {
   return useContext(AppearanceStoreContext);
+}
+
+const noSubscribe = () => () => undefined;
+
+/**
+ * "Ocultar completadas" of the task tables (#1039): the caller's preference
+ * and its setter. The setter is optimistic and persists with
+ * `updateMyPreferencesAction` (rolled back with a toast on error), so the
+ * choice follows the user across reloads and devices. Outside the provider
+ * (portal, isolated tests) it reads the default and the setter does nothing.
+ */
+export function useHideCompletedPreference(): [boolean, (hide: boolean) => void] {
+  const store = useAppearanceStoreApiOrNull();
+  const hidden = useSyncExternalStore(
+    store ? store.subscribe : noSubscribe,
+    () => store?.getState().preferences.hideCompletedTasks ?? DEFAULT_HIDE_COMPLETED_TASKS,
+    () => store?.getState().preferences.hideCompletedTasks ?? DEFAULT_HIDE_COMPLETED_TASKS,
+  );
+  const setHidden = useCallback(
+    (hide: boolean) => {
+      if (!store) return;
+      if ((store.getState().preferences.hideCompletedTasks ?? DEFAULT_HIDE_COMPLETED_TASKS) === hide) return;
+      void store.getState().setPreference({ hideCompletedTasks: hide });
+    },
+    [store],
+  );
+  return [hidden, setHidden];
 }

@@ -119,7 +119,7 @@ describe("TareasAnalitico accessibility", () => {
     const lomas = screen.getByRole("region", { name: "Casa Lomas" });
     const toggles = within(lomas)
       .getAllByRole("button")
-      .filter((b) => b.hasAttribute("aria-expanded"));
+      .filter((b) => b.hasAttribute("aria-expanded") && !b.closest('[data-slot="row-actions-cell"]'));
     // The project header and one button per tramo group.
     expect(toggles).toHaveLength(3);
     for (const toggle of toggles) {
@@ -133,12 +133,15 @@ describe("TareasAnalitico accessibility", () => {
     expect(container.querySelector(`[id="${presale.getAttribute("aria-controls")}"]`)?.tagName).toBe("TBODY");
     // A native table per project with column headers; its editable cells make it a grid.
     const table = within(lomas).getByRole("grid");
-    const headers = within(table).getAllByRole("columnheader");
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .filter((h) => h.dataset.slot !== "row-actions-head" && h.dataset.slot !== "row-select-head");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Tarea",
       "Tramo",
       "Fase",
       "Responsable",
+      "Apoyo",
       "Estatus",
       "Vence",
       "Prioridad",

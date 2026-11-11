@@ -89,12 +89,14 @@ function paidPctColumn(weekEndIso: string, includeAdminData: boolean): SQL<strin
 /** Open (live, unarchived, not completed) task count of the row's project; admin tasks only when asked. */
 function openTasksColumn(includeAdminTasks: boolean, extra?: SQL) {
   const kindFilter = includeAdminTasks ? sql`` : sql` and ${tasks.kind} <> 'admin'`;
+  // Open as in Tareas "Abiertas": not completed and no custom status that closes.
   return correlated<number>(sql`(
     select count(*)::int from ${tasks}
     where ${tasks.projectId} = ${projects.id}
       and ${tasks.deletedAt} is null
       and ${tasks.archived} = false
-      and ${tasks.status} <> 'completado'${kindFilter}${extra ?? sql``}
+      and ${tasks.status} <> 'completado'
+      and not exists (select 1 from core.task_statuses ts_open where ts_open.id = ${tasks.customStatusId} and ts_open.deleted_at is null and ts_open.closes)${kindFilter}${extra ?? sql``}
   )`);
 }
 

@@ -17,6 +17,8 @@ export function historyEventText(item: HistoryEvent): string {
   if (item.kind === "comentario") return item.comment ?? "";
   // A task's tramo move stores the tramo names (`updateTask`, #1022).
   if (item.field === "tramo") return `Movió la tarea de ${item.beforeValue ?? "—"} a ${item.afterValue ?? "—"}`;
+  // The equipo de apoyo stores the names (`setTaskSupport`, #1038); "" is nobody.
+  if (item.field === "support") return `Cambió el equipo de apoyo: ${item.beforeValue || "—"} → ${item.afterValue || "—"}`;
   return `Cambió ${item.field ?? "un campo"}: ${item.beforeValue ?? "—"} → ${item.afterValue ?? "—"}`;
 }
 

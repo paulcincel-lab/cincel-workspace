@@ -199,12 +199,13 @@ function tareasBaseFilters(user: AuthenticatedUser, viewer: ViewerScope, filters
   const out: TaskFilters = {};
   if (filters.q) out.search = filters.q;
   if (filters.estado) out.status = filters.estado;
-  if (filters.responsable === "yo") {
-    out.involvesStaffId = user.member.id;
-    if (viewer.isAdmin) out.kind = ALL_KINDS_FOR_ADMIN;
-  } else if (filters.responsable && filters.responsable !== "todos") {
-    out.involvesStaffId = filters.responsable;
+  // "Incluir apoyo" (#1038, on by default): the person as Responsable or apoyo; off, as Responsable only.
+  const person = filters.responsable === "yo" ? user.member.id : filters.responsable !== "todos" ? filters.responsable : null;
+  if (person) {
+    if (filters.apoyo === false) out.managerId = person;
+    else out.involvesStaffId = person;
   }
+  if (filters.responsable === "yo" && viewer.isAdmin) out.kind = ALL_KINDS_FOR_ADMIN;
   if (filters.mostrar && filters.mostrar !== "todas") out.mostrar = filters.mostrar;
   return out;
 }
@@ -417,6 +418,7 @@ export async function loadTareasPage(
     estado: input.estado,
     q: input.q,
     ...(input.mostrar && input.mostrar !== "todas" ? { mostrar: input.mostrar } : {}),
+    ...(input.apoyo === false ? { apoyo: false as const } : {}),
   };
   const tramos = await loadTareasTramos();
   const viewFilters = tareasViewFilters(user, viewer, filters, tramos);

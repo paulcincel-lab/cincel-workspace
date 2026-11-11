@@ -92,7 +92,7 @@ describe("Proyecto · Resumen Esencial accessibility", () => {
     renderPage();
     const line = within(screen.getByRole("region", { name: "Tramos" })).getByRole("img");
     expect(line.getAttribute("aria-label")).toBe(
-      "Tramos: Presale terminado 100 %, Diseño terminado 100 %, Construcción en curso fase 2 de 3, Decoración sin iniciar",
+      "Tramos: Presale terminado 100 %, Diseño terminado 100 %, Construcción en curso fase 2 de 3",
     );
     for (const dot of line.querySelectorAll("span")) expect(dot.getAttribute("aria-hidden")).toBe("true");
   });

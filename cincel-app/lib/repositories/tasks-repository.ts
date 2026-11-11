@@ -1514,6 +1514,14 @@ export async function taskWorkflowId(id: string): Promise<string | null> {
   return (await loadLiveTask(id)).workflowId;
 }
 
+/** What a bulk change (#1040) checks per task: its kind, whether it's a subtask and which date "Vence" writes. TASK_NOT_FOUND when gone. */
+export async function taskBulkFields(
+  id: string
+): Promise<{ kind: TaskRow["kind"]; parentTaskId: string | null; commitmentDate: string | null }> {
+  const row = await loadLiveTask(id);
+  return { kind: row.kind, parentTaskId: row.parentTaskId, commitmentDate: row.commitmentDate };
+}
+
 /**
  * `opts.canMoveTramo`: the actor may change a task's existing tramo (admins,
  * #1022); without it such a patch is `FORBIDDEN: task tramo change`.
@@ -1591,17 +1599,96 @@ export async function setTaskArchived(id: string, archived: boolean, actorId: st
   return (await getTask(id))!;
 }
 
-/** Soft delete. History stays; the (project, template) slot is freed. */
+/** How long a deleted task can still be restored (#1041). */
+export const TASK_RESTORE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Soft delete. The live subtasks go with it, stamped with the same
+ * `deleted_at` so `restoreTask` brings back exactly those. History stays;
+ * the (project, template) slot is freed.
+ */
 export async function softDeleteTask(id: string, actorId: string): Promise<void> {
   await loadLiveTask(id);
-  await db.update(tasks).set({ deletedAt: new Date() }).where(eq(tasks.id, id));
-  await recordChanges({
-    entity: "task",
-    entityId: id,
-    actorId,
-    before: { deleted: false },
-    after: { deleted: true },
-    fields: ["deleted"],
+  const deletedAt = new Date();
+  await db.transaction(async (tx) => {
+    const children = await tx
+      .update(tasks)
+      .set({ deletedAt })
+      .where(and(eq(tasks.parentTaskId, id), isNull(tasks.deletedAt)))
+      .returning({ id: tasks.id });
+    await tx.update(tasks).set({ deletedAt }).where(eq(tasks.id, id));
+    for (const taskId of [id, ...children.map((c) => c.id)]) {
+      await recordChanges(
+        {
+          entity: "task",
+          entityId: taskId,
+          actorId,
+          before: { deleted: false },
+          after: { deleted: true },
+          fields: ["deleted"],
+        },
+        tx
+      );
+    }
+  });
+}
+
+/**
+ * Undo `softDeleteTask` (#1041): the task and the subtasks deleted with it
+ * (same `deleted_at`) come back. Only within `TASK_RESTORE_WINDOW_MS`, and
+ * only for an admin or the person who deleted it (FORBIDDEN otherwise).
+ * NOT_FOUND when the task doesn't exist or isn't deleted; INVALID once the
+ * window has passed.
+ */
+export async function restoreTask(
+  id: string,
+  actor: { staffId: string; isAdmin: boolean },
+  now: Date = new Date()
+): Promise<void> {
+  const [row] = await db
+    .select({ deletedAt: tasks.deletedAt })
+    .from(tasks)
+    .where(eq(tasks.id, id))
+    .limit(1);
+  const deletedAt = row?.deletedAt ?? null;
+  if (!deletedAt) throw flowError("NOT_FOUND", "task");
+  if (now.getTime() - deletedAt.getTime() > TASK_RESTORE_WINDOW_MS) throw flowError("INVALID", "restore window");
+  if (!actor.isAdmin) {
+    const [event] = await db
+      .select({ actorId: historyEvents.actorId })
+      .from(historyEvents)
+      .where(
+        and(
+          eq(historyEvents.entity, "task"),
+          eq(historyEvents.entityId, id),
+          eq(historyEvents.field, "deleted"),
+          eq(historyEvents.afterValue, "true")
+        )
+      )
+      .orderBy(desc(historyEvents.eventAt), desc(historyEvents.createdAt))
+      .limit(1);
+    if (event?.actorId !== actor.staffId) throw flowError("FORBIDDEN", "task restore");
+  }
+  await db.transaction(async (tx) => {
+    const children = await tx
+      .update(tasks)
+      .set({ deletedAt: null })
+      .where(and(eq(tasks.parentTaskId, id), eq(tasks.deletedAt, deletedAt)))
+      .returning({ id: tasks.id });
+    await tx.update(tasks).set({ deletedAt: null }).where(eq(tasks.id, id));
+    for (const taskId of [id, ...children.map((c) => c.id)]) {
+      await recordChanges(
+        {
+          entity: "task",
+          entityId: taskId,
+          actorId: actor.staffId || null,
+          before: { deleted: true },
+          after: { deleted: false },
+          fields: ["deleted"],
+        },
+        tx
+      );
+    }
   });
 }
 
@@ -1781,12 +1868,21 @@ export async function setTaskSupport(
     await db.insert(taskSupport).values(toAdd.map((staffId) => ({ taskId, staffId })));
   }
   if (!options.silent && (toAdd.length > 0 || toRemove.length > 0)) {
+    // The bitácora reads names ("Ana López, Luis Pérez"), not ids (#1038).
+    const ids = [...new Set([...currentIds, ...wanted])];
+    const people = await db.select({ id: staff.id, name: staff.name }).from(staff).where(inArray(staff.id, ids));
+    const nameOf = new Map(people.map((p) => [p.id, p.name]));
+    const names = (set: Set<string>) =>
+      [...set]
+        .map((id) => nameOf.get(id) ?? id)
+        .sort((x, y) => x.localeCompare(y, "es"))
+        .join(", ");
     await recordChanges({
       entity: "task",
       entityId: taskId,
       actorId,
-      before: { support: [...currentIds].sort().join(",") },
-      after: { support: [...wanted].sort().join(",") },
+      before: { support: names(currentIds) },
+      after: { support: names(wanted) },
       fields: ["support"],
     });
   }

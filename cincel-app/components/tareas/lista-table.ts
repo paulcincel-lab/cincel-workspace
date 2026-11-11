@@ -13,6 +13,8 @@ import type { TaskListItem } from "@/lib/types/core";
 import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
 
 import { PRIORITY_LABEL, daysLate, localIsoDate, taskDueDate } from "./tablero-table";
+import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
+import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -36,6 +38,7 @@ export const LISTA_COLUMNS: RecordColumn[] = [
   { key: "tramo", label: "Tramo" },
   { key: "fase", label: "Fase", hideOn: VISUAL_AND_ESENCIAL },
   { key: "responsable", label: "Responsable" },
+  { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL, hideOn: ["esencial"] },
   { key: "plazo", label: "Plazo", hideOn: ["visual", "analitico"] },
   { key: "vence", label: "Vence", format: "date", mono: true },
   { key: "prioridad", label: "Prioridad", hideOn: ["esencial"] },
@@ -147,6 +150,8 @@ export function listaRow(task: TaskListItem, today: string, summary: ProjectSumm
     tramo: task.workflow?.name ?? null,
     fase: task.phase?.name ?? null,
     responsable: task.manager?.name ?? null,
+    // The cell renders the avatars (`PeopleStack`); the names are its text value.
+    [TASK_SUPPORT_COLUMN]: task.support.length > 0 ? task.support.map((s) => s.name).join(", ") : null,
     plazo: listaPlazo(task, today),
     vence: taskDueDate(task),
     prioridad: PRIORITY_LABEL[task.priority],

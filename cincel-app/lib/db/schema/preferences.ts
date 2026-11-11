@@ -25,6 +25,8 @@ export const userPreferences = core.table(
     /** Quiet hours: both null or both set. */
     quietFrom: time("quiet_from"),
     quietTo: time("quiet_to"),
+    /** "Ocultar completadas" in the task tables (#1039). */
+    hideCompletedTasks: boolean("hide_completed_tasks").notNull().default(false),
     ...stamps,
   },
   (t) => [

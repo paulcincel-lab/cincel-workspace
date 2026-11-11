@@ -4,7 +4,7 @@
  * `components/widgets/*` renders them. The shapes are serializable; UI-only
  * inputs (`actions`, `footer`, `renderCell`) are component props, not fields.
  */
-import type { CanEdit, CellEdit } from "@/components/widgets/editable-cell";
+import type { AnyCellEdit, CanEdit } from "@/components/widgets/editable-cell";
 import type { TaskStatus } from "@/lib/types/core";
 import type { AbsenceRange, PersonProjectLoad, PresentationStyle, WeekLoad } from "@/lib/types/redesign";
 
@@ -177,7 +177,7 @@ export type RecordColumn<Row = Record<string, unknown>> = {
   format?: RecordColumnFormat;
   hideOn?: PresentationStyle[];
   /** Editable cell (#1024); without it the column is calculated and inert. */
-  edit?: CellEdit<Row>;
+  edit?: AnyCellEdit<Row>;
   /** true, or the reason shown when the viewer clicks a locked cell */
   canEdit?(row: Row): ReturnType<CanEdit<Row>>;
 };

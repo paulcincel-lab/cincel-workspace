@@ -90,12 +90,20 @@ vi.mock("@/lib/quick-add/parse", () => ({
   },
 }));
 
+// The empty state's Iniciar tramo sheet (#1043) reads these; no test here starts a tramo.
+vi.mock("@/lib/actions/tramo-start-actions", () => ({
+  previewStartTramoAction: vi.fn(() => new Promise(() => {})),
+  startTramoAction: vi.fn(),
+  undoStartTramoAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasStartSlotData: vi.fn(() => new Promise(() => {})) }));
+
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { ResumenAnaliticoLayout, NO_SCHEDULE_TEXT } from "@/components/widgets/ResumenAnaliticoLayout";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
-import { TASK_ROWS, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { TASK_ROWS, TRAMOS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
 
 beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
@@ -233,6 +241,35 @@ describe("ResumenAnaliticoLayout", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input.value).toBe("");
     expect(screen.queryByText("Detectado")).toBeNull();
+  });
+
+  it("Tramos y fases: the empty state without a started tramo; only started tramos plus the Siguiente hint (#1043)", () => {
+    renderLayout(
+      fixtureSummaryInput({
+        project: fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [], stages: [] }),
+      }),
+    );
+    const section = document.getElementById("s-tramos")!;
+    expect(section.textContent).toContain("Este proyecto aún no tiene tramo.");
+    expect(within(section).getByRole("button", { name: "Iniciar un tramo" })).toBeTruthy();
+    expect(within(section).queryByText("Levantamiento")).toBeNull();
+    cleanup();
+
+    const diseno = TRAMOS[1]!;
+    renderLayout(
+      fixtureSummaryInput({
+        project: fixtureProject({
+          currentWorkflowId: diseno.id,
+          currentWorkflow: diseno,
+          tramos: [{ ...diseno, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
+          stages: [diseno],
+        }),
+      }),
+    );
+    const started = document.getElementById("s-tramos")!;
+    expect(started.textContent).toContain("Siguiente: Construcción");
+    expect(started.textContent).toContain("Anteproyecto");
+    expect(within(started).queryByText("Levantamiento")).toBeNull();
   });
 
   it("no schedule message", () => {

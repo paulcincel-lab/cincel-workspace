@@ -1,0 +1,1 @@
+ALTER TABLE "core"."user_preferences" ADD COLUMN "hide_completed_tasks" boolean DEFAULT false NOT NULL;

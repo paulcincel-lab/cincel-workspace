@@ -62,6 +62,7 @@ export type TaskCellTask = Pick<
   | "customStatus"
   | "managerId"
   | "manager"
+  | "support"
   | "priority"
   | "commitmentDate"
   | "reviewDate"
@@ -274,6 +275,40 @@ export function taskCellAction(task: TaskCellTask, field: TaskCellField, value: 
     case "espacio":
       return { kind: "update", patch: { spaceId: value } };
   }
+}
+
+// ── Apoyo (#1038) ───────────────────────────────────────────────────────────
+
+/** The column key of the Apoyo (equipo de apoyo) cell in every task table. */
+export const TASK_SUPPORT_COLUMN = "apoyo";
+
+/** The ids of the task's equipo de apoyo (the people editor's value). */
+export function taskSupportIds(task: Pick<TaskCellTask, "support">): string[] {
+  return task.support.map((s) => s.id);
+}
+
+/** true, or why the viewer can't change the equipo de apoyo: the Responsable's rule (`setTaskSupportAction`). */
+export function taskSupportLock(viewer: { caps: Pick<ActivitiesCapabilities, "canChangeResponsible"> }): true | string {
+  return viewer.caps.canChangeResponsible ? true : LOCK_REASON.support;
+}
+
+/** The people the Apoyo editor lists: the staff by name, with avatars. */
+export function taskSupportOptions(staff: readonly StaffRef[]): CellOption[] {
+  return [...staff]
+    .sort((a, b) => a.name.localeCompare(b.name, "es"))
+    .map((s) => ({ value: s.id, label: s.name, avatar: { name: s.name } }));
+}
+
+/** Who can't be picked as apoyo: the task's Responsable. */
+export function taskSupportExclude(task: Pick<TaskCellTask, "managerId">): string[] {
+  return task.managerId ? [task.managerId] : [];
+}
+
+/** The task with `ids` as its equipo de apoyo (the optimistic patch); names from `staff` or the current support. */
+export function taskWithSupport<T extends Pick<TaskCellTask, "support">>(task: T, ids: readonly string[], staff: readonly StaffRef[]): T {
+  const known = new Map<string, StaffRef>([...task.support, ...staff].map((s) => [s.id, { id: s.id, name: s.name }]));
+  const support = [...new Set(ids)].map((id) => known.get(id) ?? { id, name: "" });
+  return { ...task, support };
 }
 
 /** Whether a task's tramo passes a `tareas.list` tramo filter (a key, a comma list or "Sin tramo"). */

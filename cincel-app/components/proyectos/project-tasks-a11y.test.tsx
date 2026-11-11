@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import axe from "axe-core";
 
 vi.mock("next/navigation", () => ({
@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectoTareasData: vi.fn() }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
+import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
 import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";

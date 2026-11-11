@@ -33,6 +33,11 @@ export type UserPreferences = {
   textSize: TextSize;
   /** "HH:MM" pair. */
   quietHours: { from: string; to: string } | null;
+  /**
+   * "Ocultar completadas" in the task tables (#1039), server-persisted per
+   * user. Missing means `DEFAULT_HIDE_COMPLETED_TASKS`.
+   */
+  hideCompletedTasks?: boolean;
 };
 
 export type TokenName =

@@ -6,13 +6,16 @@ import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
-  type CellEdit,
+  type AnyCellEdit,
+  type CellValue,
+  sameCellValue,
   SAVED_TOAST,
   UNDO_LABEL,
   UNDO_MS,
   UNDONE_TOAST,
 } from "@/components/widgets/editable-cell";
 import { actionErrorText } from "@/lib/errors";
+import type { ActionResult } from "@/lib/types/schedule";
 
 export type UseCellCommitOptions<Row> = {
   /** Query keys patched optimistically (`setQueryData`) and invalidated on settle. */
@@ -22,13 +25,15 @@ export type UseCellCommitOptions<Row> = {
   /**
    * The cached data with `row` showing `value` (optimistic patch), applied to
    * each of `queryKeys`. Without it the cache is only invalidated on settle.
+   * A people cell's list never goes through it: its `commit` patches the
+   * caches it knows.
    */
   apply?(cached: unknown, row: Row, value: string | null): unknown;
 };
 
 export type CellCommit<Row> = {
   /** Optimistic save of `value` through `edit.commit`; rollback and error toast on failure. */
-  commit(edit: CellEdit<Row>, row: Row, value: string | null): Promise<void>;
+  commit(edit: AnyCellEdit<Row>, row: Row, value: CellValue): Promise<void>;
   /** Commits the previous value of the last save while its toast shows (Deshacer, ⌘/Ctrl+Z). */
   undo(): void;
   pending: boolean;
@@ -70,7 +75,13 @@ export function useCellCommitContext(): CellCommitContextValue | null {
   return useContext(CellCommitContext);
 }
 
-type UndoEntry<Row> = { edit: CellEdit<Row>; row: Row; previous: string | null; toastId: string | number };
+type UndoEntry<Row> = { edit: AnyCellEdit<Row>; row: Row; previous: CellValue; toastId: string | number };
+
+/** `edit.commit` with the value its kind takes (a list for a people cell). */
+function runCommit<Row>(edit: AnyCellEdit<Row>, row: Row, value: CellValue): Promise<ActionResult<unknown>> {
+  if (edit.kind === "people") return edit.commit(row, Array.isArray(value) ? value : []);
+  return edit.commit(row, Array.isArray(value) ? null : value);
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -107,11 +118,11 @@ export function useCellCommit<Row>(options: UseCellCommitOptions<Row>): CellComm
 
   /** Writes `value` optimistically, saves, rolls back on failure. Resolves to whether it saved. */
   const save = useCallback(
-    async (edit: CellEdit<Row>, row: Row, value: string | null): Promise<boolean> => {
+    async (edit: AnyCellEdit<Row>, row: Row, value: CellValue): Promise<boolean> => {
       const { queryKeys, apply } = optionsRef.current;
       setPendingCount((n) => n + 1);
       const snapshot: [QueryKey, unknown][] = [];
-      if (apply) {
+      if (apply && !Array.isArray(value)) {
         for (const queryKey of queryKeys) {
           await queryClient.cancelQueries({ queryKey });
           for (const [key, cached] of queryClient.getQueriesData({ queryKey })) {
@@ -123,7 +134,7 @@ export function useCellCommit<Row>(options: UseCellCommitOptions<Row>): CellComm
       }
       let error: unknown = null;
       try {
-        const result = await edit.commit(row, value);
+        const result = await runCommit(edit, row, value);
         if (!result.ok) error = result.error;
       } catch (thrown) {
         error = thrown ?? "";
@@ -150,9 +161,9 @@ export function useCellCommit<Row>(options: UseCellCommitOptions<Row>): CellComm
   }, [clearUndo, save]);
 
   const commit = useCallback(
-    async (edit: CellEdit<Row>, row: Row, value: string | null) => {
-      const previous = edit.value(row);
-      if (previous === value) return;
+    async (edit: AnyCellEdit<Row>, row: Row, value: CellValue) => {
+      const previous: CellValue = edit.value(row);
+      if (sameCellValue(previous, value)) return;
       // A new save replaces the undo of the last one.
       const last = undoRef.current;
       if (last) toast.dismiss(last.toastId);

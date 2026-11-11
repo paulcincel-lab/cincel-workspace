@@ -31,7 +31,7 @@ describe("listaTable", () => {
   it("shows Plazo only in Esencial and keeps the Visual columns", () => {
     expect(column("plazo").hideOn).toEqual(["visual", "analitico"]);
     const visible = LISTA_COLUMNS.filter((c) => !c.hideOn?.includes("visual")).map((c) => c.key);
-    expect(visible).toEqual(["tarea", "proyecto", "tramo", "responsable", "vence", "prioridad", "subtareas"]);
+    expect(visible).toEqual(["tarea", "proyecto", "tramo", "responsable", "apoyo", "vence", "prioridad", "subtareas"]);
     expect(table.rows.map((r) => r.plazo)).toEqual(["Vencida", "Esta semana", "Vencida", "Más adelante", "Completada"]);
   });
 

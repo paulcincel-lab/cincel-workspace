@@ -316,7 +316,9 @@ export type TareasEsencialProps = {
 
 export function TareasEsencial({ startSlot }: TareasEsencialProps = {}) {
   const query = useTareasQuery();
-  const urlFilters = useTareasFilters(query);
+  // "Ocultar completadas" is for the tables: Esencial lists open work with its own "N completadas".
+  const listQuery = useMemo(() => ({ ...query, completadas: true }), [query]);
+  const urlFilters = useTareasFilters(listQuery);
   const filters = useMemo(() => tareasEsencialFilters(urlFilters), [urlFilters]);
   const page = useTareasPage(query);
   const tramos = page.data?.tramos ?? NO_TRAMOS;

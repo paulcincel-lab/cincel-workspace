@@ -8,6 +8,8 @@ import { tareasListFiltersOf, tareasPageKeyInputOf, tareasPageOptions } from "@/
 import type { TareasListFilters } from "@/lib/query/keys";
 import { DEFAULT_TAREAS_QUERY, parseTareasQuery, type TareasQuery } from "@/lib/tareas/query";
 import { useStyle } from "@/components/shell/StyleProvider";
+import { useHideCompletedPreference } from "@/lib/stores/appearance-store";
+import { ESTILO_PARAM } from "@/lib/ui/style-override";
 
 /**
  * The `/tareas` query from the URL. Filters write it with
@@ -18,15 +20,20 @@ import { useStyle } from "@/components/shell/StyleProvider";
 export function useTareasQuery(): TareasQuery {
   const searchParams = useSearchParams();
   const search = searchParams.toString();
-  return useMemo(() => parseTareasQuery(new URLSearchParams(search)), [search]);
+  // A URL without `?completadas=` follows the viewer's "Ocultar completadas" preference.
+  const [hideCompleted] = useHideCompletedPreference();
+  return useMemo(
+    () => parseTareasQuery(new URLSearchParams(search), { completadas: !hideCompleted }),
+    [search, hideCompleted],
+  );
 }
 
 /** The filters of a query, stable while their values stay the same. */
 export function useTareasFilters(query: TareasQuery): TareasListFilters {
-  const { tramo, proyecto, responsable, estado, q, mostrar } = query;
+  const { tramo, proyecto, responsable, estado, q, mostrar, completadas, apoyo } = query;
   return useMemo(
-    () => tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, tramo, proyecto, responsable, estado, q, mostrar }),
-    [tramo, proyecto, responsable, estado, q, mostrar],
+    () => tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, tramo, proyecto, responsable, estado, q, mostrar, completadas, apoyo }),
+    [tramo, proyecto, responsable, estado, q, mostrar, completadas, apoyo],
   );
 }
 
@@ -52,9 +59,22 @@ export function useTareasPageReady(query: TareasQuery): boolean {
   return page.isSuccess && !page.isPlaceholderData;
 }
 
-/** Writes a Tareas URL without a server render (filters, chips, search). */
+/**
+ * `href` with the current URL's `?estilo=` when it names none, so a filter
+ * change keeps the style the page was opened with. Pure.
+ */
+export function withCurrentEstilo(href: string, currentSearch: string): string {
+  const estilo = new URLSearchParams(currentSearch).get(ESTILO_PARAM);
+  if (!estilo) return href;
+  const url = new URL(href, "http://x");
+  if (url.searchParams.has(ESTILO_PARAM)) return href;
+  url.searchParams.set(ESTILO_PARAM, estilo);
+  return `${url.pathname}?${url.searchParams.toString()}${url.hash}`;
+}
+
+/** Writes a Tareas URL without a server render (filters, chips, search); `?estilo=` stays. */
 export function replaceTareasUrl(href: string): void {
-  window.history.replaceState(null, "", href);
+  window.history.replaceState(null, "", withCurrentEstilo(href, window.location.search));
 }
 
 /** Adds a Tareas URL to the history without a server render (the view switch). */

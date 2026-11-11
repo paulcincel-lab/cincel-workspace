@@ -15,6 +15,9 @@ import { TableCell, TableRow } from "@/components/ui/shadcn/table";
 import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { RowActionsMenu, createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
+import { RowActionsMenu as RowMenu, rowDeleteKeyDown } from "@/components/widgets/RowActionsMenu";
+import type { TableRowActionsProps, TableSelectionProps } from "@/components/widgets/table-rows";
+import { RowSelectCheckbox, useTableSelection } from "@/components/widgets/table-selection";
 import { actionErrorText } from "@/lib/errors";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
@@ -61,6 +64,17 @@ export type RecordTableProps = {
   density?: "comoda" | "compacta";
   selectable?: boolean;
   rowActions?: RowAction<Record<string, unknown>>[];
+  /**
+   * Per-row `⋯` menu and Supr (#1041), through `DataTable`'s trailing actions
+   * column; `getRowLabel` names the row in the menu's label.
+   */
+  rowMenu?: TableRowActionsProps<Record<string, unknown>> & { getRowLabel?(row: Record<string, unknown>): string };
+  /**
+   * Controlled row checkboxes (#1040): the leading checkbox column of
+   * `DataTable` (a checkbox per item in Esencial). The page owns the
+   * selection and its bar; unlike `selectable` there is no export bar here.
+   */
+  rowSelection?: TableSelectionProps<Record<string, unknown>>;
   emptyState?: EmptyStateProps;
   /** Opt-in pagination: called by "Cargar más" under the rows. */
   onEndReached?: () => void;
@@ -203,6 +217,8 @@ function TableView({
   density,
   selectable,
   rowActions,
+  rowMenu,
+  rowSelection,
   style,
 }: RecordTableProps & { style: Extract<PresentationStyle, "visual" | "analitico"> }) {
   const analitico = style === "analitico";
@@ -266,6 +282,7 @@ function TableView({
   const totals = analitico ? computeTotals(data, columns) : null;
   const footer = totals ? (
     <TableRow data-slot="totals-row">
+      {rowSelection?.selectable ? <TableCell /> : null}
       {selectable ? <TableCell /> : null}
       {columns.map((column) => (
         <TableCell key={column.key} data-column={column.key} className={`py-1 font-semibold ${alignClass(column)}`}>
@@ -273,6 +290,7 @@ function TableView({
         </TableCell>
       ))}
       {hasActions ? <TableCell /> : null}
+      {rowMenu?.rowActions ? <TableCell /> : null}
     </TableRow>
   ) : undefined;
 
@@ -328,16 +346,23 @@ function TableView({
           )
         }
         emptyMessage={RECORD_TABLE_EMPTY_TITLE}
+        rowActions={rowMenu?.rowActions}
+        onRowDelete={rowMenu?.onRowDelete}
+        getRowLabel={rowMenu?.getRowLabel ?? rowSelection?.getRowLabel}
+        selectable={rowSelection?.selectable}
+        selectedIds={rowSelection?.selectedIds}
+        onSelectionChange={rowSelection?.onSelectionChange}
       />
     </div>
   );
 }
 
-function ListView({ data, renderCell, density, selectable, rowActions }: RecordTableProps) {
+function ListView({ data, renderCell, density, selectable, rowActions, rowMenu, rowSelection }: RecordTableProps) {
   const baseId = useId();
   const columns = visibleColumns(data.columns, "esencial");
   const [title, ...meta] = columns;
   const selection = useSelection(data.rows);
+  const picked = useTableSelection(rowSelection ?? {}, selection.ids);
   const compact = density === "compacta";
   const hasActions = Boolean(rowActions && rowActions.length > 0);
 
@@ -352,7 +377,17 @@ function ListView({ data, renderCell, density, selectable, rowActions }: RecordT
   const renderItem = ({ row, index }: { row: Row; index: number }) => {
     const id = selection.ids[index];
     return (
-      <li key={id} data-slot="record-item" className={`flex items-start gap-3 px-4 ${compact ? "py-2" : "py-3"}`}>
+      <li
+        key={id}
+        data-slot="record-item"
+        className={`group/row flex items-start gap-3 px-4 ${compact ? "py-2" : "py-3"}`}
+        onKeyDown={rowMenu?.onRowDelete ? (event) => rowDeleteKeyDown(event, () => rowMenu.onRowDelete?.(row)) : undefined}
+      >
+        {picked.enabled ? (
+          <span className="mt-1">
+            <RowSelectCheckbox selection={picked} id={id} label={rowSelection?.getRowLabel?.(row) ?? id} />
+          </span>
+        ) : null}
         {selectable ? (
           <Checkbox
             className="mt-1"
@@ -381,6 +416,9 @@ function ListView({ data, renderCell, density, selectable, rowActions }: RecordT
           ) : null}
         </div>
         {hasActions ? <RowActionsMenu row={row} actions={rowActions ?? []} /> : null}
+        {rowMenu?.rowActions ? (
+          <RowMenu rowLabel={rowMenu.getRowLabel?.(row) ?? String(id)} actions={rowMenu.rowActions(row)} />
+        ) : null}
       </li>
     );
   };

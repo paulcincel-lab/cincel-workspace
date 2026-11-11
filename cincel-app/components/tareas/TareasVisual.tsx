@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/shell/ErrorState";
 import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
+import { HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { TaskBoardWidget } from "@/components/widgets/TaskBoardWidget";
 import {
@@ -23,7 +24,14 @@ import { TASK_TREND_TIME_ZONE, localIsoDate } from "@/lib/dashboard/task-trend";
 import { tareasBoardOptions, tareasTrendOptions } from "@/lib/query/options/tareas";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import { boardOfColumns, columnKeyOfRow, type TareasBoardData, type TareasFacets } from "@/lib/tareas/page-data";
-import { hasTareasFilters, type TareasMostrar, type TareasQuery } from "@/lib/tareas/query";
+import { useHideCompletedPreference } from "@/lib/stores/appearance-store";
+import {
+  hasTareasFilters,
+  hideCompletedPatch,
+  isHidingCompleted,
+  type TareasMostrar,
+  type TareasQuery,
+} from "@/lib/tareas/query";
 import { BASE_STATUS_LABEL, parseStatusValue } from "@/lib/tasks/status-options";
 import { tramoColorVar } from "@/lib/tramos/compat";
 import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
@@ -246,6 +254,7 @@ export function TareasVisual({
         renderColumnFooter={renderColumnFooter}
         visibleCards={TAREAS_VISUAL_VISIBLE_CARDS}
         compactCompleted
+        hideCompleted={isHidingCompleted(query)}
         canMove={canMove}
       />
     );
@@ -292,6 +301,12 @@ function TareasVisualFilters({
 }: Pick<TareasVisualProps, "query" | "facets" | "tramos" | "search" | "onSearch" | "onQuery">) {
   const mostrarCount = (key: TareasMostrar) => facets.mostrar?.[key] ?? (key === "todas" ? facets.total : undefined);
   const soloMias = query.responsable === "yo";
+  // "Ocultar completadas" (#1039): hides the Completado column; remembered per user and in the URL.
+  const [, setHidePreference] = useHideCompletedPreference();
+  const onHideCompleted = (hide: boolean) => {
+    setHidePreference(hide);
+    onQuery(hideCompletedPatch(hide, query));
+  };
 
   return (
     <div role="group" aria-label="Filtros" className="flex flex-wrap items-center gap-2">
@@ -360,6 +375,8 @@ function TareasVisualFilters({
           </span>
         ) : null}
       </Button>
+      <span aria-hidden="true" className="h-5 w-px bg-border" />
+      <HideCompletedSwitch checked={isHidingCompleted(query)} onCheckedChange={onHideCompleted} />
       <div className="relative ml-auto">
         <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input

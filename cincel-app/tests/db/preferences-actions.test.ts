@@ -168,6 +168,19 @@ describe.skipIf(!url)("preferences actions (test DB)", async () => {
     expect(cookie!.options.maxAge).toBe(365 * 24 * 60 * 60);
   });
 
+  it("persists Ocultar completadas (#1039) and keeps the other fields", async () => {
+    await updateMyPreferencesAction({ density: "compacta" });
+    const on = await updateMyPreferencesAction({ hideCompletedTasks: true });
+    expect(on.preferences).toMatchObject({ density: "compacta", hideCompletedTasks: true });
+    expect(await fetchMyPreferencesAction()).toMatchObject({ hideCompletedTasks: true });
+    const [row] = await db.select().from(schema.userPreferences).where(eq(schema.userPreferences.staffId, state.staffId));
+    expect(row!.hideCompletedTasks).toBe(true);
+
+    const off = await updateMyPreferencesAction({ hideCompletedTasks: false });
+    expect(off.preferences.hideCompletedTasks).toBeUndefined();
+    expect(off.preferences.density).toBe("compacta");
+  });
+
   it("merges patches: omitted fields keep their stored value", async () => {
     await updateMyPreferencesAction({ mode: "light", textSize: 13 });
     const { preferences } = await updateMyPreferencesAction({ density: "compacta" });

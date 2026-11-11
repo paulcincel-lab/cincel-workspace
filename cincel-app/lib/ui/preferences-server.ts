@@ -92,6 +92,8 @@ export function rowToResolverInput(row: UserPreferencesRow | null): UserPreferen
     textSize: Number(row.textSize) as TextSize,
     quietHours:
       row.quietFrom && row.quietTo ? { from: hourMinute(row.quietFrom), to: hourMinute(row.quietTo) } : null,
+    // Left out at its default (`DEFAULT_HIDE_COMPLETED_TASKS`), like a missing key.
+    ...(row.hideCompletedTasks ? { hideCompletedTasks: true } : {}),
   };
 }
 

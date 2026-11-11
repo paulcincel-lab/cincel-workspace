@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
-import type { CanEdit, CellEdit } from "@/components/widgets/editable-cell";
+import type { CanEdit, CellEdit, PeopleCellEdit } from "@/components/widgets/editable-cell";
 import * as tasksActions from "@/lib/actions/tasks-actions";
 import { canSeeAdminData, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { qk, type TareasListFilters } from "@/lib/query/keys";
@@ -31,13 +31,20 @@ import type {
 } from "@/lib/types/core";
 import type { RecordColumn } from "@/lib/types/widgets";
 
+import { SUPPORT_IS_RESPONSIBLE } from "./task-table-copy";
 import {
+  TASK_SUPPORT_COLUMN,
   patchTaskListPages,
   taskCellAction,
   taskCellLock,
   taskCellOptions,
   taskCellValue,
+  taskSupportExclude,
+  taskSupportIds,
+  taskSupportLock,
+  taskSupportOptions,
   taskWithChange,
+  taskWithSupport,
   type TaskCellAction,
   type TaskCellCatalogs,
   type TaskCellField,
@@ -172,10 +179,15 @@ export type UseTaskCellEditsOptions<Row> = {
 };
 
 export type TaskCellEdits<Row> = {
-  /** The columns with `edit` / `canEdit` on the keys of `TASK_CELL_COLUMNS`; others stay calculated. */
+  /**
+   * The columns with `edit` / `canEdit` on the keys of `TASK_CELL_COLUMNS`
+   * and on Apoyo (`TASK_SUPPORT_COLUMN`); others stay calculated.
+   */
   withEdits(columns: readonly PlainColumn<Row>[]): RecordColumn<Row>[];
   /** One field's editor and lock. */
   cell(field: TaskCellField): { edit: CellEdit<Row>; canEdit: CanEdit<Row> };
+  /** The Apoyo multi-select (#1038): saves through `setTaskSupportAction`, the Responsable's lock. */
+  support(): { edit: PeopleCellEdit<Row>; canEdit: CanEdit<Row> };
   /**
    * Spread on the element around the table: the first hover or focus loads
    * the editors' lists (estatus catalog, fases of each tramo, espacios).
@@ -318,18 +330,68 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
     [save, catalogs, viewer],
   );
 
+  const saveSupport = useCallback(
+    async (row: Row, ids: string[]): Promise<ActionResult<unknown>> => {
+      const task = taskOfRef.current(row);
+      if (!task) return { ok: false, error: "NOT_FOUND" };
+      const patch = <R extends TaskCellTask>(r: R): R => taskWithSupport(r, ids, staff);
+      const snapshot = await patchTaskCaches(qc, task.id, patch, false);
+      const restore = () => {
+        for (const [key, data] of snapshot) qc.setQueryData(key, data);
+      };
+      let result: Awaited<ReturnType<typeof tasksActions.setTaskSupportAction>>;
+      try {
+        result = await tasksActions.setTaskSupportAction(task.id, ids);
+      } catch (error) {
+        restore();
+        throw error;
+      }
+      if (!result.ok) {
+        restore();
+        return result;
+      }
+      // The sheet's Apoyo and its history entry.
+      void qc.invalidateQueries({ queryKey: qk.tasks.detail(task.id), exact: true });
+      for (const queryKey of extraInvalidations(task.projectId, { kind: "assign", managerId: task.managerId })) {
+        void qc.invalidateQueries({ queryKey });
+      }
+      return result;
+    },
+    [qc, staff],
+  );
+
+  const support = useCallback((): { edit: PeopleCellEdit<Row>; canEdit: CanEdit<Row> } => {
+    const edit: PeopleCellEdit<Row> = {
+      kind: "people",
+      value: (row) => {
+        const task = taskOfRef.current(row);
+        return task ? taskSupportIds(task) : [];
+      },
+      commit: saveSupport,
+      options: () => taskSupportOptions(staff),
+      exclude: (row) => {
+        const task = taskOfRef.current(row);
+        return task ? taskSupportExclude(task) : [];
+      },
+      excludedLabel: SUPPORT_IS_RESPONSIBLE,
+    };
+    const canEdit: CanEdit<Row> = (row) => (taskOfRef.current(row) ? taskSupportLock(viewer) : true);
+    return { edit, canEdit };
+  }, [saveSupport, staff, viewer]);
+
   const withEdits = useCallback(
     (columns: readonly PlainColumn<Row>[]): RecordColumn<Row>[] =>
       columns.map((column): RecordColumn<Row> => {
+        if (column.key === TASK_SUPPORT_COLUMN) return { ...column, ...support() };
         const field = TASK_CELL_COLUMNS[column.key];
         if (!field) return column;
         const { edit, canEdit } = cell(field);
         return { ...column, edit, canEdit };
       }),
-    [cell],
+    [cell, support],
   );
 
   const primeProps = useMemo(() => ({ onPointerEnter: prime, onFocusCapture: prime }), [prime]);
 
-  return useMemo(() => ({ withEdits, cell, primeProps }), [withEdits, cell, primeProps]);
+  return useMemo(() => ({ withEdits, cell, support, primeProps }), [withEdits, cell, support, primeProps]);
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ErrorState } from "@/components/shell/ErrorState";
@@ -10,18 +11,28 @@ import ExportMenu from "@/components/ui/ExportMenu";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
+import { HiddenCompletedLine, HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
+import { useHideCompletedTasks } from "@/components/tareas/use-hide-completed";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
+import { PeopleStack } from "@/components/widgets/PeopleStack";
 import { resumenCommitKeys, resumenTaskColumns } from "@/components/widgets/proyectos-cell-edits";
+import { TASK_SUPPORT_COLUMN } from "@/components/tareas/task-cell-edits";
+import { SUPPORT_COLUMN_LABEL } from "@/components/tareas/task-table-copy";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { StatusChip } from "@/components/widgets/StatusChip";
 import { TeamLoadTable } from "@/components/widgets/TeamLoadTable";
 import { HEAT_CELL_CLASS } from "@/components/widgets/record-table-format";
 import { createUserTaskAction } from "@/lib/actions/tasks-actions";
+import { deleteTargetOf, useDeleteTasks } from "@/components/tareas/use-delete-tasks";
+import { TaskBulkBar } from "@/components/tareas/TaskBulkBar";
+import { ProjectNoTramo } from "@/components/proyectos/ProjectNoTramo";
+import { useTaskSelection } from "@/components/tareas/use-task-selection";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { computeSCurve } from "@/lib/cronograma/metrics";
 import {
   RESUMEN_SIN_FASE,
   dayMonthLong,
+  nextTramoHint,
   resumenKpis,
   resumenTasks,
   sCurveGapStart,
@@ -43,6 +54,7 @@ import { catalogTaskStatusesOptions } from "@/lib/query/options/catalog";
 import { proyectoAssigneeSuggestionOptions, proyectoTareasOptions } from "@/lib/query/options/proyectos";
 import { parseQuickAdd, type QuickAddPerson, type QuickAddTramo } from "@/lib/quick-add/parse";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
+import { isTaskClosed } from "@/lib/tasks/status-options";
 import { tramoColorVar } from "@/lib/tramos/compat";
 import type { TaskListRow, TaskPriority, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { SCurvePoint } from "@/lib/types/schedule";
@@ -59,7 +71,7 @@ import { cn } from "@/lib/utils";
  * whose groups end in a quick-add line. The task rows come from
  * `qk.proyectos.tab(id, "tareas")`; the rest from the Resumen read.
  *
- * In "Tareas por tramo", Tarea, Fase, Responsable, Estatus and Vence edit in
+ * In "Tareas por tramo", Tarea, Fase, Responsable, Apoyo, Estatus and Vence edit in
  * place with the Tareas table rules (#1026, `resumenTaskColumns`). Every
  * "Tramos y fases" number and date is calculated from the tasks (a fase has
  * no schedule row of its own), so that table stays inert.
@@ -158,6 +170,16 @@ export type ResumenQuickAddDraft = {
   priority: TaskPriority;
 };
 
+/** A "Tareas por tramo" group's last rows: the hidden-completed line, then the quick-add. */
+function withHiddenCompleted(line: ReactNode, quickAdd: ReactNode): ReactNode {
+  return (
+    <>
+      {line}
+      {quickAdd}
+    </>
+  );
+}
+
 export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): ReactNode {
   const projectId = data.project.id;
   const user = useSessionStore(selectAuthenticatedUser);
@@ -167,7 +189,14 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
 
   const tareas = useQuery(proyectoTareasOptions(projectId));
   const loaded = tareas.data?.tasks;
-  const tasks = useMemo<TaskListRow[]>(() => loaded ?? [], [loaded]);
+  // Delete (#1041): deleted tasks (and their subtasks) leave every table and count right away.
+  const router = useRouter();
+  const deletes = useDeleteTasks({ invalidate: [qk.proyectos.resumen(projectId), qk.proyectos.shell(projectId)] });
+  const isHidden = deletes.isHidden;
+  const tasks = useMemo<TaskListRow[]>(
+    () => (loaded ?? []).filter((t) => !isHidden(t.id, t.parentTaskId)),
+    [loaded, isHidden],
+  );
   const tasksLoading = tareas.isPending;
   const tasksError = tareas.isError ? { title: SECTION_ERROR_TITLE, onRetry: () => void tareas.refetch() } : undefined;
 
@@ -179,12 +208,30 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
     () => tramoPhaseGroups(tasks, data.tramoCatalog, data.phasesByTramo, data.project, data.today),
     [tasks, data.tramoCatalog, data.phasesByTramo, data.project, data.today],
   );
-  const taskTable = useMemo(() => taskGroupsByTramo(tasks, data.tramoCatalog, data.today), [tasks, data.tramoCatalog, data.today]);
+  // "Ocultar completadas" (#1039): only "Tareas por tramo" leaves them out; each group says how many.
+  const [hideCompleted, setHideCompleted] = useHideCompletedTasks();
+  const tableTasks = useMemo(() => (hideCompleted ? tasks.filter((t) => !isTaskClosed(t)) : tasks), [tasks, hideCompleted]);
+  const hiddenByGroup = useMemo(() => {
+    const out = new Map<string, number>();
+    if (!hideCompleted) return out;
+    for (const t of resumenTasks(tasks)) {
+      if (!isTaskClosed(t)) continue;
+      const key = t.workflowId ?? "admin";
+      out.set(key, (out.get(key) ?? 0) + 1);
+    }
+    return out;
+  }, [tasks, hideCompleted]);
+  const taskTable = useMemo(
+    () => taskGroupsByTramo(tableTasks, data.tramoCatalog, data.project, data.today),
+    [tableTasks, data.tramoCatalog, data.project, data.today],
+  );
   const kpis = useMemo(() => resumenKpis(data, tasks), [data, tasks]);
   const team = useMemo(() => teamLoadRows(data, tasks), [data, tasks]);
   const live = useMemo(() => resumenTasks(tasks), [tasks]);
-  const openCount = live.filter((t) => t.status !== "completado").length;
-  const overdueCount = live.filter((t) => t.status !== "completado" && t.commitmentDate !== null && t.commitmentDate.slice(0, 10) < data.today).length;
+  // The "Tareas por tramo" header counts what its table shows.
+  const shownLive = useMemo(() => resumenTasks(tableTasks), [tableTasks]);
+  const openCount = shownLive.filter((t) => t.status !== "completado").length;
+  const overdueCount = shownLive.filter((t) => t.status !== "completado" && t.commitmentDate !== null && t.commitmentDate.slice(0, 10) < data.today).length;
 
   const tramoById = useMemo(() => new Map(data.tramoCatalog.map((t) => [t.id, t])), [data.tramoCatalog]);
 
@@ -247,7 +294,12 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       color: tramoColor(tramoById, group.id),
       rows: capped ? rows.slice(0, TASK_GROUP_CAP) : rows,
       hasMore: capped,
-      quickAdd:
+      quickAdd: withHiddenCompleted(
+        <HiddenCompletedLine
+          count={hiddenByGroup.get(group.id) ?? 0}
+          colSpan={taskColumns.length + 2}
+          onShow={() => setHideCompleted(false)}
+        />,
         canCreate && tramo ? (
           <ResumenQuickAdd
             key={tramo.id}
@@ -259,12 +311,20 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
             meId={user?.member.id ?? null}
             team={team}
             canAssign={canAssign}
-            colSpan={taskColumns.length}
+            colSpan={taskColumns.length + 2}
             onCreate={createTask}
           />
         ) : undefined,
+      ),
     };
   });
+
+  // Row checkboxes and the bulk bar (#1040) on "Tareas por tramo"; "Ocultar completadas" clears the selection.
+  const selection = useTaskSelection({
+    visibleIds: taskGroups.flatMap((g) => (g.rows ?? []).map((row) => row.id)),
+    resetKey: String(hideCompleted),
+  });
+  const taskOfId = (id: string) => tasksById.get(id);
 
   const allIds = [...phaseGroups.map((g) => g.id), ...taskGroups.map((g) => g.id)];
   const allCollapsed = allIds.length > 0 && allIds.every((id) => collapsed.includes(id));
@@ -324,6 +384,8 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
         return <span className={cn(row.phase === null && "text-muted-foreground")}>{row.phase ?? RESUMEN_SIN_FASE}</span>;
       case "responsable":
         return <span className="block max-w-[170px] truncate">{row.responsable ?? "Sin asignar"}</span>;
+      case TASK_SUPPORT_COLUMN:
+        return <PeopleStack people={tasksById.get(row.id)?.support ?? []} label={SUPPORT_COLUMN_LABEL} />;
       case "status":
         return (
           <span className="inline-flex items-center gap-1.5">
@@ -341,6 +403,8 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
   }
 
   const tramoCount = phaseGroups.length;
+  const noTramo = data.project.tramos.length === 0;
+  const nextTramo = nextTramoHint(data.tramoCatalog, data.project);
   const phaseCount = phaseGroups.reduce((acc, g) => acc + (g.rows?.length ?? 0), 0);
   const phaseScope = phaseGroups.map((g) => g.id);
   const taskScope = taskGroups.map((g) => g.id);
@@ -384,28 +448,38 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
             {tramoCount} {tramoCount === 1 ? "tramo" : "tramos"} · {phaseCount} {phaseCount === 1 ? "fase" : "fases"}
           </span>
         </header>
-        <GroupedTable<PhaseRow>
-          label="Tramos y fases"
-          columns={PHASE_COLUMNS}
-          groups={phaseGroups}
-          totals={{
-            label: phaseTable.totals.name ?? "Total",
-            summary: [
-              `${phaseTable.totals.tasks} tareas`,
-              `${phaseTable.totals.open} abiertas`,
-              `${phaseTable.totals.overdue} vencidas`,
-              phaseTable.totals.pct,
-              `${phaseTable.totals.start} – ${phaseTable.totals.endPlan}`,
-              phaseTable.totals.deviationDays,
-            ].join(" · "),
-          }}
-          expanded={expandedOf(phaseScope)}
-          onExpandedChange={(ids) => onExpandedChange(ids, phaseScope)}
-          getRowId={(row, index) => row.phaseId ?? `sin-fase-${index}`}
-          renderCell={renderPhaseCell}
-          loading={tasksLoading}
-          error={tasksError}
-        />
+        {noTramo ? (
+          // No started tramo (#1043): no suggested fases, the empty state with "Iniciar un tramo".
+          <ProjectNoTramo projectId={projectId} tramos={data.tramoCatalog} />
+        ) : (
+          <GroupedTable<PhaseRow>
+            label="Tramos y fases"
+            columns={PHASE_COLUMNS}
+            groups={phaseGroups}
+            totals={{
+              label: phaseTable.totals.name ?? "Total",
+              summary: [
+                `${phaseTable.totals.tasks} tareas`,
+                `${phaseTable.totals.open} abiertas`,
+                `${phaseTable.totals.overdue} vencidas`,
+                phaseTable.totals.pct,
+                `${phaseTable.totals.start} – ${phaseTable.totals.endPlan}`,
+                phaseTable.totals.deviationDays,
+              ].join(" · "),
+            }}
+            expanded={expandedOf(phaseScope)}
+            onExpandedChange={(ids) => onExpandedChange(ids, phaseScope)}
+            getRowId={(row, index) => row.phaseId ?? `sin-fase-${index}`}
+            renderCell={renderPhaseCell}
+            loading={tasksLoading}
+            error={tasksError}
+          />
+        )}
+        {nextTramo ? (
+          <p data-slot="tramo-next" className="px-4 py-2 text-[13px] text-muted-foreground">
+            Siguiente: {nextTramo.name}
+          </p>
+        ) : null}
       </section>
 
       <div className="flex flex-wrap items-stretch gap-4">
@@ -434,9 +508,10 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
             Tareas por tramo
           </h2>
           <span className={MONO_META}>
-            {live.length} {live.length === 1 ? "tarea" : "tareas"} · {openCount} {openCount === 1 ? "abierta" : "abiertas"} ·{" "}
+            {shownLive.length} {shownLive.length === 1 ? "tarea" : "tareas"} · {openCount} {openCount === 1 ? "abierta" : "abiertas"} ·{" "}
             {overdueCount} {overdueCount === 1 ? "vencida" : "vencidas"}
           </span>
+          <HideCompletedSwitch className="ml-auto self-center" checked={hideCompleted} onCheckedChange={setHideCompleted} />
         </header>
         <CellCommitProvider queryKeys={resumenCommitKeys(projectId)}>
           <GroupedTable<TaskRow>
@@ -451,11 +526,37 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
             rowHref={(row) => `/tareas?tarea=${encodeURIComponent(row.id)}`}
             isRowMuted={(row) => row.done}
             isRowNew={(row) => created.includes(row.id)}
+            getRowLabel={(row) => row.title}
+            selectable
+            selectedIds={selection.selectedIds}
+            onSelectionChange={selection.onSelectionChange}
+            rowActions={(row) => {
+              const task = tasksById.get(row.id);
+              return task
+                ? deletes.rowActions(deleteTargetOf(task), () => router.push(`/tareas?tarea=${encodeURIComponent(row.id)}`))
+                : [];
+            }}
+            onRowDelete={
+              deletes.canDelete
+                ? (row) => {
+                    const task = tasksById.get(row.id);
+                    if (task) deletes.request([deleteTargetOf(task)]);
+                  }
+                : undefined
+            }
             onLoadMore={(groupId) => setUncapped((current) => [...current, groupId.replace(/^tareas-/, "")])}
             loading={tasksLoading}
             error={tasksError}
           />
         </CellCommitProvider>
+        {deletes.dialog}
+        <TaskBulkBar
+          selection={selection}
+          taskOf={taskOfId}
+          staff={teamPeople}
+          deletes={deletes}
+          invalidate={[qk.proyectos.shell(projectId)]}
+        />
       </section>
     </div>
   );

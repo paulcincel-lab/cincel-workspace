@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +10,7 @@ import {
   NO_TRAMO_KEY,
   NO_TRAMO_LABEL,
   PORTFOLIO_ANALITICO_DESCRIPTION,
+  PROJECT_TASKS_TOGGLE_LABEL,
   PORTFOLIO_CLEAR_FILTERS,
   PORTFOLIO_FILTER_GROUP,
   PORTFOLIO_NO_MATCH,
@@ -22,6 +23,7 @@ import {
   deviationText,
   deviationTone,
   formatDeliveryDate,
+  initialSortDirection,
   listedProjects,
   orderedTramos,
   parsePortfolioFilters,
@@ -32,13 +34,14 @@ import {
   portfolioCsvFileName,
   portfolioFilterGroups,
   portfolioFiltersSearch,
-  portfolioGroups,
   portfolioHeat,
   portfolioHeatLegend,
   portfolioKpis,
+  portfolioTable,
   sortPortfolioRows,
   type PortfolioFilters,
   type PortfolioMostrar,
+  type PortfolioSortKey,
   type PortfolioTableRow,
 } from "@/components/proyectos/projects-portfolio-data";
 import { EmptyState } from "@/components/shell/EmptyState";
@@ -48,9 +51,10 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
-import { GroupedTable } from "@/components/widgets/GroupedTable";
+import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
 import { PageHeader } from "@/components/widgets/PageHeader";
+import { ProjectAnaliticoTasks } from "@/components/widgets/ProjectAnaliticoTasks";
 import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
 import { PORTFOLIO_COMMIT_KEYS, portfolioEditColumns } from "@/components/widgets/proyectos-cell-edits";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
@@ -65,19 +69,21 @@ import { cn } from "@/lib/utils";
  * /proyectos in Analítico (#994, frame `Proyectos-Analitico`): header with
  * Exportar (CSV of the visible rows) and Nuevo proyecto, one `FilterCard`
  * (Mostrar, Tramo multi-select, Solo míos, Incluir pausados, search), the
- * `KpiStrip`, the "Proyectos por tramo" card (stacked bar, legend, "Ir a"
- * anchors, expand / collapse all) and the portfolio in a `GroupedTable`
- * grouped by tramo with heat cells, sortable numeric columns and totals.
+ * `KpiStrip`, the "Proyectos por tramo" card (stacked bar and a legend whose
+ * segments filter by tramo, expand / collapse all) and the portfolio in a
+ * `GroupedTable`: one row per project (#1042), sortable, with heat cells and
+ * totals. Tramo is a column and a filter, never a group: a project without
+ * one is a row like the rest. Each project row expands into its open tasks
+ * (`ProjectAnaliticoTasks`, loaded on first expand).
  *
  * Filters run on the client over `qk.proyectos.list()` (prefetched by the
  * page) and live in the URL (`mostrar`, `tramo`, `mios`, `pausados`, `q`),
- * written with `router.replace`. KPIs, groups, totals and anchors are all
+ * written with `router.replace`. KPIs, the tramo bar and the totals are all
  * computed from the visible rows. "Nuevo proyecto" calls `onNewProject`;
  * without it, it sets `?nuevo=1`, which the page's create dialog listens to.
  *
  * Tramo actual and Responsable edit in place (#1026, `portfolioEditColumns`):
- * a new tramo moves the project to that group at once; the other columns are
- * calculated and stay inert.
+ * the other columns are calculated and stay inert.
  */
 export type ProjectsAnaliticoLayoutProps = {
   /** Opens the create dialog. */
@@ -91,14 +97,17 @@ export const ANALITICO_NEW_PROJECT_LABEL = "Nuevo proyecto";
 export const ANALITICO_EXPAND_ALL = "Expandir todo";
 export const ANALITICO_COLLAPSE_ALL = "Contraer todo";
 /** The table's accessible name (the tramo card above is "Proyectos por tramo"). */
-export const PORTFOLIO_TABLE_LABEL = "Portafolio por tramo";
+export const PORTFOLIO_TABLE_LABEL = "Portafolio de proyectos";
+/** The tramo bar's legend: each segment filters by its tramo. */
+export const TRAMO_SEGMENTS_LABEL = "Filtrar por tramo";
 
 const NEW_PROJECT_PARAM = "nuevo";
 const SEARCH_DEBOUNCE_MS = 300;
 /** A project created this recently flashes (`row-new`) when the list shows it. */
 const NEW_ROW_MS = 60_000;
 
-type Sort = { key: keyof PortfolioTableRow; direction: "asc" | "desc" } | null;
+type Sort = { key: PortfolioSortKey; direction: "asc" | "desc" } | null;
+const ROWS_GROUP_ID = "proyectos";
 
 const SEGMENT_LABEL = "font-mono text-[11px] uppercase tracking-[.08em] text-muted-foreground";
 
@@ -179,12 +188,6 @@ function downloadText(fileName: string, text: string, type: string): void {
   URL.revokeObjectURL(url);
 }
 
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    : false;
-}
-
 /** The Analítico body over loaded page data. */
 function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onNewProject(): void }) {
   const { projects, portfolio, tramos, canSeeAdminData, canCreateProject, canChangeProjectStage, viewerStaffId } = data;
@@ -214,7 +217,8 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
   );
 
   const [sort, setSort] = useState<Sort>(null);
-  const [collapsed, setCollapsed] = useState<string[]>([]);
+  // Project rows whose tasks are shown; each loads them on its first expand.
+  const [openProjects, setOpenProjects] = useState<ReadonlySet<string>>(() => new Set());
   const [mountedAt] = useState(() => Date.now());
 
   const rows = useMemo(() => portfolioById(portfolio), [portfolio]);
@@ -239,10 +243,11 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
     [projects, rows, effective, viewerStaffId],
   );
   const kpis = useMemo(() => portfolioKpis(visible, rows, new Date(mountedAt)), [visible, rows, mountedAt]);
-  const table = useMemo(() => portfolioGroups(visible, rows, tramos, { canSeeAdminData }), [visible, rows, tramos, canSeeAdminData]);
-  const groups = useMemo(
-    () => table.groups.map((group) => ({ ...group, rows: sortPortfolioRows(group.rows ?? [], sort) })),
-    [table.groups, sort],
+  const table = useMemo(() => portfolioTable(visible, rows, tramos, { canSeeAdminData }), [visible, rows, tramos, canSeeAdminData]);
+  const tableRows = useMemo(() => sortPortfolioRows(table.rows, sort), [table.rows, sort]);
+  const groups = useMemo<Group<PortfolioTableRow>[]>(
+    () => (tableRows.length > 0 ? [{ id: ROWS_GROUP_ID, label: PORTFOLIO_TABLE_LABEL, metrics: [], rows: tableRows, headless: true }] : []),
+    [tableRows],
   );
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   // Responsable: the staff catalog; the projects' own people until it loads.
@@ -267,8 +272,7 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
   );
   const createdAt = useMemo(() => new Map(projects.map((p) => [p.id, Date.parse(p.createdAt)])), [projects]);
 
-  const groupIds = groups.map((g) => g.id);
-  const expanded = groupIds.filter((id) => !collapsed.includes(id));
+  const staffRefs = useMemo(() => staff.map((s) => ({ id: s.id, name: s.name })), [staff]);
 
   function writeUrl(next: PortfolioFilters) {
     const search = portfolioFiltersSearch(next, new URLSearchParams(window.location.search));
@@ -300,26 +304,25 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
   }
 
   function handleSort(key: string) {
-    const column = key as keyof PortfolioTableRow;
+    const column = key as PortfolioSortKey;
     setSort((current) =>
-      current && current.key === column ? { key: column, direction: current.direction === "desc" ? "asc" : "desc" } : { key: column, direction: "desc" },
+      current && current.key === column
+        ? { key: column, direction: current.direction === "desc" ? "asc" : "desc" }
+        : { key: column, direction: initialSortDirection(column) },
     );
   }
 
-  function goToGroup(event: MouseEvent<HTMLAnchorElement>, id: string) {
-    event.preventDefault();
-    setCollapsed((current) => current.filter((c) => c !== id));
-    const section = document.getElementById(id);
-    if (!section) return;
-    const button = section.querySelector<HTMLElement>("button[aria-expanded]");
-    const target = button ?? section;
-    if (!button) section.setAttribute("tabindex", "-1");
-    section.scrollIntoView?.({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
-    target.focus({ preventScroll: true });
+  function toggleProject(id: string) {
+    setOpenProjects((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function handleExport() {
-    downloadText(portfolioCsvFileName(new Date()), portfolioCsv(groups, { canSeeAdminData }), "text/csv;charset=utf-8");
+    downloadText(portfolioCsvFileName(new Date()), portfolioCsv(tableRows, { canSeeAdminData }), "text/csv;charset=utf-8");
   }
 
   function renderCell(key: string, row: PortfolioTableRow): ReactNode | undefined {
@@ -409,6 +412,8 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
   const pausadosGroup = filterGroups.find((g) => g.id === PORTFOLIO_FILTER_GROUP.pausados)!;
 
   const totalShown = visible.length;
+  // The tramo bar: the Tramo filter's options (counts over the other filters), the empty ones left out.
+  const segments = tramoGroup.options.filter((option) => (option.count ?? 0) > 0);
 
   const headerActions = (
     <>
@@ -479,54 +484,52 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
                   {totalShown} {totalShown === 1 ? "proyecto" : "proyectos"}
                 </span>
               </div>
-              {groups.length > 0 ? (
+              {segments.length > 0 ? (
                 <>
                   <div aria-hidden="true" className="flex h-2.5 gap-[3px]">
-                    {groups.map((group) => (
+                    {segments.map((segment) => (
                       <span
-                        key={group.id}
+                        key={segment.value}
                         className="grow rounded-full"
-                        style={{ flex: group.rows.length, backgroundColor: group.color }}
+                        style={{ flex: segment.count, backgroundColor: segment.color }}
                       />
                     ))}
                   </div>
-                  <ul className="flex flex-wrap gap-x-[18px] gap-y-1 text-[12.5px]">
-                    {groups.map((group) => (
-                      <li key={group.id} className="inline-flex items-center gap-1.5">
-                        <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: group.color }} />
-                        {group.label} <b className="font-semibold">{group.rows.length}</b>
-                      </li>
-                    ))}
+                  <ul aria-label={TRAMO_SEGMENTS_LABEL} className="flex flex-wrap gap-x-1 gap-y-1 text-[12.5px]">
+                    {segments.map((segment) => {
+                      const pressed = effective.tramos.includes(segment.value);
+                      return (
+                        <li key={segment.value}>
+                          <button
+                            type="button"
+                            aria-pressed={pressed}
+                            data-slot="tramo-segment"
+                            onClick={() => toggleTramo(segment.value)}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+                              pressed && "bg-muted",
+                            )}
+                          >
+                            <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: segment.color }} />
+                            {segment.label} <b className="font-semibold">{segment.count}</b>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </>
               ) : null}
-              <div className="flex flex-wrap items-center gap-2">
-                <nav aria-label="Ir a tramo" className="flex flex-wrap items-center gap-2">
-                  <span className={SEGMENT_LABEL}>IR A</span>
-                  {table.anchors.map((anchor) => {
-                    const color = groups.find((g) => g.id === anchor.id)?.color;
-                    return (
-                      <a
-                        key={anchor.id}
-                        href={`#${anchor.id}`}
-                        onClick={(event) => goToGroup(event, anchor.id)}
-                        className="inline-flex h-[30px] items-center gap-1.5 rounded-[10px] border px-3 text-[12.5px] font-medium hover:bg-muted"
-                      >
-                        <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: color }} />
-                        {anchor.label}
-                        <span className={cn("font-mono", anchor.count > 0 ? "text-destructive" : "text-muted-foreground")}>
-                          {anchor.count}
-                        </span>
-                      </a>
-                    );
-                  })}
-                  <span className="text-xs text-muted-foreground">tareas vencidas por tramo</span>
-                </nav>
-                <span className="flex-1" />
-                <Button type="button" variant="ghost" size="sm" className="text-secondary-foreground" onClick={() => setCollapsed([])}>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-secondary-foreground"
+                  onClick={() => setOpenProjects(new Set(tableRows.map((row) => row.id)))}
+                >
                   {ANALITICO_EXPAND_ALL}
                 </Button>
-                <Button type="button" variant="ghost" size="sm" className="text-secondary-foreground" onClick={() => setCollapsed(groupIds)}>
+                <Button type="button" variant="ghost" size="sm" className="text-secondary-foreground" onClick={() => setOpenProjects(new Set())}>
                   {ANALITICO_COLLAPSE_ALL}
                 </Button>
               </div>
@@ -541,9 +544,13 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
                   groups={groups}
                   layout="table"
                   footerRow={table.totals}
-                  expanded={expanded}
-                  onExpandedChange={(ids) => setCollapsed(groupIds.filter((id) => !ids.includes(id)))}
                   getRowId={(row) => row.id}
+                  rowDetail={{
+                    isOpen: (row) => openProjects.has(row.id),
+                    onToggle: (row) => toggleProject(row.id),
+                    label: (row) => PROJECT_TASKS_TOGGLE_LABEL(row.name),
+                    render: (row) => <ProjectAnaliticoTasks project={{ id: row.id, name: row.name }} tramos={tramos} staff={staffRefs} />,
+                  }}
                   renderCell={renderCell}
                   isRowNew={(row) => mountedAt - (createdAt.get(row.id) ?? 0) < NEW_ROW_MS}
                   isRowMuted={(row) => projects.find((p) => p.id === row.id)?.status === "pausado"}

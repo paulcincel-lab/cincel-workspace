@@ -121,6 +121,8 @@ export type TaskBoardWidgetProps = {
   visibleCards?: number;
   /** Visual: Completado cards as one compact line (check, title, "proyecto · tramo · responsable"). */
   compactCompleted?: boolean;
+  /** "Ocultar completadas" (#1039): leaves the Completado column out. */
+  hideCompleted?: boolean;
   /**
    * Visual: whether the viewer may move a task. A card it can't move has no
    * drag handle, can't be dragged and its "Mover a…" is disabled. Default: every card.
@@ -220,13 +222,14 @@ export function TaskBoardWidget({
   renderColumnFooter,
   visibleCards,
   compactCompleted = false,
+  hideCompleted = false,
   canMove,
 }: TaskBoardWidgetProps) {
   const tasks = useMemo(() => flattenBoard(board), [board]);
-  const columns = useMemo(
-    () => boardColumns(mergeCustomStatuses(customStatuses, customStatusesOf(tasks))),
-    [customStatuses, tasks],
-  );
+  const columns = useMemo(() => {
+    const all = boardColumns(mergeCustomStatuses(customStatuses, customStatusesOf(tasks)));
+    return hideCompleted ? all.filter((c) => c.key !== "completado") : all;
+  }, [customStatuses, tasks, hideCompleted]);
 
   if (loading) {
     return (

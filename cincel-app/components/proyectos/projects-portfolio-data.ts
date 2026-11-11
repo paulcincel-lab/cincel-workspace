@@ -6,8 +6,8 @@
  * presentation style. Pure and client-safe.
  */
 import type { FilterCardProps } from "@/components/widgets/FilterCard";
-import type { Group } from "@/components/widgets/GroupedTable";
 import type { KpiStripProps } from "@/components/widgets/KpiStrip";
+import type { TareasListFilters } from "@/lib/query/keys";
 import { TASK_TREND_TIME_ZONE, localIsoDate } from "@/lib/dashboard/task-trend";
 import { tramoColorVar } from "@/lib/tramos/compat";
 import type { ProjectListItem, WorkflowRef } from "@/lib/types/core";
@@ -444,7 +444,7 @@ export const DEFAULT_PORTFOLIO_FILTERS: PortfolioFilters = { mostrar: "todos", t
 /** URL params of the Analítico filters (defaults are left out of the URL). */
 export const PORTFOLIO_FILTER_PARAMS = { mostrar: "mostrar", tramo: "tramo", mios: "mios", pausados: "pausados", q: "q" } as const;
 
-export const PORTFOLIO_ANALITICO_DESCRIPTION = "Portafolio por tramo: avance contra plan, carga y retrasos.";
+export const PORTFOLIO_ANALITICO_DESCRIPTION = "Portafolio por proyecto: avance contra plan, carga y retrasos.";
 export const PORTFOLIO_NO_MATCH = "Ningún proyecto coincide con los filtros.";
 export const PORTFOLIO_CLEAR_FILTERS = "Quitar filtros";
 
@@ -617,6 +617,10 @@ export type PortfolioTableRow = {
   name: string;
   client: string | null;
   tramoKey: string | null;
+  /** Current tramo name, or "Sin tramo". */
+  tramo: string;
+  /** Position of the current tramo in the catalog (sorts the Tramo actual column); "Sin tramo" last. */
+  tramoRank: number;
   real: number;
   deviation: number | null;
   open: number;
@@ -645,8 +649,13 @@ export function portfolioColumns(opts: { canSeeAdminData: boolean }): RecordColu
   return columns;
 }
 
-/** Columns that sort on a header click (numbers only). */
-export const PORTFOLIO_SORTABLE_COLUMNS: readonly (keyof PortfolioTableRow)[] = [
+/** A sortable column key: Proyecto, Tramo actual and the numeric columns. */
+export type PortfolioSortKey = "name" | "tramo" | "real" | "deviation" | "open" | "overdue" | "overduePct" | "avgDelayDays" | "budgetSpentPct";
+
+/** Columns that sort on a header click. */
+export const PORTFOLIO_SORTABLE_COLUMNS: readonly PortfolioSortKey[] = [
+  "name",
+  "tramo",
   "real",
   "deviation",
   "open",
@@ -733,19 +742,25 @@ function proyectosText(n: number): string {
   return `${n} ${n === 1 ? "proyecto" : "proyectos"}`;
 }
 
-function vencidasText(n: number): string {
-  return `${n} ${n === 1 ? "vencida" : "vencidas"}`;
-}
+/** Sort rank of "Sin tramo": after every tramo. */
+const NO_TRAMO_RANK = Number.MAX_SAFE_INTEGER;
 
-/** One table row of a project. */
-export function portfolioTableRow(project: ProjectListItem, row: PortfolioRow | undefined, opts: { canSeeAdminData: boolean }): PortfolioTableRow {
+/** One table row of a project; `tramoRank` is its tramo's position (`portfolioTable` sets it from the catalog). */
+export function portfolioTableRow(
+  project: ProjectListItem,
+  row: PortfolioRow | undefined,
+  opts: { canSeeAdminData: boolean; tramoRank?: number },
+): PortfolioTableRow {
   const open = row?.open ?? project.taskCounts.open;
   const overdue = row?.overdue ?? 0;
+  const tramo = currentTramoOf(project);
   return {
     id: project.id,
     name: project.name,
     client: project.client?.name ?? null,
-    tramoKey: currentTramoOf(project)?.key ?? null,
+    tramoKey: tramo?.key ?? null,
+    tramo: tramo?.name ?? NO_TRAMO_LABEL,
+    tramoRank: tramo ? (opts.tramoRank ?? tramo.sortOrder) : NO_TRAMO_RANK,
     real: realProgress(project, row),
     deviation: row?.deviation ?? null,
     open,
@@ -790,54 +805,30 @@ function summarize(rows: PortfolioTableRow[]): RowsSummary {
 }
 
 /**
- * The Analítico table grouped by tramo (catalog order, then "Sin tramo"),
- * rows by name inside each group. Groups without rows are left out. Each
- * group carries its summary metrics; `totals` holds the footer cell of every
- * column; `anchors` are the "Ir a" links (count = overdue tasks).
+ * The Analítico table (#1042): one row per project, by name, whatever its
+ * tramo (a project without one is a row like any other, "Sin tramo" in its
+ * Tramo actual cell). `totals` holds the footer cell of every column.
  */
-export function portfolioGroups(
+export function portfolioTable(
   projects: ProjectListItem[],
   portfolio: Map<string, PortfolioRow>,
   tramos: WorkflowRef[],
   opts: { canSeeAdminData: boolean },
-): { groups: Group<PortfolioTableRow>[]; totals: Record<string, string>; anchors: { id: string; label: string; count: number }[] } {
-  const byKey = new Map<string, PortfolioTableRow[]>();
-  for (const project of projects) {
-    const key = currentTramoOf(project)?.key ?? NO_TRAMO_KEY;
-    byKey.set(key, [...(byKey.get(key) ?? []), portfolioTableRow(project, portfolio.get(project.id), opts)]);
-  }
+): { rows: PortfolioTableRow[]; totals: Record<string, string> } {
   const order = orderedTramos(projects, tramos);
   for (const project of projects) {
     const tramo = currentTramoOf(project);
     if (tramo && !order.some((t) => t.key === tramo.key)) order.push(tramo);
   }
-  const keys: { key: string; label: string; color: string }[] = order.map((t) => ({ key: t.key, label: t.name, color: tramoColorVar(t.key) }));
-  keys.push({ key: NO_TRAMO_KEY, label: NO_TRAMO_LABEL, color: NEUTRAL_COLOR_VAR });
+  const rank = new Map(order.map((t, i) => [t.key, i]));
+  const rows = projects
+    .map((project) => {
+      const key = currentTramoOf(project)?.key;
+      return portfolioTableRow(project, portfolio.get(project.id), { ...opts, tramoRank: key === undefined ? undefined : rank.get(key) });
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
-  const groups: Group<PortfolioTableRow>[] = [];
-  for (const { key, label, color } of keys) {
-    const rows = byKey.get(key);
-    if (!rows || rows.length === 0) continue;
-    rows.sort((a, b) => a.name.localeCompare(b.name, "es"));
-    const s = summarize(rows);
-    groups.push({
-      id: `t-${key}`,
-      label,
-      color,
-      caption: proyectosText(s.count),
-      rows,
-      metrics: [
-        { key: "avance", value: `avance ${percentText(s.real)}` },
-        { key: "abiertas", value: `${s.open} ${s.open === 1 ? "abierta" : "abiertas"}` },
-        { key: "vencidas", value: vencidasText(s.overdue), tone: s.overdue > 0 ? "destructive" : "default" },
-        { key: "pct", value: percentText(s.overduePct) },
-        { key: "retraso", value: delayText(s.avgDelayDays) },
-      ],
-    });
-  }
-
-  const all = groups.flatMap((g) => g.rows ?? []);
-  const t = summarize(all);
+  const t = summarize(rows);
   const totals: Record<string, string> = {
     name: `Total · ${proyectosText(t.count)}`,
     real: t.real === null ? NO_VALUE : `${percentText(t.real)} prom.`,
@@ -849,28 +840,82 @@ export function portfolioGroups(
     nextDelivery: "",
   };
   if (opts.canSeeAdminData) totals.budgetSpentPct = percentText(t.budgetSpentPct);
-
-  const anchors = groups.map((g) => ({ id: g.id, label: g.label, count: sum((g.rows ?? []).map((r) => r.overdue)) }));
-  return { groups, totals, anchors };
+  return { rows, totals };
 }
 
-/** Rows sorted by a numeric column (nulls last), else as given (by name). */
+/**
+ * Rows sorted by a column: Proyecto by name, Tramo actual by catalog order
+ * ("Sin tramo" last), numbers with nulls last; ties by name. Null: as given
+ * (by name).
+ */
 export function sortPortfolioRows(
   rows: PortfolioTableRow[],
-  sort: { key: keyof PortfolioTableRow; direction: "asc" | "desc" } | null,
+  sort: { key: PortfolioSortKey; direction: "asc" | "desc" } | null,
 ): PortfolioTableRow[] {
   if (!sort) return rows;
   const factor = sort.direction === "asc" ? 1 : -1;
+  const byName = (a: PortfolioTableRow, b: PortfolioTableRow) => a.name.localeCompare(b.name, "es");
+  if (sort.key === "name") return [...rows].sort((a, b) => byName(a, b) * factor);
+  if (sort.key === "tramo") {
+    return [...rows].sort((a, b) => {
+      if (a.tramoRank === b.tramoRank) return byName(a, b);
+      if (a.tramoRank === NO_TRAMO_RANK) return 1;
+      if (b.tramoRank === NO_TRAMO_RANK) return -1;
+      return (a.tramoRank - b.tramoRank) * factor;
+    });
+  }
+  const key = sort.key;
   return [...rows].sort((a, b) => {
-    const x = a[sort.key];
-    const y = b[sort.key];
+    const x = a[key];
+    const y = b[key];
     const nx = typeof x === "number" ? x : null;
     const ny = typeof y === "number" ? y : null;
-    if (nx === null && ny === null) return a.name.localeCompare(b.name, "es");
+    if (nx === null && ny === null) return byName(a, b);
     if (nx === null) return 1;
     if (ny === null) return -1;
-    return (nx - ny) * factor || a.name.localeCompare(b.name, "es");
+    return (nx - ny) * factor || byName(a, b);
   });
+}
+
+// ── A project's tasks under its row (#1042) ─────────────────────────────────
+
+/**
+ * The open tasks of one project, as the Tareas tables read them
+ * (`qk.tareas.list`): every tramo, every responsable, completed ones out.
+ * Loaded on the row's first expand.
+ */
+export function projectOpenTasksFilters(projectId: string): TareasListFilters {
+  return { tramo: null, proyecto: projectId, responsable: null, estado: null, q: null, mostrar: "abiertas" };
+}
+
+type DueTask = { title: string; commitmentDate: string | null; deliveryDate?: string | null };
+
+/** Tasks by due date (commitment, else delivery; undated last), then title. */
+export function sortByDueDate<T>(rows: readonly T[], taskOf: (row: T) => DueTask): T[] {
+  const due = (t: DueTask) => (t.commitmentDate ?? t.deliveryDate ?? null)?.slice(0, 10) ?? null;
+  return [...rows].sort((a, b) => {
+    const x = taskOf(a);
+    const y = taskOf(b);
+    const dx = due(x);
+    const dy = due(y);
+    if (dx !== dy) {
+      if (dx === null) return 1;
+      if (dy === null) return -1;
+      return dx < dy ? -1 : 1;
+    }
+    return x.title.localeCompare(y.title, "es");
+  });
+}
+
+/** "Tareas de «Casa Lomas»": the row toggle's accessible name. */
+export const PROJECT_TASKS_TOGGLE_LABEL = (name: string): string => `Tareas de «${name}»`;
+export const PROJECT_TASKS_SEE_ALL = "Ver todas en el proyecto";
+export const PROJECT_TASKS_EMPTY = "Este proyecto no tiene tareas abiertas.";
+export const PROJECT_TASKS_ERROR = "No se pudieron cargar las tareas";
+
+/** First click on a header: names and tramos A→Z, numbers highest first. */
+export function initialSortDirection(key: PortfolioSortKey): "asc" | "desc" {
+  return key === "name" || key === "tramo" ? "asc" : "desc";
 }
 
 /** `createdAt` falls in the calendar month of `now` (Mexico City). */
@@ -964,21 +1009,18 @@ function csvField(value: string | number | null): string {
  * one line per project with its tramo and the visible columns (the budget
  * only with `canSeeAdminData`).
  */
-export function portfolioCsv(groups: Group<PortfolioTableRow>[], opts: { canSeeAdminData: boolean }): string {
+export function portfolioCsv(rows: PortfolioTableRow[], opts: { canSeeAdminData: boolean }): string {
   const columns = portfolioColumns(opts);
   const header = ["Tramo", ...columns.flatMap((c) => (c.key === "name" ? [c.label, "Cliente"] : [c.label]))];
   const lines = [header.map(csvField).join(";")];
-  for (const group of groups) {
-    if (group.hidden) continue;
-    for (const row of group.rows ?? []) {
-      const cells: (string | number | null)[] = [group.label];
-      for (const column of columns) {
-        if (column.key === "name") cells.push(row.name, row.client);
-        else if (column.key === "nextDelivery") cells.push(row.nextDelivery ? `${row.nextDelivery.title} · ${row.nextDelivery.date}` : null);
-        else cells.push(row[column.key as keyof PortfolioTableRow] as number | null);
-      }
-      lines.push(cells.map(csvField).join(";"));
+  for (const row of rows) {
+    const cells: (string | number | null)[] = [row.tramo];
+    for (const column of columns) {
+      if (column.key === "name") cells.push(row.name, row.client);
+      else if (column.key === "nextDelivery") cells.push(row.nextDelivery ? `${row.nextDelivery.title} · ${row.nextDelivery.date}` : null);
+      else cells.push(row[column.key as keyof PortfolioTableRow] as number | null);
     }
+    lines.push(cells.map(csvField).join(";"));
   }
   return `${CSV_BOM}${lines.join("\r\n")}\r\n`;
 }
@@ -988,7 +1030,7 @@ export function portfolioCsvFileName(now: Date): string {
   return `proyectos-${localIsoDate(now, TASK_TREND_TIME_ZONE)}.csv`;
 }
 
-// ── Visual (#992): tramo summary, attention cards, portfolio board, delivery timeline ──
+// ── Visual (#992, #1042): portfolio summary, attention cards, project grid, delivery timeline ──
 
 /** Projects the Visual layout shows: `activo` only (paused ones are reachable from Analítico). */
 export function activeOnlyProjects(projects: ProjectListItem[]): ProjectListItem[] {
@@ -1024,70 +1066,105 @@ export function tramoTone(key: string | null, tramos: WorkflowRef[] = []): Tramo
   return { color, ink: `var(--chart-${slot}-ink)`, soft: TINT_BY_SLOT[slot] ?? NEUTRAL_TONE.soft };
 }
 
-/**
- * The groups the summary and the board share, in the same order: "Sin tramo"
- * first when some project has none, then every tramo of `tramos` (empty ones
- * included), then any tramo a project carries that the catalog list lacks.
- */
-function tramoGroups(
-  projects: ProjectListItem[],
-  tramos: WorkflowRef[],
-): { key: string; tramoId: string | null; label: string; members: ProjectListItem[] }[] {
-  const byKey = new Map<string, ProjectListItem[]>();
-  for (const project of projects) {
-    const key = currentTramoOf(project)?.key ?? NO_TRAMO_KEY;
-    byKey.set(key, [...(byKey.get(key) ?? []), project]);
-  }
-  const groups: { key: string; tramoId: string | null; label: string; members: ProjectListItem[] }[] = [];
-  const noTramo = byKey.get(NO_TRAMO_KEY) ?? [];
-  if (noTramo.length > 0) groups.push({ key: NO_TRAMO_KEY, tramoId: null, label: NO_TRAMO_LABEL, members: noTramo });
-  for (const t of orderedTramos(projects, tramos)) {
-    groups.push({ key: t.key, tramoId: t.id, label: t.name, members: byKey.get(t.key) ?? [] });
-  }
-  for (const project of projects) {
-    const tramo = currentTramoOf(project);
-    if (tramo && !groups.some((g) => g.key === tramo.key)) {
-      groups.push({ key: tramo.key, tramoId: tramo.id, label: tramo.name, members: byKey.get(tramo.key) ?? [] });
-    }
-  }
-  return groups;
-}
-
 export type TeamAvatar = { id: string; name: string; initials: string; tramoKey: string | null };
 
-export type TramoSummary = {
-  /** `WorkflowRef.key` or `NO_TRAMO_KEY`. */
-  key: string;
-  tramoId: string | null;
+/** One of the four Visual summary cards (#1042): a figure, its bar (0–100) and a footnote. */
+export type PortfolioSummaryCard = {
+  key: "activos" | "abiertas" | "vencidas" | "avance";
   label: string;
-  projectCount: number;
-  /** Σ `PortfolioRow.open`. */
-  openTasks: number;
-  /** round(mean `PortfolioRow.real`), 0 when the tramo has no project. */
-  avgProgress: number;
-  /** Σ `PortfolioRow.overdue`. */
-  overdue: number;
+  /** The big figure, preformatted ("12", "62 %"). */
+  value: string;
+  /** Text after the figure ("tareas abiertas"); empty for none. */
+  unit: string;
+  /** The small figure at the top right ("3 proyectos"); null for none. */
+  aside: string | null;
+  /** Bar fill, 0–100. */
+  bar: number;
+  /** What the bar measures, for screen readers ("62 % al día"). */
+  barLabel: string;
+  /** Under the bar: a lead text and an optional bold figure. */
+  footnote: { lead: string; figure?: string; tone?: "destructive" | "default" };
+  /** Chart slot of the card's color (`summaryTone`); "destructive" for Vencidas. */
+  tone: "1" | "2" | "5" | "destructive";
 };
 
-/** One summary card per tramo (empty tramos show zeros), in the board's column order. */
-export function tramoSummaries(
-  projects: ProjectListItem[],
-  portfolio: Map<string, PortfolioRow>,
-  tramos: WorkflowRef[],
-): TramoSummary[] {
-  return tramoGroups(projects, tramos).map(({ key, tramoId, label, members }) => {
-    const rows = members.map((p) => portfolio.get(p.id));
-    const progress = members.map((p, i) => realProgress(p, rows[i]));
-    return {
-      key,
-      tramoId,
-      label,
-      projectCount: members.length,
-      openTasks: sum(members.map((p, i) => rows[i]?.open ?? p.taskCounts.open)),
-      avgProgress: members.length > 0 ? Math.round(sum(progress) / members.length) : 0,
-      overdue: sum(rows.map((r) => r?.overdue ?? 0)),
-    };
-  });
+function pctOf(part: number, total: number): number {
+  return total > 0 ? Math.round((part / total) * 100) : 0;
+}
+
+/**
+ * The Visual summary over the shown projects: Proyectos activos (bar: share
+ * without overdue tasks), Tareas abiertas (bar: share on time), Vencidas
+ * (bar: share of the open ones) and Avance medio (bar: the mean progress;
+ * footnote: the mean deviation from plan).
+ */
+export function portfolioSummary(projects: ProjectListItem[], portfolio: Map<string, PortfolioRow>): PortfolioSummaryCard[] {
+  const rows = projects.map((p) => ({ project: p, row: portfolio.get(p.id) }));
+  const count = projects.length;
+  const withOverdue = rows.filter(({ row }) => (row?.overdue ?? 0) > 0).length;
+  const open = sum(rows.map(({ project, row }) => row?.open ?? project.taskCounts.open));
+  const overdue = sum(rows.map(({ row }) => row?.overdue ?? 0));
+  const reals = rows.map(({ project, row }) => realProgress(project, row));
+  const avgReal = count > 0 ? Math.round(sum(reals) / count) : 0;
+  const deviations = rows.map(({ row }) => row?.deviation ?? null).filter((d): d is number => d !== null);
+  const avgDeviation = deviations.length > 0 ? Math.round((sum(deviations) / deviations.length) * 10) / 10 : null;
+  const onTime = pctOf(open - overdue, open);
+  const overdueShareValue = pctOf(overdue, open);
+  return [
+    {
+      key: "activos",
+      label: "Proyectos activos",
+      value: INTEGER.format(count),
+      unit: count === 1 ? "proyecto" : "proyectos",
+      aside: null,
+      bar: pctOf(count - withOverdue, count),
+      barLabel: `${pctOf(count - withOverdue, count)} % sin vencidas`,
+      footnote: withOverdue > 0 ? { lead: "Con vencidas", figure: INTEGER.format(withOverdue), tone: "destructive" } : { lead: "Todos al día" },
+      tone: "1",
+    },
+    {
+      key: "abiertas",
+      label: "Tareas abiertas",
+      value: INTEGER.format(open),
+      unit: open === 1 ? "tarea abierta" : "tareas abiertas",
+      aside: proyectosText(count),
+      bar: onTime,
+      barLabel: `${onTime} % al día`,
+      footnote: { lead: "Al día", figure: `${onTime} %` },
+      tone: "2",
+    },
+    {
+      key: "vencidas",
+      label: "Vencidas",
+      value: INTEGER.format(overdue),
+      unit: overdue === 1 ? "tarea vencida" : "tareas vencidas",
+      aside: proyectosText(withOverdue),
+      bar: overdueShareValue,
+      barLabel: `${overdueShareValue} % de las abiertas`,
+      footnote: overdue > 0 ? { lead: "De las abiertas", figure: `${overdueShareValue} %`, tone: "destructive" } : { lead: "Sin vencidas" },
+      tone: "destructive",
+    },
+    {
+      key: "avance",
+      label: "Avance medio",
+      value: `${avgReal} %`,
+      unit: "",
+      aside: proyectosText(count),
+      bar: avgReal,
+      barLabel: `Avance medio ${avgReal} %`,
+      footnote:
+        avgDeviation === null
+          ? { lead: "Sin plan" }
+          : { lead: "Desv. plan", figure: deviationText(avgDeviation), tone: avgDeviation < 0 ? "destructive" : "default" },
+      tone: "5",
+    },
+  ];
+}
+
+/** The tone of a summary card (`PortfolioSummaryCard.tone`). */
+export function summaryTone(tone: PortfolioSummaryCard["tone"]): TramoTone {
+  if (tone === "destructive") return { color: "var(--destructive)", ink: "var(--destructive-ink)", soft: "var(--tint-destructive)" };
+  return { color: `var(--chart-${tone})`, ink: `var(--chart-${tone}-ink)`, soft: TINT_BY_SLOT[tone] ?? NEUTRAL_TONE.soft };
 }
 
 /** "{client} · {place}", either part alone, or null. */
@@ -1158,68 +1235,49 @@ export function attentionProjects(
       return a.project.name.localeCompare(b.project.name, "es");
     })
     .slice(0, Math.max(0, limit))
-    .map(({ project, row }): AttentionProject => {
-      const tramo = currentTramoOf(project);
-      const tramoKey = tramo?.key ?? null;
-      const team = fullTeam(project);
-      return {
-        id: project.id,
-        name: project.name,
-        initials: initialsOf(project.name),
-        tramoKey,
-        badge: tramo ? (project.activePhase ? `${tramo.name} · ${project.activePhase.name}` : tramo.name) : NO_TRAMO_LABEL,
-        subtitle: clientPlace(project),
-        real: realProgress(project, row),
-        open: row?.open ?? project.taskCounts.open,
-        overdue: row?.overdue ?? 0,
-        steps: tramoSteps(project, order),
-        team: team.slice(0, ATTENTION_TEAM_MAX).map((p) => ({ ...p, initials: initialsOf(p.name), tramoKey })),
-        teamOverflow: Math.max(0, team.length - ATTENTION_TEAM_MAX),
-        nextDelivery: row?.nextDelivery ?? null,
-      };
-    });
+    .map(({ project, row }) => projectCardOf(project, row, order));
 }
 
-export type BoardCard = { id: string; name: string; subtitle: string; real: number; open: number; overdue: number };
-export type BoardColumn = { key: string; tramoId: string | null; label: string; cards: BoardCard[]; droppable: boolean };
+/** One project card (the attention cards and the Visual project grid share it). */
+function projectCardOf(project: ProjectListItem, row: PortfolioRow | undefined, order: WorkflowRef[]): AttentionProject {
+  const tramo = currentTramoOf(project);
+  const tramoKey = tramo?.key ?? null;
+  const team = fullTeam(project);
+  return {
+    id: project.id,
+    name: project.name,
+    initials: initialsOf(project.name),
+    tramoKey,
+    badge: tramo ? (project.activePhase ? `${tramo.name} · ${project.activePhase.name}` : tramo.name) : NO_TRAMO_LABEL,
+    subtitle: clientPlace(project),
+    real: realProgress(project, row),
+    open: row?.open ?? project.taskCounts.open,
+    overdue: row?.overdue ?? 0,
+    steps: tramoSteps(project, order),
+    team: team.slice(0, ATTENTION_TEAM_MAX).map((p) => ({ ...p, initials: initialsOf(p.name), tramoKey })),
+    teamOverflow: Math.max(0, team.length - ATTENTION_TEAM_MAX),
+    nextDelivery: row?.nextDelivery ?? null,
+  };
+}
 
-/** Shown on a board card without client nor next delivery, and in the attention footer. */
-export const NO_UPCOMING_DELIVERY = "Sin entregas próximas";
-
-/**
- * "Tablero del portafolio": a leading "Sin tramo" column (only when some
- * project has no tramo; never a drop target), then one column per tramo in
- * the summary's order. Card subtitle: "{client} · {next delivery} {date}".
- */
-export function portfolioBoard(
+/** The Visual project grid (#1042): one card per project, by name, whatever its tramo. */
+export function portfolioProjectCards(
   projects: ProjectListItem[],
   portfolio: Map<string, PortfolioRow>,
   tramos: WorkflowRef[],
-): BoardColumn[] {
-  return tramoGroups(projects, tramos).map(({ key, tramoId, label, members }) => ({
-    key,
-    tramoId,
-    label,
-    droppable: tramoId !== null,
-    cards: members.map((project): BoardCard => {
-      const row = portfolio.get(project.id);
-      const delivery = row?.nextDelivery ? `${row.nextDelivery.title} ${formatDeliveryDate(row.nextDelivery.date)}` : null;
-      const parts = [project.client?.name?.trim(), delivery].filter((s): s is string => Boolean(s));
-      return {
-        id: project.id,
-        name: project.name,
-        subtitle: parts.length > 0 ? parts.join(" · ") : (placeOf(project) ?? NO_UPCOMING_DELIVERY),
-        real: realProgress(project, row),
-        open: row?.open ?? project.taskCounts.open,
-        overdue: row?.overdue ?? 0,
-      };
-    }),
-  }));
+): AttentionProject[] {
+  const order = orderedTramos(projects, tramos);
+  return [...projects]
+    .sort((a, b) => a.name.localeCompare(b.name, "es"))
+    .map((project) => projectCardOf(project, portfolio.get(project.id), order));
 }
+
+/** Shown in a project card's footer without a next delivery. */
+export const NO_UPCOMING_DELIVERY = "Sin entregas próximas";
 
 /**
  * The list data after moving project `id` to tramo `workflowId` (the
- * board's optimistic update): `currentWorkflow` / `currentWorkflowId` point
+ * Tramo actual cell's optimistic update): `currentWorkflow` / `currentWorkflowId` point
  * at it, `needsTramo` clears and `tramos[].current` flips. Other projects
  * are untouched; an unknown tramo leaves the data as is.
  */
@@ -1326,10 +1384,9 @@ export function deliveryTimeline(
   return { days: timelineDays, items, rangeLabel };
 }
 
-/** "{n} obras activas en {t} tramos · {k} entregas en los próximos 11 días." (singular forms for 1). */
-export function visualDescription(listed: number, tramosWithProjects: number, deliveries: number): string {
+/** "{n} obras activas · {k} entregas en los próximos 11 días." (singular forms for 1). */
+export function visualDescription(listed: number, deliveries: number): string {
   const obras = listed === 1 ? "1 obra activa" : `${listed} obras activas`;
-  const enTramos = tramosWithProjects === 1 ? "1 tramo" : `${tramosWithProjects} tramos`;
   const entregas = deliveries === 1 ? "1 entrega" : `${deliveries} entregas`;
-  return `${obras} en ${enTramos} · ${entregas} en los próximos ${TIMELINE_DAYS} días.`;
+  return `${obras} · ${entregas} en los próximos ${TIMELINE_DAYS} días.`;
 }

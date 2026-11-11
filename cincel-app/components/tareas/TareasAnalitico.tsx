@@ -17,22 +17,31 @@ import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
-import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
+import { renderAnaliticoTaskCell } from "@/components/widgets/analitico-task-cell";
+import { HiddenCompletedLine, HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
 import { GroupedTable, type Group, type GroupAnchor } from "@/components/widgets/GroupedTable";
+import { IncludeSupportSwitch } from "@/components/widgets/IncludeSupportSwitch";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions, tareasSummaryOptions } from "@/lib/query/options/tareas";
 import { selectAnaliticoCollapsed, useTareasUi } from "@/lib/stores/tareas-ui-store";
 import type { TareasFacets, TareasStaffOption } from "@/lib/tareas/page-data";
-import type { TareasMostrar, TareasQuery } from "@/lib/tareas/query";
-import { EMPTY_TAREAS_SUMMARY, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
+import { useHideCompletedPreference } from "@/lib/stores/appearance-store";
+import {
+  effectiveMostrar,
+  hiddenCompletedCount,
+  hideCompletedPatch,
+  isHidingCompleted,
+  responsableFilter,
+  type TareasMostrar,
+  type TareasQuery,
+} from "@/lib/tareas/query";
+import { EMPTY_TAREAS_SUMMARY, summaryTramoKey, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
 import { tramoColorVar } from "@/lib/tramos/compat";
-import { statusDotClass } from "@/lib/tasks/status-options";
 import type { TareasListFilters } from "@/lib/query/keys";
 import type { TaskListRow, WorkflowRef } from "@/lib/types/core";
-import { cn } from "@/lib/utils";
 
 import { useQuickAddCreate } from "./quick-add-create";
 import {
@@ -46,7 +55,6 @@ import {
   analiticoKpis,
   analiticoRow,
   analiticoTotals,
-  daysLateLabel,
   expandAnnouncement,
   hiddenProjectsNote,
   projectCaption,
@@ -60,6 +68,9 @@ import {
 } from "./tareas-analitico";
 import { localIsoDate } from "./tablero-table";
 import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
+import { deleteTargetOf, useDeleteTasks } from "./use-delete-tasks";
+import { TaskBulkBar } from "./TaskBulkBar";
+import { useTaskSelection } from "./use-task-selection";
 import { useTareasFilters, useTareasPageReady } from "./use-tareas-page";
 
 export const ANALITICO_SEARCH_LABEL = "Buscar tareas";
@@ -139,6 +150,25 @@ function GroupRowsLoader({
 
 const taskOfRow = (row: AnaliticoRow) => row.task;
 
+/** Cells of a full-width row: the data columns, the checkbox column (#1040) and the `⋯` column (#1041). */
+const ANALITICO_SPAN = ANALITICO_COLUMNS.length + 2;
+
+/** The rows of every tramo group, in table order. */
+function analiticoRows(groups: Group<AnaliticoRow>[]): AnaliticoRow[] {
+  return groups.flatMap((group) => [...(group.rows ?? []), ...analiticoRows(group.children ?? [])]);
+}
+
+/** A tramo group's last rows: "n completadas ocultas · Mostrar", then its quick-add (or error) row. */
+function withHiddenLine(hiddenLine: ReactNode, quickAdd: ReactNode): ReactNode {
+  if (!hiddenLine) return quickAdd;
+  return (
+    <>
+      {hiddenLine}
+      {quickAdd}
+    </>
+  );
+}
+
 function sameState(a: GroupRowsState | undefined, b: GroupRowsState): boolean {
   return !!a && a.rows === b.rows && a.loading === b.loading && a.error === b.error && a.hasMore === b.hasMore;
 }
@@ -175,6 +205,19 @@ export function TareasAnalitico({
   const mostrar = query.mostrar;
   const late = mostrar === "en_retraso";
   const today = localIsoDate();
+
+  // ── "Ocultar completadas" (#1039): on with the switch or a Mostrar that implies it; the
+  // summary and rows then filter as Abiertas, and each tramo group says how many it hides.
+  const hiding = isHidingCompleted(query);
+  const countsHidden = effectiveMostrar(query) === "abiertas";
+  const [, setHidePreference] = useHideCompletedPreference();
+  const onHideCompleted = useCallback(
+    (hide: boolean) => {
+      setHidePreference(hide);
+      onQuery(hideCompletedPatch(hide, query));
+    },
+    [setHidePreference, onQuery, query],
+  );
 
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -239,6 +282,10 @@ export function TareasAnalitico({
     return result;
   }, []);
 
+  // ── Delete (#1041): rows (and their subtasks) leave right away; counts follow the refetch.
+  const deletes = useDeleteTasks();
+  const isHidden = deletes.isHidden;
+
   const groups = useMemo<Group<AnaliticoRow>[]>(
     () =>
       summary.projects.map((p) => ({
@@ -252,25 +299,34 @@ export function TareasAnalitico({
           const state = groupRows[id];
           const tramoRef = t.tramo.key ? tramos.find((w) => w.id === t.tramo.id) : undefined;
           const failed = state?.error === true;
+          const allInTramo =
+            summary.unfiltered.projectList?.find((u) => u.id === p.project.id)?.byTramo[summaryTramoKey(t.tramo.id)] ?? t.total;
+          const hidden = countsHidden && !failed ? hiddenCompletedCount(allInTramo, t.total) : 0;
+          const hiddenLine =
+            hidden > 0 ? (
+              <HiddenCompletedLine count={hidden} colSpan={ANALITICO_SPAN} onShow={() => onHideCompleted(false)} />
+            ) : null;
           return {
             id,
             label: t.tramo.name,
             color: t.tramo.key ? tramoColorVar(t.tramo.key, tramoRef?.sortOrder ?? t.tramo.sortOrder) : undefined,
             caption: tramoCaption(summary, p.project.id, t, mostrar),
             metrics: tramoMetrics(t, mostrar),
-            rows: failed ? [] : state?.rows?.map((row) => analiticoRow(row, today)),
+            rows: failed
+              ? []
+              : state?.rows?.filter((row) => !isHidden(row.id, row.parentTaskId)).map((row) => analiticoRow(row, today)),
             loading: !failed && (state?.loading ?? false),
             hasMore: state?.hasMore ?? false,
-            quickAdd: failed ? (
+            quickAdd: withHiddenLine(hiddenLine, failed ? (
               <tr>
-                <td colSpan={ANALITICO_COLUMNS.length} className="border-b border-border px-3 py-2">
+                <td colSpan={ANALITICO_SPAN} className="border-b border-border px-3 py-2">
                   <ErrorState title="No se pudo cargar" onRetry={() => rowActions.current.get(id)?.retry()} />
                 </td>
               </tr>
             ) : canCreate && !late ? (
               <QuickAddRow
                 variant="row"
-                colSpan={ANALITICO_COLUMNS.length}
+                colSpan={ANALITICO_SPAN}
                 context={{
                   label: `Nueva tarea en ${t.tramo.name}`,
                   projectId: p.project.id,
@@ -279,12 +335,21 @@ export function TareasAnalitico({
                 }}
                 onCreate={onCreate}
               />
-            ) : undefined,
+            ) : undefined),
           };
         }),
       })),
-    [summary, mostrar, groupRows, tramos, today, canCreate, late, onCreate],
+    [summary, mostrar, groupRows, tramos, today, canCreate, late, onCreate, countsHidden, onHideCompleted, isHidden],
   );
+
+  // ── Row checkboxes and the bulk bar (#1040): a filter change clears the selection.
+  const shownRows = useMemo(() => analiticoRows(groups), [groups]);
+  const visibleIds = useMemo(() => shownRows.map((row) => row.id), [shownRows]);
+  const selection = useTaskSelection({ visibleIds, resetKey: JSON.stringify(f) });
+  const taskOfId = useMemo(() => {
+    const byId = new Map(shownRows.map((row) => [row.id, row.task]));
+    return (id: string) => byId.get(id);
+  }, [shownRows]);
 
   const anchors = useMemo<GroupAnchor[]>(
     () =>
@@ -329,63 +394,6 @@ export function TareasAnalitico({
   const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, tramos, staff });
   const columns = useMemo(() => cells.withEdits(ANALITICO_COLUMNS), [cells]);
 
-  const renderCell = useCallback((columnKey: string, row: AnaliticoRow): ReactNode | undefined => {
-    switch (columnKey) {
-      case "tarea":
-        return (
-          <span title={row.tarea} className="block max-w-[420px] truncate">
-            {row.tarea}
-          </span>
-        );
-      case "tramo": {
-        const tramo = row.task.workflow;
-        if (!tramo) return <span className="text-muted-foreground">{row.tramo}</span>;
-        return (
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="size-[7px] shrink-0 rounded-full"
-              style={{ background: tramoColorVar(tramo.key, tramo.sortOrder) }}
-            />
-            {row.tramo}
-          </span>
-        );
-      }
-      case "fase":
-        return row.task.phase ? (
-          <span title={row.fase} className="block max-w-[180px] truncate">
-            {row.fase}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">{CLEAR_LABEL.phase}</span>
-        );
-      case "responsable":
-        return (
-          <span title={row.responsable} className="block max-w-[180px] truncate">
-            {row.responsable}
-          </span>
-        );
-      case "estatus":
-        return (
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden="true" className={cn("size-[7px] shrink-0 rounded-full", statusDotClass(row.statusToken))} />
-            {row.estatus}
-          </span>
-        );
-      case "vence":
-        return <span className={row.overdue ? "text-destructive" : undefined}>{row.vence}</span>;
-      case "diasRetraso":
-        if (row.diasRetraso <= 0) return "—";
-        return (
-          <>
-            <span aria-hidden="true">{row.diasRetraso}</span>
-            <span className="sr-only">{daysLateLabel(row.diasRetraso)}</span>
-          </>
-        );
-      default:
-        return undefined;
-    }
-  }, []);
 
   // ── Filters.
   const filterGroups = useMemo<FilterGroup[]>(
@@ -454,6 +462,9 @@ export function TareasAnalitico({
           ))}
         </SelectContent>
       </Select>
+      {responsableFilter(query.responsable) ? (
+        <IncludeSupportSwitch checked={query.apoyo !== false} onCheckedChange={(on) => onQuery({ apoyo: on })} />
+      ) : null}
     </div>
   );
 
@@ -474,7 +485,12 @@ export function TareasAnalitico({
       <FilterCard
         groups={filterGroups}
         onChange={onFilterChange}
-        extra={responsable}
+        extra={
+          <>
+            {responsable}
+            <HideCompletedSwitch checked={hiding} onCheckedChange={onHideCompleted} />
+          </>
+        }
         search={{ value: search, onChange: onSearch, placeholder: ANALITICO_SEARCH_LABEL, label: ANALITICO_SEARCH_LABEL }}
       />
       <KpiStrip items={analiticoKpis(summary, mostrar)} loading={summaryLoading} />
@@ -489,10 +505,16 @@ export function TareasAnalitico({
           onExpandedChange={onExpandedChange}
           heat={[ANALITICO_DAYS_LATE_HEAT]}
           getRowId={(row) => row.id}
-          renderCell={renderCell}
+          renderCell={renderAnaliticoTaskCell}
           rowHref={rowHref}
           isRowNew={(row) => created.has(row.id)}
           isRowMuted={(row) => row.closed}
+          getRowLabel={(row) => row.tarea}
+          selectable
+          selectedIds={selection.selectedIds}
+          onSelectionChange={selection.onSelectionChange}
+          rowActions={(row) => deletes.rowActions(deleteTargetOf(row.task), () => openTask(row.id))}
+          onRowDelete={deletes.canDelete ? (row) => deletes.request([deleteTargetOf(row.task)]) : undefined}
           onLoadMore={(id) => rowActions.current.get(id)?.more()}
           loading={summaryLoading}
           error={summaryQuery.isError && !summaryQuery.data ? { title: "No se pudo cargar", onRetry: () => void summaryQuery.refetch() } : undefined}
@@ -513,6 +535,8 @@ export function TareasAnalitico({
           <span className="font-mono">{totals.summary}</span>
         </div>
       ) : null}
+      {deletes.dialog}
+      <TaskBulkBar selection={selection} taskOf={taskOfId} staff={staff} deletes={deletes} />
       <p aria-live="polite" className="sr-only">
         {announcement}
       </p>

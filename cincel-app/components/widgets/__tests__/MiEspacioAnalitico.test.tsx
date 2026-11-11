@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 
-import { LOCK_REASON } from "@/components/widgets/editable-cell";
+import { LOCK_REASON, type CellEdit } from "@/components/widgets/editable-cell";
 import type { Group, GroupedTableProps } from "@/components/widgets/GroupedTable";
 import type { QuickAddRowProps } from "@/components/widgets/QuickAddRow";
 import { qk } from "@/lib/query/keys";
@@ -490,10 +490,10 @@ describe("MiEspacioAnalitico", () => {
 describe("MiEspacioAnalitico editable cells", () => {
   const ok = (t: TaskListItem) => ({ ok: true as const, data: detail(t) });
 
-  function column(key: string): RecordColumn<TaskRow> {
+  function column(key: string): RecordColumn<TaskRow> & { edit?: CellEdit<TaskRow> } {
     const found = grouped.props!.columns.find((c) => c.key === key);
     if (!found) throw new Error(`no column ${key}`);
-    return found as unknown as RecordColumn<TaskRow>;
+    return found as unknown as RecordColumn<TaskRow> & { edit?: CellEdit<TaskRow> };
   }
 
   function row(id: string): TaskRow {
@@ -525,7 +525,15 @@ describe("MiEspacioAnalitico editable cells", () => {
   it("Tarea, Estatus, Vence and Prioridad edit; Subtareas and Días de retraso stay calculated", () => {
     renderAnalitico();
     const kinds = Object.fromEntries(grouped.props!.columns.map((c) => [c.key, c.edit?.kind ?? null]));
-    expect(kinds).toEqual({ title: "text", estatus: "select", vence: "date", prioridad: "select", subtareas: null, retraso: null });
+    expect(kinds).toEqual({
+      title: "text",
+      apoyo: "people",
+      estatus: "select",
+      vence: "date",
+      prioridad: "select",
+      subtareas: null,
+      retraso: null,
+    });
     expect(column("title").edit).toMatchObject({ required: true });
     expect(column("vence").edit).toMatchObject({ quickPicks: true, clearable: true });
     // Rest state unchanged: the title is still plain text inside the row link.

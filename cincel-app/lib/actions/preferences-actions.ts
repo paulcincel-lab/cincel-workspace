@@ -60,6 +60,7 @@ async function updateMyPreferencesActionImpl(
     values.quietFrom = input.quietHours?.from ?? null;
     values.quietTo = input.quietHours?.to ?? null;
   }
+  if (input.hideCompletedTasks !== undefined) values.hideCompletedTasks = input.hideCompletedTasks;
 
   const row = await upsertUserPreferences(db, user.member.id, values);
   const appearance = resolveAppearance(org, rowToResolverInput(row));

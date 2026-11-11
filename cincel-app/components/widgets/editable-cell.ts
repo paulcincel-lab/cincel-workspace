@@ -32,13 +32,62 @@ export type CellEdit<Row> =
 
 export type CellEditKind = CellEdit<unknown>["kind"];
 
+/**
+ * Multi-select of people (#1038, e.g. a task's equipo de apoyo): a searchable
+ * list with checkboxes and avatars; Enter or closing saves. Its value is a
+ * list of ids, so it sits beside the single-value kinds of `CellEdit`.
+ */
+export type PeopleCellEdit<Row> = {
+  kind: "people";
+  /** The ids currently picked. */
+  value(row: Row): string[];
+  /** Saves the whole list (`[]` clears). Undo calls it again with the previous list. */
+  commit(row: Row, ids: string[]): Promise<ActionResult<unknown>>;
+  options(row: Row): CellOption[];
+  /** Ids that can't be picked for this row (e.g. its Responsable). */
+  exclude?(row: Row): string[];
+  /** Shown beside an excluded option ("Ya es responsable"). */
+  excludedLabel?: string;
+};
+
+/** What a column's `edit` takes: a single-value kind or the people multi-select. */
+export type AnyCellEdit<Row> = CellEdit<Row> | PeopleCellEdit<Row>;
+export type AnyCellEditKind = AnyCellEdit<unknown>["kind"];
+
+export function isPeopleEdit<Row>(edit: AnyCellEdit<Row> | undefined): edit is PeopleCellEdit<Row> {
+  return edit?.kind === "people";
+}
+
+/** Avatars a people cell shows at rest before "+n". */
+export const PEOPLE_MAX_AVATARS = 3;
+/** The overflow after `PEOPLE_MAX_AVATARS` avatars ("+2"). */
+export const PEOPLE_OVERFLOW = (n: number): string => `+${n}`;
+/** A people cell with nobody picked. */
+export const PEOPLE_EMPTY = "—";
+/** Keys of the people editor, in its footer. */
+export const PEOPLE_HINT = { left: "↑↓ elegir · Espacio marcar · Enter guardar", right: "Esc cerrar" } as const;
+
+/** What a cell saves: one value (`null` clears) or, for a people cell, the whole list. */
+export type CellValue = string | null | string[];
+
+/** Same value: lists compare as sets (order and repeats don't count). */
+export function sameCellValue(a: CellValue, b: CellValue): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    const left = new Set(a);
+    const right = new Set(b);
+    return left.size === right.size && [...left].every((id) => right.has(id));
+  }
+  return a === b;
+}
+
 /** true, or the reason shown when the viewer clicks a locked cell */
 export type CanEdit<Row> = (row: Row) => true | string;
 
 /** How a cell behaves: calculated (no edit), locked with a reason, or editable. */
 export type CellEditState = { state: "inert" } | { state: "locked"; reason: string } | { state: "editable" };
 
-export function cellEditState<Row>(row: Row, edit?: CellEdit<Row>, canEdit?: CanEdit<Row>): CellEditState {
+export function cellEditState<Row>(row: Row, edit?: AnyCellEdit<Row>, canEdit?: CanEdit<Row>): CellEditState {
   if (!edit) return { state: "inert" };
   const allowed = canEdit ? canEdit(row) : true;
   return allowed === true ? { state: "editable" } : { state: "locked", reason: allowed };
@@ -86,6 +135,8 @@ export const LOCK_REASON = {
   tramo: "Solo un admin puede mover la tarea de tramo.",
   /** Responsable without `canChangeResponsible`. */
   responsible: "Solo un admin puede cambiar el responsable.",
+  /** Apoyo (equipo de apoyo, #1038): the same permission as the Responsable. */
+  support: "Solo un admin puede cambiar el equipo de apoyo.",
   /** Estatus when `statusScope === "none"`. */
   status: "Tu rol no puede cambiar el estatus de las tareas.",
   /** Fase of a subtask: it inherits the parent's. */

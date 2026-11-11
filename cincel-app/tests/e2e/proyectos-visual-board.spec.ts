@@ -1,8 +1,8 @@
 /**
- * E2E: /proyectos in Visual (#992), "Tablero del portafolio": dragging a
- * project card from Diseño to Construcción moves its current tramo
- * (`setProjectCurrentTramoAction`), and dragging it back restores it. The
- * board updates right away (optimistic) and the database follows.
+ * E2E: /proyectos in Visual (#992, #1042), "Todos los proyectos": every
+ * active project is a card in the grid (the "Requieren atención" card, the
+ * tramo only as its chip), whatever its tramo; there is no tramo board and no
+ * drag. A click on a card opens the project.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -11,12 +11,12 @@ import { test, expect, type Page } from "@playwright/test";
 import { loginAsAdmin, seedAuth } from "./helpers/seed-auth";
 import { BASE_URL, withDb } from "./helpers/redesign";
 
-const PROJECT_NAME = `Tablero Visual E2E ${Date.now()}`;
+const PROJECT_NAME = `Grid Visual E2E ${Date.now()}`;
 
 let projectId = "";
 let tramos: Record<"diseno" | "construccion", string> = { diseno: "", construccion: "" };
 
-/** An active project in Diseño with Construcción already started, so either move is allowed. */
+/** An active project in Diseño (Construcción started too). */
 async function seedProject(): Promise<void> {
   await withDb(async (sql) => {
     const rows = await sql<{ id: string; key: string }[]>`
@@ -36,20 +36,8 @@ async function seedProject(): Promise<void> {
   });
 }
 
-async function currentTramo(): Promise<string | null> {
-  return withDb(async (sql) => {
-    const [row] = await sql<{ current_workflow_id: string | null }[]>`
-      select current_workflow_id from core.projects where id = ${projectId}`;
-    return row?.current_workflow_id ?? null;
-  });
-}
-
-function column(page: Page, key: "diseno" | "construccion") {
-  return page.locator(`[data-slot="board-column"][data-column="${key}"]`);
-}
-
 function card(page: Page) {
-  return page.locator(`[data-slot="board-card"][data-project="${projectId}"]`);
+  return page.locator(`[data-slot="project-grid"] [data-slot="project-card"][data-project="${projectId}"]`);
 }
 
 test.beforeAll(async () => {
@@ -64,24 +52,29 @@ test.afterAll(async () => {
   });
 });
 
-test.describe("Proyectos · Visual · Tablero del portafolio", () => {
+test.describe("Proyectos · Visual · Todos los proyectos", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
   });
 
-  test("drags a card from Diseño to Construcción and back", async ({ page }) => {
+  test("the project is a card in the grid with its tramo chip; a click opens it", async ({ page }) => {
     await page.goto(`${BASE_URL}/proyectos?estilo=visual`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Tablero del portafolio" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Arrastra un proyecto para moverlo de tramo")).toBeVisible();
-    await expect(column(page, "diseno").locator(card(page))).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Todos los proyectos" })).toBeVisible({ timeout: 30_000 });
+    // No tramo board.
+    await expect(page.getByRole("heading", { name: "Tablero del portafolio" })).toHaveCount(0);
+    await expect(page.getByText("Arrastra un proyecto para moverlo de tramo")).toHaveCount(0);
+    await expect(page.locator('[data-slot="board-column"]')).toHaveCount(0);
+    // The summary is about the portfolio, not the tramos.
+    const summary = page.getByRole("region", { name: "Resumen del portafolio" });
+    await expect(summary.locator('[data-slot="portfolio-summary"]')).toHaveCount(4);
 
-    await card(page).dragTo(column(page, "construccion"));
-    await expect(column(page, "construccion").locator(card(page))).toBeVisible({ timeout: 15_000 });
-    await expect.poll(currentTramo, { timeout: 15_000 }).toBe(tramos.construccion);
+    await expect(card(page)).toBeVisible();
+    await expect(card(page).getByText(PROJECT_NAME, { exact: true })).toBeVisible();
+    await expect(card(page).getByText("Diseño", { exact: true })).toBeVisible();
+    await expect(card(page)).not.toHaveAttribute("draggable", "true");
 
-    await card(page).dragTo(column(page, "diseno"));
-    await expect(column(page, "diseno").locator(card(page))).toBeVisible({ timeout: 15_000 });
-    await expect.poll(currentTramo, { timeout: 15_000 }).toBe(tramos.diseno);
+    await card(page).click();
+    await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}(?:[/?#]|$)`), { timeout: 15_000 });
   });
 });

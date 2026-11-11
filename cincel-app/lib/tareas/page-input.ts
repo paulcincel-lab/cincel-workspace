@@ -20,6 +20,8 @@ const TareasFilterFields = {
   q: z.string().max(TAREAS_SEARCH_MAX).nullable(),
   /** Left out for "todas" (`TareasListFilters.mostrar`). */
   mostrar: z.enum(TAREAS_MOSTRAR).optional(),
+  /** "Incluir apoyo" off; left out when on (`TareasListFilters.apoyo`). */
+  apoyo: z.literal(false).optional(),
 };
 
 /** The URL filters every view shares (`TareasListFilters`). */

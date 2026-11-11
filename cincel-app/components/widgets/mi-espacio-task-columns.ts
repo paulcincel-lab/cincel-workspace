@@ -1,7 +1,21 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
-import { LOCK_REASON, type CellEdit, type CellOption } from "@/components/widgets/editable-cell";
-import { setTaskCustomStatusAction, setTaskStatusAction, updateTaskAction } from "@/lib/actions/tasks-actions";
+import {
+  TASK_SUPPORT_COLUMN,
+  taskSupportExclude,
+  taskSupportIds,
+  taskSupportLock,
+  taskSupportOptions,
+  taskWithSupport,
+} from "@/components/tareas/task-cell-edits";
+import { SUPPORT_COLUMN_LABEL, SUPPORT_IS_RESPONSIBLE } from "@/components/tareas/task-table-copy";
+import { LOCK_REASON, type CellEdit, type CellOption, type PeopleCellEdit } from "@/components/widgets/editable-cell";
+import {
+  setTaskCustomStatusAction,
+  setTaskStatusAction,
+  setTaskSupportAction,
+  updateTaskAction,
+} from "@/lib/actions/tasks-actions";
 import type { ActivitiesCapabilities } from "@/lib/auth/permissions";
 import type { TaskRow } from "@/lib/my-space/my-tasks";
 import { qk } from "@/lib/query/keys";
@@ -15,7 +29,7 @@ import {
   statusSelectItems,
   statusSelectValue,
 } from "@/lib/tasks/status-options";
-import type { TaskListItem, TaskPatch, TaskPriority, TaskStatusOption } from "@/lib/types/core";
+import type { StaffRef, TaskListItem, TaskPatch, TaskPriority, TaskStatusOption } from "@/lib/types/core";
 import type { ActionResult } from "@/lib/types/schedule";
 import type { RecordColumn } from "@/lib/types/widgets";
 
@@ -29,7 +43,10 @@ import type { RecordColumn } from "@/lib/types/widgets";
  */
 export type MiEspacioColumnsDeps = {
   qc: QueryClient;
-  capabilities: Pick<ActivitiesCapabilities, "canCreateActivity" | "statusScope">;
+  capabilities: Pick<ActivitiesCapabilities, "canCreateActivity" | "statusScope"> &
+    Partial<Pick<ActivitiesCapabilities, "canChangeResponsible">>;
+  /** People the Apoyo editor lists (#1038); empty while the catalog loads. */
+  staff?: readonly StaffRef[];
   /** Custom statuses of the catalog (after the base ones in the Estatus list). */
   statuses: readonly TaskStatusOption[];
   /**
@@ -81,6 +98,7 @@ export function miEspacioTaskColumns({
   qc,
   capabilities,
   statuses,
+  staff = [],
   left = new Map(),
 }: MiEspacioColumnsDeps): RecordColumn<TaskRow>[] {
 
@@ -167,8 +185,21 @@ export function miEspacioTaskColumns({
     commit: (row, v) => update(row, { priority: (v ?? "media") as TaskPriority }),
   };
 
+  // Apoyo (#1038): the Responsable's rule; a task I leave stays until the list refreshes.
+  const apoyo: PeopleCellEdit<TaskRow> = {
+    kind: "people",
+    value: (row) => taskSupportIds(row),
+    options: () => taskSupportOptions(staff),
+    exclude: (row) => taskSupportExclude(row),
+    excludedLabel: SUPPORT_IS_RESPONSIBLE,
+    commit: (row, ids) => save(row, (task) => taskWithSupport(task, ids, staff), () => setTaskSupportAction(row.id, ids)),
+  };
+  const supportWriter = (): true | string =>
+    taskSupportLock({ caps: { canChangeResponsible: capabilities.canChangeResponsible === true } });
+
   return [
     { key: "title", label: "Tarea", width: 320, edit: title, canEdit: writer },
+    { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL, width: 110, edit: apoyo, canEdit: supportWriter },
     { key: "estatus", label: "Estatus", width: 140, edit: estatus, canEdit: statusWriter },
     { key: "vence", label: "Vence", mono: true, width: 90, edit: vence, canEdit: writer },
     { key: "prioridad", label: "Prioridad", width: 90, edit: prioridad, canEdit: writer },

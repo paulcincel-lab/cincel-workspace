@@ -1,8 +1,8 @@
 "use client";
 
-import { useId, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode, RefObject } from "react";
-import { LockIcon } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, MutableRefObject, ReactNode, RefObject } from "react";
+import { CheckIcon, LockIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
 import { Button } from "@/components/ui/shadcn/button";
@@ -18,13 +18,18 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Popover, PopoverContent } from "@/components/ui/shadcn/popover";
 import { getPersonInitials } from "@/components/ui/TeamMultiSelect";
 import {
+  type AnyCellEdit,
   type CellEdit,
   type CellOption,
+  type CellValue,
+  type PeopleCellEdit,
   CLEAR_LABEL,
   DATE_QUICK_PICKS,
   EMPTY_TITLE_ERROR,
   NO_RESULTS,
+  PEOPLE_HINT,
   quickPickDate,
+  sameCellValue,
   SEARCH_ARIA_LABEL,
   SEARCH_MIN_OPTIONS,
   SEARCH_PLACEHOLDER,
@@ -32,8 +37,10 @@ import {
 
 /**
  * The popover editor of one cell (#1023), anchored to the cell, built on the
- * shadcn Popover + Command primitives. One component for the four kinds
- * (select, person, date, text); a locked cell shows only its reason.
+ * shadcn Popover + Command primitives. One component for the five kinds
+ * (select, person, people, date, text); a locked cell shows only its reason.
+ * The people multi-select (#1038) keeps its picks as a draft: Enter, Tab or
+ * closing the editor (Esc, a click outside) saves them.
  *
  * The editor doesn't save by itself: it reports the chosen value through
  * `onCommitted` (only when it differs from `edit.value(row)`) and closes;
@@ -42,14 +49,14 @@ import {
 export type CellEditorProps<Row> = {
   /** The cell element the popover is anchored to; focus returns to it on close. */
   anchor: HTMLElement | null;
-  edit: CellEdit<Row>;
+  edit: AnyCellEdit<Row>;
   row: Row;
   /** `canEdit(row)` result: true, or the lock reason shown instead of the editor. */
   canEdit: true | string;
   open: boolean;
   onOpenChange(open: boolean): void;
-  /** Called with the chosen value after a save (Enter, a pick, Tab). */
-  onCommitted?(value: string | null): void;
+  /** Called with the chosen value after a save (Enter, a pick, Tab; a people cell also on close). */
+  onCommitted?(value: CellValue): void;
   /** Tab inside the editor: saved; the table moves to the next editable cell in the row. */
   onTabNext?(): void;
   /** Letter typed on the cell that opened a list editor; seeds its search. */
@@ -64,27 +71,55 @@ type BodyProps<Row> = {
   label?: string;
   focusRef: RefObject<HTMLElement | null>;
   /** Saves `value` (when it changed) and closes; `next` moves on to the next cell. */
-  finish(value: string | null, next: boolean): void;
+  finish(value: CellValue, next: boolean): void;
   close(): void;
 };
 
 export function CellEditor<Row>(props: CellEditorProps<Row>): ReactNode {
   const { anchor, edit, row, canEdit, open, onOpenChange, onCommitted, onTabNext, initialQuery, label } = props;
   const focusRef = useRef<HTMLElement | null>(null);
+  // People: the picks not saved yet (null until one changes); closing saves them.
+  const draftRef = useRef<string[] | null>(null);
 
-  const close = () => onOpenChange(false);
-  const finish = (value: string | null, next: boolean) => {
-    if (value !== edit.value(row)) onCommitted?.(value);
+  const saveDraft = () => {
+    const draft = draftRef.current;
+    draftRef.current = null;
+    if (draft === null || canEdit !== true || edit.kind !== "people") return;
+    if (!sameCellValue(draft, edit.value(row))) onCommitted?.(draft);
+  };
+  const latestSave = useRef(saveDraft);
+  useEffect(() => {
+    latestSave.current = saveDraft;
+  });
+  // Closed from outside (the cell toggled it): the picks still save.
+  useEffect(() => {
+    if (!open) latestSave.current();
+  }, [open]);
+
+  const close = () => {
+    saveDraft();
+    onOpenChange(false);
+  };
+  const finish = (value: CellValue, next: boolean) => {
+    draftRef.current = null;
+    if (!sameCellValue(value, edit.value(row))) onCommitted?.(value);
     onOpenChange(false);
     if (next) onTabNext?.();
   };
 
   const body: BodyProps<Row> = { row, label, focusRef, finish, close };
   const anchorWidth = anchor?.offsetWidth ?? 0;
-  const minWidth = edit.kind === "text" ? Math.max(260, anchorWidth) : edit.kind === "date" ? 280 : Math.max(220, anchorWidth);
+  const minWidth =
+    edit.kind === "text"
+      ? Math.max(260, anchorWidth)
+      : edit.kind === "date"
+        ? 280
+        : edit.kind === "people"
+          ? Math.max(240, anchorWidth)
+          : Math.max(220, anchorWidth);
 
   return (
-    <Popover open={open} onOpenChange={(next) => onOpenChange(next)}>
+    <Popover open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <PopoverContent
         anchor={anchor}
         side="bottom"
@@ -103,6 +138,8 @@ export function CellEditor<Row>(props: CellEditorProps<Row>): ReactNode {
       >
         {canEdit !== true ? (
           <LockedBody reason={canEdit} focusRef={focusRef} />
+        ) : edit.kind === "people" ? (
+          <PeopleBody {...body} edit={edit} draftRef={draftRef} initialQuery={initialQuery} />
         ) : edit.kind === "select" || edit.kind === "person" ? (
           <ListBody {...body} edit={edit} initialQuery={initialQuery} />
         ) : edit.kind === "date" ? (
@@ -235,6 +272,120 @@ function ListBody<Row>({
         </CommandGroup>
       </CommandList>
       <Hint left="↑↓ elegir · Enter guardar" right="Esc cerrar" />
+    </Command>
+  );
+}
+
+/**
+ * The people multi-select (#1038): a search box over the options, each with
+ * a checkbox and its avatar; the excluded ones (the row's Responsable) show
+ * why and can't be picked. Space or a click toggles; Enter and Tab save.
+ */
+function PeopleBody<Row>({
+  edit,
+  row,
+  label,
+  focusRef,
+  finish,
+  draftRef,
+  initialQuery,
+}: BodyProps<Row> & {
+  edit: PeopleCellEdit<Row>;
+  draftRef: MutableRefObject<string[] | null>;
+  initialQuery?: string;
+}) {
+  const [initial] = useState(() => edit.value(row));
+  const [picked, setPicked] = useState<string[]>(initial);
+  const excluded = useMemo(() => new Set(edit.exclude?.(row) ?? []), [edit, row]);
+  // Picked people first (as the editor opened, so rows don't jump while toggling), then the rest.
+  const entries = useMemo<Entry[]>(() => {
+    const was = new Set(initial);
+    const options = edit.options(row).filter((o): o is CellOption & { value: string } => o.value !== null);
+    const ordered = [...options.filter((o) => was.has(o.value)), ...options.filter((o) => !was.has(o.value))];
+    return ordered.map((option) => ({ id: `p:${option.value}`, option }));
+  }, [edit, row, initial]);
+
+  const [query, setQuery] = useState(initialQuery ?? "");
+  const shown = useMemo(() => {
+    const term = fold(query.trim());
+    return term ? entries.filter((e) => fold(e.option.label).includes(term)) : entries;
+  }, [entries, query]);
+  const firstPickable = (list: Entry[]) => list.find((e) => !excluded.has(e.option.value ?? ""))?.id ?? "";
+  const [highlighted, setHighlighted] = useState(() => firstPickable(shown));
+
+  const toggle = (id: string) => {
+    const value = entries.find((e) => e.id === id)?.option.value;
+    if (!value || excluded.has(value)) return;
+    const next = picked.includes(value) ? picked.filter((v) => v !== value) : [...picked, value];
+    setPicked(next);
+    draftRef.current = next;
+  };
+
+  return (
+    <Command
+      shouldFilter={false}
+      loop={false}
+      value={highlighted}
+      onValueChange={setHighlighted}
+      label={label}
+      className="rounded-lg! outline-none"
+      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          finish(picked, event.key === "Tab");
+        } else if (event.key === " ") {
+          event.preventDefault();
+          toggle(highlighted);
+        }
+      }}
+    >
+      <CommandInput
+        ref={(el) => {
+          focusRef.current = el;
+        }}
+        value={query}
+        onValueChange={(next) => {
+          setQuery(next);
+          const term = fold(next.trim());
+          setHighlighted(firstPickable(term ? entries.filter((e) => fold(e.option.label).includes(term)) : entries));
+        }}
+        placeholder={SEARCH_PLACEHOLDER(label ?? "persona")}
+        aria-label={SEARCH_ARIA_LABEL}
+      />
+      <CommandList aria-multiselectable="true">
+        <CommandEmpty className="py-3">{NO_RESULTS}</CommandEmpty>
+        <CommandGroup>
+          {shown.map(({ id, option }) => {
+            const value = option.value ?? "";
+            const off = excluded.has(value);
+            const checked = picked.includes(value);
+            return (
+              <CommandItem
+                key={id}
+                value={id}
+                disabled={off}
+                aria-checked={checked}
+                data-slot="people-option"
+                onSelect={() => toggle(id)}
+              >
+                <span
+                  aria-hidden="true"
+                  data-checked={checked || undefined}
+                  className="flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground"
+                >
+                  {checked ? <CheckIcon className="size-3" /> : null}
+                </span>
+                <OptionMark option={option} />
+                <span className="truncate">{option.label}</span>
+                {off && edit.excludedLabel ? (
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">{edit.excludedLabel}</span>
+                ) : null}
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
+      </CommandList>
+      <Hint left={PEOPLE_HINT.left} right={PEOPLE_HINT.right} />
     </Command>
   );
 }
