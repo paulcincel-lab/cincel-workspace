@@ -79,6 +79,12 @@ type DataTableProps<T> = {
   isLoading?: boolean;
   loadingMessage?: string;
   initialSorting?: SortingState;
+  /**
+   * A sort the page applies (on the server): the table keeps the rows in the
+   * order they come and a header click only reports the column. Only the
+   * `sortable` column ids get a sort button.
+   */
+  manualSort?: DataTableManualSort;
   searchPlaceholder?: string;
   /** Extra classes on the inner <table> — e.g. `min-w-[1100px]` for wide tables. */
   tableClassName?: string;
@@ -115,6 +121,13 @@ type DataTableProps<T> = {
 } & TableSelectionProps<T> &
   TableRowActionsProps<T>;
 
+/** A controlled header sort (`DataTable.manualSort`). */
+export type DataTableManualSort = {
+  sortable: readonly string[];
+  sort: { key: string; direction: "asc" | "desc" } | null;
+  onSortChange(key: string): void;
+};
+
 function groupRows<R>(rows: R[], keyOf: (row: R) => string): { key: string; rows: R[] }[] {
   const groups = new Map<string, R[]>();
   for (const row of rows) {
@@ -145,6 +158,7 @@ export function DataTable<T>({
   isLoading = false,
   loadingMessage = "Cargando…",
   initialSorting = [],
+  manualSort,
   searchPlaceholder,
   tableClassName = "",
   wrapperClassName = "",
@@ -162,7 +176,12 @@ export function DataTable<T>({
   rowActions,
   onRowDelete,
 }: DataTableProps<T>): ReactNode {
-  const [sorting, setSorting] = useState<SortingState>(initialSorting);
+  const [localSorting, setSorting] = useState<SortingState>(initialSorting);
+  const sorting: SortingState = manualSort
+    ? manualSort.sort
+      ? [{ id: manualSort.sort.key, desc: manualSort.sort.direction === "desc" }]
+      : []
+    : localSorting;
   const [globalFilter, setGlobalFilter] = useState("");
   const [dragRowId, setDragRowId] = useState<string | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
@@ -177,7 +196,8 @@ export function DataTable<T>({
     data,
     columns,
     state: { sorting, ...(searchPlaceholder ? { globalFilter } : {}) },
-    onSortingChange: setSorting,
+    onSortingChange: manualSort ? undefined : setSorting,
+    manualSorting: Boolean(manualSort),
     onGlobalFilterChange: searchPlaceholder ? setGlobalFilter : undefined,
     getRowId: getRowId ? (row, index) => getRowId(row, index) : undefined,
     getCoreRowModel: getCoreRowModel(),
@@ -248,12 +268,17 @@ export function DataTable<T>({
                 )
               ) : null}
               {headerGroup.headers.map((header) => {
-                const sortable = header.column.getCanSort();
+                const sortable = manualSort
+                  ? manualSort.sortable.includes(header.column.id)
+                  : header.column.getCanSort();
+                const onSortClick = manualSort
+                  ? () => manualSort.onSortChange(header.column.id)
+                  : header.column.getToggleSortingHandler();
                 return (
                   <TableHead
                     key={header.id}
                     className={`${sortable ? "cursor-pointer select-none" : ""} ${headerClassName?.(header.column.id) ?? ""}`}
-                    onClick={sortable ? header.column.getToggleSortingHandler() : undefined}
+                    onClick={sortable ? onSortClick : undefined}
                     aria-sort={
                       header.column.getIsSorted() === "asc"
                         ? "ascending"

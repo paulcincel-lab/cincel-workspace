@@ -11,6 +11,7 @@ import { BASE_STATUSES, BASE_STATUS_LABEL, isTaskClosed } from "@/lib/tasks/stat
 import { pctVencidas, retrasoPromedio, type TareasSummaryCounts } from "@/lib/tareas/summary";
 import type { TaskListItem } from "@/lib/types/core";
 import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
+import { NESTED_ROW_PARENT } from "@/components/widgets/record-table-format";
 
 import { PRIORITY_LABEL, daysLate, localIsoDate, taskDueDate } from "./tablero-table";
 import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
@@ -168,9 +169,14 @@ export function listaRow(task: TaskListItem, today: string, summary: ProjectSumm
  * The Lista `RecordTableData`: grouped by estatus, sorted by delay, with the
  * by-project summary columns and a totals row over the whole list.
  */
-export function listaTable(tasks: TaskListItem[], today: string = localIsoDate()): RecordTableData {
+export function listaTable(
+  tasks: TaskListItem[],
+  today: string = localIsoDate(),
+  opts: { serverOrder?: boolean } = {},
+): RecordTableData {
   const summaries = projectSummaries(tasks, today);
-  const sorted = sortListaTasks(tasks, today);
+  // With a header sort (#1044) the server already ordered the rows.
+  const sorted = opts.serverOrder ? tasks : sortListaTasks(tasks, today);
   const rows = sorted.map((t) => listaRow(t, today, summaries.get(t.project.id) ?? summarize([t], today)));
   const overall = summarize(tasks, today);
   return {
@@ -187,6 +193,31 @@ export function listaTable(tasks: TaskListItem[], today: string = localIsoDate()
     },
     heat: [{ ...OVERDUE_SHARE_HEAT }],
   };
+}
+
+/**
+ * The Lista rows with each open parent's subtasks right after it (#1048):
+ * a subtask row keeps its parent's estatus group (it stays under the
+ * parent), carries `NESTED_ROW_PARENT` (drawn lighter) and leaves the
+ * by-project summary cells empty. The totals stay the parents'.
+ */
+export function withSubtaskRows(
+  rows: Record<string, unknown>[],
+  childrenOf: (parentId: string) => TaskListItem[] | undefined,
+  today: string = localIsoDate(),
+): Record<string, unknown>[] {
+  const blank = { abiertas: null, vencidas: null, pctVencidas: null, retrasoPromedio: null };
+  return rows.flatMap((row) => {
+    const children = childrenOf(String(row.id));
+    if (!children || children.length === 0) return [row];
+    const nested = children.map((child) => ({
+      ...listaRow(child, today, projectSummaryOf(summaryCountsOf([child], today))),
+      ...blank,
+      estatus: row.estatus,
+      [NESTED_ROW_PARENT]: row.id,
+    }));
+    return [row, ...nested];
+  });
 }
 
 /**

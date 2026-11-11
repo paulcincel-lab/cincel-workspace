@@ -10,6 +10,8 @@
 import { tramoLabel } from "@/lib/tramos/compat";
 import { ADMIN_GROUP_LABEL, groupFichaTasks } from "@/lib/proyectos/task-groups";
 import { isDueDateLate, isTaskClosed, isTaskCompleted, taskStatusLabel } from "@/lib/tasks/status-options";
+import type { TareasListFilters } from "@/lib/query/keys";
+import { TAREAS_ORDEN_PARAM, formatSortParam, parseSortParam, type TaskSort } from "@/lib/tareas/sort";
 import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { RecordTableData } from "@/lib/types/widgets";
 
@@ -30,7 +32,13 @@ export const PROJECT_TASK_ESTADO_LABEL: Record<ProjectTaskEstado, string> = {
 };
 
 /** `?estado=&responsable=&q=` of `/proyectos/[id]/tareas`. `responsable` is a staff id or "sin" (unassigned). */
-export type ProjectTasksQuery = { estado: ProjectTaskEstado; responsable: string | null; q: string };
+export type ProjectTasksQuery = {
+  estado: ProjectTaskEstado;
+  responsable: string | null;
+  q: string;
+  /** `?orden=<columna>:<dir>` (#1044): the header sort, on the server; left out for the default order. */
+  orden?: TaskSort | null;
+};
 
 export const UNASSIGNED_FILTER = "sin";
 
@@ -43,10 +51,12 @@ function first(value: SearchParamValue): string | undefined {
 export function parseProjectTasksQuery(sp: Record<string, SearchParamValue>): ProjectTasksQuery {
   const estado = first(sp.estado);
   const responsable = first(sp.responsable)?.trim() || null;
+  const orden = parseSortParam(first(sp[TAREAS_ORDEN_PARAM]));
   return {
     estado: PROJECT_TASK_ESTADOS.includes(estado as ProjectTaskEstado) ? (estado as ProjectTaskEstado) : "todas",
     responsable,
     q: first(sp.q)?.trim() ?? "",
+    ...(orden ? { orden } : {}),
   };
 }
 
@@ -57,6 +67,8 @@ export function projectTasksHref(projectId: string, query: ProjectTasksQuery, pa
   if (next.estado !== "todas") params.set("estado", next.estado);
   if (next.responsable) params.set("responsable", next.responsable);
   if (next.q) params.set("q", next.q);
+  const orden = next.orden ? formatSortParam(next.orden.orderBy, next.orden.orderDir) : null;
+  if (orden) params.set(TAREAS_ORDEN_PARAM, orden);
   const search = params.toString();
   return `/proyectos/${encodeURIComponent(projectId)}/tareas${search ? `?${search}` : ""}`;
 }
@@ -264,7 +276,7 @@ export function groupProjectTasks(
 }
 
 /** Group label as the grouped table shows it: "Instalaciones · 90%". */
-export function groupHeading(group: ProjectTaskGroup): string {
+export function groupHeading(group: Pick<ProjectTaskGroup, "label" | "progressPct">): string {
   return `${group.label} · ${group.progressPct}%`;
 }
 
@@ -354,14 +366,14 @@ export function buildTasksTable(groups: ProjectTaskGroup[], today: string): Reco
 }
 
 /** Row of the per-group summary; `group` feeds the "Agregar tarea" cell. */
-export type ProjectGroupRow = Record<string, unknown> & { id: string; group: ProjectTaskGroup };
+export type ProjectGroupRow = Record<string, unknown> & { id: string; group: ProjectTaskGroupSummary };
 
 /**
  * Per-group summary ("Avance por fase" / "Avance por tramo"): name, tareas,
  * avance and the "Agregar tarea" action in every style; the status breakdown
  * and the totals row only in Analítico.
  */
-export function buildGroupsTable(groups: ProjectTaskGroup[], mode: ProjectTaskGroupMode): RecordTableData {
+export function buildGroupsTable(groups: ProjectTaskGroupSummary[], mode: ProjectTaskGroupMode): RecordTableData {
   const rows: ProjectGroupRow[] = groups.map((group) => ({
     id: group.id,
     group,
@@ -374,7 +386,7 @@ export function buildGroupsTable(groups: ProjectTaskGroup[], mode: ProjectTaskGr
     avance: group.progressPct,
     agregar: "",
   }));
-  const sum = (pick: (g: ProjectTaskGroup) => number) => groups.reduce((acc, g) => acc + pick(g), 0);
+  const sum = (pick: (g: ProjectTaskGroupSummary) => number) => groups.reduce((acc, g) => acc + pick(g), 0);
   const total = sum((g) => g.total);
   const completed = sum((g) => g.completed);
   return {
@@ -403,6 +415,165 @@ export function buildGroupsTable(groups: ProjectTaskGroup[], mode: ProjectTaskGr
 }
 
 /** Admin tasks are created from their own card; every other group offers "+ Agregar tarea". */
-export function canAddToGroup(group: ProjectTaskGroup): boolean {
+export function canAddToGroup(group: Pick<ProjectTaskGroup, "kind">): boolean {
   return group.kind !== "admin";
+}
+
+// ── Server summary and paged rows (#1051) ────────────────────────────────────
+
+/** A group without its rows: what the "Avance por fase" table and the row group labels need. */
+export type ProjectTaskGroupSummary = Omit<ProjectTaskGroup, "tasks">;
+
+/**
+ * `qk.proyectos.tareasSummary(id, { responsable, q })`: everything the tab
+ * counts, computed on the server so the client loads only the rows it shows.
+ * The groups cover every task of the project; the chip counts follow the
+ * Responsable and search filters (not the estado chip).
+ */
+export type ProyectoTareasSummary = {
+  /** `canSeeAdminData`: the tab shows the "Administración" group. */
+  includeAdmin: boolean;
+  mode: ProjectTaskGroupMode;
+  groups: ProjectTaskGroupSummary[];
+  /** Per estado chip, over the tasks matching the Responsable and search filters. */
+  counts: Record<ProjectTaskEstado, number>;
+  /** Every listed task of the project ("Buscar en N tareas", "de N mostradas"). */
+  total: number;
+  /** The Responsable options: the people who manage at least one task, by name. */
+  people: { id: string; name: string }[];
+  /** Some task has no Responsable ("Sin asignar" option). */
+  hasUnassigned: boolean;
+};
+
+/** The summary of the project's tasks (`tasks`: every task the viewer may see; server side). */
+export function summarizeProjectTasks(
+  tasks: ProjectTask[],
+  options: { includeAdmin: boolean; today: string; responsable: string | null; q: string },
+): ProyectoTareasSummary {
+  const rows = topLevelTasks(options.includeAdmin ? tasks : tasks.filter((task) => task.kind !== "admin"));
+  const { mode, groups } = groupProjectTasks(rows, { includeAdmin: options.includeAdmin, today: options.today });
+  const byPerson = filterByPersonAndSearch(rows, { responsable: options.responsable, q: options.q });
+  return {
+    includeAdmin: options.includeAdmin,
+    mode,
+    groups: groups.map(({ tasks: _tasks, ...group }) => {
+      void _tasks;
+      return group;
+    }),
+    counts: estadoCounts(byPerson, options.today),
+    total: rows.length,
+    people: responsableOptions(rows),
+    hasUnassigned: rows.some((task) => !task.managerId),
+  };
+}
+
+const NO_PHASE_GROUP_ID = "__sin_fase__";
+const SIN_TRAMO_GROUP_ID = "__sin_tramo__";
+const ADMIN_GROUP_ID = "__administracion__";
+
+/** The id of the group a task falls in, as `groupProjectTasks` builds them. */
+export function projectTaskGroupId(task: Pick<ProjectTask, "kind" | "workflow" | "phase">, mode: ProjectTaskGroupMode): string {
+  if (task.kind === "admin") return ADMIN_GROUP_ID;
+  if (!task.workflow) return SIN_TRAMO_GROUP_ID;
+  if (mode === "tramo") return task.workflow.id;
+  return `${task.workflow.id}:${task.phase?.id ?? NO_PHASE_GROUP_ID}`;
+}
+
+/**
+ * The loaded rows under their groups, in the summary's group order (the
+ * server pages in tramo → fase order, so a group fills up as pages load). A
+ * row whose group the summary doesn't know yet (a task created meanwhile)
+ * gets a group of its own until the summary refreshes.
+ */
+export function groupLoadedTasks(rows: ProjectTask[], summary: Pick<ProyectoTareasSummary, "mode" | "groups">): ProjectTaskGroup[] {
+  const buckets = new Map<string, ProjectTask[]>();
+  for (const task of rows) {
+    const id = projectTaskGroupId(task, summary.mode);
+    const bucket = buckets.get(id) ?? [];
+    bucket.push(task);
+    buckets.set(id, bucket);
+  }
+  const out: ProjectTaskGroup[] = [];
+  for (const group of summary.groups) {
+    const tasks = buckets.get(group.id);
+    if (!tasks) continue;
+    out.push({ ...group, tasks });
+    buckets.delete(group.id);
+  }
+  for (const [id, tasks] of buckets) {
+    const [sample] = tasks;
+    const label = sample.kind === "admin" ? ADMIN_GROUP_LABEL : (sample.phase?.name ?? sample.workflow?.name ?? "Tareas");
+    out.push({
+      id,
+      label,
+      kind: sample.kind === "admin" ? "admin" : sample.workflow ? (summary.mode === "fase" ? "fase" : "tramo") : "sin_tramo",
+      tramo: sample.workflow ?? null,
+      phase: sample.phase ?? null,
+      tasks,
+      total: tasks.length,
+      completed: 0,
+      inProgress: 0,
+      pending: 0,
+      lateOrBlocked: 0,
+      progressPct: 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * The tab's task list as `qk.tareas.list(f)` filters: the project, the
+ * estado chip (Abiertas → open, Vencidas → open and overdue, Completadas →
+ * completado), the Responsable (managed by, not apoyo; "sin" for none), the
+ * search, and "Ocultar completadas". Admin tasks for an administrator.
+ */
+export function projectTasksListFilters(
+  projectId: string,
+  query: ProjectTasksQuery,
+  options: { hideCompleted: boolean; includeAdmin: boolean },
+): TareasListFilters {
+  const responsable = query.responsable ?? null;
+  const mostrar =
+    query.estado === "vencidas" ? "en_retraso" : query.estado === "abiertas" || options.hideCompleted ? "abiertas" : undefined;
+  return {
+    tramo: null,
+    proyecto: projectId,
+    responsable,
+    estado: query.estado === "completadas" ? "completado" : null,
+    q: query.q.trim() || null,
+    ...(mostrar ? { mostrar } : {}),
+    ...(responsable && responsable !== UNASSIGNED_FILTER ? { apoyo: false as const } : {}),
+    ...(options.includeAdmin ? { incluirAdmin: true as const } : {}),
+    ...(query.orden ? { orderBy: query.orden.orderBy } : {}),
+    ...(query.orden?.orderDir === "desc" ? { orderDir: "desc" as const } : {}),
+  };
+}
+
+/** Closed tasks "Ocultar completadas" leaves out of the estado chip's list, from the summary counts. */
+export function hiddenCompletedOf(counts: Record<ProjectTaskEstado, number>, estado: ProjectTaskEstado, hideCompleted: boolean): number {
+  if (!hideCompleted) return 0;
+  if (estado === "todas") return Math.max(0, counts.todas - counts.abiertas);
+  if (estado === "completadas") return counts.completadas;
+  return 0;
+}
+
+/** The URL's responsable as the server takes it: a staff id or "sin"; anything else is no filter. */
+export function validResponsable(value: string | null): string | null {
+  if (!value) return null;
+  if (value === UNASSIGNED_FILTER) return value;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null;
+}
+
+/** The tab's keys for its URL filters (page prefetch and client alike): the summary and the list. */
+export function projectTareasKeysOf(
+  projectId: string,
+  query: ProjectTasksQuery,
+  options: { hideCompleted: boolean; includeAdmin: boolean },
+): { summary: { responsable: string | null; q: string }; list: TareasListFilters } {
+  const responsable = validResponsable(query.responsable);
+  const q = query.q.trim();
+  return {
+    summary: { responsable, q },
+    list: projectTasksListFilters(projectId, { ...query, responsable, q }, options),
+  };
 }
