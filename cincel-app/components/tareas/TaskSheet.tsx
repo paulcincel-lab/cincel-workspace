@@ -10,7 +10,6 @@ import TaskDependencies from "@/components/tareas/TaskDependencies";
 import {
   TASK_ATTACHMENT_ACCEPT,
   TaskAttachmentGrid,
-  TaskChecklistEditor,
   TaskPhaseSelect,
   TaskSpaceSelect,
   TaskTramoSelect,
@@ -19,14 +18,10 @@ import {
   useTaskSheetCatalogs,
 } from "@/components/tareas/task-detail-fields";
 import {
-  useAddChecklistItemMutation,
   useAddTaskAttachmentMutation,
   useAddTaskCommentMutation,
   useAssignTaskMutation,
-  useRemoveChecklistItemMutation,
-  useReorderChecklistMutation,
   useTaskStatusMutation,
-  useToggleChecklistItemMutation,
   useUpdateTaskMutation,
 } from "@/components/tareas/task-sheet-mutations";
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
@@ -37,7 +32,6 @@ import { ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel"
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
-import { Progress } from "@/components/ui/shadcn/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { StatusChip } from "@/components/widgets/StatusChip";
@@ -49,7 +43,7 @@ import { mutationErrorText } from "@/lib/query/mutation";
 import { taskSheetOptions } from "@/lib/query/options/tareas";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { isDueDateLate, parseStatusValue, statusSelectItems, statusSelectValue } from "@/lib/tasks/status-options";
-import type { StaffRef, TaskChecklistItem, TaskPatch, TaskPriority, TaskRef } from "@/lib/types/core";
+import type { StaffRef, TaskPatch, TaskPriority, TaskRef } from "@/lib/types/core";
 
 import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 
@@ -360,10 +354,6 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const update = useUpdateTaskMutation(target, mutationOptions);
   const status = useTaskStatusMutation(target, statuses, mutationOptions);
   const assign = useAssignTaskMutation(target, mutationOptions);
-  const addItem = useAddChecklistItemMutation(target, mutationOptions);
-  const toggleItem = useToggleChecklistItemMutation(target, mutationOptions);
-  const removeItem = useRemoveChecklistItemMutation(target, mutationOptions);
-  const reorderItems = useReorderChecklistMutation(target, mutationOptions);
   const attach = useAddTaskAttachmentMutation(target, mutationOptions);
   // The composer shows its own error.
   const comment = useAddTaskCommentMutation(target, { onError: () => undefined });
@@ -435,9 +425,6 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const showSpace = !isAdminTask && spaceOptions.length > 0;
   const isSubtask = Boolean(task.parentTaskId && task.parentTitle !== null);
   const lateCommitment = isDueDateLate(task.commitmentDate, todayIso(), task);
-  const checklistDone = task.checklistItems.filter((i) => i.completed).length;
-  const checklistTotal = task.checklistItems.length;
-  const checklistPct = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0;
   const managerMissing = task.manager !== null && !staff.some((s) => s.id === task.manager?.id);
 
   const patch = (next: TaskPatch) => {
@@ -464,9 +451,9 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
     await update.mutateAsync(next);
   };
 
-  const addAttachment = (file: File, checklistItemId?: string) => {
+  const addAttachment = (file: File) => {
     setError(null);
-    attach.mutate({ file, checklistItemId });
+    attach.mutate({ file });
   };
 
   const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -484,7 +471,6 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
     commitment: `tarea-${task.id}-compromiso`,
     late: `tarea-${task.id}-vencida`,
     review: `tarea-${task.id}-revision`,
-    checklist: `tarea-${task.id}-checklist`,
     files: `tarea-${task.id}-adjuntos`,
     activity: `tarea-${task.id}-actividad`,
   };
@@ -732,41 +718,6 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
             placeholder="Agrega una descripción"
             onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
           />
-        </section>
-
-        <section aria-labelledby={ids.checklist} className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <h3 id={ids.checklist} className="text-base font-semibold text-foreground">
-              Checklist
-            </h3>
-            <span className="font-mono text-xs text-muted-foreground">
-              {checklistDone}/{checklistTotal}
-            </span>
-          </div>
-          {checklistTotal > 0 ? <Progress value={checklistPct} aria-label="Avance del checklist" /> : null}
-          <div className="space-y-2">
-            <TaskChecklistEditor
-              task={task}
-              onAdd={(title) => {
-                setError(null);
-                addItem.mutate(title);
-              }}
-              onToggle={(item: TaskChecklistItem) => {
-                setError(null);
-                toggleItem.mutate(item);
-              }}
-              onRemove={(item: TaskChecklistItem) => {
-                setError(null);
-                removeItem.mutate(item);
-              }}
-              onReorder={(orderedIds) => {
-                setError(null);
-                reorderItems.mutate(orderedIds);
-              }}
-              onAddPhoto={(item, file) => addAttachment(file, item.id)}
-              onPhotoError={setAttachmentError}
-            />
-          </div>
         </section>
 
         {!isSubtask ? (

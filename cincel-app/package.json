@@ -26,6 +26,7 @@
     "monday:codegen": "graphql-codegen --config scripts/monday/codegen.ts",
     "monday:schema": "tsx scripts/monday/fetch-schema.ts",
     "flow:report": "tsx scripts/project-flow-report.ts",
+    "tasks:convert-checklists": "tsx scripts/convert-task-checklists.ts",
     "themes:css": "tsx scripts/themes-css.ts"
   },
   "dependencies": {

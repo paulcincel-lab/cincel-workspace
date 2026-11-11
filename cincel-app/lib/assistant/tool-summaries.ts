@@ -125,11 +125,11 @@ export function summarizeAddTaskComment(input: unknown): string {
   return names.length ? `${base} (menciona a ${names.join(", ")})` : base;
 }
 
-export function summarizeAddChecklistItem(input: unknown): string {
-  const item = text(input, "item");
+export function summarizeAddSubtask(input: unknown): string {
+  const title = text(input, "title");
   const done = field(input, "done") === true;
-  const base = item ? `Agregar ${quoted(item)} al checklist de la tarea` : "Agregar un punto al checklist de la tarea";
-  return done ? `${base}, ya marcado como hecho` : base;
+  const base = title ? `Agregar la subtarea ${quoted(title)}` : "Agregar una subtarea";
+  return done ? `${base}, ya completada` : base;
 }
 
 export function summarizeCreateTasksFromNotes(input: unknown): string {
@@ -160,7 +160,7 @@ Object.assign(toolSummaries, {
   update_task_status: summarizeUpdateTaskStatus,
   reschedule_task: summarizeRescheduleTask,
   add_task_comment: summarizeAddTaskComment,
-  add_checklist_item: summarizeAddChecklistItem,
+  add_subtask: summarizeAddSubtask,
   create_tasks_from_notes: summarizeCreateTasksFromNotes,
   rebalance_workload: summarizeRebalanceWorkload,
 } satisfies Record<string, ToolSummary>);
@@ -327,7 +327,7 @@ export function summarizeScheduleSiteVisit(input: unknown): string {
   const template = text(input, "checklistTemplate");
   const base = project ? `Programar una visita de obra a ${quoted(project)}` : "Programar una visita de obra";
   const when = date ? ` el ${formatEventDateTime(date)}` : "";
-  const checklist = template ? ` con el checklist de ${quoted(template)}` : " con su checklist";
+  const checklist = template ? ` con las subtareas de ${quoted(template)}` : " con su checklist como subtareas";
   return `${base}${when}${withPeople(agendaNames(input, "people"))}: evento en el calendario y tarea${checklist}`;
 }
 
@@ -782,7 +782,7 @@ const PREVIEW_COPY: Record<string, PreviewCopy> = {
   assign_task: { verb: "reasignar", first: "Reasigno", imperative: "Reasigna", one: "tarea", many: "tareas", feminine: true },
   reschedule_task: { verb: "mover", first: "Muevo", imperative: "Mueve", one: "entrega", many: "entregas", feminine: true, datePrefix: ["al", "al"] },
   update_task_status: { verb: "cambiar", first: "Cambio", imperative: "Cambia", one: "estatus", many: "estatus", feminine: false },
-  add_checklist_item: { verb: "agregar", first: "Agrego", imperative: "Agrega", one: "punto", many: "puntos", feminine: false },
+  add_subtask: { verb: "agregar", first: "Agrego", imperative: "Agrega", one: "subtarea", many: "subtareas", feminine: true },
   create_event: { verb: "crear", first: "Creo", imperative: "Crea", one: "evento", many: "eventos", feminine: false },
   update_event: { verb: "cambiar", first: "Cambio", imperative: "Cambia", one: "evento", many: "eventos", feminine: false },
   cancel_event: { verb: "cancelar", first: "Cancelo", imperative: "Cancela", one: "evento", many: "eventos", feminine: false },
@@ -843,7 +843,7 @@ export const toolPreviews: Partial<Record<string, ToolPreview>> = {
     op: "~",
     title: text(input, "status") ? `Estatus: ${taskStatusLabel(text(input, "status"))}` : "Estatus de la tarea",
   }),
-  add_checklist_item: (input) => ({ op: "+", title: text(input, "item") || "Punto del checklist" }),
+  add_subtask: (input) => ({ op: "+", title: text(input, "title") || "Subtarea" }),
   create_event: (input) => ({
     op: "+",
     title: text(input, "title") || "Evento",

@@ -118,7 +118,9 @@ export const BoardMapping = z.object({
   projectCodes: z.record(z.string(), z.string()).default({}),
   columns: z.record(z.string(), ColumnTarget),
   subitemColumns: z.record(z.string(), ColumnTarget).default({}),
-  subitems: z.enum(["checklist", "child_tasks", "ignore"]).default("checklist"),
+  // "checklist" is kept so older saved mappings still parse; task checklists are gone (#1046),
+  // so it imports as "child_tasks".
+  subitems: z.enum(["checklist", "child_tasks", "ignore"]).default("child_tasks"),
   schedule: z
     .object({
       enabled: z.boolean(),

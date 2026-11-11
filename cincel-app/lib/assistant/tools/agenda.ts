@@ -29,10 +29,10 @@ import { z } from "zod";
 import { unwrapActionResult } from "@/lib/actions/action-result";
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import {
-  addChecklistItemAction,
+  createSubtaskAction,
   createUserTaskAction,
   fetchCalendarAction,
-  fetchTaskAction,
+  listSubtasksAction,
 } from "@/lib/actions/tasks-actions";
 import { fetchTimeTrackingSettingsAction } from "@/lib/actions/time-tracking-actions";
 import { IMPLEMENTED as TIME_TRACKING } from "@/lib/actions/time-tracking-actions.flags";
@@ -185,7 +185,7 @@ export const ScheduleSiteVisitSchema = z.object({
     .min(1)
     .max(200)
     .optional()
-    .describe("Título de una tarea del proyecto cuyo checklist se copia"),
+    .describe("Título de una tarea del proyecto cuyas subtareas se copian"),
 });
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -699,15 +699,15 @@ async function siteVisitChecklist(projectId: string, template: string | undefine
     template,
   );
   if (!resolved.ok) return resolved;
-  const detail = await fetchTaskAction(resolved.value.id);
-  const items = (detail?.checklistItems ?? []).map((item) => item.title.trim()).filter(Boolean);
-  if (items.length === 0) return { ok: false, error: `La tarea «${resolved.value.name}» no tiene checklist que copiar.` };
+  const subtasks = await listSubtasksAction(resolved.value.id);
+  const items = subtasks.map((s) => s.title.trim()).filter(Boolean);
+  if (items.length === 0) return { ok: false, error: `La tarea «${resolved.value.name}» no tiene subtareas que copiar.` };
   return { ok: true, items };
 }
 
 export const schedule_site_visit = defineTool({
   name: "schedule_site_visit",
-  description: `Programa una visita de obra: crea el evento en el calendario de Google del usuario con las personas que van (${SITE_VISIT_MINUTES / 60} h) y una tarea en el proyecto con el checklist de la visita (el de otra tarea del proyecto si se indica checklistTemplate).`,
+  description: `Programa una visita de obra: crea el evento en el calendario de Google del usuario con las personas que van (${SITE_VISIT_MINUTES / 60} h) y una tarea en el proyecto con el checklist de la visita como subtareas (las subtareas de otra tarea del proyecto si se indica checklistTemplate).`,
   schema: ScheduleSiteVisitSchema,
   capability: isAgendaLead,
   available: eventWritesAvailable,
@@ -765,7 +765,7 @@ export const schedule_site_visit = defineTool({
         throw err;
       }
       for (const item of checklist.items) {
-        unwrapActionResult(await addChecklistItemAction(task.id, item));
+        unwrapActionResult(await createSubtaskAction(task.id, { title: item }));
       }
 
       const summary = summarizeScheduleSiteVisit(input);

@@ -41,10 +41,6 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   assignTaskAction: vi.fn(),
   addTaskCommentAction: vi.fn(),
   addTaskAttachmentAction: vi.fn(),
-  addChecklistItemAction: vi.fn(),
-  updateChecklistItemAction: vi.fn(),
-  removeChecklistItemAction: vi.fn(),
-  reorderChecklistAction: vi.fn(),
   createSubtaskAction: vi.fn(),
   listSubtasksAction: vi.fn(async () => []),
   listTaskDependenciesAction: vi.fn(async () => ({ dependsOn: [], blocks: [] })),
@@ -76,7 +72,6 @@ import {
   addTaskCommentAction,
   assignTaskAction,
   setTaskStatusAction,
-  updateChecklistItemAction,
   updateTaskAction,
 } from "@/lib/actions/tasks-actions";
 import { qk } from "@/lib/query/keys";
@@ -158,7 +153,6 @@ beforeEach(() => {
   vi.mocked(setTaskStatusAction).mockReset().mockResolvedValue({ ok: true, data: makeTask({ status: "en_proceso" }) });
   vi.mocked(assignTaskAction).mockReset();
   vi.mocked(addTaskCommentAction).mockReset();
-  vi.mocked(updateChecklistItemAction).mockReset();
 });
 
 afterEach(() => {
@@ -287,7 +281,7 @@ describe("TaskSheet shallow navigation", () => {
 });
 
 describe("TaskSheet properties", () => {
-  it("shows the properties grid, checklist progress, adjuntos and actividad", async () => {
+  it("shows the properties grid, adjuntos and actividad", async () => {
     render(<TaskSheet taskId="t-1" onClose={vi.fn()} />);
     await screen.findByDisplayValue("Planos de conjunto");
     for (const term of ["Estatus", "Responsable", "Proyecto", "Tramo", "Prioridad"]) {
@@ -297,8 +291,6 @@ describe("TaskSheet properties", () => {
     expect(screen.getByLabelText("Revisión")).toBeTruthy();
     expect(screen.getByLabelText("Descripción")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Casa Lomas" }).getAttribute("href")).toBe("/proyectos/p-1");
-    expect(screen.getByText("1/2")).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: "Avance del checklist" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Baño PB antes.jpg" })).toBeTruthy();
     expect(screen.getByText("@Ana López ojo con el modelo.")).toBeTruthy();
   });
@@ -437,40 +429,16 @@ describe("TaskSheet properties", () => {
   });
 });
 
-describe("TaskSheet checklist", () => {
-  it("toggles an item optimistically and keeps the server's item", async () => {
-    let resolve: (value: unknown) => void = () => undefined;
-    vi.mocked(updateChecklistItemAction).mockImplementation(() => new Promise((r) => (resolve = r)) as never);
-    const client = seededClient();
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-    render(<TaskSheet taskId="t-1" onClose={vi.fn()} />, client);
+describe("TaskSheet without a checklist (#1046)", () => {
+  it("shows no checklist section or items, only the subtareas", async () => {
+    render(<TaskSheet taskId="t-1" onClose={vi.fn()} />);
     await screen.findByDisplayValue("Planos de conjunto");
-
-    fireEvent.click(screen.getByRole("checkbox", { name: "Subir planos" }));
-    await waitFor(() => expect(updateChecklistItemAction).toHaveBeenCalledWith("c-2", { completed: true }));
-    const optimistic = client.getQueryData<TaskDetail>(qk.tasks.detail("t-1"));
-    expect(optimistic?.checklistItems.find((i) => i.id === "c-2")?.completed).toBe(true);
-    expect(optimistic?.checklist).toEqual({ total: 2, completed: 2 });
-    expect(await screen.findByText("2/2")).toBeTruthy();
-
-    await act(async () =>
-      resolve({ ok: true, data: { id: "c-2", title: "Subir planos", completed: true, sortOrder: 2 } }),
-    );
-    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining([["tareas", "list"]])));
-    expect(client.getQueryData<TaskDetail>(qk.tasks.detail("t-1"))?.checklist.completed).toBe(2);
-  });
-
-  it("rolls the toggle back when the action fails", async () => {
-    vi.mocked(updateChecklistItemAction).mockResolvedValue({ ok: false, error: "FORBIDDEN" });
-    const client = seededClient();
-    render(<TaskSheet taskId="t-1" onClose={vi.fn()} />, client);
-    await screen.findByDisplayValue("Planos de conjunto");
-
-    fireEvent.click(screen.getByRole("checkbox", { name: "Subir planos" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
-    const rolledBack = client.getQueryData<TaskDetail>(qk.tasks.detail("t-1"));
-    expect(rolledBack?.checklistItems.find((i) => i.id === "c-2")?.completed).toBe(false);
-    expect(screen.getByText("1/2")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Checklist" })).toBeNull();
+    expect(screen.queryByRole("progressbar", { name: "Avance del checklist" })).toBeNull();
+    // The fixture still carries read-only checklist items: none of them render.
+    expect(screen.queryByRole("checkbox", { name: "Subir planos" })).toBeNull();
+    expect(screen.queryByText("Medir baños")).toBeNull();
+    expect(screen.queryByText("1/2")).toBeNull();
   });
 });
 

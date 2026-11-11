@@ -45,7 +45,7 @@ const NEW_BY_GROUP: Record<string, string[]> = {
     "update_task_status",
     "reschedule_task",
     "add_task_comment",
-    "add_checklist_item",
+    "add_subtask",
     "create_tasks_from_notes",
     "rebalance_workload",
   ],

@@ -26,6 +26,7 @@ export const IMPORT_ENTITIES = [
   "project",
   "project_schedule",
   "task",
+  // Old imports only (rollback): checklist subitems now import as subtasks (#1046).
   "checklist_item",
   "task_support",
   "task_dependency",

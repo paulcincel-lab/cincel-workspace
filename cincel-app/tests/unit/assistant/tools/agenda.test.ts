@@ -14,9 +14,9 @@ const grant = vi.hoisted(() => ({ calendarEvents: false }));
 const mocks = vi.hoisted(() => ({
   fetchCalendarAction: vi.fn(),
   listViewerTasks: vi.fn(),
-  fetchTaskAction: vi.fn(),
+  listSubtasksAction: vi.fn(),
   createUserTaskAction: vi.fn(),
-  addChecklistItemAction: vi.fn(),
+  createSubtaskAction: vi.fn(),
   fetchStaffAction: vi.fn(),
   listViewerProjects: vi.fn(),
   fetchTimeTrackingSettingsAction: vi.fn(),
@@ -33,9 +33,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchCalendarAction: mocks.fetchCalendarAction,
-  fetchTaskAction: mocks.fetchTaskAction,
+  listSubtasksAction: mocks.listSubtasksAction,
   createUserTaskAction: mocks.createUserTaskAction,
-  addChecklistItemAction: mocks.addChecklistItemAction,
+  createSubtaskAction: mocks.createSubtaskAction,
 }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction: mocks.fetchStaffAction }));
 vi.mock("@/lib/assistant/reads", () => ({ listViewerProjects: mocks.listViewerProjects, listViewerTasks: mocks.listViewerTasks }));
@@ -240,7 +240,7 @@ describe("agenda tool registry", () => {
 
   it("summarizes a site visit with project, time and people", () => {
     expect(summarizeToolCall("schedule_site_visit", SAMPLE_INPUT.schedule_site_visit)).toBe(
-      "Programar una visita de obra a «Casa Roble» el 9 ene 2030, 09:00 con Luis, Marta: evento en el calendario y tarea con su checklist",
+      "Programar una visita de obra a «Casa Roble» el 9 ene 2030, 09:00 con Luis, Marta: evento en el calendario y tarea con su checklist como subtareas",
     );
   });
 
@@ -471,7 +471,7 @@ describe("event writes", () => {
       expect(mocks.recordComment).not.toHaveBeenCalled();
     });
 
-    it("schedule_site_visit creates the event, the task with its checklist and logs both vía asistente", async () => {
+    it("schedule_site_visit creates the event, the task with its checklist as subtasks and logs both vía asistente", async () => {
       mocks.fetchStaffAction.mockResolvedValue(STAFF_ROWS.map((s) => ({ ...s, email: s.email ?? `${s.id}@cincel.mx` })));
       mocks.insertPrimaryEvent.mockResolvedValue({ id: "visit1", htmlLink: "https://calendar/visit1" });
       mocks.createUserTaskAction.mockResolvedValue({ id: TASK_ID, title: "Visita de obra 2030-01-09 09:00" });
@@ -486,22 +486,25 @@ describe("event writes", () => {
           commitmentDate: "2030-01-09",
         }),
       );
-      expect(mocks.addChecklistItemAction).toHaveBeenCalledTimes(DEFAULT_SITE_VISIT_CHECKLIST.length);
+      expect(mocks.createSubtaskAction.mock.calls).toEqual(
+        DEFAULT_SITE_VISIT_CHECKLIST.map((title) => [TASK_ID, { title }]),
+      );
       const comment = `${summarizeToolCall("schedule_site_visit", SAMPLE_INPUT.schedule_site_visit)} (vía asistente)`;
       expect(mocks.recordComment).toHaveBeenCalledWith({ entity: "task", entityId: TASK_ID, actorId: STAFF_A, comment });
       expect(mocks.recordComment).toHaveBeenCalledWith({ entity: "project", entityId: PROJECT_ID, actorId: STAFF_A, comment });
     });
 
-    it("schedule_site_visit copies the checklist of a template task", async () => {
+    it("schedule_site_visit copies the subtasks of a template task", async () => {
       mocks.fetchStaffAction.mockResolvedValue(STAFF_ROWS.map((s) => ({ ...s, email: s.email ?? `${s.id}@cincel.mx` })));
       mocks.listViewerTasks.mockResolvedValue([{ id: TEMPLATE_TASK_ID, title: "Visita tipo" }]);
-      mocks.fetchTaskAction.mockResolvedValue({ checklistItems: [{ title: "Medir muros" }, { title: "Revisar losas" }] });
+      mocks.listSubtasksAction.mockResolvedValue([{ title: "Medir muros" }, { title: "Revisar losas" }]);
       mocks.insertPrimaryEvent.mockResolvedValue({ id: "visit2" });
       mocks.createUserTaskAction.mockResolvedValue({ id: TASK_ID, title: "Visita" });
       await run("schedule_site_visit", { ...(SAMPLE_INPUT.schedule_site_visit as object), checklistTemplate: "Visita tipo" });
-      expect(mocks.addChecklistItemAction.mock.calls).toEqual([
-        [TASK_ID, "Medir muros"],
-        [TASK_ID, "Revisar losas"],
+      expect(mocks.listSubtasksAction).toHaveBeenCalledWith(TEMPLATE_TASK_ID);
+      expect(mocks.createSubtaskAction.mock.calls).toEqual([
+        [TASK_ID, { title: "Medir muros" }],
+        [TASK_ID, { title: "Revisar losas" }],
       ]);
     });
 

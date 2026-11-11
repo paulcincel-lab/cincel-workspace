@@ -421,7 +421,7 @@ export function BoardEquivalences({
           <Section id={`subitems-${board.mondayBoardId}`} title="Subelementos" description={subitemsCopy.description}>
             <ChoiceSelect
               label={subitemsCopy.selectLabel}
-              value={board.subitems ?? "checklist"}
+              value={board.subitems === "ignore" ? "ignore" : "child_tasks"}
               choices={Object.entries(SUBITEM_LABELS).map(([value, label]) => ({ value, label }))}
               onChange={(value) =>
                 onBoardChange((current) => ({ ...current, subitems: value as NonNullable<BoardDraft["subitems"]> }))

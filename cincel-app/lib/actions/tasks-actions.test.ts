@@ -55,7 +55,7 @@ describe("fetchMyOpenTasksAction", () => {
     const rows = await fetchMyOpenTasksAction();
 
     expect(rows.map((t) => t.id).sort()).toEqual(["abierta", "revision"]);
-    expect(repo.listMyTasks).toHaveBeenCalledWith(ACTOR, {}, expect.objectContaining({ isAdmin: false }));
+    expect(repo.listMyTasks).toHaveBeenCalledWith(ACTOR, { mostrar: "abiertas" }, expect.objectContaining({ isAdmin: false }));
   });
 
   it("sorts by commitment date with undated last, then by title", async () => {

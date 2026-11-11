@@ -289,7 +289,7 @@ export const render_stat_grid = tool({
 
 export const render_list = tool({
   description:
-    "Renderiza una lista corta con título en la conversación — para una enumeración simple (p. ej. qué falta en el checklist de una tarea) que no necesita ser una tabla ni un gráfico.",
+    "Renderiza una lista corta con título en la conversación — para una enumeración simple (p. ej. qué subtareas faltan en una tarea) que no necesita ser una tabla ni un gráfico.",
   inputSchema: z.object({
     title: z.string(),
     items: z.array(z.string()).min(1).max(20),
@@ -694,7 +694,7 @@ export const merge_duplicate_clients = tool({
 
 export const merge_duplicate_activities = tool({
   description:
-    "Fusiona tareas duplicadas (mismo proyecto/flujo y título exacto): conserva la más antigua, reasigna checklist/apoyo/historial de las demás y las elimina de forma reversible. Usa find_duplicates primero para ver los grupos. Pide confirmación explícita antes de usarlo — es destructivo para los registros perdedores.",
+    "Fusiona tareas duplicadas (mismo proyecto/flujo y título exacto): conserva la más antigua, reasigna subtareas/apoyo/historial de las demás y las elimina de forma reversible. Usa find_duplicates primero para ver los grupos. Pide confirmación explícita antes de usarlo — es destructivo para los registros perdedores.",
   inputSchema: z.object({
     projectName: z.string().min(2),
     descriptionContains: z.string().min(3).describe("Título (o fragmento) de la tarea duplicada"),

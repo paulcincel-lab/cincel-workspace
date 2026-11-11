@@ -13,8 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 const actions = vi.hoisted(() => ({
   fetchTaskAction: vi.fn(),
-  addChecklistItemAction: vi.fn(),
-  updateChecklistItemAction: vi.fn(),
+  createSubtaskAction: vi.fn(),
   updateTaskAction: vi.fn(),
 }));
 
@@ -30,8 +29,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   setTaskCustomStatusAction: vi.fn(),
   updateTaskAction: actions.updateTaskAction,
   addTaskCommentAction: vi.fn(),
-  addChecklistItemAction: actions.addChecklistItemAction,
-  updateChecklistItemAction: actions.updateChecklistItemAction,
+  createSubtaskAction: actions.createSubtaskAction,
   createUserTaskAction: vi.fn(),
   assignTaskAction: vi.fn(),
 }));
@@ -139,15 +137,15 @@ describe.skipIf(!url)("tareas tools bitácora (test DB)", async () => {
     expect(rows[0]).toMatchObject({ entity: "task", actorId: staffId, comment: "Prueba (vía asistente)" });
   });
 
-  it("add_checklist_item writes the bitácora row of the shared task", async () => {
-    actions.addChecklistItemAction.mockResolvedValue({ id: "c1", title: "Cortes", completed: false, sortOrder: 0 });
-    const definition = tool("add_checklist_item");
+  it("add_subtask writes the bitácora row of the shared task", async () => {
+    actions.createSubtaskAction.mockResolvedValue({ id: "c1", title: "Cortes", status: "pendiente" });
+    const definition = tool("add_subtask");
     await definition.run(
       { user: admin(), context: { route: "/tareas" }, threadId: randomUUID() },
-      definition.schema.parse({ taskId, item: "Cortes" }),
+      definition.schema.parse({ taskId, title: "Cortes" }),
     );
     const rows = await comments();
-    expect(rows.map((r) => r.comment)).toEqual([`Checklist de «Revisar planos ${run}»: + «Cortes» (vía asistente)`]);
+    expect(rows.map((r) => r.comment)).toEqual([`Subtarea de «Revisar planos ${run}»: + «Cortes» (vía asistente)`]);
   });
 
   it("reschedule_task writes nothing when the action refuses", async () => {

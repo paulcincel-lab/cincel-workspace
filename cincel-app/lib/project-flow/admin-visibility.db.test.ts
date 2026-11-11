@@ -713,10 +713,6 @@ describe.skipIf(!url)("admin visibility across every reader (test DB)", async ()
         ["setTaskSupportAction", () => tasksActions.setTaskSupportAction(ids.adminTask, [ids.nonAdmin])],
         ["mergeTasksAction", () => tasksActions.mergeTasksAction(ids.adminTask, [ids.adminChild])],
         ["createSubtaskAction", () => tasksActions.createSubtaskAction(ids.adminTask, { title: "Hija" })],
-        ["addChecklistItemAction", () => tasksActions.addChecklistItemAction(ids.adminTask, "Punto")],
-        ["updateChecklistItemAction", () => tasksActions.updateChecklistItemAction(ids.checklistItem, { completed: true })],
-        ["removeChecklistItemAction", () => tasksActions.removeChecklistItemAction(ids.checklistItem)],
-        ["reorderChecklistAction", () => tasksActions.reorderChecklistAction(ids.adminTask, [ids.checklistItem])],
         ["addTaskCommentAction", () => tasksActions.addTaskCommentAction(ids.adminTask, "Hola")],
         ["addTaskAttachmentAction", () => tasksActions.addTaskAttachmentAction(ids.adminTask, file)],
         [

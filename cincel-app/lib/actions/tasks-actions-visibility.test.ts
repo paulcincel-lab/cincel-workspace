@@ -11,7 +11,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 const ADMIN_TASK = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_TASK = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const ITEM = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const LINK = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const session = vi.hoisted(() => ({ access: "Colaborador" }));
@@ -43,7 +42,6 @@ const repo = vi.hoisted(() => {
       if (!viewer.isAdmin && isAdminTask(id)) throw new Error("FORBIDDEN");
     }),
     isTaskVisible: vi.fn(async (id: string, viewer: { isAdmin: boolean }) => viewer.isAdmin || !isAdminTask(id)),
-    checklistItemTaskId: vi.fn(async () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
     taskLinkTaskId: vi.fn(async () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
     getTaskForViewer: vi.fn(async () => null),
     listTasks: vi.fn(async () => []),
@@ -110,10 +108,6 @@ const writes: Array<[string, () => Promise<unknown>]> = [
   ["restoreTaskAction", () => actions.restoreTaskAction(ADMIN_TASK)],
   ["mergeTasksAction", () => actions.mergeTasksAction(USER_TASK, [ADMIN_TASK])],
   ["setTaskSupportAction", () => actions.setTaskSupportAction(ADMIN_TASK, [])],
-  ["addChecklistItemAction", () => actions.addChecklistItemAction(ADMIN_TASK, "x")],
-  ["updateChecklistItemAction", () => actions.updateChecklistItemAction(ITEM, { completed: true })],
-  ["removeChecklistItemAction", () => actions.removeChecklistItemAction(ITEM)],
-  ["reorderChecklistAction", () => actions.reorderChecklistAction(ADMIN_TASK, [])],
   ["reorderProjectTasksAction", () => actions.reorderProjectTasksAction("p1", [USER_TASK, ADMIN_TASK])],
   ["reorderTasksAction", () => actions.reorderTasksAction([ADMIN_TASK])],
   ["addTaskCommentAction", () => actions.addTaskCommentAction(ADMIN_TASK, "hola")],
@@ -142,10 +136,6 @@ describe("writes on an admin task by a non-admin", () => {
       "restoreTask",
       "mergeTasks",
       "setTaskSupport",
-      "addChecklistItem",
-      "updateChecklistItem",
-      "removeChecklistItem",
-      "reorderChecklist",
       "reorderProjectTasks",
       "reorderTasks",
       "addTaskComment",
@@ -173,10 +163,6 @@ const RESULT_MUTATIONS = [
   "setTaskCustomStatusAction",
   "assignTaskAction",
   "deleteTaskAction",
-  "addChecklistItemAction",
-  "updateChecklistItemAction",
-  "removeChecklistItemAction",
-  "reorderChecklistAction",
   "addTaskCommentAction",
   "addTaskAttachmentAction",
   "addTaskDependencyAction",
@@ -191,10 +177,6 @@ describe("ActionResult (user-facing mutations)", () => {
     ["setTaskCustomStatusAction", () => actionsModule.setTaskCustomStatusAction(ADMIN_TASK, "s1")],
     ["assignTaskAction", () => actionsModule.assignTaskAction(ADMIN_TASK, null)],
     ["deleteTaskAction", () => actionsModule.deleteTaskAction(ADMIN_TASK)],
-    ["addChecklistItemAction", () => actionsModule.addChecklistItemAction(ADMIN_TASK, "x")],
-    ["updateChecklistItemAction", () => actionsModule.updateChecklistItemAction(ITEM, { completed: true })],
-    ["removeChecklistItemAction", () => actionsModule.removeChecklistItemAction(ITEM)],
-    ["reorderChecklistAction", () => actionsModule.reorderChecklistAction(ADMIN_TASK, [])],
     ["addTaskCommentAction", () => actionsModule.addTaskCommentAction(ADMIN_TASK, "hola")],
     ["addTaskAttachmentAction", () => actionsModule.addTaskAttachmentAction(ADMIN_TASK, file())],
     ["addTaskDependencyAction", () => actionsModule.addTaskDependencyAction(USER_TASK, ADMIN_TASK)],
