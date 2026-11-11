@@ -14,13 +14,19 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => nav.params,
 }));
 
-// The page prefetches `qk.proyectos.tab(id, 'tareas')`; a client call here would be a bug.
-const actions = vi.hoisted(() => ({ getProyectoTareasData: vi.fn() }));
+// The page prefetches the summary and the first page; a client call for them here would be a bug.
+const actions = vi.hoisted(() => ({ getProyectoTareasData: vi.fn(), getProyectoTareasSummary: vi.fn() }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => actions);
+const tareasActions = vi.hoisted(() => ({ getTareasListPage: vi.fn() }));
+vi.mock("@/lib/actions/page-data/tareas-actions", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getTareasListPage: tareasActions.getTareasListPage,
+}));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { qk } from "@/lib/query/keys";
-import { proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { proyectoTareasSummaryOptions } from "@/lib/query/options/proyectos";
+import { tareasListInfiniteOptions } from "@/lib/query/options/tareas";
 import { prefetch } from "@/lib/query/server";
 import { createTestQueryClient, hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import { resetNewTaskUi, useNewTaskUi } from "@/lib/stores/new-task-store";
@@ -31,10 +37,17 @@ import {
   estadoCounts,
   filterByPersonAndSearch,
   formatDueDate,
+  groupLoadedTasks,
   groupProjectTasks,
+  matchesEstado,
   parseProjectTasksQuery,
+  projectTareasKeysOf,
+  projectTaskGroupId,
   projectTasksHref,
+  projectTasksListFilters,
+  summarizeProjectTasks,
   topLevelTasks,
+  type ProjectTasksQuery,
 } from "@/lib/proyectos/project-tasks-by-fase";
 import type { TaskListItem, TaskListRow, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
@@ -106,6 +119,8 @@ afterEach(() => {
   refresh.mockReset();
   push.mockReset();
   actions.getProyectoTareasData.mockReset();
+  actions.getProyectoTareasSummary.mockReset();
+  tareasActions.getTareasListPage.mockReset();
   nav.params = new URLSearchParams();
   resetNewTaskUi();
   vi.useRealTimers();
@@ -248,10 +263,20 @@ describe("filters", () => {
   });
 });
 
-function renderTab(style: PresentationStyle, props: Partial<Parameters<typeof ProjectTasksByFase>[0]> = {}) {
+/** What the server answers for the URL's filters: the summary and the matching rows (as one loaded page). */
+function serverView(tasks: TaskListItem[], includeAdmin: boolean, query: ProjectTasksQuery) {
+  const summary = summarizeProjectTasks(tasks, { includeAdmin, today: TODAY, responsable: query.responsable, q: query.q });
+  const visible = topLevelTasks(includeAdmin ? tasks : tasks.filter((t) => t.kind !== "admin"));
+  const rows = filterByPersonAndSearch(visible, query).filter((t) => matchesEstado(t, query.estado, TODAY));
+  return { summary, rows };
+}
+
+function renderTab(style: PresentationStyle, props: { tasks?: TaskListItem[]; includeAdmin?: boolean } = {}) {
+  const query = parseProjectTasksQuery(Object.fromEntries(nav.params));
+  const { summary, rows } = serverView(props.tasks ?? FASE_TASKS, props.includeAdmin ?? false, query);
   return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
-      <ProjectTasksByFase projectId="p1" tasks={FASE_TASKS} today={TODAY} {...props} />
+      <ProjectTasksByFase projectId="p1" summary={summary} tasks={rows} listTotal={rows.length} today={TODAY} />
     </StyleProvider>,
   );
 }
@@ -329,8 +354,8 @@ describe("ProjectTasksByFase", () => {
     const replaceState = vi.spyOn(window.history, "replaceState");
     renderTab("visual");
     fireEvent.change(screen.getByLabelText("Buscar en 5 tareas"), { target: { value: "presion" } });
-    // The rows filter right away; the URL follows after the debounce.
-    expect(screen.getByRole("link", { name: "Pruebas de presión hidráulica" })).toBeTruthy();
+    // The input shows it right away; the URL (and so the server search) follows after the debounce.
+    expect((screen.getByLabelText("Buscar en 5 tareas") as HTMLInputElement).value).toBe("presion");
     expect(replaceState).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(PROJECT_TASKS_SEARCH_DEBOUNCE_MS));
     expect(lastReplacedUrl(replaceState)).toBe("/proyectos/p1/tareas?estado=abiertas&q=presion");
@@ -355,31 +380,48 @@ function rowOf(task: TaskListItem): TaskListRow {
 }
 
 describe("ProjectTareasTab", () => {
-  it("renders from the hydrated tab query with 0 client action calls", async () => {
-    const { client, state } = await hydrationRoundtrip((server) =>
-      prefetch(server, proyectoTareasOptions("p1"), async () => ({ tasks: FASE_TASKS.map(rowOf), includeAdmin: false })),
-    );
+  const SUMMARY_KEY = { responsable: null, q: "" };
+
+  it("renders from the hydrated summary and first page with 0 client action calls", async () => {
+    const keys = projectTareasKeysOf("p1", parseProjectTasksQuery({}), { hideCompleted: false, includeAdmin: false });
+    const { summary, rows } = serverView(FASE_TASKS, false, parseProjectTasksQuery({}));
+    const { client, state } = await hydrationRoundtrip(async (server) => {
+      await prefetch(server, proyectoTareasSummaryOptions("p1", keys.summary), async () => summary);
+      await server.prefetchInfiniteQuery({
+        ...tareasListInfiniteOptions(keys.list),
+        queryFn: async () => ({ rows: rows.map((t) => rowOf(t as TaskListItem)), nextCursor: null, total: rows.length }),
+      });
+    });
     renderWithQueryClient(<ProjectTareasTab projectId="p1" />, { client, hydrate: state });
     expect(screen.getByRole("link", { name: "Pruebas de presión hidráulica" })).toBeTruthy();
+    expect(actions.getProyectoTareasSummary).not.toHaveBeenCalled();
     expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+    expect(tareasActions.getTareasListPage).not.toHaveBeenCalled();
   });
 
-  it("changing filters makes no action call when the rows are loaded", () => {
+  it("asks the server for the rows of the URL's estado, 30 a page, never every task", async () => {
+    nav.params = new URLSearchParams("estado=completadas");
     const client = createTestQueryClient();
-    client.setQueryData(qk.proyectos.tab("p1", "tareas"), { tasks: FASE_TASKS, includeAdmin: false });
+    const { summary } = serverView(FASE_TASKS, false, parseProjectTasksQuery({ estado: "completadas" }));
+    client.setQueryData(qk.proyectos.tareasSummary("p1", SUMMARY_KEY), summary);
+    tareasActions.getTareasListPage.mockResolvedValue({ rows: [rowOf(FASE_TASKS[1])], nextCursor: "c1", total: 3 });
     renderWithQueryClient(<ProjectTareasTab projectId="p1" />, { client });
-    fireEvent.click(estadoChip("Completadas"));
+    expect(await screen.findByRole("link", { name: "Retiro de cascajo" })).toBeTruthy();
+    expect(tareasActions.getTareasListPage).toHaveBeenCalledTimes(1);
+    expect(tareasActions.getTareasListPage.mock.calls[0][0]).toMatchObject({
+      cursor: null,
+      filters: { proyecto: "p1", estado: "completado", responsable: null, q: null },
+    });
+    expect(screen.getByRole("button", { name: "Cargar más (2 restantes)" })).toBeTruthy();
     expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
-    expect(push).not.toHaveBeenCalled();
   });
 
   it("shows an error state when the project is gone (null data)", () => {
     const client = createTestQueryClient();
-    client.setQueryData(qk.proyectos.tab("p1", "tareas"), null);
+    client.setQueryData(qk.proyectos.tareasSummary("p1", SUMMARY_KEY), null);
     renderWithQueryClient(<ProjectTareasTab projectId="p1" />, { client });
     expect(screen.getByText("No se pudieron cargar las tareas.")).toBeTruthy();
   });
-
 
   it("mounts no NewTaskDialog and calls no router.refresh (the shell's host owns the dialog)", () => {
     const source = readFileSync(join(__dirname, "ProjectTasksByFase.tsx"), "utf8");
@@ -398,5 +440,36 @@ describe("ProjectTareasTab", () => {
       expect(source).not.toMatch(/useStyle\b/);
       expect(source).not.toMatch(/["'](visual|esencial|analitico)["']\s*(===|!==)|(===|!==)\s*["'](visual|esencial|analitico)["']/);
     }
+  });
+});
+
+describe("paged rows (#1051)", () => {
+  it("maps the estado chip, Responsable, search and Ocultar completadas to server filters", () => {
+    const base = { tramo: null, proyecto: "p1" };
+    const q = (patch: Partial<ProjectTasksQuery>): ProjectTasksQuery => ({ estado: "todas", responsable: null, q: "", ...patch });
+    const opts = { hideCompleted: false, includeAdmin: false };
+    expect(projectTasksListFilters("p1", q({}), opts)).toEqual({ ...base, responsable: null, estado: null, q: null });
+    expect(projectTasksListFilters("p1", q({ estado: "abiertas" }), opts)).toMatchObject({ mostrar: "abiertas" });
+    expect(projectTasksListFilters("p1", q({ estado: "vencidas" }), opts)).toMatchObject({ mostrar: "en_retraso" });
+    expect(projectTasksListFilters("p1", q({ estado: "completadas" }), opts)).toMatchObject({ estado: "completado" });
+    expect(projectTasksListFilters("p1", q({}), { ...opts, hideCompleted: true })).toMatchObject({ mostrar: "abiertas" });
+    expect(projectTasksListFilters("p1", q({ responsable: "s1" }), opts)).toMatchObject({ responsable: "s1", apoyo: false });
+    expect(projectTasksListFilters("p1", q({ responsable: "sin" }), opts)).not.toHaveProperty("apoyo");
+    expect(projectTasksListFilters("p1", q({ q: " muro " }), { ...opts, includeAdmin: true })).toMatchObject({
+      q: "muro",
+      incluirAdmin: true,
+    });
+  });
+
+  it("puts loaded rows under the summary's groups, keeping the summary's progress", () => {
+    const summary = summarizeProjectTasks(FASE_TASKS, { includeAdmin: false, today: TODAY, responsable: null, q: "" });
+    expect(summary.counts).toEqual({ todas: 5, abiertas: 2, vencidas: 1, completadas: 3 });
+    expect(summary.total).toBe(5);
+    expect(summary.hasUnassigned).toBe(true);
+    // Only the first page loaded: Instalaciones still says 33 % of its 3 tasks.
+    const loaded = groupLoadedTasks([FASE_TASKS[2]], summary);
+    expect(loaded.map((g) => [g.label, g.total, g.progressPct, g.tasks.length])).toEqual([["Instalaciones", 3, 33, 1]]);
+    expect(projectTaskGroupId(FASE_TASKS[0], "fase")).toBe("w3:f1");
+    expect(projectTaskGroupId(FASE_TASKS[6], "fase")).toBe("__administracion__");
   });
 });

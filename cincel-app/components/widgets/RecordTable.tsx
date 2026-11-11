@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
-import { DataTable } from "@/components/ui/DataTable";
+import { DataTable, type DataTableManualSort } from "@/components/ui/DataTable";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
@@ -16,7 +16,7 @@ import { BulkActionBar } from "@/components/v2/table/BulkActionBar";
 import { createSelectionColumn } from "@/components/v2/table/bulk-select";
 import { RowActionsMenu, createRowActionsColumn, type RowAction } from "@/components/v2/table/RowActionsMenu";
 import { RowActionsMenu as RowMenu, rowDeleteKeyDown } from "@/components/widgets/RowActionsMenu";
-import type { TableRowActionsProps, TableSelectionProps } from "@/components/widgets/table-rows";
+import { loadMoreText, type TableRowActionsProps, type TableSelectionProps } from "@/components/widgets/table-rows";
 import { RowSelectCheckbox, useTableSelection } from "@/components/widgets/table-selection";
 import { actionErrorText } from "@/lib/errors";
 import type { PresentationStyle } from "@/lib/types/redesign";
@@ -34,6 +34,7 @@ import {
   HEAT_CELL_CLASS,
   heatLevel,
   isNegativeDelta,
+  NESTED_ROW_PARENT,
   rowId,
   visibleColumns,
 } from "./record-table-format";
@@ -80,10 +81,18 @@ export type RecordTableProps = {
   onEndReached?: () => void;
   /** More rows after these; without it "Cargar más" isn't shown. */
   hasMore?: boolean;
+  /** Rows still to load: "Cargar más (12 restantes)" (#1051). */
+  remaining?: number;
   /** The next rows are loading: "Cargar más" is disabled. */
   loadingMore?: boolean;
   /** Dashboard override (`StyleView`): "table" renders the Analítico table whatever the style. */
   view?: WidgetView;
+  /**
+   * A header sort the page applies on the server (#1044): the rows keep the
+   * order they come in (a subtask stays under its parent) and a header click
+   * reports the column. Without it the table sorts the loaded rows itself.
+   */
+  sort?: DataTableManualSort;
 };
 
 /** "Cargar más" under a paginated `RecordTable`. */
@@ -115,7 +124,7 @@ export function RecordTable(props: RecordTableProps) {
       {view}
       <div className="flex justify-center">
         <Button type="button" variant="outline" size="sm" disabled={props.loadingMore} onClick={props.onEndReached}>
-          {props.loadingMore ? "Cargando…" : RECORD_TABLE_LOAD_MORE}
+          {props.loadingMore ? "Cargando…" : loadMoreText(props.remaining)}
         </Button>
       </div>
     </div>
@@ -219,6 +228,7 @@ function TableView({
   rowActions,
   rowMenu,
   rowSelection,
+  sort,
   style,
 }: RecordTableProps & { style: Extract<PresentationStyle, "visual" | "analitico"> }) {
   const analitico = style === "analitico";
@@ -308,7 +318,13 @@ function TableView({
         columns={defs}
         data={data.rows}
         getRowId={(row, index) => rowId(row, index)}
-        rowClassName={(row) => (selectable && selection.selected.has(idOf(row)) ? "bg-muted" : undefined)}
+        rowClassName={(row) =>
+          selectable && selection.selected.has(idOf(row))
+            ? "bg-muted"
+            : row[NESTED_ROW_PARENT]
+              ? "bg-muted/30 text-foreground-soft"
+              : undefined
+        }
         headerClassName={(id) => {
           const column = byKey.get(id);
           return [column ? alignClass(column) : "", analitico ? "h-8 text-[11.5px] text-muted-foreground" : ""]
@@ -328,6 +344,7 @@ function TableView({
             .filter(Boolean)
             .join(" ");
         }}
+        manualSort={sort}
         tableClassName={analitico ? "text-[12.5px] [&_thead_tr]:bg-muted" : "text-sm"}
         wrapperClassName={wrapper}
         footer={footer}

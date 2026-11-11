@@ -76,6 +76,8 @@ test.describe("Tareas · Eliminar", () => {
 
     const table = page.locator(`[data-slot="tareas-analitico"]`);
     await expect(table.getByText(PARENT_TITLE, { exact: true })).toBeVisible({ timeout: 30_000 });
+    // The subtask sits in its parent's collapsible block (#1048).
+    await table.getByRole("button", { name: `Subtareas de «${PARENT_TITLE}»` }).click();
     await expect(table.getByText(CHILD_TITLE, { exact: true })).toBeVisible();
 
     await table.getByRole("button", { name: `Acciones de «${PARENT_TITLE}»` }).click();

@@ -180,6 +180,14 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     owner: own("checklist_item"),
   },
   {
+    // The subtask a checklist item became (#1046); conversion-made, never imported.
+    table: "task_checklist_items",
+    column: "converted_task_id",
+    target: "task",
+    idSql: "c.id",
+    owner: own("checklist_item"),
+  },
+  {
     table: "task_support",
     column: "task_id",
     target: "task",

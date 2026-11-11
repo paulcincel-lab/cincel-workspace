@@ -40,7 +40,7 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
   update_task_status: [TASKS],
   reschedule_task: [TASKS],
   add_task_comment: [TASKS],
-  add_checklist_item: [TASKS],
+  add_subtask: [TASKS],
   create_tasks_from_notes: [TASKS],
   rebalance_workload: [TASKS],
   meeting_to_tasks: [TASKS],

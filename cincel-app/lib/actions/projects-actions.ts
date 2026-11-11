@@ -32,6 +32,7 @@ import type {
 import type { ProjectFilters } from "@/lib/repositories/projects-repository";
 import { OrderedIdsSchema, ProjectSpaceNameSchema, UuidSchema, parseInput } from "@/lib/validation/project-flow";
 import { portfolioFor } from "@/lib/projects/portfolio";
+import type { ProjectDeleteResult, ProjectRestoreResult } from "@/lib/types/project-delete";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
 async function requireProjectsCapabilities() {
@@ -182,12 +183,53 @@ export async function archiveProjectAction(id: string, status: "completado" | "c
   return row;
 }
 
-export async function deleteProjectAction(id: string): Promise<void> {
+export async function deleteProjectAction(
+  ...args: Parameters<typeof deleteProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deleteProjectActionImpl>>>> {
+  return toActionResult(() => deleteProjectActionImpl(...args));
+}
+
+/**
+ * Deletes the project with its live tasks and subtasks, and revokes its
+ * portal access (#1050). `canDeleteProject`. The Drive folder stays.
+ * Errors: FORBIDDEN, NOT_FOUND. The caller invalidates `projectDeleteInvalidations`.
+ */
+async function deleteProjectActionImpl(id: string): Promise<ProjectDeleteResult> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canDeleteProject) {
     throw new Error("FORBIDDEN: project delete");
   }
-  await projectsRepository.softDeleteProject(id, user.member.id);
+  if (!isUuid(id)) throw flowError(FLOW_ERROR.NOT_FOUND, "project");
+  let result: ProjectDeleteResult;
+  try {
+    result = await projectsRepository.deleteProjectWithTasks(id, user.member.id);
+  } catch (err) {
+    if (err instanceof Error && err.message === "PROJECT_NOT_FOUND") throw flowError(FLOW_ERROR.NOT_FOUND, "project");
+    throw err;
+  }
+  revalidateProjectFlow();
+  return result;
+}
+
+/**
+ * Restores a deleted project and exactly the tasks deleted with it (#1050):
+ * admins or the person who deleted it, within `PROJECT_RESTORE_DAYS`.
+ * Portal access is not restored. Errors: FORBIDDEN, NOT_FOUND, INVALID
+ * (window passed), NAME_TAKEN.
+ */
+export async function restoreProjectAction(
+  ...args: Parameters<typeof restoreProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof restoreProjectActionImpl>>>> {
+  return toActionResult(() => restoreProjectActionImpl(...args));
+}
+
+async function restoreProjectActionImpl(id: string): Promise<ProjectRestoreResult> {
+  // Admin or the deleter: checked in the repository against the delete's history row.
+  const user = await requireCapabilityUser();
+  if (!isUuid(id)) throw flowError(FLOW_ERROR.NOT_FOUND, "project");
+  const result = await projectsRepository.restoreProject(id, viewerOf(user));
+  revalidateProjectFlow();
+  return result;
 }
 
 export async function setProjectMembersAction(

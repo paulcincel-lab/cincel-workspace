@@ -25,15 +25,20 @@ import type { PortalActivityRow } from "@/lib/types/portal";
 import {
   loadProyectoResumen,
   loadProyectoTareas,
+  loadProyectoTareasSummary,
   loadProjectCreateStartOptions,
   loadProyectosPage,
   type ProyectoTareasData,
   type ProyectosPageData,
 } from "@/lib/loaders/proyectos";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
+import type { ProyectoTareasSummary } from "@/lib/proyectos/project-tasks-by-fase";
 import type { ProjectCreateStartOptions } from "@/lib/types/core";
 import { suggestAssignee, type AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
+import type { DeletedProjectRow, ProjectDeletePreview } from "@/lib/types/project-delete";
+import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import * as projectsRepository from "@/lib/repositories/projects-repository";
 
 /**
  * Proyectos page-data reads (Query Migration Phase 5). Each one parses its
@@ -149,6 +154,20 @@ export async function getProyectoTareasData(input: z.input<typeof ProyectoTareas
   return loadProyectoTareas(await requireCapabilityUser(), parsed);
 }
 
+const ProyectoTareasSummaryInput = z.object({
+  id: UuidSchema,
+  responsable: z.union([z.literal("sin"), UuidSchema]).nullable(),
+  q: z.string().max(200),
+});
+
+/** `qk.proyectos.tareasSummary(id, f)` (#1051): the Tareas tab's counts; null for a project out of scope or deleted. */
+export async function getProyectoTareasSummary(
+  input: z.input<typeof ProyectoTareasSummaryInput>,
+): Promise<ProyectoTareasSummary | null> {
+  const parsed = parseInput(ProyectoTareasSummaryInput, input);
+  return loadProyectoTareasSummary(await requireCapabilityUser(), parsed);
+}
+
 // ── Resumen Analítico quick-add hint (#997) ──────────────────────────────────
 
 const ProyectoAssigneeSuggestionInput = z.object({ id: UuidSchema, phaseId: UuidSchema, staffId: UuidSchema });
@@ -167,4 +186,21 @@ export async function getProyectoAssigneeSuggestion(
     phaseId: parsed.phaseId,
     excludeStaffId: parsed.staffId,
   });
+}
+
+// ── Delete and restore (#1050) ───────────────────────────────────────────────
+
+/** `qk.proyectos.deletePreview(id)`: the delete dialog's counts. FORBIDDEN without `canDeleteProject`. */
+export async function getProjectDeletePreview(id: string): Promise<ProjectDeletePreview | null> {
+  const projectId = parseInput(UuidSchema, id);
+  const user = await requireCapabilityUser();
+  if (!resolveProjectsCapabilities(user).canDeleteProject) throw new Error("FORBIDDEN: project delete");
+  return projectsRepository.getProjectDeletePreview(projectId);
+}
+
+/** `qk.proyectos.deleted()`: the projects deleted in the last 30 days. FORBIDDEN unless admin. */
+export async function getDeletedProjects(): Promise<DeletedProjectRow[]> {
+  const user = await requireCapabilityUser();
+  if (!canSeeAdminData(user)) throw new Error("FORBIDDEN: deleted projects");
+  return projectsRepository.listDeletedProjects();
 }

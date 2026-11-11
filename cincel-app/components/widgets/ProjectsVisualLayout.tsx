@@ -31,6 +31,9 @@ import { Button } from "@/components/ui/shadcn/button";
 import { ProjectsVisualSkeleton } from "@/components/widgets/route-skeletons";
 import { DeliveryTimelineWidget } from "@/components/widgets/DeliveryTimelineWidget";
 import { PageHeader } from "@/components/widgets/PageHeader";
+import { RowActionsMenu } from "@/components/widgets/RowActionsMenu";
+import type { TableRowAction } from "@/components/widgets/table-rows";
+import { useDeleteProject } from "@/components/proyectos/use-delete-project";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
 import { staggerStyle } from "@/lib/ui/motion";
@@ -193,17 +196,20 @@ function ProjectCard({
   toneOf,
   slot = "attention-card",
   steps = true,
+  actions = [],
 }: {
   project: AttentionProject;
   index: number;
   toneOf(key: string | null): TramoTone;
   slot?: string;
   steps?: boolean;
+  /** The card's `⋯` entries ("Eliminar proyecto", #1050); none hides the menu. */
+  actions?: TableRowAction[];
 }) {
   const tone = toneOf(project.tramoKey);
   const current = project.steps.find((s) => s.state === "current")?.label ?? project.badge.split(" · ")[0];
   const names = project.team.map((p) => p.name).join(", ");
-  return (
+  const card = (
     <Link
       href={`/proyectos/${project.id}`}
       data-slot={slot}
@@ -286,6 +292,16 @@ function ProjectCard({
       </div>
     </Link>
   );
+  if (actions.length === 0) return card;
+  // The menu sits beside the link (not inside it), over the card's top-right corner.
+  return (
+    <div className="group/row relative flex min-w-0 flex-col *:flex-1">
+      {card}
+      <div className="absolute top-2 right-2 rounded-md bg-card">
+        <RowActionsMenu rowLabel={project.name} actions={actions} />
+      </div>
+    </div>
+  );
 }
 
 // ── Layout ─────────────────────────────────────────────────────────────────
@@ -304,6 +320,8 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
   const timeline = useMemo(() => deliveryTimeline(listed, rows, today), [listed, rows, today]);
 
   const toneOf = (key: string | null) => tramoTone(key, tramoOrder);
+  // Card menu "Eliminar proyecto" (#1050), only with `canDeleteProject`.
+  const deleteProject = useDeleteProject();
 
   const newButton = canCreateProject ? (
     <Button type="button" onClick={() => onNewProject?.()}>
@@ -365,7 +383,13 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
           </div>
           <div className="grid gap-[18px] [grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))]">
             {attention.map((project, index) => (
-              <ProjectCard key={project.id} project={project} index={index} toneOf={toneOf} />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                index={index}
+                toneOf={toneOf}
+                actions={deleteProject.rowActions({ id: project.id, name: project.name })}
+              />
             ))}
           </div>
         </section>
@@ -387,7 +411,15 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
         </div>
         <div data-slot="project-grid" className="grid gap-[18px] [grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))]">
           {cards.map((project, index) => (
-            <ProjectCard key={project.id} project={project} index={index} toneOf={toneOf} slot="project-card" steps={false} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              index={index}
+              toneOf={toneOf}
+              slot="project-card"
+              steps={false}
+              actions={deleteProject.rowActions({ id: project.id, name: project.name })}
+            />
           ))}
           {canCreateProject ? (
             <Button type="button" variant="outline" className="h-auto min-h-28 border-dashed" onClick={() => onNewProject?.()}>
@@ -407,6 +439,7 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
         legend={tramoOrder.map((t) => ({ key: t.key, label: t.name }))}
         enterIndex={gridIndex + 1}
       />
+      {deleteProject.dialog}
     </div>
   );
 }

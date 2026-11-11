@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, queryOptions, type InfiniteData, type QueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, keepPreviousData, queryOptions, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 
 import {
   fetchGmailStatusAction,
@@ -6,8 +6,9 @@ import {
   fetchGmailThreadsAction,
 } from "@/lib/actions/gmail-actions";
 import { fetchRemindersAction } from "@/lib/actions/my-space-actions";
-import { fetchMyOpenTasksAction, fetchMyTasksAction } from "@/lib/actions/tasks-actions";
-import { isTaskClosed } from "@/lib/tasks/status-options";
+import { fetchMyOpenTasksAction } from "@/lib/actions/tasks-actions";
+import { getTareasListPage, getTareasSummary } from "@/lib/actions/page-data/tareas-actions";
+import type { TareasRowsPage } from "@/lib/tareas/page-data";
 import { fetchMyWeekHoursAction } from "@/lib/actions/time-tracking-actions";
 import { fetchNotificationsAction, fetchNotificationsSummaryAction } from "@/lib/actions/notifications-actions";
 import {
@@ -16,7 +17,7 @@ import {
   getMiEspacioPageData,
 } from "@/lib/actions/page-data/mi-espacio-actions";
 import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
-import { STALE, qk } from "@/lib/query/keys";
+import { STALE, qk, type TareasListFilters } from "@/lib/query/keys";
 import { setShellBadgesUnread } from "@/lib/query/options/shell";
 import type { TaskListItem } from "@/lib/types/core";
 import type { GmailThreadsPage, GmailThreadView, MiEspacioPageData, MySpaceListPage } from "@/lib/types/mi-espacio";
@@ -160,17 +161,45 @@ export function meTasksOptions() {
   });
 }
 
+/** The list filters of my closed tasks in Mi espacio (#1051): mine (Responsable or apoyo), completado, the tramo and search. */
+export function meClosedTasksFilters(f: { tramo: string | null; q: string }): TareasListFilters {
+  return { tramo: f.tramo, proyecto: null, responsable: "yo", estado: "completado", q: f.q.trim() || null };
+}
+
 /**
- * My closed tasks (Mi espacio with "Ocultar completadas" off, #1039): the
- * `fetchMyTasksAction` rows that are completado or in a closing custom
- * status. Under the `me.tasks` prefix, so every invalidation of my tasks
- * refreshes it too.
+ * My closed tasks (Mi espacio with "Ocultar completadas" off, #1039), 30 a
+ * page with "Cargar más" (#1051): completado (a closing custom status is
+ * completado underneath), searched and narrowed by tramo on the server.
+ * Under the `me.tasks` prefix, so every invalidation of my tasks refreshes
+ * it too. The caller enables it only while the switch shows them.
  */
-export function meClosedTasksOptions() {
-  return queryOptions<TaskListItem[]>({
-    queryKey: [...qk.me.tasks(), "closed"] as const,
-    queryFn: async () => (await fetchMyTasksAction()).filter(isTaskClosed),
+export function meClosedTasksOptions(f: { tramo: string | null; q: string }) {
+  const filters = meClosedTasksFilters(f);
+  return infiniteQueryOptions<TareasRowsPage, Error, InfiniteData<TareasRowsPage, string | null>, readonly unknown[], string | null>({
+    queryKey: [...qk.me.tasks(), "closed", filters] as const,
+    queryFn: ({ pageParam }) => getTareasListPage({ filters, cursor: pageParam }),
+    initialPageParam: null,
+    getNextPageParam: (last) => last.nextCursor,
     staleTime: STALE.screen,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * How many of my closed tasks each project has (#1051): the "n completadas
+ * ocultas" line per project while the switch hides them, from one summary
+ * query instead of loading the rows. Under the `me.tasks` prefix.
+ */
+export function meClosedTaskCountsOptions(f: { tramo: string | null; q: string }) {
+  const filters = meClosedTasksFilters(f);
+  return queryOptions<Record<string, number>>({
+    queryKey: [...qk.me.tasks(), "closed-counts", filters] as const,
+    queryFn: async () => {
+      const summary = await getTareasSummary({ filters });
+      return Object.fromEntries(summary.projects.map((p) => [p.project.id, p.total]));
+    },
+    staleTime: STALE.screen,
+    placeholderData: keepPreviousData,
   });
 }
 

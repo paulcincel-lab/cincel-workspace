@@ -29,6 +29,7 @@ import { assertPhaseInWorkflow } from "@/lib/repositories/workflow-phases-reposi
 import { underlyingStatus } from "@/lib/repositories/task-statuses-repository";
 import { UNSCOPED_VIEWER, scopeTaskDto } from "@/lib/auth/viewer-scope";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
+import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
 import {
   EMPTY_SUMMARY_COUNTS,
   SIN_TRAMO_LABEL,
@@ -155,27 +156,13 @@ async function listTaskAttachments(taskId: string): Promise<TaskAttachment[]> {
 export async function addTaskAttachment(
   taskId: string,
   file: { name: string; mimeType: string; data: Buffer },
-  actorId: string,
-  checklistItemId: string | null = null
+  actorId: string
 ): Promise<TaskAttachment> {
   if (!ALLOWED_ATTACHMENT_MIME.test(file.mimeType)) {
     throw new Error("TASK_ATTACHMENT_TYPE_NOT_ALLOWED");
   }
   if (file.data.byteLength === 0 || file.data.byteLength > MAX_ATTACHMENT_BYTES) {
     throw new Error("TASK_ATTACHMENT_TOO_LARGE");
-  }
-
-  let checklistItemTitle: string | null = null;
-  if (checklistItemId) {
-    // A checklist photo must be an image and belong to this same task.
-    if (!file.mimeType.startsWith("image/")) throw new Error("TASK_ATTACHMENT_TYPE_NOT_ALLOWED");
-    const [item] = await db
-      .select({ title: taskChecklistItems.title })
-      .from(taskChecklistItems)
-      .where(and(eq(taskChecklistItems.id, checklistItemId), eq(taskChecklistItems.taskId, taskId)))
-      .limit(1);
-    if (!item) throw new Error("CHECKLIST_ITEM_NOT_FOUND");
-    checklistItemTitle = item.title;
   }
 
   const [row] = await db
@@ -187,7 +174,6 @@ export async function addTaskAttachment(
       sizeBytes: file.data.byteLength,
       data: file.data,
       uploadedById: actorId,
-      checklistItemId,
     })
     .returning();
 
@@ -195,9 +181,7 @@ export async function addTaskAttachment(
     entity: "task",
     entityId: taskId,
     actorId,
-    comment: checklistItemTitle
-      ? `Adjuntó una foto al punto "${checklistItemTitle}": ${row.fileName}`
-      : `Adjuntó un archivo: ${row.fileName}`,
+    comment: `Adjuntó un archivo: ${row.fileName}`,
   });
 
   const [uploader] = await db.select({ name: staff.name }).from(staff).where(eq(staff.id, actorId));
@@ -344,13 +328,61 @@ function mostrarCondition(mostrar: TaskFilters["mostrar"], today?: string): SQL 
   return undefined;
 }
 
+/**
+ * The list filters. With `topLevelOnly` (#1047): top-level tasks only (no
+ * parent, or a soft-deleted one), each matching itself or through a live
+ * child that matches (the parent then shows as the child's context). The
+ * parent keeps the scope filters (live, archived, kind, project, tramo).
+ */
 function whereFilters(f: TaskFilters, viewer: ViewerScope) {
+  if (!f.topLevelOnly) return rowFilters(f, viewer);
+  return and(
+    topLevelTaskSql(),
+    isNull(tasks.deletedAt),
+    isNull(projects.deletedAt),
+    f.archived === undefined ? eq(tasks.archived, false) : eq(tasks.archived, f.archived),
+    kindCondition(f.kind, viewer),
+    f.projectId ? eq(tasks.projectId, f.projectId) : undefined,
+    f.projectIds && f.projectIds.length > 0 ? inArray(tasks.projectId, f.projectIds) : undefined,
+    f.workflowId ? eq(tasks.workflowId, f.workflowId) : undefined,
+    f.withoutWorkflow ? isNull(tasks.workflowId) : undefined,
+    matchesWithSubtasks(f, viewer)
+  );
+}
+
+/** No parent, or a soft-deleted one (such a child behaves as top-level). */
+function topLevelTaskSql(): SQL {
+  return sql`(${tasks.parentTaskId} is null or not exists (select 1 from core.tasks live_parent where live_parent.id = ${tasks.parentTaskId} and live_parent.deleted_at is null))`;
+}
+
+/**
+ * The parents of the live children matching `f`, as an uncorrelated
+ * subquery: its `tasks` is the child, so `rowFilters` reads the child.
+ */
+function parentsOfMatchingChildren(f: TaskFilters, viewer: ViewerScope) {
+  return db
+    .select({ id: tasks.parentTaskId })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .where(and(rowFilters(f, viewer), sql`${tasks.parentTaskId} is not null`));
+}
+
+/** The task matches `f` itself, or one of its live children does. */
+function matchesWithSubtasks(f: TaskFilters, viewer: ViewerScope): SQL {
+  return or(rowFilters(f, viewer), inArray(tasks.id, parentsOfMatchingChildren(f, viewer)))!;
+}
+
+/** The filters on the task row itself (parents and subtasks alike). */
+function rowFilters(f: TaskFilters, viewer: ViewerScope) {
   const statuses = f.status ? (Array.isArray(f.status) ? f.status : [f.status]) : undefined;
   return and(
     isNull(tasks.deletedAt),
     isNull(projects.deletedAt),
     f.archived === undefined ? eq(tasks.archived, false) : eq(tasks.archived, f.archived),
     f.projectId ? eq(tasks.projectId, f.projectId) : undefined,
+    f.projectIds && f.projectIds.length > 0 ? inArray(tasks.projectId, f.projectIds) : undefined,
     f.workflowId ? eq(tasks.workflowId, f.workflowId) : undefined,
     f.withoutWorkflow ? isNull(tasks.workflowId) : undefined,
     f.phaseId ? eq(tasks.phaseId, f.phaseId) : undefined,
@@ -358,6 +390,7 @@ function whereFilters(f: TaskFilters, viewer: ViewerScope) {
     kindCondition(f.kind, viewer),
     statuses && statuses.length > 0 ? inArray(tasks.status, statuses) : undefined,
     f.managerId ? eq(tasks.managerId, f.managerId) : undefined,
+    f.unassigned ? isNull(tasks.managerId) : undefined,
     f.involvesStaffId
       ? or(
           eq(tasks.managerId, f.involvesStaffId),
@@ -469,6 +502,10 @@ type TaskListPageQuery = {
   withTotal?: boolean;
   /** Joins the board ranking and keeps the first `perColumn` rows of each column. */
   ranked?: { subquery: ReturnType<typeof rankedBoardSubquery>; perColumn: number };
+  /** Selects these sort keys as one JSON array (`sortValues`), for a column sort's cursor (#1044). */
+  sortValues?: SQL[];
+  /** Joins each row's live children (ids, open count, those matching `filters`) and the page's subtask total (#1047). */
+  subtasks?: { filters: TaskFilters };
 };
 
 /**
@@ -480,6 +517,7 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
   const parent = alias(tasks, "parent_task");
   const taskColumns = withoutNotes(getTableColumns(tasks));
   const ranked = page.ranked?.subquery;
+  const info = page.subtasks ? subtaskInfoAggregate(page.subtasks.filters, viewer) : null;
   const query = db
     .select({
       task: taskColumns,
@@ -510,6 +548,18 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
       pageTotal: page.withTotal ? sql<number>`(count(*) over ())::int` : sql<number>`0`,
       columnKey: ranked ? sql<string | null>`${ranked.columnKey}` : sql<string | null>`null`,
       columnTotal: ranked ? sql<number>`${ranked.columnTotal}` : sql<number>`0`,
+      sortValues: page.sortValues
+        ? sql<unknown>`json_build_array(${sql.join(page.sortValues, sql`, `)})`
+        : sql<unknown>`null`,
+      subtaskIds: info ? sql<string[] | string | null>`${info.ids}` : sql<null>`null`,
+      subtaskOpen: info ? countOf(info.open) : sql<number>`0`,
+      matchedSubtaskIds: info ? sql<string[] | string | null>`${info.matched}` : sql<null>`null`,
+      selfMatch:
+        page.subtasks?.filters.topLevelOnly
+          ? sql<boolean>`coalesce((${rowFilters(page.subtasks.filters, viewer)}), false)`
+          : sql<boolean>`true`,
+      subtaskPageTotal:
+        info && page.withTotal ? sql<number>`(sum(coalesce(${agg.subtasks.total}, 0)) over ())::int` : sql<number>`0`,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -530,6 +580,7 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
     .leftJoin(agg.attachments, slim ? eq(agg.attachments.taskId, tasks.id) : sql`false`)
     .$dynamic();
   if (ranked) query.innerJoin(ranked, eq(ranked.id, tasks.id));
+  if (info) query.leftJoin(info, eq(info.parentId, tasks.id));
   query
     .where(
       and(
@@ -594,6 +645,15 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
       pageTotal: Number(r.pageTotal),
       columnKey: r.columnKey,
       columnTotal: Number(r.columnTotal),
+      sortValues: (typeof r.sortValues === "string" ? JSON.parse(r.sortValues) : r.sortValues) as ColumnSortValue[] | null,
+      subtasks: info
+        ? {
+            ids: jsonIds(r.subtaskIds),
+            open: Number(r.subtaskOpen),
+            matched: r.selfMatch ? [] : jsonIds(r.matchedSubtaskIds),
+            pageTotal: Number(r.subtaskPageTotal),
+          }
+        : null,
     };
   });
 }
@@ -723,7 +783,13 @@ function rankedBoardSubquery(filters: TaskFilters, viewer: ViewerScope) {
     .as("board_ranked");
 }
 
-export type TaskRowsPage = { rows: TaskListRow[]; nextCursor: string | null; total: number };
+export type TaskRowsPage = {
+  rows: TaskListRow[];
+  nextCursor: string | null;
+  total: number;
+  /** With `topLevelOnly` (#1047): the live subtasks of every matching task ("n subtareas"). */
+  subtaskTotal?: number;
+};
 
 // ── "retraso" order (Tareas Analítico, #988) ────────────────────────────────
 
@@ -774,6 +840,119 @@ function decodeRetrasoCursor(cursor: string): TaskRetrasoSortKey {
   return value as TaskRetrasoSortKey;
 }
 
+// ── Column sorts (task table headers, #1044) ────────────────────────────────
+
+/** One value of a column sort key, as `json_build_array` returns it. */
+type ColumnSortValue = number | string;
+
+/** One part of a column sort key: its SQL, the type its cursor value casts to, and whether it ignores the direction. */
+type ColumnSortPart = { expr: SQL; cast: "int" | "text" | "date" | "uuid"; fixed?: boolean };
+
+/** Sorts a nullable value: 0 for a value, 1 for none; always ascending, so empty values come last both ways. */
+const nullsLastFlag = (value: SQL | SQLWrapper): ColumnSortPart => ({
+  expr: sql`(case when ${value} is null then 1 else 0 end)`,
+  cast: "int",
+  fixed: true,
+});
+
+/** Live subtasks of the row (as `subtaskCount`: not deleted, not archived). */
+const subtaskCountSql = (): SQL =>
+  sql`(select count(*)::int from core.tasks st where st.parent_task_id = ${tasks.id} and st.deleted_at is null and not st.archived)`;
+
+/**
+ * The key of a column sort (every column but "tramo" and "retraso" asc,
+ * which keep their own cursors): optional null flag, the value, then `id`.
+ * The value of an empty row is coalesced so comparisons never see null; the
+ * flag already puts it last.
+ */
+export function columnSortParts(column: TaskSortColumn, today?: string): ColumnSortPart[] {
+  const id: ColumnSortPart = { expr: sql`${tasks.id}`, cast: "uuid" };
+  switch (column) {
+    case "titulo":
+      return [{ expr: sql`lower(${tasks.title})`, cast: "text" }, id];
+    case "tramo":
+      return [nullsLastFlag(workflows.sortOrder), { expr: sql`coalesce(${workflows.sortOrder}, 0)`, cast: "int" }, id];
+    case "fase":
+      return [nullsLastFlag(workflowPhases.sortOrder), { expr: sql`coalesce(${workflowPhases.sortOrder}, 0)`, cast: "int" }, id];
+    case "responsable":
+      return [nullsLastFlag(staff.name), { expr: sql`lower(coalesce(${staff.name}, ''))`, cast: "text" }, id];
+    case "estatus":
+      return [
+        {
+          expr: sql`(case ${tasks.status} when 'pendiente' then 0 when 'en_proceso' then 1 when 'bloqueado' then 2 else 3 end)`,
+          cast: "int",
+        },
+        id,
+      ];
+    case "vence":
+      return [nullsLastFlag(taskDueSql()), { expr: sql`coalesce(${taskDueSql()}, '1970-01-01'::date)`, cast: "date" }, id];
+    case "prioridad":
+      return [{ expr: sql`(case ${tasks.priority} when 'alta' then 0 when 'media' then 1 else 2 end)`, cast: "int" }, id];
+    case "subtareas":
+      return [{ expr: subtaskCountSql(), cast: "int" }, id];
+    case "retraso":
+      return [
+        { expr: sql`(case when ${overdueTaskSql(today)} then 0 when ${openTaskSql()} then 1 else 2 end)`, cast: "int" },
+        nullsLastFlag(taskDueSql()),
+        { expr: sql`coalesce(${taskDueSql()}, '1970-01-01'::date)`, cast: "date" },
+        id,
+      ];
+  }
+}
+
+const directed = (part: ColumnSortPart, dir: TaskSortDir): "asc" | "desc" => (part.fixed ? "asc" : dir);
+
+/** ORDER BY of a column sort. */
+function columnSortOrderBy(parts: ColumnSortPart[], dir: TaskSortDir): SQL[] {
+  return parts.map((p) => sql`${p.expr} ${sql.raw(directed(p, dir))}`);
+}
+
+/** Rows strictly after the cursor in a column sort (each part in its own direction). */
+function afterColumnCursor(parts: ColumnSortPart[], dir: TaskSortDir, values: ColumnSortValue[]): SQL {
+  const value = (i: number) => sql`${values[i]}::${sql.raw(parts[i]!.cast)}`;
+  const branches = parts.map((part, i) => {
+    const op = directed(part, dir) === "asc" ? sql`>` : sql`<`;
+    const equal = parts.slice(0, i).map((p, j) => sql`${p.expr} = ${value(j)}`);
+    return sql`(${sql.join([...equal, sql`${part.expr} ${op} ${value(i)}`], sql` and `)})`;
+  });
+  return sql`(${sql.join(branches, sql` or `)})`;
+}
+
+/** Cursor of a column sort: the column, the direction and the last row's key. */
+type ColumnSortCursor = ["s", TaskSortColumn, TaskSortDir, ...ColumnSortValue[]];
+
+export function encodeColumnSortCursor(column: TaskSortColumn, dir: TaskSortDir, values: ColumnSortValue[]): string {
+  const key: ColumnSortCursor = ["s", column, dir, ...values];
+  return Buffer.from(JSON.stringify(key), "utf8").toString("base64url");
+}
+
+/**
+ * The key values of a column sort cursor, checked against the column's
+ * parts; INVALID when it is another order's cursor or malformed.
+ */
+export function decodeColumnSortCursor(cursor: string, column: TaskSortColumn, dir: TaskSortDir): ColumnSortValue[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("INVALID: cursor");
+  }
+  if (!Array.isArray(value) || value[0] !== "s" || value[1] !== column || value[2] !== dir) throw new Error("INVALID: cursor");
+  const parts = columnSortParts(column);
+  const values = value.slice(3) as unknown[];
+  const ok =
+    values.length === parts.length &&
+    parts.every((part, i) => {
+      const v = values[i];
+      if (part.cast === "int") return Number.isInteger(v);
+      if (part.cast === "date") return typeof v === "string" && ISO_DATE_RE.test(v);
+      if (part.cast === "uuid") return typeof v === "string" && UUID_RE.test(v);
+      return typeof v === "string" && v.length <= 2000;
+    });
+  if (!ok) throw new Error("INVALID: cursor");
+  return values as ColumnSortValue[];
+}
+
 /**
  * One page of slim rows (`TaskListRow`) in a stable keyset order, with the
  * total that match the filters. `cursor` is the previous page's
@@ -786,29 +965,41 @@ function decodeRetrasoCursor(cursor: string): TaskRetrasoSortKey {
  * - "retraso" (Tareas Analítico): overdue tasks first by due date (most days
  *   late first), then the open ones by due date, then the closed ones; the
  *   due date is `coalesce(commitment, delivery)` and today is `filters.today`
- *   or today in America/Mexico_City.
+ *   or today in America/Mexico_City;
+ * - any other column (or "retraso" with `orderDir: "desc"`): the column's
+ *   key in `orderDir` (default asc), empty values last both ways, `id` as
+ *   the tie-break (`columnSortParts`, #1044).
  */
 export async function listTasksPage(
   filters: TaskFilters,
   viewer: ViewerScope,
-  opts: { cursor: string | null; limit: number; orderBy?: "tramo" | "retraso"; columnKey?: string }
+  opts: { cursor: string | null; limit: number; orderBy?: "tramo" | TaskSortColumn; orderDir?: TaskSortDir; columnKey?: string }
 ): Promise<TaskRowsPage> {
   const limit = Math.max(1, Math.floor(opts.limit));
-  const retraso = opts.orderBy === "retraso";
+  const dir: TaskSortDir = opts.orderDir ?? "asc";
+  // "retraso" ascending keeps its own cursor (#988); every other column sort uses `columnSortParts` (#1044).
+  const retraso = opts.orderBy === "retraso" && dir === "asc";
+  const column = opts.orderBy && opts.orderBy !== "tramo" && !retraso ? opts.orderBy : null;
   const today = filters.today ?? todayInAppTimeZone();
+  const parts = column ? columnSortParts(column, today) : null;
   let after: SQL | undefined;
   if (opts.cursor) {
-    after = retraso
-      ? afterRetrasoCursor(decodeRetrasoCursor(opts.cursor), today)
-      : afterCursor(decodeTaskCursor(opts.cursor));
+    if (column && parts) after = afterColumnCursor(parts, dir, decodeColumnSortCursor(opts.cursor, column, dir));
+    else if (retraso) after = afterRetrasoCursor(decodeRetrasoCursor(opts.cursor), today);
+    else after = afterCursor(decodeTaskCursor(opts.cursor));
   }
   // One "today" for the order and the Mostrar filter.
-  const f: TaskFilters = retraso ? { ...filters, today } : filters;
+  const f: TaskFilters = retraso || column ? { ...filters, today } : filters;
+  let orderBy = pageOrderBy();
+  if (parts) orderBy = columnSortOrderBy(parts, dir);
+  else if (retraso) orderBy = retrasoSortExpressions(today).map((e) => sql`${e} asc`);
   const rows = await selectTaskList(f, viewer, true, {
     where: and(after, opts.columnKey ? sql`${boardColumnKey()} = ${opts.columnKey}` : undefined),
-    orderBy: retraso ? retrasoSortExpressions(today).map((e) => sql`${e} asc`) : pageOrderBy(),
+    orderBy,
     limit: limit + 1,
     withTotal: true,
+    ...(parts ? { sortValues: parts.map((p) => p.expr) } : {}),
+    subtasks: { filters: f },
   });
   const pageRows = rows.slice(0, limit);
   const last = pageRows.at(-1);
@@ -817,11 +1008,100 @@ export async function listTasksPage(
   if (opts.cursor) total = await countTasksMatching(f, viewer, opts.columnKey);
   let nextCursor: string | null = null;
   if (rows.length > limit && last) {
-    nextCursor = retraso
-      ? Buffer.from(JSON.stringify(retrasoSortKey(last.item, today)), "utf8").toString("base64url")
-      : encodeTaskCursor(last.sortKey);
+    if (column && last.sortValues) nextCursor = encodeColumnSortCursor(column, dir, last.sortValues);
+    else if (retraso) nextCursor = Buffer.from(JSON.stringify(retrasoSortKey(last.item, today)), "utf8").toString("base64url");
+    else nextCursor = encodeTaskCursor(last.sortKey);
   }
-  return { rows: pageRows.map(toTaskListRow), nextCursor, total };
+  return withSubtaskInfo(pageRows, { nextCursor, total }, f, viewer, opts);
+}
+
+// ── Subtasks of the listed tasks (#1047) ────────────────────────────────────
+
+/** The children order: due date (`coalesce(commitment, delivery)`, nulls last), then creation, then id. */
+function childOrder(): SQL[] {
+  return [sql`${taskDueSql()} asc nulls last`, asc(tasks.createdAt), asc(tasks.id)];
+}
+
+/** A `json_agg` of ids (a string from some drivers), `[]` for none. */
+function jsonIds(value: string[] | string | null): string[] {
+  if (value === null) return [];
+  return typeof value === "string" ? (JSON.parse(value) as string[]) : value;
+}
+
+/**
+ * Every parent's live children (deleted and archived ones left out, as
+ * `subtaskCount`) grouped as a derived table: the ids in the children order,
+ * the open ones, and the ids matching `f` (a `topLevelOnly` list's context
+ * children). Its `tasks` is the child, so `rowFilters` reads the child.
+ */
+function subtaskInfoAggregate(f: TaskFilters, viewer: ViewerScope) {
+  const order = sql.join(childOrder(), sql`, `);
+  return db
+    .select({
+      parentId: sql<string>`${tasks.parentTaskId}`.as("info_parent_id"),
+      ids: sql<string[] | string>`json_agg(${tasks.id} order by ${order})`.as("info_subtask_ids"),
+      open: sql<number>`(count(*) filter (where ${openTaskSql()}))::int`.as("info_subtask_open"),
+      matched: f.topLevelOnly
+        ? sql<string[] | string | null>`json_agg(${tasks.id} order by ${order}) filter (where ${rowFilters(f, viewer)})`.as(
+            "info_subtask_matched"
+          )
+        : sql<null>`null`.as("info_subtask_matched"),
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .where(and(sql`${tasks.parentTaskId} is not null`, isNull(tasks.deletedAt), eq(tasks.archived, false)))
+    .groupBy(tasks.parentTaskId)
+    .as("subtask_info");
+}
+
+/**
+ * The page with each row's `subtaskIds` and `subtaskOpenCount`, with
+ * `topLevelOnly` the `matchedSubtaskIds` of a parent shown only as the
+ * context of matching children, and the `subtaskTotal` of every matching
+ * task (from the page statement; one count more after a cursor).
+ */
+async function withSubtaskInfo(
+  rows: Awaited<ReturnType<typeof selectTaskList>>,
+  page: Omit<TaskRowsPage, "rows">,
+  f: TaskFilters,
+  viewer: ViewerScope,
+  opts: { cursor: string | null; columnKey?: string }
+): Promise<TaskRowsPage> {
+  let subtaskTotal: number | undefined;
+  if (f.topLevelOnly) {
+    subtaskTotal = opts.cursor
+      ? await countSubtasksOfMatching(f, viewer, opts.columnKey)
+      : (rows[0]?.subtasks?.pageTotal ?? 0);
+  }
+  const out = rows.map((r) => {
+    const row: TaskListRow = toTaskListRow(r);
+    if (!r.subtasks) return row;
+    row.subtaskIds = r.subtasks.ids;
+    row.subtaskOpenCount = r.subtasks.open;
+    if (f.topLevelOnly && r.subtasks.matched.length > 0) row.matchedSubtaskIds = r.subtasks.matched;
+    return row;
+  });
+  return { ...page, rows: out, ...(subtaskTotal !== undefined ? { subtaskTotal } : {}) };
+}
+
+/** The live children (deleted and archived ones left out, as `subtaskCount`) of every task matching `f`. */
+async function countSubtasksOfMatching(f: TaskFilters, viewer: ViewerScope, columnKey?: string): Promise<number> {
+  const child = alias(tasks, "counted_child");
+  const parents = db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .leftJoin(taskStatuses, and(eq(taskStatuses.id, tasks.customStatusId), isNull(taskStatuses.deletedAt)))
+    .where(and(whereFilters(f, viewer), columnKey ? sql`${boardColumnKey()} = ${columnKey}` : undefined));
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(child)
+    .where(and(inArray(child.parentTaskId, parents), isNull(child.deletedAt), eq(child.archived, false)));
+  return Number(row?.n ?? 0);
 }
 
 /** COUNT(*) of the tasks matching the filters (and the board column). */
@@ -884,7 +1164,8 @@ export async function listBoardColumns(
 export type TaskFacets = {
   total: number;
   byTramo: Record<string, number>;
-  projects: { id: string; name: string; count: number }[];
+  /** `open` / `overdue`: the project's open and overdue tasks in the selected tramo, for the Proyecto dropdown (#1045). */
+  projects: { id: string; name: string; count: number; open?: number; overdue?: number }[];
   /** "Mostrar" counts: the tasks in the selected tramo and project with each choice (they ignore `mostrar`). */
   mostrar?: { todas: number; abiertas: number; en_retraso: number };
   /** The tasks in that scope the viewer manages. */
@@ -899,16 +1180,24 @@ export type TaskFacets = {
  * - `total` ("Todas") and `byTramo` (per tramo key): the tasks in the selected
  *   project (`scope.projectId`), any tramo;
  * - `projects`: the projects with tasks in the selected tramo
- *   (`scope.workflowKey`), any project, by name; the selected project is kept
- *   even when the tramo leaves it with no task.
+ *   (`scope.workflowKey`), any project, by name, with their open and overdue
+ *   tasks; the selected projects are kept even when the tramo leaves them
+ *   with no task.
+ *
+ * Several projects (`scope.projectIds`, the Proyecto multi-select) count as
+ * the selection the same way one does.
  */
 export async function taskFacets(
   filters: TaskFilters,
   viewer: ViewerScope,
-  scope: { workflowKey: string | null; projectId: string | null } = { workflowKey: null, projectId: null }
+  scope: { workflowKey: string | null; projectId: string | null; projectIds?: string[] } = { workflowKey: null, projectId: null }
 ): Promise<TaskFacets> {
-  const base: TaskFilters = { ...filters, workflowId: undefined, projectId: undefined, mostrar: undefined };
-  const shown = mostrarCondition(filters.mostrar, filters.today);
+  const base: TaskFilters = { ...filters, workflowId: undefined, projectId: undefined, projectIds: undefined, mostrar: undefined };
+  const selected = new Set([...(scope.projectId ? [scope.projectId] : []), ...(scope.projectIds ?? [])]);
+  // With `topLevelOnly` a parent also counts through its matching subtasks, as the list shows it (#1047).
+  const counted = (extra: TaskFilters, own: SQL): SQL => (base.topLevelOnly ? matchesWithSubtasks({ ...base, ...extra }, viewer) : own);
+  const ownShown = mostrarCondition(filters.mostrar, filters.today);
+  const shown = ownShown ? counted({ mostrar: filters.mostrar }, ownShown) : undefined;
   const groups = await db
     .select({
       workflowKey: workflows.key,
@@ -916,10 +1205,13 @@ export async function taskFacets(
       projectName: projects.name,
       count: shown ? sql<number>`(count(*) filter (where ${shown}))::int` : sql<number>`count(*)::int`,
       all: sql<number>`count(*)::int`,
-      open: sql<number>`(count(*) filter (where ${openTaskSql()}))::int`,
-      overdue: sql<number>`(count(*) filter (where ${overdueTaskSql(filters.today)}))::int`,
+      open: sql<number>`(count(*) filter (where ${counted({ mostrar: "abiertas" }, openTaskSql())}))::int`,
+      overdue: sql<number>`(count(*) filter (where ${counted({ mostrar: "en_retraso" }, overdueTaskSql(filters.today))}))::int`,
       mine: viewer.staffId
-        ? sql<number>`(count(*) filter (where ${shown ?? sql`true`} and ${tasks.managerId} = ${viewer.staffId}))::int`
+        ? sql<number>`(count(*) filter (where ${counted(
+            { mostrar: filters.mostrar, managerId: viewer.staffId },
+            sql`${ownShown ?? sql`true`} and ${tasks.managerId} = ${viewer.staffId}`
+          )}))::int`
         : sql<number>`0`,
     })
     .from(tasks)
@@ -934,10 +1226,11 @@ export async function taskFacets(
   let mine = 0;
   const byTramo: Record<string, number> = {};
   const mostrar = { todas: 0, abiertas: 0, en_retraso: 0 };
-  const projectCounts = new Map<string, { id: string; name: string; count: number }>();
+  const projectCounts = new Map<string, { id: string; name: string; count: number; open: number; overdue: number }>();
   for (const g of groups) {
     const count = Number(g.count);
-    const inProject = scope.projectId === null || g.projectId === scope.projectId;
+    const isSelected = selected.has(g.projectId);
+    const inProject = selected.size === 0 || isSelected;
     const inTramo = scope.workflowKey === null || g.workflowKey === scope.workflowKey;
     if (inProject) {
       total += count;
@@ -950,9 +1243,13 @@ export async function taskFacets(
       mine += Number(g.mine);
     }
     // A project the Mostrar choice leaves without tasks drops out of the options (the selected one stays).
-    if ((inTramo && count > 0) || g.projectId === scope.projectId) {
-      const entry = projectCounts.get(g.projectId) ?? { id: g.projectId, name: g.projectName, count: 0 };
-      if (inTramo) entry.count += count;
+    if ((inTramo && count > 0) || isSelected) {
+      const entry = projectCounts.get(g.projectId) ?? { id: g.projectId, name: g.projectName, count: 0, open: 0, overdue: 0 };
+      if (inTramo) {
+        entry.count += count;
+        entry.open += Number(g.open);
+        entry.overdue += Number(g.overdue);
+      }
       projectCounts.set(g.projectId, entry);
     }
   }
@@ -1122,16 +1419,6 @@ export async function isTaskVisible(taskId: string, viewer: ViewerScope): Promis
   } catch {
     return false;
   }
-}
-
-/** The task a checklist item belongs to, or null; lets the actions guard item-scoped calls. */
-export async function checklistItemTaskId(itemId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ taskId: taskChecklistItems.taskId })
-    .from(taskChecklistItems)
-    .where(eq(taskChecklistItems.id, itemId))
-    .limit(1);
-  return row?.taskId ?? null;
 }
 
 /** The task a link belongs to, or null; lets the actions guard link-scoped calls. */
@@ -1341,6 +1628,34 @@ export async function createSubtask(parentId: string, input: SubtaskInput, actor
     actorId,
     parent.id
   );
+}
+
+/**
+ * The live children of each parent as full table rows (#1047/#1048), in
+ * the children order (due date, then creation), in ONE statement for every
+ * parent (no N+1). A parent without visible children maps to `[]`.
+ */
+export async function listTaskChildren(
+  parentIds: string[],
+  viewer: ViewerScope
+): Promise<Map<string, TaskListRow[]>> {
+  const out = new Map<string, TaskListRow[]>(parentIds.map((id) => [id, []]));
+  if (parentIds.length === 0) return out;
+  // Only parents the viewer can see: a live one, admin tasks for administrators only.
+  const parent = alias(tasks, "visible_parent");
+  const visibleParents = db
+    .select({ id: parent.id })
+    .from(parent)
+    .where(and(inArray(parent.id, parentIds), isNull(parent.deletedAt), viewer.isAdmin ? undefined : ne(parent.kind, "admin")));
+  const rows = await selectTaskList({ kind: viewer.isAdmin ? ALL_TASK_KINDS : undefined }, viewer, true, {
+    where: inArray(tasks.parentTaskId, visibleParents),
+    orderBy: childOrder(),
+  });
+  for (const r of rows) {
+    const list = r.item.parentTaskId ? out.get(r.item.parentTaskId) : undefined;
+    if (list) list.push(toTaskListRow(r));
+  }
+  return out;
 }
 
 /** Live (not deleted, not archived) child tasks of `parentId`, in list order. */
@@ -1890,45 +2205,6 @@ export async function setTaskSupport(
 }
 
 // ── Checklist ───────────────────────────────────────────────────────────────
-export async function addChecklistItem(taskId: string, title: string): Promise<TaskChecklistItem> {
-  const [{ n }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(taskChecklistItems)
-    .where(eq(taskChecklistItems.taskId, taskId));
-  const [row] = await db
-    .insert(taskChecklistItems)
-    .values({ taskId, title: title.trim(), sortOrder: n })
-    .returning();
-  return toChecklistItem(row);
-}
-
-export async function updateChecklistItem(
-  id: string,
-  patch: { title?: string; completed?: boolean }
-): Promise<TaskChecklistItem> {
-  const set: Partial<typeof taskChecklistItems.$inferSelect> = {};
-  if (patch.title !== undefined) set.title = patch.title.trim();
-  if (patch.completed !== undefined) set.completed = patch.completed;
-  const [row] = await db.update(taskChecklistItems).set(set).where(eq(taskChecklistItems.id, id)).returning();
-  if (!row) throw new Error("CHECKLIST_ITEM_NOT_FOUND");
-  return toChecklistItem(row);
-}
-
-export async function removeChecklistItem(id: string): Promise<void> {
-  await db.delete(taskChecklistItems).where(eq(taskChecklistItems.id, id));
-}
-
-export async function reorderChecklist(taskId: string, orderedIds: string[]): Promise<void> {
-  await db.transaction(async (tx) => {
-    for (const [i, id] of orderedIds.entries()) {
-      await tx
-        .update(taskChecklistItems)
-        .set({ sortOrder: i })
-        .where(and(eq(taskChecklistItems.id, id), eq(taskChecklistItems.taskId, taskId)));
-    }
-  });
-}
-
 /**
  * Persists a manual drag-and-drop order for a project's tasks (Actividades).
  * Rewrites sortOrder for every id given, scoped to that project so a stray

@@ -328,6 +328,9 @@ describe("get_task", () => {
     expect(actions.fetchTaskAction).toHaveBeenCalledWith(TASK_ID);
     expect(result.task.title).toBe("Revisar planos");
     expect(result.task.history).toHaveLength(1);
+    // The task checklist is gone (#1046): neither its items nor its counts are exposed.
+    expect(result.task).not.toHaveProperty("checklistItems");
+    expect(result.task).not.toHaveProperty("checklist");
   });
 
   it("accepts a title plus project", async () => {

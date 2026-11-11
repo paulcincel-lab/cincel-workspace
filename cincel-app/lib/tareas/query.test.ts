@@ -7,6 +7,7 @@ import {
   clearTareasFilters,
   hasTareasFilters,
   parseTareasQuery,
+  proyectosPatch,
   tareasHref,
   toTareasSearch,
   toUrlSearchParams,
@@ -48,7 +49,8 @@ function randomQuery(r: Rand): TareasQuery {
   return {
     tramo: maybe(r, () => oneOf(r, TRAMO_KEYS)),
     responsable: maybe(r, () => (r() < 0.5 ? "yo" : uuid(r))),
-    proyecto: maybe(r, () => uuid(r)),
+    // One project in `proyecto`, two or more in `proyectos` (#1045).
+    ...proyectosPatch(r() < 0.25 ? [uuid(r), uuid(r)] : r() < 0.5 ? [uuid(r)] : []),
     estado: maybe(r, () => oneOf(r, TAREAS_ESTADOS)),
     q: maybe(r, () => oneOf(r, SEARCHES)),
     mostrar: oneOf(r, TAREAS_MOSTRAR),

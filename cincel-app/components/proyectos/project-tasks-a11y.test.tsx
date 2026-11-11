@@ -8,11 +8,12 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/proyectos/p1/tareas",
   useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectoTareasData: vi.fn() }));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectoTareasData: vi.fn(), getProyectoTareasSummary: vi.fn() }));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import { THEME_IDS } from "@/lib/ui/themes";
+import { summarizeProjectTasks } from "@/lib/proyectos/project-tasks-by-fase";
 import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
@@ -56,6 +57,8 @@ const TASKS: TaskListItem[] = [
   task("t4", { phase: INSTALACIONES, status: "bloqueado", title: "Pintura de fachada" }),
 ];
 
+const SUMMARY = summarizeProjectTasks(TASKS, { includeAdmin: false, today: TODAY, responsable: null, q: "" });
+
 async function seriousViolations(container: HTMLElement) {
   // Color contrast needs real layout and rendering, which happy-dom does not provide.
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
@@ -87,7 +90,7 @@ describe("Proyecto · Tareas accessibility", () => {
             <main>
               <h1>Proyecto</h1>
               <StyleProvider style={style} scope="staff">
-                <ProjectTasksByFase projectId="p1" tasks={TASKS} today={TODAY} />
+                <ProjectTasksByFase projectId="p1" summary={SUMMARY} tasks={TASKS} today={TODAY} />
               </StyleProvider>
             </main>,
           );
@@ -100,7 +103,7 @@ describe("Proyecto · Tareas accessibility", () => {
   it("names every Agregar tarea button after its group", () => {
     const { getAllByRole } = render(
       <StyleProvider style="visual" scope="staff">
-        <ProjectTasksByFase projectId="p1" tasks={TASKS} today={TODAY} />
+        <ProjectTasksByFase projectId="p1" summary={SUMMARY} tasks={TASKS} today={TODAY} />
       </StyleProvider>,
     );
     const names = getAllByRole("button", { name: /^Agregar tarea a / }).map((b) => b.getAttribute("aria-label"));

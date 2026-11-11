@@ -5,7 +5,6 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
-import { ChecklistProgressCell } from "@/components/tareas/ChecklistProgressCell";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { statusColorToken, taskStatusLabel } from "@/lib/tasks/status-options";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
@@ -440,7 +439,6 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
                                     {t.space ? <span className="ml-2 text-xs text-muted-foreground">{t.space.name}</span> : null}
                                   </span>
                                   <div className="flex shrink-0 items-center gap-3">
-                                    <ChecklistProgressCell total={t.checklist.total} completed={t.checklist.completed} />
                                     <StatusBadge label={taskStatusLabel(t)} token={statusColorToken(t)} />
                                   </div>
                                 </li>

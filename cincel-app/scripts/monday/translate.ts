@@ -1673,11 +1673,10 @@ function addGuestContact(
 // --- subitems --------------------------------------------------------------
 
 /**
- * Subitems of a task's item (BE §5.2). `checklist`: checklist items in
- * depth-first order, deeper levels prefixed with their parents' names, and
- * their column values in the task's import data. `child_tasks`: tasks under
- * the item's task, every level flattened to that one child level with the
- * subitem names in `path`.
+ * Subitems of a task's item (BE §5.2): tasks under the item's task, every
+ * level flattened to that one child level with the subitem names in `path`.
+ * `checklist` (older mappings) imports the same way: task checklists are
+ * gone (#1046), so `checklistItems` stays empty.
  */
 function addSubitems(
   ctx: Ctx,
@@ -1696,45 +1695,6 @@ function addSubitems(
   const defs = board.subitem_columns;
   const parentRef = taskRef(parent.externalId);
   let n = 0;
-
-  if (bm.subitems === "checklist") {
-    const statusColumn = columnsFor(columns, defs, "status")[0];
-    const files = ctx.targets.get(parent.externalId)?.files ?? null;
-    const subitems: NonNullable<ImportRefData["subitems"]> = {};
-    const walk = (
-      nodes: readonly (ItemLike | null)[],
-      prefix: string | null,
-    ) => {
-      for (const sub of activeItems(nodes)) {
-        const title = prefix ? `${prefix} › ${sub.name}` : sub.name;
-        const { status } = taskStatus(ctx, bm, sub, statusColumn);
-        ctx.out.checklistItems.push({
-          entity: "checklist_item",
-          externalId: sub.id,
-          task: parentRef,
-          title,
-          completed: status === "completado",
-          sortOrder: ++n,
-          source: parent.source,
-        });
-        subitems[sub.id] = {
-          name: sub.name,
-          columns: importColumns(sub, columns, defs),
-        };
-        ctx.targets.set(sub.id, {
-          entity: "task",
-          ref: parentRef,
-          prefix: sub.name,
-          files,
-          source: parent.source,
-        });
-        walk(sub.subitems ?? [], title);
-      }
-    };
-    walk(roots, null);
-    parent.data.subitems = subitems;
-    return;
-  }
 
   const walk = (nodes: readonly (ItemLike | null)[], path: string[]) => {
     for (const sub of activeItems(nodes)) {

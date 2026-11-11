@@ -14,6 +14,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 import type {
   StartTramoPreview,
   TaskDetail,
+  TaskListRow,
   TaskRef,
   TaskStatus,
   WorkflowDetail,
@@ -27,11 +28,14 @@ import {
   getTareasBoardColumn,
   getTareasByProject,
   getTareasFacets,
+  getTareasListFirstPages,
   getTareasListPage,
   getTareasPageData,
   getTareasTrend,
+  getTaskChildren,
 } from "@/lib/actions/page-data/tareas-actions";
 import type { TareasPageKeyInput } from "@/lib/query/keys";
+import { TAREAS_FIRST_PAGES_MAX } from "@/lib/tareas/page-input";
 import { getTareasSummary } from "@/lib/actions/page-data/tareas-actions";
 import type { TareasSummary } from "@/lib/tareas/summary";
 import type {
@@ -105,6 +109,8 @@ export function tareasListFiltersOf(query: TareasQuery): TareasListFilters {
     estado: (query.estado as TaskStatus | null) ?? null,
     q: query.q,
     ...(mostrar !== "todas" ? { mostrar } : {}),
+    // Two or more projects (#1045); one stays in `proyecto`, so its keys keep their shape.
+    ...(query.proyectos && query.proyectos.length > 0 ? { proyectos: query.proyectos } : {}),
     // Only a responsable filter reads it, so the other keys stay as they were.
     ...(query.apoyo === false && responsableFilter(query.responsable) ? { apoyo: false as const } : {}),
   };
@@ -202,6 +208,24 @@ export function taskSubtasksOptions(id: string) {
   });
 }
 
+/**
+ * A parent's subtasks as table rows (`qk.tasks.children(id)`, #1047/#1048),
+ * fetched on expand; 30 s stale. A list that loads children in one batch
+ * seeds these keys with `seedTaskChildren` instead of one query per parent.
+ */
+export function taskChildrenOptions(parentId: string) {
+  return queryOptions<TaskListRow[]>({
+    queryKey: qk.tasks.children(parentId),
+    queryFn: () => getTaskChildren(parentId),
+    staleTime: STALE.screen,
+  });
+}
+
+/** Writes batched children into each parent's `qk.tasks.children(id)` key. */
+export function seedTaskChildren(client: QueryClient, byParent: Record<string, TaskListRow[]>): void {
+  for (const [parentId, rows] of Object.entries(byParent)) client.setQueryData(qk.tasks.children(parentId), rows);
+}
+
 /** "Depende de" and "Bloquea a" of a task (`qk.tasks.dependencies(id)`), 30 s stale. */
 export function taskDependenciesOptions(id: string) {
   return queryOptions<{ dependsOn: TaskRef[]; blocks: TaskRef[] }>({
@@ -267,11 +291,6 @@ export function taskAssignInvalidations(): QueryKey[] {
   return [...TAREAS_VIEW_KEYS, qk.inicio(), qk.shell.badges(), qk.me.tasks()];
 }
 
-/** Checklist add / update / remove / reorder: the views that show checklist progress. */
-export function taskChecklistInvalidations(): QueryKey[] {
-  return [[...qk.tareas.all, "page"], [...qk.tareas.all, "list"], [...qk.tareas.all, "board"]];
-}
-
 /** `createSubtaskAction`: the parent's subtareas, every Tareas key, the project's Tareas tab, Inicio and the badges. */
 export function subtaskCreateInvalidations(parentId: string, projectId: string): QueryKey[] {
   return [
@@ -319,6 +338,7 @@ function filtersOfPageKey(q: TareasPageKeyInput): TareasListFilters {
     estado: q.estado,
     q: q.q,
     ...(q.mostrar ? { mostrar: q.mostrar } : {}),
+    ...(q.proyectos && q.proyectos.length > 0 ? { proyectos: q.proyectos } : {}),
     ...(q.apoyo === false ? { apoyo: false as const } : {}),
   };
 }
@@ -408,13 +428,36 @@ export function tareasListInfiniteOptions(f: TareasListFilters) {
   return infiniteQueryOptions<TareasRowsPage, Error, TareasListPages, readonly unknown[], string | null>({
     queryKey: qk.tareas.list(f),
     queryFn: ({ pageParam }) =>
-      getTareasListPage({ filters: f, cursor: pageParam, ...(f.orderBy ? { orderBy: f.orderBy } : {}) }),
+      getTareasListPage({
+        filters: f,
+        cursor: pageParam,
+        ...(f.orderBy ? { orderBy: f.orderBy } : {}),
+        ...(f.orderDir ? { orderDir: f.orderDir } : {}),
+      }),
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
     staleTime: STALE.screen,
     placeholderData: keepPreviousData,
     refetchOnMount: false,
   });
+}
+
+/**
+ * Loads the first page of every list in `lists` that has no cached pages yet,
+ * in one `getTareasListFirstPages` request, and seeds each
+ * `qk.tareas.list(f)` (#1051). "Expandir todo" calls it before it opens the
+ * rows, so N expanded rows cost one request, not N.
+ */
+export async function prefetchTareasListFirstPages(client: QueryClient, lists: TareasListFilters[]): Promise<void> {
+  const missing = lists.filter((f) => client.getQueryData(qk.tareas.list(f)) === undefined);
+  for (let i = 0; i < missing.length; i += TAREAS_FIRST_PAGES_MAX) {
+    const chunk = missing.slice(i, i + TAREAS_FIRST_PAGES_MAX);
+    const pages = await getTareasListFirstPages({ lists: chunk });
+    chunk.forEach((f, j) => {
+      const page = pages[j];
+      if (page) client.setQueryData<TareasListPages>(qk.tareas.list(f), { pages: [page], pageParams: [null] });
+    });
+  }
 }
 
 /** The extra pages of one board column. */

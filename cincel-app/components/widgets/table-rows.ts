@@ -91,3 +91,12 @@ export function toggleRowSelection(
   }
   return setRowsSelected(selected, [id], on);
 }
+
+/** "Cargar más" under a paged table (#1051). */
+export const LOAD_MORE_TEXT = "Cargar más";
+
+/** "Cargar más (12 restantes)"; just "Cargar más" without a count. */
+export function loadMoreText(remaining: number | undefined): string {
+  if (!remaining || remaining <= 0) return LOAD_MORE_TEXT;
+  return `${LOAD_MORE_TEXT} (${remaining} ${remaining === 1 ? "restante" : "restantes"})`;
+}

@@ -100,7 +100,7 @@ describe("loadMiEspacio", () => {
       { id: "a", title: "A", status: "en_proceso", customStatus: null, commitmentDate: "2026-11-10" },
     ]);
     const data = await loadMiEspacio(user);
-    expect(h.listMyTasks).toHaveBeenCalledWith("staff-ana", {}, { staffId: "staff-ana", isAdmin: false });
+    expect(h.listMyTasks).toHaveBeenCalledWith("staff-ana", { mostrar: "abiertas" }, { staffId: "staff-ana", isAdmin: false });
     expect(data.tasks.map((t) => t.id)).toEqual(["a", "b"]);
     expect(data.canCreateTask).toBe(true);
   });

@@ -5,10 +5,13 @@ import {
   loadTareasBoardColumn,
   loadTareasByProject,
   loadTareasFacets,
+  loadTareasListFirstPages,
   loadTareasListPage,
   loadTareasPage,
   loadTareasSummary,
   loadTareasTrend,
+  loadTaskChildren,
+  loadTaskChildrenBatch,
 } from "@/lib/loaders/tareas";
 import type { TareasSummary } from "@/lib/tareas/summary";
 import type {
@@ -23,6 +26,7 @@ import type {
 import {
   TareasBoardColumnInput,
   TareasFiltersInput,
+  TareasListFirstPagesInput,
   TareasListPageInput,
   TareasPageInput,
 } from "@/lib/tareas/page-input";
@@ -33,7 +37,7 @@ import { requireCapabilityUser } from "@/lib/auth/session";
 import { loadTareasStartSlot, loadTaskSheet, searchProjectTasks } from "@/lib/loaders/tareas";
 import type { TareasStartSlotData } from "@/lib/types/tareas-start-slot";
 import type { TaskSheetData } from "@/lib/types/task-sheet";
-import type { TaskRef } from "@/lib/types/core";
+import type { TaskListRow, TaskRef } from "@/lib/types/core";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
@@ -112,6 +116,32 @@ export async function getTareasPageData(input: z.input<typeof TareasPageInput>):
 export async function getTareasListPage(input: z.input<typeof TareasListPageInput>): Promise<TareasRowsPage> {
   const parsed = parseInput(TareasListPageInput, input);
   return loadTareasListPage(await requireCapabilityUser(), parsed);
+}
+
+/**
+ * The first page of several `qk.tareas.list(f)` lists in one request
+ * (#1051, "Expandir todo" in Proyectos · Analítico). FORBIDDEN without Tareas.
+ */
+export async function getTareasListFirstPages(
+  input: z.input<typeof TareasListFirstPagesInput>,
+): Promise<TareasRowsPage[]> {
+  const parsed = parseInput(TareasListFirstPagesInput, input);
+  return loadTareasListFirstPages(await requireCapabilityUser(), parsed);
+}
+
+/** `qk.tasks.children(parentId)`: a parent's subtasks as table rows (#1047/#1048). FORBIDDEN without Tareas. */
+export async function getTaskChildren(parentId: string): Promise<TaskListRow[]> {
+  const id = parseInput(UuidSchema, parentId);
+  return loadTaskChildren(await requireCapabilityUser(), id);
+}
+
+/** Most parents one `getTaskChildrenBatch` call reads ("Expandir subtareas", #1048). */
+const TASK_CHILDREN_BATCH_MAX = 100;
+
+/** Several parents' subtasks in one read, by parent id ("Expandir subtareas", #1048). FORBIDDEN without Tareas. */
+export async function getTaskChildrenBatch(parentIds: string[]): Promise<Record<string, TaskListRow[]>> {
+  const ids = parseInput(z.array(UuidSchema).max(TASK_CHILDREN_BATCH_MAX), parentIds);
+  return loadTaskChildrenBatch(await requireCapabilityUser(), [...new Set(ids)]);
 }
 
 /** `qk.tareas.board(f, columnId)` pages: one board column after `cursor`. FORBIDDEN without Tareas. */

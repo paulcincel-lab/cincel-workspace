@@ -10,6 +10,7 @@ import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader"
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
+import { ProjectFilter } from "@/components/widgets/ProjectFilter";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { TaskBoardWidget } from "@/components/widgets/TaskBoardWidget";
 import {
@@ -29,6 +30,8 @@ import {
   hasTareasFilters,
   hideCompletedPatch,
   isHidingCompleted,
+  proyectosPatch,
+  selectedProyectos,
   type TareasMostrar,
   type TareasQuery,
 } from "@/lib/tareas/query";
@@ -289,7 +292,8 @@ export function TareasVisual({
  * The Visual filter row (`role="group" aria-label="Filtros"`): Mostrar
  * (Todas, Abiertas, En retraso; single-select, Todas also clears the tramo),
  * the tramo pills (single-select, a second click clears it), Solo mías
- * (`responsable=yo`) and the search. Pills are `aria-pressed` buttons.
+ * (`responsable=yo`), Proyecto (multi-select, #1045) and the search. Pills
+ * are `aria-pressed` buttons.
  */
 function TareasVisualFilters({
   query,
@@ -375,6 +379,13 @@ function TareasVisualFilters({
           </span>
         ) : null}
       </Button>
+      <span aria-hidden="true" className="h-5 w-px bg-border" />
+      <ProjectFilter
+        options={facets.projects}
+        selected={selectedProyectos(query)}
+        onChange={(ids) => onQuery(proyectosPatch(ids))}
+        triggerClassName={CHIP_CLASS}
+      />
       <span aria-hidden="true" className="h-5 w-px bg-border" />
       <HideCompletedSwitch checked={isHidingCompleted(query)} onCheckedChange={onHideCompleted} />
       <div className="relative ml-auto">

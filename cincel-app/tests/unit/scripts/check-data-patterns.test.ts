@@ -163,6 +163,48 @@ export function a() {
   });
 });
 
+describe("#1051 rules", () => {
+  it("flags a Zustand store hook called without a selector, not one with a selector", () => {
+    const text = `import { useNewTaskUi } from "@/lib/stores/new-task-store";
+import { useHideCompletedPreference } from "@/lib/stores/appearance-store";
+export function A() {
+  const all = useNewTaskUi();
+  const open = useNewTaskUi((s) => s.open);
+  const [pref] = useHideCompletedPreference();
+  return all && open && pref;
+}
+`;
+    expect(patterns("components/A.tsx", text)).toEqual(["4 useNewTaskUi() without a selector"]);
+  });
+
+  it("flags a queryFn that filters a full action list on the client", () => {
+    const text = `import { fetchMyTasksAction } from "@/lib/actions/tasks-actions";
+export const opts = {
+  queryKey: ["me", "tasks", "closed"],
+  queryFn: async () => (await fetchMyTasksAction()).filter((t) => t.closed),
+};
+export const ok = { queryKey: ["x"], queryFn: () => fetchMyTasksAction() };
+`;
+    expect(patterns("lib/query/options/a.ts", text)).toEqual(["4 queryFn → fetchMyTasksAction(…).filter("]);
+  });
+
+  it("flags a sort over infinite-query pages unless it keeps the server's order", () => {
+    const text = `export function rowsOf(pages: { rows: { due: string }[] }[]) {
+  return useMemo(() => sortByDueDate(pages.flatMap((p) => p.rows)), [pages]);
+}
+export function eventsOf(data: { pages: { events: { at: string }[] }[] }) {
+  return data.pages
+    .flatMap((p) => p.events)
+    .sort((a, b) => b.at.localeCompare(a.at)); // data-patterns: server-order
+}
+export function plain(rows: number[]) {
+  return rows.sort();
+}
+`;
+    expect(patterns("components/a.tsx", text)).toEqual(["2 sortByDueDate( over paged rows"]);
+  });
+});
+
 describe("CLI", () => {
   const dir = mkdtempSync(join(tmpdir(), "data-patterns-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));

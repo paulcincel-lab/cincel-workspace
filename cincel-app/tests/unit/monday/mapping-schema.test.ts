@@ -127,7 +127,7 @@ describe("Mapping", () => {
     expect(board.projectNames).toEqual({});
     expect(board.projectCodes).toEqual({});
     expect(board.subitemColumns).toEqual({});
-    expect(board.subitems).toBe("checklist");
+    expect(board.subitems).toBe("child_tasks");
     expect(board.schedule).toEqual({
       enabled: false,
       planta: { fixed: "General" },

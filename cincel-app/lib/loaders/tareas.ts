@@ -10,6 +10,7 @@ import {
   type TareasFacets,
   type TareasPageData,
   type TareasRowsPage,
+  type TaskListPageInput,
   type TareasStaffOption,
 } from "@/lib/tareas/page-data";
 import type { TaskKind, TaskStatusOption, ViewerScope, WorkflowRef } from "@/lib/types/core";
@@ -35,6 +36,7 @@ import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
 import type { TaskFilters, TaskListRow, TaskRef } from "@/lib/types/core";
 import { esencialResponsable } from "@/lib/tareas/query";
+import { TAREAS_FIRST_PAGES_MAX } from "@/lib/tareas/page-input";
 import { EMPTY_TAREAS_SUMMARY, SIN_TRAMO_KEY, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
 import {
   currentTaskStatus,
@@ -197,15 +199,24 @@ async function loadTareasTramos(): Promise<WorkflowRef[]> {
  */
 function tareasBaseFilters(user: AuthenticatedUser, viewer: ViewerScope, filters: TareasListFilters): TaskFilters {
   const out: TaskFilters = {};
+  // Top-level tasks only, a matching subtask bringing its parent (#1047); `topLevelOnly: false` lists subtasks as rows.
+  if (filters.topLevelOnly !== false) out.topLevelOnly = true;
   if (filters.q) out.search = filters.q;
   if (filters.estado) out.status = filters.estado;
   // "Incluir apoyo" (#1038, on by default): the person as Responsable or apoyo; off, as Responsable only.
-  const person = filters.responsable === "yo" ? user.member.id : filters.responsable !== "todos" ? filters.responsable : null;
+  // "sin" (#1051): the tasks without a Responsable.
+  if (filters.responsable === "sin") out.unassigned = true;
+  const person =
+    filters.responsable === "yo"
+      ? user.member.id
+      : filters.responsable !== "todos" && filters.responsable !== "sin"
+        ? filters.responsable
+        : null;
   if (person) {
     if (filters.apoyo === false) out.managerId = person;
     else out.involvesStaffId = person;
   }
-  if (filters.responsable === "yo" && viewer.isAdmin) out.kind = ALL_KINDS_FOR_ADMIN;
+  if ((filters.responsable === "yo" || filters.incluirAdmin) && viewer.isAdmin) out.kind = ALL_KINDS_FOR_ADMIN;
   if (filters.mostrar && filters.mostrar !== "todas") out.mostrar = filters.mostrar;
   return out;
 }
@@ -226,6 +237,7 @@ function tareasViewFilters(
     out.workflowId = tramo.id;
   }
   if (filters.proyecto) out.projectId = filters.proyecto;
+  if (filters.proyectos && filters.proyectos.length > 0) out.projectIds = filters.proyectos;
   return out;
 }
 
@@ -265,6 +277,7 @@ async function tareasFacets(
   return tasksRepository.taskFacets(tareasBaseFilters(user, viewer, filters), viewer, {
     workflowKey: filters.tramo,
     projectId: filters.proyecto,
+    ...(filters.proyectos && filters.proyectos.length > 0 ? { projectIds: filters.proyectos } : {}),
   });
 }
 
@@ -301,7 +314,7 @@ const EMPTY_PAGE: TareasRowsPage = { rows: [], nextCursor: null, total: 0 };
 /** `qk.tareas.list(f)` page loader (`useInfiniteQuery`, the cursor is the page param). FORBIDDEN without Tareas. */
 export async function loadTareasListPage(
   user: AuthenticatedUser,
-  input: { filters: TareasListFilters; cursor: string | null; limit?: number; orderBy?: "retraso" },
+  input: TaskListPageInput,
 ): Promise<TareasRowsPage> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
@@ -311,7 +324,62 @@ export async function loadTareasListPage(
     cursor: input.cursor,
     limit: input.limit ?? TAREAS_LIST_PAGE_SIZE,
     ...(input.orderBy ? { orderBy: input.orderBy } : {}),
+    ...(input.orderDir ? { orderDir: input.orderDir } : {}),
   });
+}
+
+/**
+ * The first page of several task lists in one request (#1051): "Expandir
+ * todo" in Proyectos · Analítico seeds every project's `qk.tareas.list(f)`
+ * with it instead of one request per project. The tramos are read once.
+ * FORBIDDEN without the Tareas capability.
+ */
+export async function loadTareasListFirstPages(
+  user: AuthenticatedUser,
+  input: { lists: TareasListFilters[] },
+): Promise<TareasRowsPage[]> {
+  requireTareasView(user);
+  const viewer = viewerScopeOf(user);
+  const tramos = await loadTareasTramos();
+  return Promise.all(
+    input.lists.slice(0, TAREAS_FIRST_PAGES_MAX).map((f) => {
+      const filters = tareasViewFilters(user, viewer, f, tramos);
+      if (!filters) return EMPTY_PAGE;
+      return tasksRepository.listTasksPage(filters, viewer, {
+        cursor: null,
+        limit: TAREAS_LIST_PAGE_SIZE,
+        ...(f.orderBy ? { orderBy: f.orderBy } : {}),
+        ...(f.orderDir ? { orderDir: f.orderDir } : {}),
+      });
+    }),
+  );
+}
+
+/**
+ * `qk.tasks.children(parentId)` loader (#1047/#1048): the parent's subtasks
+ * as table rows; `[]` for a parent the viewer can't see. FORBIDDEN without Tareas.
+ */
+export async function loadTaskChildren(user: AuthenticatedUser, parentId: string): Promise<TaskListRow[]> {
+  requireTareasView(user);
+  const viewer = viewerScopeOf(user);
+  const byParent = await tasksRepository.listTaskChildren([parentId], viewer);
+  return byParent.get(parentId) ?? [];
+}
+
+/**
+ * Several parents' subtasks in one read ("Expandir subtareas", #1048): one
+ * `listTaskChildren` statement, seeded into each `qk.tasks.children(id)`.
+ * FORBIDDEN without Tareas.
+ */
+export async function loadTaskChildrenBatch(
+  user: AuthenticatedUser,
+  parentIds: string[],
+): Promise<Record<string, TaskListRow[]>> {
+  requireTareasView(user);
+  if (parentIds.length === 0) return {};
+  const viewer = viewerScopeOf(user);
+  const byParent = await tasksRepository.listTaskChildren(parentIds, viewer);
+  return Object.fromEntries(parentIds.map((id) => [id, byParent.get(id) ?? []]));
 }
 
 /** `qk.tareas.board(f, columnId)` loader: the rows of one column after the cursor. FORBIDDEN without Tareas. */
@@ -418,6 +486,7 @@ export async function loadTareasPage(
     estado: input.estado,
     q: input.q,
     ...(input.mostrar && input.mostrar !== "todas" ? { mostrar: input.mostrar } : {}),
+    ...(input.proyectos && input.proyectos.length > 0 ? { proyectos: input.proyectos } : {}),
     ...(input.apoyo === false ? { apoyo: false as const } : {}),
   };
   const tramos = await loadTareasTramos();

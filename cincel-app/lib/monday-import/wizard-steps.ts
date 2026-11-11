@@ -116,8 +116,8 @@ export const BASE_STATUS_LABELS = {
   bloqueado: "Bloqueado",
 } as const;
 
-export const SUBITEM_LABELS: Record<NonNullable<BoardDraft["subitems"]>, string> = {
-  checklist: "Checklist de la tarea",
+/** "checklist" is not offered: older mappings with it import subitems as subtareas (#1046). */
+export const SUBITEM_LABELS: Record<Exclude<NonNullable<BoardDraft["subitems"]>, "checklist">, string> = {
   child_tasks: "Subtareas",
   ignore: "Ignorar",
 };
@@ -484,6 +484,6 @@ export function subitemsSection(
   return {
     description: "Qué serán los subelementos de monday.",
     selectLabel: "Subelementos",
-    showColumns: (subitems ?? "checklist") !== "ignore",
+    showColumns: subitems !== "ignore",
   };
 }

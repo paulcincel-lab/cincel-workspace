@@ -193,6 +193,14 @@ export const taskChecklistItems = core.table(
     title: text("title").notNull(),
     completed: boolean("completed").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Read-only since #1046: each item became a subtask. The subtask it became
+     * (null once that subtask is purged) and when; a set `convertedAt` marks
+     * the item as converted, so the conversion never runs twice on it.
+     * Rollback: soft-delete the tasks in `converted_task_id` and clear both columns.
+     */
+    convertedTaskId: uuid("converted_task_id").references((): AnyPgColumn => tasks.id, { onDelete: "set null" }),
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
     ...stamps,
   },
   (t) => [index("idx_task_checklist_items_task_id").on(t.taskId)]

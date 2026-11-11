@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, keepPreviousData, queryOptions, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { getProyectoFichaData, getProyectoHistoryPage } from "@/lib/actions/page-data/proyectos-actions";
 import type { ProyectoFichaData } from "@/lib/loaders/proyectos";
@@ -28,8 +28,12 @@ import type { ProjectCreateStartOptions } from "@/lib/types/core";
 import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 // Resumen Analítico quick-add hint (#997)
-import { getProyectoAssigneeSuggestion } from "@/lib/actions/page-data/proyectos-actions";
+import { getProyectoAssigneeSuggestion, getProyectoTareasSummary } from "@/lib/actions/page-data/proyectos-actions";
+import type { ProyectoTareasSummary } from "@/lib/proyectos/project-tasks-by-fase";
 import type { AssigneeSuggestion } from "@/lib/proyectos/assignee-suggestion";
+// Delete and restore (#1050)
+import { getDeletedProjects, getProjectDeletePreview } from "@/lib/actions/page-data/proyectos-actions";
+import type { DeletedProjectRow, ProjectDeletePreview } from "@/lib/types/project-delete";
 
 /**
  * `queryOptions` for the Proyectos screens (Query Migration Phase 5), 30 s
@@ -191,6 +195,21 @@ export function proyectoTareasOptions(id: string) {
   });
 }
 
+/**
+ * The project Tareas tab's counts (`qk.proyectos.tareasSummary(id, f)`,
+ * #1051): groups and progress, chip counts and Responsable options for the
+ * Responsable and search filters. 30 s stale; the previous counts stay while
+ * the next load. The rows are `qk.tareas.list` pages.
+ */
+export function proyectoTareasSummaryOptions(id: string, f: { responsable: string | null; q: string }) {
+  return queryOptions<ProyectoTareasSummary | null>({
+    queryKey: qk.proyectos.tareasSummary(id, f),
+    queryFn: () => getProyectoTareasSummary({ id, ...f }),
+    staleTime: STALE.screen,
+    placeholderData: keepPreviousData,
+  });
+}
+
 // ── Resumen Analítico quick-add hint (#997) ──────────────────────────────────
 
 /**
@@ -203,4 +222,41 @@ export function proyectoAssigneeSuggestionOptions(id: string, phaseId: string, s
     queryFn: () => getProyectoAssigneeSuggestion({ id, phaseId, staffId }),
     staleTime: STALE.screen,
   });
+}
+
+// ── Delete and restore (#1050) ───────────────────────────────────────────────
+
+/** The delete dialog's counts (`qk.proyectos.deletePreview(id)`), fetched when the dialog opens; always fresh. */
+export function projectDeletePreviewOptions(id: string) {
+  return queryOptions<ProjectDeletePreview | null>({
+    queryKey: qk.proyectos.deletePreview(id),
+    queryFn: () => getProjectDeletePreview(id),
+    staleTime: 0,
+  });
+}
+
+/** The admin "Proyectos eliminados" list (`qk.proyectos.deleted()`), 30 s stale. */
+export function deletedProjectsOptions() {
+  return queryOptions<DeletedProjectRow[]>({
+    queryKey: qk.proyectos.deleted(),
+    queryFn: () => getDeletedProjects(),
+    staleTime: STALE.screen,
+  });
+}
+
+/**
+ * What a project delete or restore changes (#1050): every Proyectos read
+ * (list, the project's tabs, "Proyectos eliminados"), the project pickers,
+ * Tareas, Inicio, Mi espacio and the shell badges.
+ */
+export function projectDeleteInvalidations(): QueryKey[] {
+  return [
+    qk.proyectos.all,
+    qk.catalog.projectOptions(),
+    qk.tareas.all,
+    qk.inicio(),
+    qk.me.tasks(),
+    qk.me.today(),
+    qk.shell.badges(),
+  ];
 }

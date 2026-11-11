@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
@@ -12,7 +12,7 @@ import { Button, buttonVariants } from "@/components/ui/shadcn/button";
 import { EditableCell } from "@/components/widgets/EditableCell";
 import { ROW_ACTIONS_HEADER, ROW_ACTIONS_WIDTH, RowActionsMenu, rowDeleteKeyDown } from "@/components/widgets/RowActionsMenu";
 import { OPEN_TASK_LABEL, cellEditState } from "@/components/widgets/editable-cell";
-import type { TableRowActionsProps, TableSelectionProps } from "@/components/widgets/table-rows";
+import { loadMoreText, type TableRowActionsProps, type TableSelectionProps } from "@/components/widgets/table-rows";
 import {
   HeaderSelectCheckbox,
   RowSelectCheckbox,
@@ -85,6 +85,8 @@ export type Group<Row> = {
   quickAdd?: ReactNode;
   loading?: boolean;
   hasMore?: boolean;
+  /** Rows still to load after these: "Cargar más (12 restantes)" (#1051). */
+  remaining?: number;
   hidden?: boolean;
   /** "table" layout: no group row; the rows are always shown (a flat list, #1042). */
   headless?: boolean;
@@ -99,7 +101,20 @@ export type RowDetail<Row> = {
   onToggle(row: Row): void;
   /** The toggle's accessible name, e.g. "Tareas de «Casa Lomas»". */
   label(row: Row): string;
-  render(row: Row): ReactNode;
+  /** Full-width content under the open row (left out with `rows`). */
+  render?(row: Row): ReactNode;
+  /** Rows that get a toggle (default: every row), e.g. tasks with subtasks. */
+  hasDetail?(row: Row): boolean;
+  /**
+   * Nested rows (#1048): the open row's children as rows of this same table
+   * (same columns, editable cells and keyboard grid), indented with a lighter
+   * style and without a toggle of their own; undefined while they load.
+   */
+  rows?(row: Row): Row[] | undefined;
+  /** `<tr>`s after the nested rows, e.g. the "+ Subtarea…" quick-add row. */
+  after?(row: Row): ReactNode;
+  /** Screen-reader text of a nested row, e.g. "subtarea de «Diseño»". */
+  nestedLabel?(child: Row, parent: Row): string;
 };
 export type GroupAnchor = { groupId: string; label: string; count: number; tone?: "destructive" | "muted" };
 export type GroupedTableProps<Row extends Record<string, unknown>> = {
@@ -119,6 +134,8 @@ export type GroupedTableProps<Row extends Record<string, unknown>> = {
   anchorsCaption?: string;
   /** "Expandir todo" / "Contraer todo" above the groups (default true); false when the page has its own. */
   toggleAll?: boolean;
+  /** More controls in the row above the groups, before "Expandir todo" (e.g. "Expandir subtareas", #1048). */
+  toolbar?: ReactNode;
   defaultExpanded?: boolean | string[];
   expanded?: string[];
   onExpandedChange?(ids: string[]): void;
@@ -217,12 +234,42 @@ function leadingColumns<Row extends Record<string, unknown>>(props: GroupedTable
   return props.selectable ? 1 : 0;
 }
 
-/** Every row id of the groups (and their children), in the order the table shows them. */
-function orderedRowIds<Row>(groups: Group<Row>[], idOf: (row: Row, index: number) => string): string[] {
+/** Every row id of the groups (and their children, and the open nested rows), in the order the table shows them. */
+function orderedRowIds<Row>(groups: Group<Row>[], idOf: (row: Row, index: number) => string, detail?: RowDetail<Row>): string[] {
   return groups.flatMap((group) => [
-    ...(group.rows ?? []).map((row, index) => idOf(row, index)),
-    ...orderedRowIds(group.children ?? [], idOf),
+    ...(group.rows ?? []).flatMap((row, index) => [
+      idOf(row, index),
+      ...(detail?.rows && hasRowDetail(detail, row) && detail.isOpen(row) ? (detail.rows(row) ?? []).map((child, i) => idOf(child, i)) : []),
+    ]),
+    ...orderedRowIds(group.children ?? [], idOf, detail),
   ]);
+}
+
+function hasRowDetail<Row>(detail: RowDetail<Row>, row: Row): boolean {
+  return detail.hasDetail?.(row) ?? true;
+}
+
+/** ← / → on the first cell of a row with nested rows (#1048): → opens them, ← closes them. */
+function nestedToggleKeyDown<Row>(event: KeyboardEvent<HTMLElement>, detail: RowDetail<Row>, row: Row, open: boolean) {
+  if (event.target !== event.currentTarget || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+  if ((event.key === "ArrowRight" && !open) || (event.key === "ArrowLeft" && open)) {
+    event.preventDefault();
+    event.stopPropagation();
+    detail.onToggle(row);
+  }
+}
+
+/** ← on the first cell of a nested row goes back to its parent's first cell. */
+function nestedParentKeyDown(event: KeyboardEvent<HTMLElement>, parentId: string, columnKey: string) {
+  if (event.target !== event.currentTarget || event.key !== "ArrowLeft" || event.altKey || event.metaKey || event.ctrlKey) return;
+  const root = event.currentTarget.closest("table");
+  const parent = Array.from(root?.querySelectorAll<HTMLElement>("[data-grid-cell]") ?? []).find(
+    (cell) => cell.dataset.cellRow === parentId && cell.dataset.cellColumn === columnKey,
+  );
+  if (!parent) return;
+  event.preventDefault();
+  event.stopPropagation();
+  parent.focus({ preventScroll: true });
 }
 
 function trailingColumns<Row extends Record<string, unknown>>(props: GroupedTableProps<Row>): number {
@@ -371,6 +418,13 @@ function HeaderRow<Row extends Record<string, unknown>>({ ctx, rowIds = [] }: { 
                 className="inline-flex items-center gap-1 uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {label}
+                {ctx.props.sort?.key === column.key ? (
+                  ctx.props.sort.direction === "asc" ? (
+                    <ArrowUp aria-hidden="true" className="size-3" />
+                  ) : (
+                    <ArrowDown aria-hidden="true" className="size-3" />
+                  )
+                ) : null}
               </button>
             ) : (
               label
@@ -424,28 +478,40 @@ function LeafRow<Row extends Record<string, unknown>>({
   row,
   index,
   groupId,
+  nested,
 }: {
   ctx: Ctx<Row>;
   row: Row;
   index: number;
   groupId: string;
+  /** A nested row (#1048) under `parent`: indented, lighter, no toggle of its own. */
+  nested?: { parent: Row; parentId: string };
 }) {
   const { props, columns, grid } = ctx;
   const isNew = props.isRowNew?.(row) ?? false;
   const muted = props.isRowMuted?.(row) ?? false;
   const id = props.getRowId?.(row, index) ?? rowId(row, index);
-  const detail = props.rowDetail;
+  const detail = !nested && props.rowDetail && hasRowDetail(props.rowDetail, row) ? props.rowDetail : undefined;
   const detailOpen = detail?.isOpen(row) ?? false;
   const detailId = domId("fila-detalle", id);
   const span = columns.length + leadingColumns(props) + trailingColumns(props);
+  // Nested rows (#1048): the open row's children render as rows of this table.
+  const nestedMode = detail?.rows !== undefined;
+  const childRows = nestedMode && detailOpen ? detail?.rows?.(row) : undefined;
+  const childIds = (childRows ?? []).map((child, i) => props.getRowId?.(child, i) ?? rowId(child, i));
+  const controls = !detailOpen ? undefined : nestedMode && childRows ? childIds.map((c) => domId("subfila", c)).join(" ") || undefined : detailId;
+  const nestedText = nested ? props.rowDetail?.nestedLabel?.(row, nested.parent) : undefined;
   return (
     <>
     <tr
+      id={nested ? domId("subfila", id) : undefined}
       data-slot="leaf-row"
       data-row-id={id}
+      data-depth={nested ? 1 : undefined}
+      data-parent-row-id={nested?.parentId}
       data-selected={ctx.selection.isSelected(id) ? "" : undefined}
       {...(grid ? { [GRID_GROUP_ATTR]: groupId } : {})}
-      className={cn("group/row", isNew && "row-new", grid && GRID_ROW_CLASS)}
+      className={cn("group/row", isNew && "row-new", grid && GRID_ROW_CLASS, nested && "text-foreground-soft")}
       onKeyDown={props.onRowDelete ? (event) => rowDeleteKeyDown(event, () => props.onRowDelete?.(row)) : undefined}
     >
       {ctx.selection.enabled ? (
@@ -475,6 +541,7 @@ function LeafRow<Row extends Record<string, unknown>>({
               ) : (
                 <span className={cn("truncate", muted && "text-muted-foreground")}>{content}</span>
               )}
+              {nestedText ? <span className="sr-only">{`, ${nestedText}`}</span> : null}
               {isNew ? (
                 <Badge variant="secondary" className="text-[11px]">
                   {NEW_ROW_LABEL}
@@ -488,7 +555,7 @@ function LeafRow<Row extends Record<string, unknown>>({
                 <button
                   type="button"
                   aria-expanded={detailOpen}
-                  aria-controls={detailOpen ? detailId : undefined}
+                  aria-controls={controls}
                   aria-label={detail.label(row)}
                   data-slot="row-detail-toggle"
                   onClick={() => detail.onToggle(row)}
@@ -528,7 +595,14 @@ function LeafRow<Row extends Record<string, unknown>>({
             data-column={column.key}
             data-heat={heat ?? undefined}
             {...(grid ? grid.cellProps(id, column.key, cellEditState(row, edit, column.canEdit).state) : {})}
-            className={cn(cellClass(column, first, heat), grid && GRID_CELL_CLASS)}
+            onKeyDown={
+              grid && first && detail && nestedMode
+                ? (event) => nestedToggleKeyDown(event, detail, row, detailOpen)
+                : grid && first && nested
+                  ? (event) => nestedParentKeyDown(event, nested.parentId, column.key)
+                  : undefined
+            }
+            className={cn(cellClass(column, first, heat), grid && GRID_CELL_CLASS, nested && "bg-muted/30", nested && first && "pl-16")}
             style={column.width && columnAlign(column) !== "right" ? { maxWidth: column.width } : undefined}
           >
             {content}
@@ -541,11 +615,26 @@ function LeafRow<Row extends Record<string, unknown>>({
         </td>
       ) : null}
     </tr>
-    {detail && detailOpen ? (
+    {detail && detailOpen && nestedMode ? (
+      <>
+        {(childRows ?? []).map((child, i) => (
+          <LeafRow key={childIds[i]} ctx={ctx} row={child} index={i} groupId={groupId} nested={{ parent: row, parentId: id }} />
+        ))}
+        {childRows === undefined ? (
+          <tr id={detailId} data-slot="nested-loading">
+            <td colSpan={span} className="border-b border-border px-3 py-2 pl-16">
+              <LoadingSkeleton variant="table" rows={1} />
+            </td>
+          </tr>
+        ) : null}
+        {detail.after?.(row) ?? null}
+      </>
+    ) : null}
+    {detail && detailOpen && !nestedMode ? (
       <tr id={detailId} data-slot="row-detail">
         {/* `data-row-detail`: the outer keyboard grid skips the cells of a table rendered here. */}
         <td colSpan={span} data-row-detail="" className="border-b border-border bg-muted/30 p-0">
-          {detail.render(row)}
+          {detail.render?.(row)}
         </td>
       </tr>
     ) : null}
@@ -578,7 +667,7 @@ function GroupRows<Row extends Record<string, unknown>>({ ctx, group }: { ctx: C
         <tr data-slot="load-more">
           <td colSpan={span} className="border-b border-border px-3 py-1 pl-10">
             <Button type="button" variant="link" size="sm" onClick={() => ctx.props.onLoadMore?.(group.id)}>
-              {LOAD_MORE_LABEL}
+              {loadMoreText(group.remaining)}
             </Button>
           </td>
         </tr>
@@ -712,7 +801,7 @@ function TopGroup<Row extends Record<string, unknown>>({
               style={{ minWidth }}
             >
               <thead className="sticky top-0">
-                <HeaderRow ctx={ctx} rowIds={orderedRowIds([group], ctx.idOf)} />
+                <HeaderRow ctx={ctx} rowIds={orderedRowIds([group], ctx.idOf, ctx.props.rowDetail)} />
               </thead>
               {ownRows ? (
                 <tbody data-slot="group-rows">
@@ -742,7 +831,7 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
     () => (row: Row, index: number) => getRowId?.(row, index) ?? rowId(row, index),
     [getRowId],
   );
-  const rowOrder = useMemo(() => orderedRowIds(groups, idOf), [groups, idOf]);
+  const rowOrder = useMemo(() => orderedRowIds(groups, idOf, p.rowDetail), [groups, idOf, p.rowDetail]);
   const selection = useTableSelection(p, rowOrder);
 
   // Uncontrolled: the ids whose state differs from `defaultExpanded`.
@@ -842,7 +931,7 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
           }
         : {})}
     >
-      {anchors.length > 0 || p.toggleAll !== false ? (
+      {anchors.length > 0 || p.toggleAll !== false || p.toolbar ? (
       <div className="flex flex-wrap items-center gap-2">
         {anchors.length > 0 ? (
           <nav aria-label={ANCHORS_LABEL} className="flex flex-wrap items-center gap-2">
@@ -874,6 +963,7 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
           </nav>
         ) : null}
         <span className="flex-1" />
+        {p.toolbar ?? null}
         {p.toggleAll !== false ? (
           <Button type="button" variant="link" size="sm" onClick={toggleAll}>
             {allOpen ? COLLAPSE_ALL_LABEL : EXPAND_ALL_LABEL}

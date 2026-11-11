@@ -8,6 +8,8 @@
  */
 import type { TaskStatus } from "@/lib/types/core";
 
+import { TAREAS_ORDEN_PARAM, formatSortParam, parseSortParam, type TaskSort } from "./sort";
+
 /** "Mostrar" filter (`?mostrar=`): every task, the open ones, or the open ones past their due date. */
 export type TareasMostrar = "todas" | "abiertas" | "en_retraso";
 export const TAREAS_MOSTRAR: readonly TareasMostrar[] = ["todas", "abiertas", "en_retraso"];
@@ -16,7 +18,14 @@ export type TareasQuery = {
   tramo: string | null;
   /** "yo", a staff id, "todos" (written by Esencial's Solo mías toggle: everyone) or null. */
   responsable: "yo" | "todos" | string | null;
+  /** `?proyecto=<id>`: one project (also what the project page links to). */
   proyecto: string | null;
+  /**
+   * `?proyecto=<id>,<id>` (#1045): two or more projects, sorted; one project
+   * stays in `proyecto`, so its keys, links and "Nueva tarea" default are
+   * unchanged. Read both with `selectedProyectos`.
+   */
+  proyectos?: string[];
   estado: string | null;
   q: string | null;
   /** `?mostrar=`; default "todas" (left out of the URL). */
@@ -31,6 +40,8 @@ export type TareasQuery = {
    * that person is apoyo. Default true (left out of the URL); `?apoyo=0` turns it off.
    */
   apoyo?: boolean;
+  /** `?orden=<columna>:<dir>` (#1044): the task table sort; null or left out for the default ("retraso"). */
+  orden?: TaskSort | null;
   nueva?: boolean;
 };
 
@@ -49,6 +60,7 @@ export const DEFAULT_TAREAS_QUERY: TareasQuery = {
   tramo: null,
   responsable: null,
   proyecto: null,
+  proyectos: [],
   estado: null,
   q: null,
   mostrar: "todas",
@@ -93,22 +105,56 @@ export function parseCompletadasParam(value: string | null, fallback = true): bo
   return fallback;
 }
 
+/** Most projects the Proyecto filter keeps from the URL (`TAREAS_PROYECTOS_MAX` in the input schema). */
+export const TAREAS_PROYECTOS_URL_MAX = 50;
+
+/**
+ * `?proyecto=` → project ids: comma-separated UUIDs, lowercased, without
+ * duplicates or malformed ones, sorted, at most `TAREAS_PROYECTOS_URL_MAX`.
+ */
+export function parseProyectosParam(value: string | null): string[] {
+  if (!value) return [];
+  const ids = new Set<string>();
+  for (const part of value.split(",")) {
+    const parsed = id(part.trim());
+    if (parsed) ids.add(parsed);
+  }
+  return [...ids].sort().slice(0, TAREAS_PROYECTOS_URL_MAX);
+}
+
+/** The projects a query narrows to (`proyecto` or `proyectos`); [] for every project. */
+export function selectedProyectos(q: { proyecto?: string | null; proyectos?: string[] }): string[] {
+  if (q.proyectos && q.proyectos.length > 0) return q.proyectos;
+  return q.proyecto ? [q.proyecto] : [];
+}
+
+/** The query patch of a Proyecto selection: one id in `proyecto`, two or more in `proyectos`, none clears both. */
+export function proyectosPatch(ids: readonly string[]): Pick<TareasQuery, "proyecto" | "proyectos"> {
+  const sorted = [...new Set(ids.map((v) => v.toLowerCase()))].sort().slice(0, TAREAS_PROYECTOS_URL_MAX);
+  if (sorted.length === 0) return { proyecto: null, proyectos: [] };
+  if (sorted.length === 1) return { proyecto: sorted[0], proyectos: [] };
+  return { proyecto: null, proyectos: sorted };
+}
+
 /**
  * URL → query; unknown or malformed values fall back to the defaults. A
  * missing `?completadas=` uses `defaults.completadas` (the preference).
  */
 export function parseTareasQuery(sp: URLSearchParams, defaults: TareasQueryDefaults = {}): TareasQuery {
+  const orden = parseSortParam(sp.get(TAREAS_ORDEN_PARAM));
   const responsable = sp.get("responsable");
   const estado = sp.get("estado");
   return {
     tramo: key(sp.get("tramo")),
     responsable: responsable === "yo" || responsable === TAREAS_RESPONSABLE_TODOS ? responsable : id(responsable),
-    proyecto: id(sp.get("proyecto")),
+    ...proyectosPatch(parseProyectosParam(sp.get("proyecto"))),
     estado: estado !== null && (TAREAS_ESTADOS as readonly string[]).includes(estado) ? estado : null,
     q: searchText(sp.get("q")),
     mostrar: pick(sp.get("mostrar"), TAREAS_MOSTRAR, DEFAULT_TAREAS_QUERY.mostrar),
     completadas: parseCompletadasParam(sp.get(TAREAS_COMPLETADAS_PARAM), defaults.completadas ?? true),
     apoyo: sp.get(TAREAS_APOYO_PARAM) !== "0",
+    // Left out for the default sort, so queries without `?orden=` keep their shape.
+    ...(orden ? { orden } : {}),
     nueva: sp.get("nueva") === "1",
   };
 }
@@ -118,15 +164,19 @@ export function toTareasSearch(q: Partial<TareasQuery>): string {
   const sp = new URLSearchParams();
   if (q.tramo) sp.set("tramo", q.tramo);
   if (q.responsable) sp.set("responsable", q.responsable);
-  if (q.proyecto) sp.set("proyecto", q.proyecto);
+  const proyectos = selectedProyectos(q);
+  if (proyectos.length > 0) sp.set("proyecto", proyectos.join(","));
   if (q.estado) sp.set("estado", q.estado);
   const text = q.q?.trim();
   if (text) sp.set("q", text);
   if (q.mostrar && q.mostrar !== DEFAULT_TAREAS_QUERY.mostrar) sp.set("mostrar", q.mostrar);
   if (q.completadas === false) sp.set(TAREAS_COMPLETADAS_PARAM, "0");
   if (q.apoyo === false) sp.set(TAREAS_APOYO_PARAM, "0");
+  const orden = q.orden ? formatSortParam(q.orden.orderBy, q.orden.orderDir) : null;
+  if (orden) sp.set(TAREAS_ORDEN_PARAM, orden);
   if (q.nueva) sp.set("nueva", "1");
-  const out = sp.toString();
+  // Commas stay readable in `?proyecto=a,b` (they are safe in a query string).
+  const out = sp.toString().replace(/%2C/gi, ",");
   return out === "" ? "" : `?${out}`;
 }
 
@@ -147,7 +197,7 @@ export function toUrlSearchParams(sp: Record<string, string | string[] | undefin
 
 /** True when any filter (tramo, responsable, proyecto, estado, search, mostrar) narrows the tasks. */
 export function hasTareasFilters(q: TareasQuery): boolean {
-  return Boolean(q.tramo || responsableFilter(q.responsable) || q.proyecto || q.estado || q.q || (q.mostrar && q.mostrar !== "todas"));
+  return Boolean(q.tramo || responsableFilter(q.responsable) || selectedProyectos(q).length > 0 || q.estado || q.q || (q.mostrar && q.mostrar !== "todas"));
 }
 
 /** `?responsable=todos`: everyone's tasks, kept in the URL so Esencial's "Solo mías" off is shareable. */
@@ -178,7 +228,7 @@ export function isEsencialSoloMias(responsable: TareasQuery["responsable"]): boo
  */
 export function hasEsencialFilters(q: TareasQuery): boolean {
   return Boolean(
-    q.tramo || q.proyecto || q.estado || q.q || (q.mostrar && q.mostrar !== "todas") || !isEsencialSoloMias(q.responsable),
+    q.tramo || selectedProyectos(q).length > 0 || q.estado || q.q || (q.mostrar && q.mostrar !== "todas") || !isEsencialSoloMias(q.responsable),
   );
 }
 

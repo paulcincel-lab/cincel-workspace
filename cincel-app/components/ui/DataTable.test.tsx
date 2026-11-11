@@ -180,4 +180,22 @@ describe("DataTable", () => {
       expect(onReorderRows).not.toHaveBeenCalled();
     });
   });
+  it("with manualSort keeps the row order, marks the sorted header and reports clicks", () => {
+    const onSortChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={data}
+        manualSort={{ sortable: ["name"], sort: { key: "name", direction: "desc" }, onSortChange }}
+      />,
+    );
+    const cells = screen.getAllByRole("cell").map((cell) => cell.textContent);
+    expect(cells.filter((text) => ["Beto", "Ana", "Cris"].includes(text ?? ""))).toEqual(["Beto", "Ana", "Cris"]);
+    const nameHeader = screen.getByText("Nombre").closest("th")!;
+    expect(nameHeader.getAttribute("aria-sort")).toBe("descending");
+    fireEvent.click(nameHeader);
+    expect(onSortChange).toHaveBeenCalledWith("name");
+    fireEvent.click(screen.getByText("Edad").closest("th")!);
+    expect(onSortChange).toHaveBeenCalledTimes(1);
+  });
 });

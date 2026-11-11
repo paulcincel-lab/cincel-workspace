@@ -21,7 +21,6 @@ import type {
   TaskAttachment,
   TaskBulkPatch,
   TaskBulkResult,
-  TaskChecklistItem,
   TaskDetail,
   TaskFilters,
   TaskLink,
@@ -50,12 +49,6 @@ async function requireTaskWriter(...taskIds: string[]) {
   return { user, viewer };
 }
 
-/** The checklist item's task id as a one-item list (empty when the item is gone). */
-async function checklistItemTask(itemId: string): Promise<string[]> {
-  const taskId = await tasksRepository.checklistItemTaskId(itemId);
-  return taskId ? [taskId] : [];
-}
-
 export async function fetchTasksAction(filters: TaskFilters = {}): Promise<TaskListItem[]> {
   const caps = await requireTasksCapabilities();
   if (!caps.canViewActivities) return [];
@@ -75,7 +68,8 @@ export async function fetchMyTasksAction(filters: TaskFilters = {}): Promise<Tas
  */
 export async function fetchMyOpenTasksAction(): Promise<TaskListItem[]> {
   const user = await requireCapabilityUser();
-  const rows = await tasksRepository.listMyTasks(user.member.id, {}, viewerScopeOf(user));
+  // Open ones only, in the statement (#1051): the closed history never leaves the database here.
+  const rows = await tasksRepository.listMyTasks(user.member.id, { mostrar: "abiertas" }, viewerScopeOf(user));
   return openTasksInOrder(rows);
 }
 
@@ -386,61 +380,6 @@ async function setTaskSupportActionImpl(taskId: string, staffIds: string[]) {
   return support;
 }
 
-export async function addChecklistItemAction(
-  ...args: Parameters<typeof addChecklistItemActionImpl>
-): Promise<ActionResult<Awaited<ReturnType<typeof addChecklistItemActionImpl>>>> {
-  return toActionResult(() => addChecklistItemActionImpl(...args));
-}
-
-async function addChecklistItemActionImpl(taskId: string, title: string): Promise<TaskChecklistItem> {
-  const { user } = await requireTaskWriter(taskId);
-  if (!resolveActivitiesCapabilities(user).canCreateActivity) {
-    throw new Error("FORBIDDEN: checklist edit");
-  }
-  const row = await tasksRepository.addChecklistItem(taskId, title);
-  return row;
-}
-
-export async function updateChecklistItemAction(
-  ...args: Parameters<typeof updateChecklistItemActionImpl>
-): Promise<ActionResult<Awaited<ReturnType<typeof updateChecklistItemActionImpl>>>> {
-  return toActionResult(() => updateChecklistItemActionImpl(...args));
-}
-
-async function updateChecklistItemActionImpl(
-  id: string,
-  patch: { title?: string; completed?: boolean }
-): Promise<TaskChecklistItem> {
-  await requireTaskWriter(...(await checklistItemTask(id)));
-  const row = await tasksRepository.updateChecklistItem(id, patch);
-  return row;
-}
-
-export async function removeChecklistItemAction(
-  ...args: Parameters<typeof removeChecklistItemActionImpl>
-): Promise<ActionResult<Awaited<ReturnType<typeof removeChecklistItemActionImpl>>>> {
-  return toActionResult(() => removeChecklistItemActionImpl(...args));
-}
-
-async function removeChecklistItemActionImpl(id: string): Promise<void> {
-  const { user } = await requireTaskWriter(...(await checklistItemTask(id)));
-  if (!resolveActivitiesCapabilities(user).canCreateActivity) {
-    throw new Error("FORBIDDEN: checklist edit");
-  }
-  await tasksRepository.removeChecklistItem(id);
-}
-
-export async function reorderChecklistAction(
-  ...args: Parameters<typeof reorderChecklistActionImpl>
-): Promise<ActionResult<Awaited<ReturnType<typeof reorderChecklistActionImpl>>>> {
-  return toActionResult(() => reorderChecklistActionImpl(...args));
-}
-
-async function reorderChecklistActionImpl(taskId: string, orderedIds: string[]): Promise<void> {
-  await requireTaskWriter(taskId);
-  await tasksRepository.reorderChecklist(taskId, orderedIds);
-}
-
 export async function reorderProjectTasksAction(projectId: string, orderedTaskIds: string[]): Promise<void> {
   const { user } = await requireTaskWriter(...orderedTaskIds);
   if (!resolveActivitiesCapabilities(user).canReorderPhases) {
@@ -487,7 +426,6 @@ export async function fetchTaskHistoryAction(taskId: string): Promise<HistoryEve
 const ATTACHMENT_ERROR_MESSAGES: Record<string, string> = {
   TASK_ATTACHMENT_TYPE_NOT_ALLOWED: "Solo se permiten imágenes o archivos .txt.",
   TASK_ATTACHMENT_TOO_LARGE: "El archivo supera el límite de 10MB.",
-  CHECKLIST_ITEM_NOT_FOUND: "Ese punto del checklist ya no existe.",
 };
 
 /** Attaches a file to a task as a comment (#425). Images and .txt only, up to 10MB. */
@@ -507,12 +445,10 @@ async function addTaskAttachmentActionImpl(taskId: string, formData: FormData): 
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const checklistItemId = formData.get("checklistItemId");
     const row = await tasksRepository.addTaskAttachment(
       taskId,
       { name: file.name, mimeType: file.type || "application/octet-stream", data: buffer },
-      user.member.id,
-      typeof checklistItemId === "string" && checklistItemId ? checklistItemId : null
+      user.member.id
     );
     return row;
   } catch (err) {

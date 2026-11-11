@@ -17,8 +17,7 @@ const actions = vi.hoisted(() => ({
   setTaskCustomStatusAction: vi.fn(),
   updateTaskAction: vi.fn(),
   addTaskCommentAction: vi.fn(),
-  addChecklistItemAction: vi.fn(),
-  updateChecklistItemAction: vi.fn(),
+  createSubtaskAction: vi.fn(),
   createUserTaskAction: vi.fn(),
   assignTaskAction: vi.fn(),
   fetchProjectAction: vi.fn(),
@@ -44,8 +43,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   setTaskCustomStatusAction: actions.setTaskCustomStatusAction,
   updateTaskAction: actions.updateTaskAction,
   addTaskCommentAction: actions.addTaskCommentAction,
-  addChecklistItemAction: actions.addChecklistItemAction,
-  updateChecklistItemAction: actions.updateChecklistItemAction,
+  createSubtaskAction: actions.createSubtaskAction,
   createUserTaskAction: actions.createUserTaskAction,
   assignTaskAction: actions.assignTaskAction,
 }));
@@ -82,12 +80,12 @@ const TOOL_NAMES = [
   "update_task_status",
   "reschedule_task",
   "add_task_comment",
-  "add_checklist_item",
+  "add_subtask",
   "create_tasks_from_notes",
   "rebalance_workload",
 ];
 const CONFIRM_TOOLS = ["reschedule_task", "add_task_comment", "create_tasks_from_notes", "rebalance_workload"];
-const DIRECT_TOOLS = ["update_task_status", "add_checklist_item"];
+const DIRECT_TOOLS = ["update_task_status", "add_subtask"];
 
 const STAFF_A = "11111111-1111-4111-8111-111111111111";
 const STAFF_B = "22222222-2222-4222-8222-222222222222";
@@ -177,7 +175,7 @@ const SAMPLE_INPUT: Record<string, unknown> = {
   update_task_status: { taskId: TASK_ID, status: "en_proceso" },
   reschedule_task: { taskId: TASK_ID, dueDate: "2026-11-20", reason: "Falta el levantamiento" },
   add_task_comment: { taskId: TASK_ID, text: "Ya quedó el corte" },
-  add_checklist_item: { taskId: TASK_ID, item: "Cortes" },
+  add_subtask: { taskId: TASK_ID, title: "Cortes" },
   create_tasks_from_notes: { text: "- Revisar planos\n- Cotizar acero", project: "Ensenada" },
   rebalance_workload: { tramo: "Diseño", maxPerPerson: 3 },
 };
@@ -251,7 +249,7 @@ describe("approval rules", () => {
     for (const name of CONFIRM_TOOLS) expect(await needsApproval(name, CLEAN_TURN)).toBe(true);
   });
 
-  it("runs update_task_status and add_checklist_item directly in a clean turn", async () => {
+  it("runs update_task_status and add_subtask directly in a clean turn", async () => {
     for (const name of DIRECT_TOOLS) expect(await needsApproval(name, CLEAN_TURN)).toBe(false);
   });
 
@@ -371,21 +369,25 @@ describe("add_task_comment", () => {
   });
 });
 
-describe("add_checklist_item", () => {
+describe("add_subtask", () => {
   it("refuses someone who is neither the manager nor act-assign", async () => {
-    const result = (await run("add_checklist_item", SAMPLE_INPUT.add_checklist_item, runCtx(user("Colaborador")))) as {
+    const result = (await run("add_subtask", SAMPLE_INPUT.add_subtask, runCtx(user("Colaborador")))) as {
       error: string;
     };
     expect(result.error).toBe("FORBIDDEN");
-    expect(actions.addChecklistItemAction).not.toHaveBeenCalled();
+    expect(actions.createSubtaskAction).not.toHaveBeenCalled();
   });
 
-  it("adds the item, marks it done and audits it", async () => {
-    actions.addChecklistItemAction.mockResolvedValue({ id: "c1", title: "Cortes", completed: false, sortOrder: 0 });
-    actions.updateChecklistItemAction.mockResolvedValue({ id: "c1", title: "Cortes", completed: true, sortOrder: 0 });
-    await run("add_checklist_item", { taskId: TASK_ID, item: "Cortes", done: true });
-    expect(actions.updateChecklistItemAction).toHaveBeenCalledWith("c1", { completed: true });
-    expect(auditComments()[0]).toBe("Checklist de «Revisar planos»: + «Cortes» (hecho) (vía asistente)");
+  it("creates the subtask, completes it and audits it", async () => {
+    actions.createSubtaskAction.mockResolvedValue({ id: "c1", title: "Cortes", status: "pendiente" });
+    actions.setTaskStatusAction.mockResolvedValue({ id: "c1", title: "Cortes", status: "completado" });
+    const result = (await run("add_subtask", { taskId: TASK_ID, title: "Cortes", done: true })) as {
+      subtask: { id: string; done: boolean };
+    };
+    expect(actions.createSubtaskAction).toHaveBeenCalledWith(TASK_ID, { title: "Cortes" });
+    expect(actions.setTaskStatusAction).toHaveBeenCalledWith("c1", "completado");
+    expect(result.subtask).toEqual({ id: "c1", title: "Cortes", done: true });
+    expect(auditComments()[0]).toBe("Subtarea de «Revisar planos»: + «Cortes» (completada) (vía asistente)");
   });
 });
 

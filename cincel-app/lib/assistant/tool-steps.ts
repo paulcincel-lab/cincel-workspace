@@ -602,7 +602,7 @@ const ENTRIES: Record<string, Entry> = {
   update_task_status: { icon: SquareCheck, tone: 2, running: "Cambiando el estatus…", short: "Cambio de estatus", href: toTareas },
   reschedule_task: { icon: CalendarRange, tone: 2, running: "Moviendo la entrega…", short: "Cambio de entrega", href: toTareas },
   add_task_comment: { icon: MessageSquare, tone: 2, running: "Comentando la tarea…", short: "Comentario", href: toTareas },
-  add_checklist_item: { icon: ClipboardList, tone: 2, running: "Agregando al checklist…", short: "Punto del checklist", href: toTareas },
+  add_subtask: { icon: ClipboardList, tone: 2, running: "Agregando la subtarea…", short: "Subtarea", href: toTareas },
   create_tasks_from_notes: { icon: ListTodo, tone: 2, running: "Sacando tareas de las notas…", short: "Tareas desde notas", href: toTareas },
   rebalance_workload: { icon: Shuffle, tone: 4, running: "Repartiendo la carga…", short: "Reparto de carga", href: () => "/personas" },
 

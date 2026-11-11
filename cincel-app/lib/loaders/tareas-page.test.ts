@@ -120,7 +120,7 @@ describe("loadTareasPage", () => {
   it("Analítico: the summary and the first page of the first 3 groups in retraso order, no board", async () => {
     const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS });
     expect(repo.taskSummary).toHaveBeenCalledTimes(1);
-    expect(repo.taskSummary.mock.calls[0][0]).toEqual({});
+    expect(repo.taskSummary.mock.calls[0][0]).toEqual({ topLevelOnly: true });
     expect(repo.taskSummary.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(data.summary).toBe(summary);
     expect(repo.listTasksPage).toHaveBeenCalledTimes(3);
@@ -130,12 +130,12 @@ describe("loadTareasPage", () => {
       return f;
     });
     expect(calls).toEqual([
-      { projectId: "p1", workflowId: "w1" },
-      { projectId: "p1", withoutWorkflow: true },
-      { projectId: "p2", workflowId: "w1" },
+      { topLevelOnly: true, projectId: "p1", workflowId: "w1" },
+      { topLevelOnly: true, projectId: "p1", withoutWorkflow: true },
+      { topLevelOnly: true, projectId: "p2", workflowId: "w1" },
     ]);
     for (const call of repo.listTasksPage.mock.calls) {
-      expect(call[2]).toEqual({ cursor: null, limit: 50, orderBy: "retraso" });
+      expect(call[2]).toEqual({ cursor: null, limit: 30, orderBy: "retraso" });
     }
     // Each page is keyed by the group's list filters (`tareasGroupFilters`).
     expect(data.groups?.map((g) => [g.filters.proyecto, g.filters.tramo, g.filters.orderBy])).toEqual([
@@ -158,6 +158,7 @@ describe("loadTareasPage", () => {
       q: "plano",
     });
     expect(repo.taskSummary.mock.calls[0][0]).toEqual({
+      topLevelOnly: true,
       search: "plano",
       status: "pendiente",
       involvesStaffId: "me",
@@ -167,6 +168,7 @@ describe("loadTareasPage", () => {
     });
     // The facets ignore tramo and proyecto (the chips and the Proyecto options).
     expect(repo.taskFacets.mock.calls[0][0]).toEqual({
+      topLevelOnly: true,
       search: "plano",
       status: "pendiente",
       involvesStaffId: "me",
@@ -176,7 +178,7 @@ describe("loadTareasPage", () => {
 
     vi.clearAllMocks();
     await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS, responsable: "yo", mostrar: "en_retraso" });
-    expect(repo.taskSummary.mock.calls[0][0]).toEqual({ involvesStaffId: "me", mostrar: "en_retraso" });
+    expect(repo.taskSummary.mock.calls[0][0]).toEqual({ topLevelOnly: true, involvesStaffId: "me", mostrar: "en_retraso" });
   });
 
   it("an unknown tramo loads no rows", async () => {

@@ -14,11 +14,17 @@ import { PeopleStack } from "@/components/widgets/PeopleStack";
 import { TramoBadge } from "@/components/widgets/TramoBadge";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions } from "@/lib/query/options/tareas";
+import type { TareasListFilters } from "@/lib/query/keys";
+import { tareasHref } from "@/lib/tareas/query";
+import { TASK_TABLE_SORT_KEYS, nextSort, tableSortOf } from "@/lib/tareas/sort";
 import { listItemOfRow } from "@/lib/tareas/page-data";
 import type { TareasQuery } from "@/lib/tareas/query";
-import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
+import type { TaskListItem, TaskListRow, WorkflowRef } from "@/lib/types/core";
+import { SubtaskProgressChip } from "@/components/widgets/analitico-task-cell";
+import { NESTED_ROW_PARENT } from "@/components/widgets/record-table-format";
 
-import { listaTable, listaTasks } from "./lista-table";
+import { LISTA_COLUMNS, listaTable, listaTasks, withSubtaskRows } from "./lista-table";
+import { SubtaskToggle, subtaskOfLabel, useSubtaskRows } from "./use-subtask-rows";
 import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
 import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 import { TareasStartSlot, startSlotTramo } from "./TareasStartSlot";
@@ -26,7 +32,7 @@ import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
 import { deleteTargetOf, useDeleteTasks } from "./use-delete-tasks";
 import { TaskBulkBar } from "./TaskBulkBar";
 import { useTaskSelection } from "./use-task-selection";
-import { useTareasFilters, useTareasPage, useTareasPageReady } from "./use-tareas-page";
+import { replaceTareasUrl, useTareasFilters, useTareasPage, useTareasPageReady, useTareasSort } from "./use-tareas-page";
 
 /** Empty state when the filters leave no task (FE §3.4). */
 export const LISTA_EMPTY: EmptyStateProps = { title: "No hay tareas con estos filtros" };
@@ -42,6 +48,9 @@ export type TareasListaProps = {
 
 const NO_TRAMOS: WorkflowRef[] = [];
 const NO_STAFF: { id: string; name: string }[] = [];
+const sameRow = (row: TaskListRow) => row;
+/** Every Lista column with a server sort (#1044). */
+const LISTA_SORTABLE = LISTA_COLUMNS.map((c) => c.key).filter((key) => key in TASK_TABLE_SORT_KEYS);
 
 /**
  * Tareas · Lista (FE §3.4, §4.10.2): `ListPage` with
@@ -57,11 +66,30 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const f = useTareasFilters(query);
+  // ── Header sort (#1044): `?orden=` sorts on the server; the rows then keep that
+  // order, so an open parent's subtasks stay right under it.
+  const sort = useTareasSort(query);
+  const listFilters = useMemo<TareasListFilters>(
+    () =>
+      sort ? { ...f, orderBy: sort.orderBy, ...(sort.orderDir === "desc" ? { orderDir: "desc" as const } : {}) } : f,
+    [f, sort],
+  );
+  const tableSort = useMemo(
+    () => ({
+      sortable: LISTA_SORTABLE,
+      sort: tableSortOf(sort),
+      onSortChange: (key: string) => {
+        const column = TASK_TABLE_SORT_KEYS[key];
+        if (column) replaceTareasUrl(tareasHref({ ...query, orden: nextSort(sort, column) }));
+      },
+    }),
+    [sort, query],
+  );
   const ready = useTareasPageReady(query);
   const page = useTareasPage(query).data;
   const tramos = page?.tramos ?? NO_TRAMOS;
   const staff = page?.staff ?? NO_STAFF;
-  const list = useInfiniteQuery({ ...tareasListInfiniteOptions(f), enabled: ready });
+  const list = useInfiniteQuery({ ...tareasListInfiniteOptions(listFilters), enabled: ready });
 
   const pages = list.data?.pages;
   // Delete (#1041): deleted rows (and their subtasks) leave right away.
@@ -76,7 +104,26 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
     () => listaTasks(loaded, { tramo: query.tramo, proyecto: query.proyecto }),
     [loaded, query.tramo, query.proyecto],
   );
-  const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  // ── Subtasks (#1048): an open parent's subtasks follow it, in its estatus group.
+  const rowsById = useMemo(() => new Map((pages ?? []).flatMap((p) => p.rows).map((r) => [r.id, r])), [pages]);
+  const parents = useMemo(
+    () => tasks.map((t) => rowsById.get(t.id)).filter((r): r is TaskListRow => r !== undefined),
+    [tasks, rowsById],
+  );
+  const subtasks = useSubtaskRows<TaskListRow>({ parents, toRow: sameRow, taskOf: sameRow, isHidden });
+  const { rowDetail } = subtasks;
+  const childrenOf = useCallback(
+    (parentId: string): TaskListItem[] | undefined => {
+      const parent = rowsById.get(parentId);
+      if (!parent || !(rowDetail.hasDetail?.(parent) ?? false) || !rowDetail.isOpen(parent)) return undefined;
+      return rowDetail.rows?.(parent)?.map(listItemOfRow);
+    },
+    [rowsById, rowDetail],
+  );
+  const tasksById = useMemo(
+    () => new Map([...tasks, ...subtasks.shownRows.map(listItemOfRow)].map((t) => [t.id, t])),
+    [tasks, subtasks.shownRows],
+  );
 
   // ── Editable cells (#1025): the task columns; Proyecto and the calculated ones stay as they are.
   const taskOf = useCallback(
@@ -85,9 +132,9 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
   );
   const cells = useTaskCellEdits<Record<string, unknown>>({ taskOf, tramos, staff });
   const data = useMemo(() => {
-    const table = listaTable(tasks);
-    return { ...table, columns: cells.withEdits(table.columns) };
-  }, [tasks, cells]);
+    const table = listaTable(tasks, undefined, { serverOrder: sort !== null });
+    return { ...table, rows: withSubtaskRows(table.rows, childrenOf), columns: cells.withEdits(table.columns) };
+  }, [tasks, cells, childrenOf, sort]);
 
   // ── Row checkboxes and the bulk bar (#1040): a filter change clears the selection.
   const visibleIds = useMemo(() => data.rows.map((row) => String(row.id)), [data.rows]);
@@ -116,11 +163,25 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
           window.history.pushState(null, "", href);
         };
         // In the grid a plain click on the title edits it; ⌘/Ctrl-click and the open icon open the task.
+        const parentId = row[NESTED_ROW_PARENT] ? String(row[NESTED_ROW_PARENT]) : null;
+        const parent = rowsById.get(parentId ?? task.id);
+        const toggle =
+          !parentId && parent && (rowDetail.hasDetail?.(parent) ?? false) ? (
+            <SubtaskToggle open={rowDetail.isOpen(parent)} label={rowDetail.label(parent)} onToggle={() => rowDetail.onToggle(parent)} />
+          ) : null;
         return (
           <>
+            {toggle}
+            {parentId ? <span aria-hidden="true" className="inline-block w-6" /> : null}
             <Link href={href} scroll={false} onNavigate={onNavigate} className="underline-offset-4 hover:underline">
               {task.title}
             </Link>
+            {parentId && parent ? <span className="sr-only">{`, ${subtaskOfLabel(parent.title)}`}</span> : null}
+            {!parentId && parent ? (
+              <span className="ml-1.5 inline-flex align-middle">
+                <SubtaskProgressChip task={parent} />
+              </span>
+            ) : null}
             <Link
               href={href}
               scroll={false}
@@ -140,7 +201,7 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
       if (columnKey === TASK_SUPPORT_COLUMN) return <PeopleStack people={task.support} label={SUPPORT_COLUMN_LABEL} />;
       return undefined;
     },
-    [tasksById, taskHref],
+    [tasksById, taskHref, rowsById, rowDetail],
   );
 
   const { rowActions: deleteActions, request: requestDelete, canDelete } = deletes;
@@ -166,21 +227,22 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = list;
   const onEndReached = useCallback(() => void fetchNextPage(), [fetchNextPage]);
+  // "Cargar más (n restantes)" (#1051): the total comes with every page, the loaded rows are counted here.
+  const loadedCount = useMemo(() => (pages ?? []).reduce((sum, p) => sum + p.rows.length, 0), [pages]);
+  const remaining = Math.max(0, (pages?.at(-1)?.total ?? 0) - loadedCount);
+  // Only the selection's ids and setter key the spec, not the whole selection object (#1051).
+  const { selectedIds, onSelectionChange } = selection;
   const spec: ListSpec = useMemo(
     () => ({
       kind: "table" as const,
       data,
       renderCell,
       rowMenu,
-      rowSelection: {
-        selectable: true,
-        selectedIds: selection.selectedIds,
-        onSelectionChange: selection.onSelectionChange,
-        getRowLabel: rowMenu.getRowLabel,
-      },
-      pagination: { onEndReached, hasMore: hasNextPage, loadingMore: isFetchingNextPage },
+      rowSelection: { selectable: true, selectedIds, onSelectionChange, getRowLabel: rowMenu.getRowLabel },
+      pagination: { onEndReached, hasMore: hasNextPage, loadingMore: isFetchingNextPage, remaining },
+      sort: tableSort,
     }),
-    [data, renderCell, rowMenu, selection, onEndReached, hasNextPage, isFetchingNextPage],
+    [data, renderCell, rowMenu, selectedIds, onSelectionChange, onEndReached, hasNextPage, isFetchingNextPage, remaining, tableSort],
   );
 
   const slotTramo = startSlotTramo(query.tramo, tramos);

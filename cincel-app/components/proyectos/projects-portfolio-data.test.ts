@@ -374,6 +374,7 @@ describe("project tasks under a row", () => {
       estado: null,
       q: null,
       mostrar: "abiertas",
+      orderBy: "vence",
     });
   });
 

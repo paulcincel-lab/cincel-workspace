@@ -20,10 +20,21 @@
  * - `useState(initial…)` / `useState(props.…)` copies of server props
  * - `window.dispatchEvent(new (Custom)?Event("cincel:…"))`, also through a
  *   same-file string constant
+ * - (#1051) a Zustand store hook from `@/lib/stores/*` called without a
+ *   selector (`useNewTaskUi()`): the component re-renders on every change of
+ *   the store
+ * - (#1051) a `queryFn` that awaits an `*Action` and filters its result on
+ *   the client (`(await fetchXAction()).filter(…)`): a full list loaded to
+ *   show part of it; the server filters instead
+ * - (#1051) a sort over `useInfiniteQuery` pages in the same function
+ *   (`pages.flatMap(…)` then `.sort(` / `sortBy…(`): the loaded rows reorder
+ *   when "Cargar más" lands; the server sorts instead
  *
- * A reported line ending in `// data-patterns: auth` is allowed (auth flows only).
+ * A reported line ending in `// data-patterns: auth` is allowed (auth flows only);
+ * a sort ending in `// data-patterns: server-order` is allowed: it keeps the
+ * order the server already pages in (after an optimistic insert, say).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -41,8 +52,37 @@ export const LAYOUT_KEEP_LIST = new Set([
 
 const SCREEN_HELPERS_DIR = "lib/cache/screens/";
 const ALLOW_COMMENT = /\/\/\s*data-patterns:\s*auth\s*$/;
+const SERVER_ORDER_COMMENT = /\/\/\s*data-patterns:\s*server-order\s*$/;
 const EFFECT_HOOKS = new Set(["useEffect", "useLayoutEffect", "startTransition"]);
 const LOADER_NAME = /^(load([A-Z_]\w*)?|reload\w*|refetch\w*)$/;
+const STORE_MODULE = /^@\/lib\/stores\//;
+const STORE_DIR = "lib/stores";
+const STORE_EXPORT = /export const (use[A-Z]\w*)(?:\s*:[^=]+)?\s*=\s*(?:create|createDashboardStore)\b/g;
+
+let zustandHookNames = null;
+/** The Zustand hooks `lib/stores/*` exports (`export const useX = create…`), read once. */
+function zustandHooks() {
+  if (zustandHookNames) return zustandHookNames;
+  zustandHookNames = new Set();
+  const walk = (dir) => {
+    let entries = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const path = resolve(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.tsx?$/.test(entry.name) && !/\.test\./.test(entry.name)) {
+        for (const match of readFileSync(path, "utf8").matchAll(STORE_EXPORT)) zustandHookNames.add(match[1]);
+      }
+    }
+  };
+  walk(resolve(APP_ROOT, STORE_DIR));
+  return zustandHookNames;
+}
+const SORT_NAME = /^(sort|toSorted|sort[A-Z]\w*)$/;
 
 function scriptKind(file) {
   if (file.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -93,6 +133,60 @@ function importedNames(source) {
   return names;
 }
 
+/** Hook names imported from `@/lib/stores/*` (the Zustand stores). */
+function storeHooks(source) {
+  const names = new Set();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !statement.importClause || statement.importClause.isTypeOnly) continue;
+    const from = stringValue(statement.moduleSpecifier);
+    if (!from || !STORE_MODULE.test(from)) continue;
+    const bindings = statement.importClause.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      const imported = (element.propertyName ?? element.name).text;
+      if (!element.isTypeOnly && zustandHooks().has(imported)) names.add(element.name.text);
+    }
+  }
+  return names;
+}
+
+/** True when `node` reads `.pages` or a `pages` binding (callbacks such as `pages.flatMap((p) => …)` included). */
+function readsPages(node) {
+  let found = false;
+  const visit = (child) => {
+    if (found) return;
+    if (ts.isPropertyAccessExpression(child) && child.name.text === "pages") found = true;
+    else if (ts.isIdentifier(child) && child.text === "pages") found = true;
+    ts.forEachChild(child, visit);
+  };
+  ts.forEachChild(node, visit);
+  return found;
+}
+
+/** The sort calls of a function body. */
+function sortCalls(node) {
+  const found = [];
+  const visit = (child) => {
+    if (ts.isCallExpression(child)) {
+      const name = calleeName(child);
+      if (name && SORT_NAME.test(name)) found.push(child);
+    }
+    ts.forEachChild(child, visit);
+  };
+  ts.forEachChild(node, visit);
+  return found;
+}
+
+/** `await xAction(…)` (through parentheses) as the receiver of `.filter(`. */
+function isAwaitedActionFiltered(call, imported) {
+  if (calleeName(call) !== "filter" || !ts.isPropertyAccessExpression(call.expression)) return null;
+  let receiver = call.expression.expression;
+  while (ts.isParenthesizedExpression(receiver)) receiver = receiver.expression;
+  if (!ts.isAwaitExpression(receiver) || !ts.isCallExpression(receiver.expression)) return null;
+  const name = calleeName(receiver.expression);
+  return name && /Action$/.test(name) && imported.has(name) ? name : null;
+}
+
 /** The data-loading call inside `node` (searching nested functions too), or null. */
 function findLoadingCalls(node, imported) {
   const found = [];
@@ -128,12 +222,14 @@ export function checkSource(file, text) {
   const lines = text.split(/\r?\n/);
   const constants = stringConstants(source);
   const imported = importedNames(source);
+  const stores = storeHooks(source);
   const violations = [];
   const seen = new Set();
 
   const report = (node, pattern) => {
     const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
     if (ALLOW_COMMENT.test(lines[line - 1] ?? "")) return;
+    if (pattern.endsWith(" over paged rows") && SERVER_ORDER_COMMENT.test(lines[line - 1] ?? "")) return;
     const key = `${line}:${pattern}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -141,9 +237,45 @@ export function checkSource(file, text) {
   };
 
   const visit = (node) => {
+    // queryFn: (await xAction()).filter(…)
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "queryFn" &&
+      isFunctionLike(node.initializer)
+    ) {
+      const scan = (child) => {
+        if (ts.isCallExpression(child)) {
+          const action = isAwaitedActionFiltered(child, imported);
+          if (action) report(child, `queryFn → ${action}(…).filter(`);
+        }
+        ts.forEachChild(child, scan);
+      };
+      ts.forEachChild(node.initializer, scan);
+    }
+
+    // A sort over infinite-query pages in one function body.
+    if ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && readsPages(node)) {
+      const body = node.body;
+      const direct = ts.isBlock(body) ? body.statements : [body];
+      // Only the function's own statements: nested callbacks are checked on their own.
+      const sorts = direct.flatMap((statement) => (ts.isCallExpression(statement) ? [statement, ...sortCalls(statement)] : sortCalls(statement)))
+        .filter((call) => SORT_NAME.test(calleeName(call) ?? ""));
+      for (const call of sorts) {
+        // A chained `.sort(` reports on its own line, where an allowance comment can sit.
+        const at = ts.isPropertyAccessExpression(call.expression) ? call.expression.name : call;
+        report(at, `${calleeName(call)}( over paged rows`);
+      }
+    }
+
     if (ts.isCallExpression(node)) {
       const name = calleeName(node);
       const callee = node.expression;
+
+      // useXStore() without a selector
+      if (ts.isIdentifier(callee) && stores.has(callee.text) && node.arguments.length === 0) {
+        report(node, `${callee.text}() without a selector`);
+      }
 
       // router.refresh(
       if (

@@ -1,0 +1,3 @@
+ALTER TABLE "core"."task_checklist_items" ADD COLUMN "converted_task_id" uuid;--> statement-breakpoint
+ALTER TABLE "core"."task_checklist_items" ADD COLUMN "converted_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "core"."task_checklist_items" ADD CONSTRAINT "task_checklist_items_converted_task_id_tasks_id_fk" FOREIGN KEY ("converted_task_id") REFERENCES "core"."tasks"("id") ON DELETE set null ON UPDATE no action;

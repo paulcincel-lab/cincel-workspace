@@ -1,11 +1,11 @@
 /**
- * Assistant tool group "Tareas (6): update_task_status, reschedule_task, add_task_comment, add_checklist_item, create_tasks_from_notes, rebalance_workload" (redesign BE §10.3; Phase 7).
+ * Assistant tool group "Tareas (6): update_task_status, reschedule_task, add_task_comment, add_subtask, create_tasks_from_notes, rebalance_workload" (redesign BE §10.3; Phase 7).
  * Each tool is a `defineTool` with capability, `confirm`, `summarize(input)`
  * and `available(ctx)` reading only the flags modules (Rule 3).
  *
  * Every tool here writes, so each one is `write: true`: it asks for approval
  * whenever the turn already holds an untrusted result (review N4), even the
- * direct ones (`update_task_status`, `add_checklist_item`). Tasks are shared
+ * direct ones (`update_task_status`, `add_subtask`). Tasks are shared
  * entities, so each write appends a "<resumen> (vía asistente)" comment to the
  * task's bitácora (BE §9.9). Nothing here deletes; the task actions archive.
  */
@@ -20,13 +20,12 @@ import { fetchProjectAction } from "@/lib/actions/projects-actions";
 import { fetchAssignableStaffAction } from "@/lib/actions/staff-actions";
 import { fetchTaskStatusesAction } from "@/lib/actions/task-statuses-actions";
 import {
-  addChecklistItemAction,
   addTaskCommentAction,
   assignTaskAction,
+  createSubtaskAction,
   createUserTaskAction,
   setTaskCustomStatusAction,
   setTaskStatusAction,
-  updateChecklistItemAction,
   updateTaskAction,
 } from "@/lib/actions/tasks-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
@@ -282,39 +281,40 @@ export const add_task_comment = defineTool({
   },
 });
 
-// ── add_checklist_item ──────────────────────────────────────────────────────
+// ── add_subtask ─────────────────────────────────────────────────────────────
 
-const checklistSchema = z.object({
+const subtaskSchema = z.object({
   taskId: taskIdSchema,
-  item: z.string().trim().min(2).max(300).describe("Texto del punto del checklist"),
-  done: z.boolean().optional().describe("Marcarlo como hecho al agregarlo"),
+  title: z.string().trim().min(2).max(300).describe("Título de la subtarea"),
+  done: z.boolean().optional().describe("Marcarla como completada al crearla"),
 });
 
-export const add_checklist_item = defineTool({
-  name: "add_checklist_item",
+export const add_subtask = defineTool({
+  name: "add_subtask",
   description:
-    "Agrega un punto al checklist de una tarea (opcionalmente ya marcado como hecho). Lo puede hacer el responsable de la tarea o quien puede reasignar tareas.",
-  schema: checklistSchema,
+    "Agrega una subtarea a una tarea (opcionalmente ya completada). Lo puede hacer el responsable de la tarea o quien puede reasignar tareas. Una subtarea no puede tener subtareas.",
+  schema: subtaskSchema,
   capability: always,
   available: always,
   confirm: false,
   write: true,
-  summarize: toolSummaries.add_checklist_item,
+  summarize: toolSummaries.add_subtask,
   async run(ctx, input) {
     const found = await findTask(ctx, { taskId: input.taskId });
     if (!found.ok) return found;
     const task = found.task;
     // BE §10.3: the task's manager or **act-assign**.
     if (task.managerId !== ctx.user.member.id && !canAssign(ctx.user)) {
-      return failure("FORBIDDEN", "Solo el responsable de la tarea o quien puede reasignar tareas agrega puntos al checklist.");
+      return failure("FORBIDDEN", "Solo el responsable de la tarea o quien puede reasignar tareas agrega subtareas.");
     }
 
     try {
-      let item = unwrapActionResult(await addChecklistItemAction(task.id, input.item));
-      if (input.done) item = unwrapActionResult(await updateChecklistItemAction(item.id, { completed: true }));
-      const summary = `Checklist de ${quoted(task.title)}: + ${quoted(item.title)}${item.completed ? " (hecho)" : ""}`;
+      let sub = unwrapActionResult(await createSubtaskAction(task.id, { title: input.title }));
+      if (input.done) sub = unwrapActionResult(await setTaskStatusAction(sub.id, "completado"));
+      const done = sub.status === "completado";
+      const summary = `Subtarea de ${quoted(task.title)}: + ${quoted(sub.title)}${done ? " (completada)" : ""}`;
       await recordViaAsistente({ entity: "task", entityId: task.id, actorId: ctx.user.member.id, summary });
-      return { ok: true as const, taskId: task.id, item: { id: item.id, title: item.title, done: item.completed } };
+      return { ok: true as const, taskId: task.id, subtask: { id: sub.id, title: sub.title, done } };
     } catch (err) {
       return actionFailure(err);
     }
@@ -579,7 +579,7 @@ export const tools: DefinedTool[] = [
   update_task_status,
   reschedule_task,
   add_task_comment,
-  add_checklist_item,
+  add_subtask,
   create_tasks_from_notes,
   rebalance_workload,
 ] as unknown as DefinedTool[];

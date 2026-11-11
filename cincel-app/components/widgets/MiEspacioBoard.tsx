@@ -1062,7 +1062,7 @@ function BandejaRow({ item, now, onOpen }: { item: NotificationItem; now: Date; 
 function NotesPanel({ now }: { now: Date }) {
   const headingId = useId();
   const query = useInfiniteQuery(meNotesOptions());
-  const notes = useMemo(() => sortNotes(flattenPages(query.data?.pages)).slice(0, NOTES_LIMIT), [query.data]);
+  const notes = useMemo(() => sortNotes(flattenPages(query.data?.pages)).slice(0, NOTES_LIMIT), [query.data]); // data-patterns: server-order
 
   return (
     <section aria-labelledby={headingId} className="anim-in flex min-w-0 flex-col gap-3.5" style={stagger(4)}>

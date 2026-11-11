@@ -26,6 +26,7 @@ const ORGANIZATION = [
   "Permisos",
   "Importar de monday",
   "Google",
+  "Proyectos eliminados",
 ];
 
 const NONE: AjustesVisibleSegments = {
@@ -38,6 +39,7 @@ const NONE: AjustesVisibleSegments = {
   permisos: false,
   monday: false,
   google: false,
+  eliminados: false,
 };
 
 function linkNames(): string[] {

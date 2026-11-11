@@ -35,9 +35,9 @@ vi.mock("@/lib/actions/staff-actions", () => ({
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchCalendarAction: vi.fn(async () => []),
-  fetchTaskAction: vi.fn(async () => null),
+  listSubtasksAction: vi.fn(async () => []),
   createUserTaskAction: vi.fn(),
-  addChecklistItemAction: vi.fn(),
+  createSubtaskAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowsAction: vi.fn(async () => []) }));
 vi.mock("@/lib/assistant/agenda/google-calendar", () => {

@@ -5,6 +5,7 @@ import { TASK_SUPPORT_COLUMN } from "@/components/tareas/task-cell-edits";
 import { SUPPORT_COLUMN_LABEL } from "@/components/tareas/task-table-copy";
 import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
 import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { Badge } from "@/components/ui/shadcn/badge";
 import { statusDotClass } from "@/lib/tasks/status-options";
 import { tramoColorVar } from "@/lib/tramos/compat";
 import { cn } from "@/lib/utils";
@@ -19,8 +20,11 @@ export function renderAnaliticoTaskCell(columnKey: string, row: AnaliticoRow): R
   switch (columnKey) {
     case "tarea":
       return (
-        <span title={row.tarea} className="block max-w-[420px] truncate">
-          {row.tarea}
+        <span className="inline-flex max-w-[420px] min-w-0 items-center gap-1.5">
+          <span title={row.tarea} className="truncate">
+            {row.tarea}
+          </span>
+          <SubtaskProgressChip task={row.task} />
         </span>
       );
     case "tramo": {
@@ -69,4 +73,26 @@ export function renderAnaliticoTaskCell(columnKey: string, row: AnaliticoRow): R
     default:
       return undefined;
   }
+}
+
+/** "2/5 subtareas completadas": the progress chip after a parent's title (#1048). */
+export function subtaskProgressLabel(done: number, total: number): string {
+  return `${done} de ${total} ${total === 1 ? "subtarea completada" : "subtareas completadas"}`;
+}
+
+/** The "2/5" chip of a task with subtasks (none on a subtask: one level only). */
+export function SubtaskProgressChip({ task }: { task: { subtaskCount: number; subtaskDone: number; parentTaskId: string | null } }) {
+  if (task.parentTaskId !== null || task.subtaskCount === 0) return null;
+  return (
+    // Hidden from the title link's name; the row's Subtareas column says the same to screen readers.
+    <Badge
+      variant="secondary"
+      aria-hidden="true"
+      title={subtaskProgressLabel(task.subtaskDone, task.subtaskCount)}
+      data-slot="subtask-progress"
+      className="shrink-0 px-1.5 py-px font-mono text-[10.5px]"
+    >
+      {task.subtaskDone}/{task.subtaskCount}
+    </Badge>
+  );
 }

@@ -405,8 +405,9 @@ async function seedTasks(
   const titlesByProject = new Map<string, string[]>();
   for (const t of TASKS) titlesByProject.set(t.project, [...(titlesByProject.get(t.project) ?? []), t.title]);
   for (const [project, titles] of titlesByProject) {
-    await db
-      .delete(schema.tasks)
+    const old = await db
+      .select({ id: schema.tasks.id })
+      .from(schema.tasks)
       .where(
         and(
           eq(schema.tasks.projectId, projects.get(project)!),
@@ -414,6 +415,11 @@ async function seedTasks(
           eq(schema.tasks.kind, "usuario")
         )
       );
+    const oldIds = old.map((r) => r.id);
+    if (oldIds.length === 0) continue;
+    // Their subtasks first (the FK would only null their parent).
+    await db.delete(schema.tasks).where(inArray(schema.tasks.parentTaskId, oldIds));
+    await db.delete(schema.tasks).where(inArray(schema.tasks.id, oldIds));
   }
 
   const ids = new Map<string, string>();
@@ -446,12 +452,17 @@ async function seedTasks(
     }
     if (t.checklist) {
       const [done, total] = t.checklist;
-      await db.insert(schema.taskChecklistItems).values(
+      await db.insert(schema.tasks).values(
         Array.from({ length: total }, (_, n) => ({
-          taskId: row.id,
+          projectId: projects.get(t.project)!,
+          parentTaskId: row.id,
+          kind: "usuario" as const,
+          workflowId: t.tramo ? workflows.get(t.tramo)! : null,
           title: CHECKLIST_TITLES[n % CHECKLIST_TITLES.length],
-          completed: n < done,
-          sortOrder: n,
+          createdById: ownerId,
+          status: n < done ? ("completado" as const) : ("pendiente" as const),
+          closedAt: n < done ? at(-1, "12:00") : null,
+          sortOrder: n + 1,
         }))
       );
     }

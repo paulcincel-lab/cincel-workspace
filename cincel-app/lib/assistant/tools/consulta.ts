@@ -87,7 +87,6 @@ export function taskSummary(task: TaskListItem, user: AuthenticatedUser) {
     commitmentDate: task.commitmentDate,
     reviewDate: task.reviewDate,
     deliveryDate: task.deliveryDate,
-    checklist: task.checklist,
     waitingOn: task.waitingOn,
     url: `/tareas?tarea=${task.id}`,
   };
@@ -100,7 +99,6 @@ export function taskDetailView(task: TaskDetail, user: AuthenticatedUser) {
     createdBy: task.createdBy.name,
     parentTitle: task.parentTitle,
     subtasks: { total: task.subtaskCount, done: task.subtaskDoneCount },
-    checklistItems: task.checklistItems.map((item) => ({ id: item.id, title: item.title, done: item.completed })),
     attachments: task.attachments.length,
     links: task.links.map((link) => ({ title: link.title, kind: link.kind, url: link.url })),
     history: task.history.slice(0, 10).map(historyLine),
@@ -343,7 +341,7 @@ export async function findTask(
 export const get_task = defineTool({
   name: "get_task",
   description:
-    "Consulta una tarea con su estatus, responsables, fechas, checklist, enlaces y los últimos movimientos de su bitácora. Acepta el id de la tarea, o su título y proyecto; sin nada usa la tarea de la página actual.",
+    "Consulta una tarea con su estatus, responsables, fechas, subtareas, enlaces y los últimos movimientos de su bitácora. Acepta el id de la tarea, o su título y proyecto; sin nada usa la tarea de la página actual.",
   schema: getTaskSchema,
   capability: always,
   available: always,

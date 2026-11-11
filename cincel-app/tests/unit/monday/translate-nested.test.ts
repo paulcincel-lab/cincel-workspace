@@ -138,49 +138,22 @@ describe("translate helpers: nested content", () => {
 });
 
 describe("translate: subitems", () => {
-  it("checklist: depth-first items, prefixed titles, status → completed", () => {
+  it("checklist (older mappings): subitems import as subtasks, no checklist items (#1046)", () => {
     const r = run();
-    expect(
-      r.checklistItems.map((c) => [
-        c.externalId,
-        c.title,
-        c.completed,
-        c.sortOrder,
-      ]),
-    ).toEqual([
-      ["2101", "Aplanado", true, 1],
-      ["2111", "Aplanado › Fino", false, 2],
-      ["2102", "Pintura", false, 3],
+    expect(r.checklistItems).toEqual([]);
+    const children = r.tasks.filter((t) => t.parentTask?.kind === "planned" && t.parentTask.externalId === "2001");
+    expect(children.map((t) => [t.externalId, t.title, t.status, t.sortOrder, t.data.path])).toEqual([
+      ["2101", "Aplanado", "completado", 1, undefined],
+      ["2111", "Fino", "pendiente", 2, ["Aplanado", "Fino"]],
+      ["2102", "Pintura", "pendiente", 3, undefined],
     ]);
-    for (const c of r.checklistItems) {
-      expect(c.task).toEqual({
-        kind: "planned",
-        entity: "task",
-        externalId: "2001",
-      });
-    }
-    // Checklist subitems are not tasks.
-    expect(
-      r.tasks.some((t) =>
-        ["2101", "2111", "2102", "2103"].includes(t.externalId),
-      ),
-    ).toBe(false);
-  });
-
-  it("checklist: subitem column values in the parent's import data, keyed by id", () => {
-    expect(task(run(), "2001").data.subitems).toEqual({
-      "2101": {
-        name: "Aplanado",
-        columns: { Metros: "20", "Metros#metros2": "5" },
-      },
-      "2111": { name: "Fino", columns: {} },
-      "2102": { name: "Pintura", columns: {} },
-    });
+    expect(task(r, "2101").data.columns).toEqual({ Metros: "20", "Metros#metros2": "5" });
+    expect(task(r, "2001").data.subitems).toBeUndefined();
   });
 
   it("child tasks: every level flattened under the item's task, path for deeper levels", () => {
     const r = run();
-    const children = r.tasks.filter((t) => t.parentTask != null);
+    const children = r.tasks.filter((t) => t.parentTask?.kind === "planned" && t.parentTask.externalId === "3001");
     expect(
       children.map((t) => [t.externalId, t.title, t.sortOrder, t.data.path]),
     ).toEqual([
@@ -317,19 +290,19 @@ describe("translate: updates → comments", () => {
     });
   });
 
-  it("checklist subitems: on the parent task with a [subitem] prefix", () => {
+  it("subitems of the old checklist mode: on their own subtask, no prefix (#1046)", () => {
     const r = run();
     const ev = (id: string) =>
       r.historyEvents.find((e) => e.externalId === id)!;
     expect(ev("u2")).toMatchObject({
       actorId: ADMIN,
-      comment: "monday · usuario 99: [Aplanado] Revisar esquinas",
-      target: { entity: "task", ref: { externalId: "2001" } },
+      comment: "monday · usuario 99: Revisar esquinas",
+      target: { entity: "task", ref: { externalId: "2101" } },
     });
     expect(ev("u8")).toMatchObject({
       actorId: ANA,
-      comment: "[Fino] Fino listo",
-      target: { entity: "task", ref: { externalId: "2001" } },
+      comment: "Fino listo",
+      target: { entity: "task", ref: { externalId: "2111" } },
     });
   });
 
@@ -362,7 +335,7 @@ describe("translate: updates → comments", () => {
 });
 
 describe("translate: files → links", () => {
-  it("item, update and reply files on tasks; project files; checklist files on the parent", () => {
+  it("item, update and reply files on tasks; project files; subitem files on their subtask", () => {
     const r = run();
     expect(
       r.files.map((f) => [
@@ -391,14 +364,14 @@ describe("translate: files → links", () => {
         "a2",
         "task_link",
         { kind: "planned", entity: "project", externalId: "901" },
-        "2001",
+        "2101",
         "Obra",
       ],
       [
         "a7",
         "task_link",
         { kind: "planned", entity: "project", externalId: "901" },
-        "2001",
+        "2111",
         "Obra",
       ],
       [

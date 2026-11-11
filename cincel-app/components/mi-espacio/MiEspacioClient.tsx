@@ -65,7 +65,7 @@ export function MiEspacioClient(props: MiEspacioClientProps) {
 
   const notesQuery = useInfiniteQuery({ ...meNotesOptions(), enabled: IMPLEMENTED.fetchNotesAction });
 
-  const notes = useMemo(() => sortNotes(flattenPages(notesQuery.data?.pages)), [notesQuery.data]);
+  const notes = useMemo(() => sortNotes(flattenPages(notesQuery.data?.pages)), [notesQuery.data]); // data-patterns: server-order
 
   const showNotes = IMPLEMENTED.fetchNotesAction;
 

@@ -406,16 +406,16 @@ describe("plan: counts", () => {
   it("matches the hand-counted nested fixture totals per board", async () => {
     const p = await plan(nestedMapping(), fakeDb(), nestedData());
     const by = Object.fromEntries(p.boards.map((b) => [b.boardId, b]));
-    // 901: 1 project; tasks 2001-2003; checklist Aplanado, Aplanado › Fino, Pintura
-    // (Borrado is deleted); comments u1, r1, u2, u8 (u3 is empty, u4 is on a
+    // 901: 1 project; tasks 2001-2003; subitems Aplanado, Fino, Pintura as
+    // child tasks, the old checklist mode (#1046) (Borrado is deleted); comments u1, r1, u2, u8 (u3 is empty, u4 is on a
     // deleted subitem); files a1, a2, a3, a7 (a9 isn't in the index);
     // cronograma 2001, 2002 (2003 has no timeline).
     expect(by["901"]).toMatchObject({
       contacts: 0,
       projects: 1,
       tasks: 3,
-      childTasks: 0,
-      checklistItems: 3,
+      childTasks: 3,
+      checklistItems: 0,
       dependencies: 0,
       comments: 4,
       cronogramaRows: 2,
@@ -452,8 +452,8 @@ describe("plan: counts", () => {
       contacts: 1,
       projects: 3,
       tasks: 5,
-      childTasks: 4,
-      checklistItems: 3,
+      childTasks: 7,
+      checklistItems: 0,
       comments: 7,
       cronogramaRows: 2,
       files: 6,
@@ -499,7 +499,7 @@ describe("plan: counts", () => {
       new Date("2026-10-30T12:00:00Z"),
     );
     expect(md).toContain(
-      "| 901 | Casa Nido | board_as_project | 0 | 1 | 3 | 0 | 3 | 0 | 4 | 2 | 4 | 0 |",
+      "| 901 | Casa Nido | board_as_project | 0 | 1 | 3 | 3 | 0 | 0 | 4 | 2 | 4 | 0 |",
     );
     expect(md).toContain("**Clean:**");
     expect(md).toMatch(/### DATES_MISSING \(\d+\)/);

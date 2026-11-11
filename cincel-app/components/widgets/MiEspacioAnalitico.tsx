@@ -77,11 +77,14 @@ import {
   meGmailThreadsOptions,
   meNotificationsOptions,
   meNotificationsSummaryOptions,
+  meClosedTaskCountsOptions,
   meClosedTasksOptions,
   meTasksOptions,
   meWeekHoursOptions,
 } from "@/lib/query/options/mi-espacio";
 import { qk } from "@/lib/query/keys";
+import { listItemOfRow } from "@/lib/tareas/page-data";
+import { loadMoreText } from "@/components/widgets/table-rows";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { isTaskClosed, statusColorToken, statusDotClass } from "@/lib/tasks/status-options";
@@ -369,30 +372,33 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   // on leaves them out and each project says how many. The counts and KPIs stay on open work.
   // Hidden by default here (Mi espacio always listed open work only); the switch shows them.
   const [hideCompleted, setHideCompleted] = useHideCompletedTasks({ defaultHidden: true });
-  const doneQuery = useQuery(meClosedTasksOptions());
+  // #1051: the closed rows load 30 at a time only while shown, searched and filtered on the server;
+  // while hidden, one summary query counts them per project.
+  const closedFilters = useMemo(() => ({ tramo, q: filters.q }), [tramo, filters.q]);
+  const closedWanted = filters.estado !== "retraso";
+  const doneQuery = useInfiniteQuery({ ...meClosedTasksOptions(closedFilters), enabled: closedWanted && !hideCompleted });
+  const doneCounts = useQuery({ ...meClosedTaskCountsOptions(closedFilters), enabled: closedWanted && hideCompleted });
+  const donePages = doneQuery.data?.pages;
   const visibleDone = useMemo(
     () =>
-      (doneQuery.data ?? []).filter((task) => {
-        if (isHidden(task.id, task.parentTaskId)) return false;
-        if (tramo && task.workflow?.key !== tramo) return false;
-        if (filters.estado === "retraso") return false;
-        return matches(task.title, q);
-      }),
-    [doneQuery.data, isHidden, tramo, filters.estado, q],
+      closedWanted
+        ? (donePages ?? []).flatMap((page) => page.rows.filter((row) => !isHidden(row.id, row.parentTaskId)).map(listItemOfRow))
+        : [],
+    [donePages, isHidden, closedWanted],
   );
-  const tableTasks = useMemo(
-    () => (hideCompleted ? visibleTasks : [...visibleTasks, ...visibleDone.filter((t) => !visibleTasks.some((o) => o.id === t.id))]),
-    [hideCompleted, visibleTasks, visibleDone],
-  );
+  const doneLoaded = useMemo(() => (donePages ?? []).reduce((sum, page) => sum + page.rows.length, 0), [donePages]);
+  const doneRemaining = Math.max(0, (donePages?.at(-1)?.total ?? 0) - doneLoaded);
+  const tableTasks = useMemo(() => {
+    if (hideCompleted) return visibleTasks;
+    const open = new Set(visibleTasks.map((t) => t.id));
+    return [...visibleTasks, ...visibleDone.filter((t) => !open.has(t.id))];
+  }, [hideCompleted, visibleTasks, visibleDone]);
   const hiddenDoneByProject = useMemo(() => {
     const out = new Map<string, number>();
-    if (!hideCompleted) return out;
-    for (const task of visibleDone) {
-      const id = task.project?.id ?? task.projectId;
-      out.set(id, (out.get(id) ?? 0) + 1);
-    }
+    if (!hideCompleted || !closedWanted) return out;
+    for (const [id, count] of Object.entries(doneCounts.data ?? {})) out.set(id, count);
     return out;
-  }, [hideCompleted, visibleDone]);
+  }, [hideCompleted, closedWanted, doneCounts.data]);
   const groups = useMemo(() => myTasksGroups(tableTasks, today), [tableTasks, today]);
   const visibleRows = useMemo(() => groups.flatMap((g) => (g.children ?? []).flatMap((c) => c.rows ?? [])), [groups]);
   // ── Row checkboxes and the bulk bar (#1040): a filter change clears the selection.
@@ -760,6 +766,18 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
               />
               {deletes.dialog}
             </CellCommitProvider>
+            {!hideCompleted && doneQuery.hasNextPage ? (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="self-start"
+                disabled={doneQuery.isFetchingNextPage}
+                onClick={() => void doneQuery.fetchNextPage()}
+              >
+                {loadMoreText(doneRemaining)}
+              </Button>
+            ) : null}
             <TaskBulkBar
               selection={selection}
               taskOf={taskOfId}
