@@ -105,7 +105,7 @@ Goal: the shared proposal model (ADR 0007), its overlay in every view, apply wit
 | Code | Issue | Title |
 |---|---|---|
 | 7.1 | #1089 | [BE]: plan_week: deterministic capacity placement, deferral reasons, backlog and lanes loader, owner notifications |
-| 7.2 | #1090 | [FE]: Planear mi semana: backlog, lanes per person × Lun–Vie, drag with keyboard alternative, three Estilos |
+| 7.2 | #1090 | [FE]: Planear mi semana: backlog, lanes per person × Lun–Vie, drag with keyboard alternative, three Estilos (a collapsible section of the Semana view, F12; deferred if it is much trouble) |
 
 ### Phase 8: Cleanup and polish (milestone #95)
 
@@ -154,6 +154,7 @@ Every item has a recommended default, so work can start now.
 | F7 | Analítico Mes grouping | #1065 | One group per ISO week |
 | F8 | Google refresh trigger | #1072 | Once per session on mount when older than 5 min, plus "Actualizar" |
 | F10 | Keep the Nueva reunión draft across the Google grant redirect | #1071 | Yes: `sessionStorage` draft and `?nueva=reunion` |
-| F11 | "Tramos" legend in the shell sidebar (`Sidebar` board) | #1061 | Not built: the sidebar is shared by every page; the legend is in the Visual filter row |
+| F11 | "Tramos" legend in the shell sidebar (`Sidebar` board) | #1061 | **Decided: not built.** The legend is in the Visual filter row |
+| F12 | Where Planear mi semana lives | #1090, #1079 | **Decided:** a collapsible section of the Semana view; left for later if it is much trouble |
 
 `docs/phases/milestones.json` is not updated: like the Estilos milestones (#74–#84), these milestones have no per-phase labels in the repo.
