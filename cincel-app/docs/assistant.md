@@ -1,8 +1,9 @@
 # Asistente IA (`/asistente`)
 
-Chat operativo interno de Cincel. Responde preguntas accionables sobre proyectos,
-tareas y carga del equipo, y —según el rol del usuario— puede crear y asignar
-trabajo. Todo el acceso a datos es vía Drizzle contra `core.*`; nunca toca
+Chat interno de Cincel. Responde preguntas generales de arquitectura, diseño y
+construcción con su propio conocimiento (marcadas como referencia general, con la
+norma mexicana que aplique), consulta los datos de Cincel solo con herramientas
+y —según el rol del usuario— puede crear y asignar trabajo. Todo el acceso a datos es vía Drizzle contra `core.*`; nunca toca
 `auth_credentials`, `sessions` ni información financiera de clientes.
 
 ## Partes principales
@@ -10,7 +11,7 @@ trabajo. Todo el acceso a datos es vía Drizzle contra `core.*`; nunca toca
 | Archivo | Responsabilidad |
 | --- | --- |
 | `lib/assistant/provider.ts` | Modelo de lenguaje. `isAssistantConfigured()` (¿hay `LLM_BASE_URL` + `LLM_API_KEY`?) y `getLanguageModel()` (`createOpenAI({ baseURL, apiKey }).chat(LLM_MODEL)`). Proveedor-neutro: cualquier endpoint compatible con OpenAI. |
-| `lib/assistant/prompt.ts` | `buildSystemPrompt({ toolNames, user })` — arma el prompt de sistema en español a partir de (a) la identidad del usuario (nombre, rol de acceso, área) y (b) los nombres de las herramientas disponibles, de modo que el modelo no ofrezca acciones que el usuario no puede ejecutar. `SYSTEM_PROMPT` es la variante de solo lectura sin usuario. |
+| `lib/assistant/prompt.ts` | `buildSystemPrompt({ tools, user, context, serverThreads })` — arma el prompt de sistema en español: conocimiento general permitido (con la referencia normativa y la aclaración de que es una referencia general), datos de Cincel solo con herramientas, y la lista de herramientas **generada** del conjunto de la petición (`toolCatalogOf(tools, writes)`: nombre, primera frase de la descripción, consulta o escritura). Solo algunas herramientas agregan una regla propia (`TOOL_RULES`). `SYSTEM_PROMPT` es la variante sin herramientas ni usuario. |
 | `lib/assistant/tools.ts` | Definición de las herramientas (`tool()` de la AI SDK, `inputSchema` con Zod) y `buildAssistantTools(user)`, que devuelve el subconjunto de herramientas permitido para ese usuario. |
 | `app/api/asistente/chat/route.ts` | Endpoint `POST` de streaming. `getSession()` → 401 · `isAssistantConfigured()` → 503 · `requireCapabilityUser()` → 403. Luego `streamText({ model, system, messages, tools, stopWhen: stepCountIs(5) })` y `toUIMessageStreamResponse()`. |
 | `components/asistente/AssistantChat.tsx` | Cliente (`useChat` + `DefaultChatTransport`). Renderiza `message.parts`: texto → burbuja markdown; `tool-render_chart` → `<AssistantChartMessage>`; el resto de `tool-*` → línea de progreso ("Consultando datos…", "Creando tarea…", …). |
@@ -39,13 +40,13 @@ se sobrescribe.
 | `onboard_client` | escritura | `canCreateClient` **y** `canCreateActivity` | Administrador, Dirección, Jefes, Arquitecto Senior |
 | `create_rfc` | escritura externa | `canCreateActivity` | todos |
 
-`onboard_client` da de alta el cliente y, en el mismo paso, siembra el checklist
-estándar del tramo elegido (las plantillas de `workflow_task_templates` de sus
-fases activas, vía `startTramoAction`; Presale por defecto) como tareas
-`Pendiente` contra un proyecto nuevo, más
-`extraTasks` opcionales. Es **idempotente**: si el cliente ya existe (mismo
-nombre) lo reutiliza, y omite las tareas de plantilla que el proyecto ya tenga
-para ese flujo — una llamada reintentada no duplica nada.
+`onboard_client` da de alta el cliente (o reutiliza el que ya existe con el mismo
+nombre), crea el proyecto sin tramo y lo liga al cliente —como cliente del
+proyecto si quien lo pide es administrador; si no, como contacto del proyecto, y
+avisa que un administrador debe asignarlo— y luego inicia el tramo elegido
+(las plantillas de `workflow_task_templates` de sus fases activas, vía
+`startTramoAction`; Presale por defecto) con el responsable indicado, más
+`extraTasks` opcionales.
 
 Acciones de servidor: `lib/actions/activities-actions.ts`
 (`createActivityViaAssistantAction`, `assignActivityViaAssistantAction`) y
@@ -70,11 +71,22 @@ responde `{ ok: false, error }` en vez de fallar silenciosamente.
    resultados.
 3. Si aplica solo a ciertos roles, agrégala dentro de `buildAssistantTools()` bajo
    la comprobación de capacidad correspondiente.
-4. Añade una línea descriptiva en `buildSystemPrompt()` (`lib/assistant/prompt.ts`)
-   condicionada a `toolNames.includes("<nombre>")`.
-5. Agrega el caso de progreso en `AssistantChat.tsx` (`tool-<nombre>`).
-6. Tests: `lib/assistant/tools.test.ts` (Zod + gating por rol),
-   `app/api/asistente/chat/route.test.ts` (conjunto de herramientas por rol).
+4. No hace falta tocar el prompt: la lista de herramientas se genera de la
+   descripción (escríbela en español, corta, con la primera frase autosuficiente).
+   Solo si la herramienta necesita una regla extra, agrégala a `TOOL_RULES` en
+   `lib/assistant/prompt.ts`.
+5. Agrega su paso en `lib/assistant/tool-steps.ts`, su resumen en
+   `lib/assistant/tool-summaries.ts` y, si escribe, su entrada en
+   `TOOL_INVALIDATIONS` (o en `WRITES_WITHOUT_LOCAL_CACHE` si no cambia nada de
+   la app) en `lib/assistant/tool-invalidation.ts`.
+6. Si un comando o sugerencia la usa, nómbrala en `tools` del prompt en
+   `lib/assistant/starter-prompts.ts`: solo se muestra a quien tiene todas sus
+   herramientas (`groupsForTools`, con los nombres que lee `/asistente` en el
+   servidor).
+7. Tests: `lib/assistant/tools.test.ts` (Zod + gating por rol),
+   `app/api/asistente/chat/route.test.ts` (conjunto de herramientas por rol) y
+   las guardas de `lib/assistant/tool-references.test.ts` (nombres registrados,
+   paso, resumen e invalidación de cada escritura).
 
 ## Configuración
 

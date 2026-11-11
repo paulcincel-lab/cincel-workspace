@@ -748,6 +748,72 @@ Object.assign(toolSummaries, {
   progress_report: summarizeProgressReport,
 } satisfies Record<string, ToolSummary>);
 
+// ── Tools of `lib/assistant/tools.ts` that write (#1055) ────────────────────
+
+const WORKFLOW_NAMES: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
+
+export function summarizeCreateTask(input: unknown): string {
+  const title = text(input, "description");
+  const project = text(input, "project");
+  const manager = text(input, "manager");
+  const base = title ? `Crear la tarea ${quoted(title)}` : "Crear una tarea";
+  return `${base}${project ? ` en ${quoted(project)}` : ""}${manager ? ` para ${manager}` : ""}`;
+}
+
+export function summarizeAssignTask(input: unknown): string {
+  const task = text(input, "descriptionContains");
+  const manager = text(input, "manager");
+  return `Reasignar ${task ? `la tarea ${quoted(task)}` : "la tarea"}${manager ? ` a ${manager}` : ""}`;
+}
+
+export function summarizeCreateClient(input: unknown): string {
+  const name = text(input, "name");
+  return name ? `Dar de alta al cliente ${quoted(name)}` : "Dar de alta un cliente";
+}
+
+export function summarizeOnboardClient(input: unknown): string {
+  const name = text(input, "name");
+  const project = text(input, "projectName");
+  const tramo = WORKFLOW_NAMES[text(input, "workflow") || "presale"] ?? text(input, "workflow");
+  const who = name ? `a ${quoted(name)}` : "un cliente";
+  return `Arrancar ${who}${project ? ` con el proyecto ${quoted(project)}` : ""} y las tareas de ${tramo}`;
+}
+
+export function summarizeCreateRfc(input: unknown): string {
+  const title = text(input, "title");
+  return title ? `Registrar la RFC ${quoted(title)} en GitHub` : "Registrar una RFC en GitHub";
+}
+
+export function summarizeMergeDuplicateClients(input: unknown): string {
+  const name = text(input, "name");
+  return name ? `Fusionar los contactos duplicados ${quoted(name)}` : "Fusionar contactos duplicados";
+}
+
+export function summarizeMergeDuplicateActivities(input: unknown): string {
+  const task = text(input, "descriptionContains");
+  const project = text(input, "projectName");
+  const base = task ? `Fusionar las tareas duplicadas ${quoted(task)}` : "Fusionar tareas duplicadas";
+  return project ? `${base} de ${quoted(project)}` : base;
+}
+
+export function summarizeDiscardProject(input: unknown): string {
+  const project = text(input, "projectName");
+  return project
+    ? `Eliminar el proyecto ${quoted(project)} con sus tareas (se puede restaurar 30 días)`
+    : "Eliminar un proyecto con sus tareas";
+}
+
+Object.assign(toolSummaries, {
+  create_task: summarizeCreateTask,
+  assign_task: summarizeAssignTask,
+  create_client: summarizeCreateClient,
+  onboard_client: summarizeOnboardClient,
+  create_rfc: summarizeCreateRfc,
+  merge_duplicate_clients: summarizeMergeDuplicateClients,
+  merge_duplicate_activities: summarizeMergeDuplicateActivities,
+  discard_project: summarizeDiscardProject,
+} satisfies Record<string, ToolSummary>);
+
 // ── Approval previews (grouped confirmation card) ───────────────────────────
 
 /** One row of a grouped confirmation: what the call adds (+), changes (~) or removes (−). */
@@ -788,7 +854,7 @@ const PREVIEW_COPY: Record<string, PreviewCopy> = {
   cancel_event: { verb: "cancelar", first: "Cancelo", imperative: "Cancela", one: "evento", many: "eventos", feminine: false },
   create_client: { verb: "dar de alta", first: "Doy de alta", imperative: "Da de alta", one: "cliente", many: "clientes", feminine: false },
   onboard_client: { verb: "arrancar", first: "Arranco", imperative: "Arranca", one: "cliente", many: "clientes", feminine: false },
-  discard_project: { verb: "descartar", first: "Descarto", imperative: "Descarta", one: "proyecto", many: "proyectos", feminine: false },
+  discard_project: { verb: "eliminar", first: "Elimino", imperative: "Elimina", one: "proyecto", many: "proyectos", feminine: false },
 };
 
 const WORKFLOW_PREVIEW: Record<string, { key: string; name: string; sortOrder: number }> = {

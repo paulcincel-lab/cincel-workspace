@@ -15,6 +15,7 @@ import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithApprovalResponses, type FileUIPart, type UIMessage } from "ai";
 import { ArrowUpIcon, ListIcon, PaperclipIcon, PlusIcon, XIcon } from "lucide-react";
 
+import { useAssistantToolGroups } from "@/components/asistente/assistant-tool-groups";
 import { AssistantMessageParts } from "@/components/asistente/AssistantMessageParts";
 import { AssistantContextStore, createAssistantChatTransport } from "@/components/asistente/assistant-transport";
 import type { AssistantTurn } from "@/components/asistente/use-asistente-cache";
@@ -29,7 +30,6 @@ import { PageHeader } from "@/components/widgets/PageHeader";
 import { ConfirmationBar } from "@/components/widgets/asistente/ConfirmationBar";
 import { StepDataPanel } from "@/components/widgets/asistente/StepDataPanel";
 import { ToolStepsTable } from "@/components/widgets/asistente/ToolStepsTable";
-import { ASSISTANT_TOOL_GROUPS } from "@/lib/assistant/starter-prompts";
 import {
   contextTokensLabel,
   estimateContextTokens,
@@ -351,6 +351,7 @@ type ComposerProps = {
 function AnaliticoComposer({ value, onChange, onSubmit, busy, tokensLabel, chip, onRemoveChip, textareaRef }: ComposerProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [commandsOpen, setCommandsOpen] = useState(false);
+  const toolGroups = useAssistantToolGroups();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const submit = () => {
@@ -460,7 +461,7 @@ function AnaliticoComposer({ value, onChange, onSubmit, busy, tokensLabel, chip,
           </PopoverTrigger>
           <PopoverContent align="start" className="max-h-80 w-80 overflow-y-auto p-2">
             <ul aria-label="Comandos" className="flex flex-col gap-2">
-              {ASSISTANT_TOOL_GROUPS.filter((group) => !group.disabled).map((group) => (
+              {toolGroups.filter((group) => !group.disabled).map((group) => (
                 <li key={group.key} className="flex flex-col gap-1">
                   <span className="px-1 text-xs font-medium text-muted-foreground">{group.label}</span>
                   <ul className="flex flex-col">

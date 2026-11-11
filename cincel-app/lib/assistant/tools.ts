@@ -5,12 +5,19 @@ import { z } from "zod";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import {
+  canSeeAdminData,
   resolveActivitiesCapabilities,
   resolveClientsCapabilities,
   resolveProjectsCapabilities,
 } from "@/lib/auth/permissions";
 import { unwrapActionResult } from "@/lib/actions/action-result";
-import { createProjectAction, deleteProjectAction } from "@/lib/actions/projects-actions";
+import { requireCapabilityUser } from "@/lib/auth/session";
+import {
+  createProjectAction,
+  deleteProjectAction,
+  setProjectContactsAction,
+  updateProjectAction,
+} from "@/lib/actions/projects-actions";
 import { startTramoAction } from "@/lib/actions/tramo-start-actions";
 import { createUserTaskAction, assignTaskAction, mergeTasksAction } from "@/lib/actions/tasks-actions";
 import { listViewerProjects, listViewerTasks } from "@/lib/assistant/reads";
@@ -18,6 +25,7 @@ import { fetchContactsAction, createContactAction, mergeContactsAction } from "@
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { createGithubIssue, isGithubConfigured } from "@/lib/github/client";
+import { loadOwnerMail } from "@/lib/assistant/owner-mail";
 import { buildDefinedTools } from "@/lib/assistant/tools/index";
 import type { AssistantContext } from "@/lib/types/redesign";
 import { resolveProject, resolveStaff, type Resolved } from "@/lib/assistant/resolvers";
@@ -63,7 +71,7 @@ async function resolveWorkflowByKey(key: string): Promise<Resolved<WorkflowDetai
 }
 
 export const list_projects = tool({
-  description: `Lista proyectos de Cincel con su estado, etapa, avance y ${RISK_NOTE}. Filtra por estado, etapa o si están activos.`,
+  description: `Lista proyectos de Cincel (hasta 50) con su estado, tramo, avance y ${RISK_NOTE}. Filtra por estado, tramo o si están activos.`,
   inputSchema: z.object({
     activeOnly: z.boolean().default(true),
     stage: z.string().optional().describe("p. ej. Presale, Diseño, Construcción"),
@@ -121,7 +129,7 @@ export const list_projects = tool({
 
 export const list_activities_due = tool({
   description:
-    "Lista actividades/tareas no completadas. Por defecto solo las que tienen entrega (commitmentDate) o revisión (reviewDate) dentro de una ventana de días, o las bloqueadas. Si indicas projectName, lista TODAS las tareas de ese proyecto tengan fecha o no (útil para revisar o secuenciar un proyecto recién creado). Filtra también por responsable.",
+    "Lista tareas no completadas: las que vencen o se revisan en los próximos días, las bloqueadas o, con projectName, todas las de un proyecto (hasta 80). Por defecto solo las que tienen entrega (commitmentDate) o revisión (reviewDate) dentro de una ventana de días, o las bloqueadas. Si indicas projectName, lista TODAS las tareas de ese proyecto tengan fecha o no (útil para revisar o secuenciar un proyecto recién creado). Filtra también por responsable.",
   inputSchema: z.object({
     withinDays: z.number().int().min(1).max(60).default(7),
     memberName: z.string().optional(),
@@ -301,7 +309,7 @@ export const render_list = tool({
 
 export const create_task = tool({
   description:
-    "Crea una nueva tarea/actividad en Cincel (estado inicial 'pendiente') y opcionalmente le asigna un responsable. Úsalo solo cuando el usuario pida explícitamente crear o registrar trabajo. Verifica antes el nombre del proyecto y del responsable con list_projects / team_workload_summary; no los inventes.",
+    "Crea una nueva tarea/actividad en Cincel (estado inicial 'pendiente') y opcionalmente le asigna un responsable. Úsalo solo cuando el usuario pida explícitamente crear o registrar trabajo. Verifica antes el nombre del proyecto y del responsable con search_workspace, list_projects o get_person; no los inventes.",
   inputSchema: z.object({
     description: z.string().min(3).describe("Qué hay que hacer"),
     project: z.string().min(2).describe("Nombre exacto del proyecto — toda tarea pertenece a un proyecto"),
@@ -440,7 +448,7 @@ export const create_client = tool({
 
 export const onboard_client = tool({
   description:
-    "Da de alta un nuevo cliente y, en el mismo paso, crea el checklist estándar de tareas del flujo elegido (Presale por defecto) para un proyecto nuevo. Úsalo cuando el usuario quiera 'arrancar' un cliente/proyecto. Confirma antes el nombre del cliente, el nombre del proyecto y el flujo.",
+    "Arranca un cliente con un proyecto nuevo: da de alta el cliente (o reutiliza el que ya existe con ese nombre), crea el proyecto ligado a él e inicia el tramo elegido (Presale por defecto) con sus tareas de plantilla. Úsalo cuando el usuario quiera 'arrancar' un cliente o proyecto.",
   inputSchema: z.object({
     name: z.string().min(2).describe("Nombre del cliente"),
     kind: CLIENT_KIND_ENUM.default("Particular"),
@@ -484,29 +492,38 @@ export const onboard_client = tool({
       managerId = managerResolved.value.id;
     }
 
-    const contact = unwrapActionResult(
-      await createContactAction({
-        type: "cliente",
-        kind: CLIENT_KIND_MAP[kind],
-        name,
-        phone,
-        acquisitionChannel,
-        people: contactName
-          ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
-          : undefined,
-      }),
-    );
+    // Reuses a client with the same name, so a retried call doesn't duplicate it.
+    const q = name.trim().toLowerCase();
+    const existing = (await fetchContactsAction({ type: "cliente" })).find((c) => c.name.trim().toLowerCase() === q);
+    const contact =
+      existing ??
+      unwrapActionResult(
+        await createContactAction({
+          type: "cliente",
+          kind: CLIENT_KIND_MAP[kind],
+          name,
+          phone,
+          acquisitionChannel,
+          people: contactName
+            ? [{ name: contactName, email: contactEmail ?? null, phone: contactPhone ?? null, isPrimary: true, role: null }]
+            : undefined,
+        }),
+      );
 
-    const project = unwrapActionResult(
-      await createProjectAction({
-        name: projectName,
-        clientId: contact.id,
-        managerId,
-      }),
-    );
+    // No tramo on create: the chosen tramo starts below with the managers.
+    const project = unwrapActionResult(await createProjectAction({ name: projectName, startWorkflowId: null }));
 
-    // Creating the project may already have started the first tramo; startTramo
-    // only adds the templates still missing, so this is safe either way.
+    // The project's client is admin only (`clientId`); other roles link the
+    // client as a project contact and an administrator assigns it later.
+    let clientLink: "cliente" | "contacto";
+    if (canSeeAdminData(await requireCapabilityUser())) {
+      unwrapActionResult(await updateProjectAction(project.id, { clientId: contact.id }));
+      clientLink = "cliente";
+    } else {
+      unwrapActionResult(await setProjectContactsAction(project.id, [{ contactId: contact.id, role: "Cliente" }]));
+      clientLink = "contacto";
+    }
+
     const phaseIds = workflowResolved.value.phases.filter((p) => p.active).map((p) => p.id);
     if (phaseIds.length > 0) {
       unwrapActionResult(
@@ -537,7 +554,10 @@ export const onboard_client = tool({
       client: { id: contact.id, name: contact.name },
       project: { id: project.id, name: project.name },
       workflow: workflowResolved.value.name,
-      // Counts the auto-started tasks too, which the start above skips.
+      clientLink,
+      ...(clientLink === "contacto"
+        ? { note: "El cliente quedó como contacto del proyecto; un administrador debe asignarlo como cliente del proyecto." }
+        : {}),
       tasksCreated: (await listViewerTasks({ projectId: project.id })).length,
     };
   },
@@ -762,9 +782,9 @@ export const merge_duplicate_activities = tool({
 
 export const discard_project = tool({
   description:
-    "Descarta (archiva de forma reversible) un proyecto completo y TODAS sus tareas — útil para limpiar proyectos de prueba o de semilleo. No borra nada de forma permanente: las filas conservan su historial y se pueden restaurar. Pide confirmación explícita y el nombre exacto del proyecto antes de usarlo.",
+    "Elimina un proyecto con todas sus tareas y subtareas y quita el acceso de sus clientes al portal; la carpeta de Drive se queda. Un administrador o quien lo eliminó puede restaurarlo durante 30 días desde Proyectos eliminados. Útil para limpiar proyectos de prueba. Pide el nombre exacto del proyecto.",
   inputSchema: z.object({
-    projectName: z.string().min(2).describe("Nombre exacto del proyecto a descartar"),
+    projectName: z.string().min(2).describe("Nombre exacto del proyecto a eliminar"),
   }),
   execute: async ({ projectName }) => {
     const resolved = await resolveProject(projectName);
@@ -839,4 +859,14 @@ export function buildAssistantTools(
   // tool replaces a legacy one of the same name.
   if (user && run) Object.assign(tools, buildDefinedTools({ user, ...run }));
   return tools;
+}
+
+/**
+ * The names of every tool the caller gets on `/asistente` (#1055): the
+ * starter prompts and suggestion cards only offer what is in this list.
+ * Reads the caller's Gmail status first, like the chat route.
+ */
+export async function assistantToolNamesFor(user: AuthenticatedUser): Promise<string[]> {
+  await loadOwnerMail(user);
+  return Object.keys(buildAssistantTools(user, { context: { route: "/asistente" }, threadId: "" }));
 }

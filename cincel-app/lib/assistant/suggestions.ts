@@ -6,14 +6,17 @@
  */
 import { ASSISTANT_TOOL_GROUPS, type AssistantToolGroup } from "@/lib/assistant/starter-prompts";
 
-export const EXAMPLE_QUESTIONS: readonly string[] = [
-  "¿Qué entregas vencen esta semana?",
-  "¿Quién está más saturado en el equipo?",
-  "¿Qué proyectos están en riesgo alto?",
-  "¿Hay tareas bloqueadas?",
-  "Compara el avance de los proyectos activos",
-  "Muéstrame la ocupación por área",
+/** Example questions with the tools that answer them (every role has these; guard test, #1055). */
+export const EXAMPLES: readonly { text: string; tools: readonly string[] }[] = [
+  { text: "¿Qué entregas vencen esta semana?", tools: ["list_activities_due"] },
+  { text: "¿Quién está más saturado en el equipo?", tools: ["team_workload_summary"] },
+  { text: "¿Qué proyectos están en riesgo alto?", tools: ["list_projects"] },
+  { text: "¿Hay tareas bloqueadas?", tools: ["list_activities_due"] },
+  { text: "Compara el avance de los proyectos activos", tools: ["list_projects", "render_stat_grid"] },
+  { text: "Muéstrame la ocupación de cada persona del equipo", tools: ["team_workload_summary", "render_chart"] },
 ];
+
+export const EXAMPLE_QUESTIONS: readonly string[] = EXAMPLES.map((example) => example.text);
 
 /** Tint of a suggestion card's tile (a tint token with its ink). */
 export type SuggestionTone = "primary" | "violet" | "warning" | "cyan" | "success";

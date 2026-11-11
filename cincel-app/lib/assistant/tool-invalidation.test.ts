@@ -21,14 +21,21 @@ describe("keysForToolParts", () => {
     ["cancel_reminder", [REMINDERS_PREFIX, qk.shell.badges(), qk.inicio()]],
     ["clock_in", [qk.me.today()]],
     ["pause_or_clock_out", [qk.me.today()]],
-    ["create_task", [qk.tareas.all, qk.inicio(), qk.shell.badges()]],
-    ["update_task_status", [qk.tareas.all, qk.inicio(), qk.shell.badges()]],
-    ["create_tasks_from_notes", [qk.tareas.all, qk.inicio(), qk.shell.badges()]],
+    ["create_task", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
+    ["update_task_status", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
+    ["create_tasks_from_notes", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
     ["create_event", [INICIO]],
     ["send_email", [qk.me.gmail.all]],
     ["draft_email", [qk.me.gmail.all]],
     ["invite_client_to_portal", [qk.proyectos.all]],
     ["request_client_approval", [qk.proyectos.all]],
+    ["mark_notifications_read", [["me", "notifications"], qk.me.notificationsSummary(), qk.shell.badges()]],
+    ["schedule_digest", [qk.me.notificationPrefs(), qk.me.preferences()]],
+    ["site_photo_log", [qk.proyectos.all]],
+    [
+      "discard_project",
+      [qk.proyectos.all, qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks(), qk.catalog.projectOptions(), qk.me.today()],
+    ],
   ])("%s", (tool, expected) => {
     expect(keysForToolParts([done(tool)])).toEqual(expected);
   });
@@ -68,7 +75,7 @@ describe("keysForToolParts", () => {
 
   it("dedupes keys across tool families, first seen first", () => {
     const keys = keysForToolParts([done("create_reminder"), done("create_task"), done("create_note"), done("create_task")]);
-    expect(keys).toEqual([REMINDERS_PREFIX, qk.shell.badges(), qk.inicio(), qk.tareas.all, qk.me.notes()]);
+    expect(keys).toEqual([REMINDERS_PREFIX, qk.shell.badges(), qk.inicio(), qk.tareas.all, qk.me.tasks(), qk.me.notes()]);
   });
 
   it("is empty for no parts", () => {

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { AsistentePageClient } from "@/components/asistente/AsistentePageClient";
 import { assistantThreadsReady } from "@/lib/assistant/threads-ready";
+import { assistantToolNamesFor } from "@/lib/assistant/tools";
 import { getSession, requireCapabilityUser } from "@/lib/auth/session";
 import { loadAsistentePageData } from "@/lib/loaders/asistente";
 import { Hydrate } from "@/lib/query/hydrate";
@@ -40,7 +41,7 @@ export default async function AsistentePage({ searchParams }: AsistentePageProps
   const projectId = rawProject && UuidSchema.safeParse(rawProject).success ? rawProject.toLowerCase() : null;
 
   const user = await requireCapabilityUser();
-  const data = await loadAsistentePageData(user, { threadId });
+  const [data, toolNames] = await Promise.all([loadAsistentePageData(user, { threadId }), assistantToolNamesFor(user)]);
 
   const qc = getQueryClient();
   qc.setQueryData(asistenteThreadsOptions().queryKey, data.threads);
@@ -52,6 +53,7 @@ export default async function AsistentePage({ searchParams }: AsistentePageProps
         threadId={data.initialThread?.id ?? null}
         missingThread={requested !== null && data.initialThread === null}
         initialProjectId={projectId}
+        toolNames={toolNames}
       />
     </Hydrate>
   );

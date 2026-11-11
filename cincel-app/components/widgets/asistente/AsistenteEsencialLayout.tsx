@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CheckIcon, MessagesSquareIcon, PlusIcon, XIcon } from "lucide-react";
 
+import { useAssistantToolGroups } from "@/components/asistente/assistant-tool-groups";
 import { AssistantCardMessage } from "@/components/asistente/AssistantCardMessage";
 import { AssistantChartMessage } from "@/components/asistente/AssistantChartMessage";
 import { AssistantListMessage } from "@/components/asistente/AssistantListMessage";
@@ -38,7 +39,6 @@ import {
   taskListOf,
   type ApprovalOutcome,
 } from "@/components/widgets/asistente/esencial-chat";
-import { ASSISTANT_TOOL_GROUPS } from "@/lib/assistant/starter-prompts";
 import { EXAMPLE_QUESTIONS } from "@/lib/assistant/suggestions";
 import {
   RENDER_WIDGET_TOOLS,
@@ -239,6 +239,7 @@ function EsencialConversation({ thread, context, chips = [], draft, onTurnFinish
   const [input, setInput] = useState(draft?.text ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [commandsOpen, setCommandsOpen] = useState(false);
+  const toolGroups = useAssistantToolGroups();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const assistantCount = messages.filter((m) => m.role === "assistant").length;
@@ -323,7 +324,7 @@ function EsencialConversation({ thread, context, chips = [], draft, onTurnFinish
             }
           }}
         >
-          <AssistantCommandList groups={ASSISTANT_TOOL_GROUPS} onPick={fill} />
+          <AssistantCommandList groups={toolGroups} onPick={fill} />
         </div>
       ) : null}
 
