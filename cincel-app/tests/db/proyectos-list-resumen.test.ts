@@ -12,6 +12,7 @@
  *   Resumen), Resumen `schedule.payments` = `[]`, staff `{id,name}` (+
  *   `puesto`) without `email`; admins get them.
  * - Resumen staff covers the project's team only.
+ * - The Resumen task numbers (`getProyectoResumenSummary`) count top-level tasks.
  * - Out of scope (no `canViewProjects`) or a deleted project → null.
  */
 import { randomUUID } from "node:crypto";
@@ -57,7 +58,7 @@ describe.skipIf(!url)("Proyectos list, Resumen and Tareas page data (test DB)", 
   const { asViewer } = await import("@/lib/query/test-utils");
   const { requireCapabilityUser } = await import("@/lib/auth/session");
   const { countQueries } = await import("../helpers/count-queries");
-  const { getProyectoResumenData, getProyectoTareasData, getProyectosPageData } = await import(
+  const { getProyectoResumenData, getProyectoResumenSummary, getProyectosPageData } = await import(
     "@/lib/actions/page-data/proyectos-actions"
   );
   const { loadProyectosPage } = await import("@/lib/loaders/proyectos");
@@ -232,20 +233,21 @@ describe.skipIf(!url)("Proyectos list, Resumen and Tareas page data (test DB)", 
     expect(resumen?.portfolio).toEqual(list.portfolio.find((row) => row.projectId === projectId));
   });
 
-  it("Tareas returns the slim rows of the project (admin tasks only for admins)", async () => {
-    const asColaborador = await asViewer(colaborador(), () => getProyectoTareasData({ id: projectId }));
+  it("the Resumen task numbers count the project's top-level tasks (admin tasks only for admins, #1051)", async () => {
+    const total = (s: { buckets: { total: number }[] } | null) => s?.buckets.reduce((acc, b) => acc + b.total, 0);
+    const asColaborador = await asViewer(colaborador(), () => getProyectoResumenSummary({ id: projectId }));
     expect(asColaborador?.includeAdmin).toBe(false);
-    expect(asColaborador?.tasks.every((t) => t.projectId === projectId && t.kind !== "admin")).toBe(true);
-    expect(asColaborador?.tasks.every((t) => !("notes" in t))).toBe(true);
-    const asAdmin = await asViewer(admin(), () => getProyectoTareasData({ id: projectId }));
+    // Uno and Dos; the subtask counts on its parent.
+    expect(total(asColaborador ?? null)).toBe(2);
+    const asAdmin = await asViewer(admin(), () => getProyectoResumenSummary({ id: projectId }));
     expect(asAdmin?.includeAdmin).toBe(true);
-    expect(asAdmin?.tasks.some((t) => t.kind === "admin")).toBe(true);
+    expect(total(asAdmin ?? null)).toBe(3);
   });
 
   it("is null for a viewer without canViewProjects", async () => {
     perms.noProjects = true;
     expect(await asViewer(colaborador(), () => getProyectoResumenData({ id: projectId }))).toBeNull();
-    expect(await asViewer(colaborador(), () => getProyectoTareasData({ id: projectId }))).toBeNull();
+    expect(await asViewer(colaborador(), () => getProyectoResumenSummary({ id: projectId }))).toBeNull();
     const list = await asViewer(colaborador(), () => getProyectosPageData({}));
     expect(list.projects).toEqual([]);
     expect(list.portfolio).toEqual([]);
@@ -253,12 +255,12 @@ describe.skipIf(!url)("Proyectos list, Resumen and Tareas page data (test DB)", 
 
   it("is null for a deleted project, even for an admin", async () => {
     expect(await asViewer(admin(), () => getProyectoResumenData({ id: deletedProject }))).toBeNull();
-    expect(await asViewer(admin(), () => getProyectoTareasData({ id: deletedProject }))).toBeNull();
+    expect(await asViewer(admin(), () => getProyectoResumenSummary({ id: deletedProject }))).toBeNull();
   });
 
   it("is null for an unknown project", async () => {
     expect(await asViewer(admin(), () => getProyectoResumenData({ id: randomUUID() }))).toBeNull();
-    expect(await asViewer(admin(), () => getProyectoTareasData({ id: randomUUID() }))).toBeNull();
+    expect(await asViewer(admin(), () => getProyectoResumenSummary({ id: randomUUID() }))).toBeNull();
   });
 
   it("a guest gets FORBIDDEN", async () => {

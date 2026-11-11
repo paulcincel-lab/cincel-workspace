@@ -8,6 +8,9 @@ import type { QuickAddRowProps } from "@/components/widgets/QuickAddRow";
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskListItem } from "@/lib/types/core";
+import { MY_TASKS_ALL, meTasksBucketFilters, type MeTasksListFilters, type MyTasksSummaryInput } from "@/lib/my-space/my-tasks-summary";
+import type { MeTasksListData } from "@/lib/query/options/mi-espacio";
+import { fakeMyTasks, type FakeMyTasks } from "@/tests/helpers/my-tasks-fake";
 import type { Checklist, Note, NotificationItem, TodayStatus, WeekHours } from "@/lib/types/redesign";
 
 /**
@@ -28,7 +31,6 @@ vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({
 
 const actions = vi.hoisted(() => ({
   createUserTaskAction: vi.fn(),
-  fetchMyOpenTasksAction: vi.fn(async () => []),
   fetchMyTodayAction: vi.fn(),
   fetchMyWeekHoursAction: vi.fn(),
   clockInAction: vi.fn(),
@@ -39,7 +41,6 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   createUserTaskAction: actions.createUserTaskAction,
-  fetchMyOpenTasksAction: actions.fetchMyOpenTasksAction,
 }));
 vi.mock("@/lib/actions/time-tracking-actions", () => ({
   fetchMyTodayAction: actions.fetchMyTodayAction,
@@ -61,10 +62,14 @@ vi.mock("@/lib/actions/my-space-actions", () => ({
   createChecklistAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/gmail-actions", () => ({}));
+// Mi espacio's task reads (#1051), answered from the fixture by the fake.
+const myTasks = vi.hoisted(() => ({ server: null as FakeMyTasks | null }));
 vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
   getMiEspacioPageData: vi.fn(),
   fetchMiEspacioNotesPage: vi.fn(),
   fetchMiEspacioChecklistsPage: vi.fn(),
+  getMyTasksSummary: vi.fn(async (input: MyTasksSummaryInput) => myTasks.server!.summary(input)),
+  getMyTasksPage: vi.fn(async (input: { filters: MeTasksListFilters; cursor: string | null }) => myTasks.server!.page(input)),
 }));
 vi.mock("@/lib/actions/page-data/me-actions", () => ({ fetchMyProfileAction: vi.fn() }));
 
@@ -205,7 +210,9 @@ function renderBoard(
   const client = createTestQueryClient();
   client.setQueryData(qk.me.profile(), { id: "me", name: "Ana López", photoUrl: null });
   client.setQueryData(qk.me.today(), opts.status ?? today());
-  client.setQueryData(qk.me.tasks(), opts.tasks ?? [task("t1", TODAY), task("t2", "2026-11-06"), task("t3", "2026-11-12"), task("t4", null)]);
+  const server = fakeMyTasks(opts.tasks ?? [task("t1", TODAY), task("t2", "2026-11-06"), task("t3", "2026-11-12"), task("t4", null)], TODAY);
+  myTasks.server = server;
+  server.seed(client, MY_TASKS_ALL, server.boardLists());
   client.setQueryData(qk.me.notifications({}), {
     pages: [{ items: [NOTIFICATION], nextCursor: null, unreadCount: 1 }],
     pageParams: [null],
@@ -304,7 +311,8 @@ describe("MiEspacioBoard", () => {
     });
     const column = screen.getByRole("list", { name: "Esta semana" });
     expect(await within(column).findByText("Casa Lomas · recién creada")).toBeTruthy();
-    expect(client.getQueryData<TaskListItem[]>(qk.me.tasks())?.some((t) => t.id === "nueva")).toBe(true);
+    const semana = client.getQueryData<MeTasksListData>(qk.me.tasksList(meTasksBucketFilters("semana")));
+    expect(semana?.pages.flatMap((p) => p.rows).some((t) => t.id === "nueva")).toBe(true);
     expect(screen.getByRole("status").textContent).toBe("Tarea agregada a Esta semana");
 
     fireEvent.click(screen.getByRole("button", { name: "Agregar tarea para hoy" }));
@@ -321,11 +329,13 @@ describe("MiEspacioBoard", () => {
     expect(screen.queryByRole("button", { name: "Nueva tarea" })).toBeNull();
   });
 
-  it("5 cards then Ver más", () => {
+  it("5 cards, then Cargar más loads the next ones (#1051)", async () => {
     renderBoard({ tasks: Array.from({ length: 7 }, (_, i) => task(`h${i}`, TODAY)) });
     expect(within(screen.getByRole("list", { name: "Hoy" })).getAllByRole("listitem")).toHaveLength(5);
-    expect(screen.getByRole("link", { name: "Ver 2 más →" }).getAttribute("href")).toBe("/tareas?responsable=yo");
     expect(within(screen.getByRole("list", { name: "Esta semana" })).getByText("Nada aquí")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cargar más (2 restantes)" }));
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Hoy" })).getAllByRole("listitem")).toHaveLength(7));
+    expect(screen.queryByRole("button", { name: /^Cargar más/ })).toBeNull();
   });
 
   it("Abrir expands the Inbox", () => {

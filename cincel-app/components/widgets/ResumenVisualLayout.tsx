@@ -18,20 +18,24 @@ import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
 import {
   activityItems,
   fileTypeLabel,
-  nextTasks,
   nextTramoHint,
   RESUMEN_NO_TRAMO,
   shortDate,
-  statusCounts,
   TEAM_LOAD_MAX,
-  teamLoadCards,
-  tramoProgress,
   type ActivityItem,
   type NextTask,
   type ProjectSummaryInput,
   type TramoProgress,
 } from "@/lib/proyectos/project-summary";
-import type { HistoryEvent, TaskListRow } from "@/lib/types/core";
+import {
+  resumenHeroCounts,
+  resumenNextCards,
+  resumenStatusCounts,
+  resumenTeamLoadCards,
+  resumenTramoProgress,
+  type ResumenTareasSummary,
+} from "@/lib/proyectos/resumen-summary";
+import type { HistoryEvent } from "@/lib/types/core";
 import type { StaffFileItem } from "@/lib/types/workspace-access";
 import { initialsOf } from "@/lib/people/aggregates";
 import { staggerStyle } from "@/lib/ui/motion";
@@ -43,8 +47,8 @@ import { cn } from "@/lib/utils";
  * chips), three cards (tareas por estatus, avance por tramo, equipo y carga),
  * the S-curve against plan, "Lo que sigue" with the quick-add and "Actividad
  * reciente", and the recent Drive files. The counts, tramo bars and next
- * tasks derive from the project's task list (`qk.proyectos.tab(id,
- * "tareas")`), so a quick-added task shows at once. Budget data is never
+ * tasks come from the server's task numbers (`qk.proyectos.resumenSummary(id)`,
+ * #1051), which a quick-add refreshes. Budget data is never
  * rendered here. Every chart has `role="img"`, a label and a visually hidden
  * table with the same numbers.
  */
@@ -56,8 +60,8 @@ export type ResumenVisualHistory = {
 
 export type ResumenVisualLayoutProps = {
   data: ProjectSummaryInput;
-  /** The project's task rows (subtasks included; counts read top-level tasks). */
-  tasks: TaskListRow[];
+  /** The task numbers (`qk.proyectos.resumenSummary(id)`): counts, tramo bars, team, next tasks. */
+  summary: ResumenTareasSummary;
   history: ResumenVisualHistory;
   /** `activities.canCreateActivity`: "Nueva tarea" and the quick-add. */
   canCreate: boolean;
@@ -547,7 +551,7 @@ function FilesSection({ data, now, index }: { data: ProjectSummaryInput; now: Da
 
 export function ResumenVisualLayout({
   data,
-  tasks,
+  summary,
   history,
   canCreate,
   onQuickAdd,
@@ -559,23 +563,18 @@ export function ResumenVisualLayout({
   const now = nowProp ?? firstRender;
   const { project, today, tramoCatalog } = data;
 
-  const progress = useMemo(() => tramoProgress(tasks, tramoCatalog, project, today), [tasks, tramoCatalog, project, today]);
-  const counts = useMemo(() => statusCounts(tasks), [tasks]);
-  const open = useMemo(() => nextTasks(tasks, today, Number.POSITIVE_INFINITY), [tasks, today]);
-  const team = useMemo(() => teamLoadCards(data, tasks), [data, tasks]);
+  const progress = useMemo(() => resumenTramoProgress(summary, tramoCatalog, project), [summary, tramoCatalog, project]);
+  const counts = useMemo(() => resumenStatusCounts(summary), [summary]);
+  const team = useMemo(() => resumenTeamLoadCards(data, summary), [data, summary]);
   const activity = useMemo(() => activityItems(history.events, tramoCatalog, now, ACTIVITY_ITEMS), [history.events, tramoCatalog, now]);
 
   const current = progress.find((step) => step.state === "current") ?? null;
   const tone = current ? tramoTone(current.key, tramoCatalog) : NEUTRAL_TONE;
-  const heroCounts = {
-    open: open.length,
-    overdue: open.filter((task) => task.daysLate > 0).length,
-    blocked: counts.find((c) => c.status === "bloqueado")?.count ?? 0,
-  };
+  const heroCounts = resumenHeroCounts(summary);
 
   // Just-created tasks first (with `row-new`), then the urgency order.
   const recent = new Set(recentIds);
-  const next = [...open.filter((task) => recent.has(task.id)), ...open.filter((task) => !recent.has(task.id))].slice(0, NEXT_TASKS);
+  const next = resumenNextCards(summary, recentIds, NEXT_TASKS);
 
   const projectHref = `/proyectos/${encodeURIComponent(project.id)}`;
   const hasSCurve = data.schedule !== null;

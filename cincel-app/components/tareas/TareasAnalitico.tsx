@@ -11,7 +11,7 @@ import {
   type RefObject,
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -112,7 +112,7 @@ export type TareasAnaliticoProps = {
 
 /** What one tramo group's rows query reports to the page. */
 type GroupRowsState = { rows: TaskListRow[] | undefined; loading: boolean; error: boolean; hasMore: boolean };
-type GroupRowsActions = { more(): void; retry(): void };
+type GroupRowsActions = { more(): void };
 
 /**
  * One tramo group's rows (`useInfiniteQuery(tareas.list(groupFilters))`,
@@ -137,15 +137,16 @@ function GroupRowsLoader({
   const loading = list.isPending || list.isFetchingNextPage;
   const error = list.isError && !rows;
   const hasMore = Boolean(list.hasNextPage);
-  const { fetchNextPage, refetch } = list;
+  const { fetchNextPage } = list;
 
+  // Registers "Cargar más" only; nothing loads here. A retry refetches the group's key from the page.
   useEffect(() => {
     const map = actions.current;
-    map.set(id, { more: () => void fetchNextPage(), retry: () => void refetch() });
+    map.set(id, { more: () => void fetchNextPage() });
     return () => {
       map.delete(id);
     };
-  }, [id, fetchNextPage, refetch, actions]);
+  }, [id, fetchNextPage, actions]);
 
   useEffect(() => {
     onState(id, { rows, loading, error, hasMore });
@@ -293,6 +294,14 @@ export function TareasAnalitico({
       ),
     [summary.projects, collapsedSet, f, sort],
   );
+  const queryClient = useQueryClient();
+  const retryGroup = useCallback(
+    (id: string) => {
+      const group = openGroups.find((g) => g.id === id);
+      if (group) void queryClient.refetchQueries({ queryKey: tareasListInfiniteOptions(group.filters).queryKey, exact: true });
+    },
+    [openGroups, queryClient],
+  );
 
   // ── Quick-add: rows it created enter with `row-new` and a "Nueva" tag.
   const quickAdd = useQuickAddCreate();
@@ -347,7 +356,7 @@ export function TareasAnalitico({
             quickAdd: withHiddenLine(hiddenLine, failed ? (
               <tr>
                 <td colSpan={ANALITICO_SPAN} className="border-b border-border px-3 py-2">
-                  <ErrorState title="No se pudo cargar" onRetry={() => rowActions.current.get(id)?.retry()} />
+                  <ErrorState title="No se pudo cargar" onRetry={() => retryGroup(id)} />
                 </td>
               </tr>
             ) : canCreate && !late ? (
@@ -366,7 +375,7 @@ export function TareasAnalitico({
           };
         }),
       })),
-    [summary, mostrar, groupRows, tramos, today, canCreate, late, onCreate, countsHidden, onHideCompleted, isHidden],
+    [summary, mostrar, groupRows, tramos, today, canCreate, late, onCreate, countsHidden, onHideCompleted, isHidden, retryGroup],
   );
 
   // ── Subtasks (#1048): a collapsible block of nested rows under each parent, "+ Subtarea…" last.

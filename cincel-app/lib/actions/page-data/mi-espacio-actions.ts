@@ -3,7 +3,10 @@
 import { z } from "zod";
 
 import { requireCapabilityUser } from "@/lib/auth/session";
-import { loadMiEspacio } from "@/lib/loaders/mi-espacio";
+import { loadMiEspacio, loadMyTasksPage, loadMyTasksSummary } from "@/lib/loaders/mi-espacio";
+import type { MyTasksSummary } from "@/lib/my-space/my-tasks-summary";
+import { MeTasksListFiltersSchema, MyTasksSummaryInputSchema } from "@/lib/my-space/my-tasks-input";
+import type { TareasRowsPage } from "@/lib/tareas/page-data";
 import { listChecklistsPage, listNotesPage } from "@/lib/my-space/notes-checklists";
 import type { MiEspacioPageData, MySpaceListPage } from "@/lib/types/mi-espacio";
 import type { Checklist, Note } from "@/lib/types/redesign";
@@ -37,4 +40,37 @@ export async function fetchMiEspacioChecklistsPage(
 ): Promise<MySpaceListPage<Checklist>> {
   const { cursor } = parseInput(MiEspacioCursorInput, input ?? {});
   return listChecklistsPage(await requireCapabilityUser(), { cursor });
+}
+
+// ── My tasks (#1051) ─────────────────────────────────────────────────────────
+
+/**
+ * `qk.me.tasksSummary(input)`: Mi espacio's task counts (KPIs, chips, board
+ * columns, Esencial cards, Analítico groups) in one grouped statement. The
+ * staff id comes from the session. Read-only. Errors: `INVALID`.
+ */
+export async function getMyTasksSummary(input: z.input<typeof MyTasksSummaryInputSchema>): Promise<MyTasksSummary> {
+  const parsed = parseInput(MyTasksSummaryInputSchema, input);
+  return loadMyTasksSummary(await requireCapabilityUser(), parsed);
+}
+
+const MyTasksPageInput = z
+  .object({
+    filters: MeTasksListFiltersSchema,
+    cursor: z
+      .string()
+      .max(512)
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .nullable(),
+  })
+  .strict();
+
+/**
+ * `qk.me.tasksList(f)` pages ("Cargar más"): my tasks after `cursor`, 30 a
+ * page (the first page of a board column or an Esencial card is shorter).
+ * The staff id comes from the session. Read-only. Errors: `INVALID`.
+ */
+export async function getMyTasksPage(input: z.input<typeof MyTasksPageInput>): Promise<TareasRowsPage> {
+  const parsed = parseInput(MyTasksPageInput, input);
+  return loadMyTasksPage(await requireCapabilityUser(), parsed);
 }

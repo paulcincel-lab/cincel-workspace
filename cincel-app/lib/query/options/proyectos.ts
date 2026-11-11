@@ -20,10 +20,11 @@ import type { PortalActivityRow } from "@/lib/types/portal";
 import {
   getProjectCreateStartOptions,
   getProyectoResumenData,
-  getProyectoTareasData,
+  getProyectoResumenSummary,
   getProyectosPageData,
 } from "@/lib/actions/page-data/proyectos-actions";
-import type { ProyectoTareasData, ProyectosPageData } from "@/lib/loaders/proyectos";
+import type { ProyectosPageData } from "@/lib/loaders/proyectos";
+import type { ResumenTareasSummary } from "@/lib/proyectos/resumen-summary";
 import type { ProjectCreateStartOptions } from "@/lib/types/core";
 import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
@@ -183,14 +184,15 @@ export function proyectoResumenOptions(id: string) {
 }
 
 /**
- * `qk.proyectos.tab(id, 'tareas')`, 30 s stale. The tab's `estado`,
- * `responsable` and `q` filters run on the client over these rows, so they
- * are not part of the key. Null when the viewer can't see the project.
+ * The Resumen's task numbers (`qk.proyectos.resumenSummary(id)`, #1051):
+ * KPIs, tramos and fases, team load and "Lo que sigue" as server
+ * aggregates, prefetched by the page; the "Tareas por tramo" rows are
+ * `qk.tareas.list` pages. 30 s stale. Null when the viewer can't see the project.
  */
-export function proyectoTareasOptions(id: string) {
-  return queryOptions<ProyectoTareasData | null>({
-    queryKey: qk.proyectos.tab(id, "tareas"),
-    queryFn: () => getProyectoTareasData({ id }),
+export function proyectoResumenSummaryOptions(id: string) {
+  return queryOptions<ResumenTareasSummary | null>({
+    queryKey: qk.proyectos.resumenSummary(id),
+    queryFn: () => getProyectoResumenSummary({ id }),
     staleTime: STALE.screen,
   });
 }

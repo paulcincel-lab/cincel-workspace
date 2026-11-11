@@ -14,6 +14,7 @@
  */
 import type { AjustesAdminSegment } from "@/lib/auth/ajustes-segments";
 import type { PersonasContactsTab } from "@/lib/personas/contacts";
+import type { MeTasksListFilters, MyTasksSummaryInput } from "@/lib/my-space/my-tasks-summary";
 import type { ImportDataEntity } from "@/lib/repositories/import-repository";
 import type { TareasMostrar } from "@/lib/tareas/query";
 import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
@@ -72,8 +73,12 @@ export const qk = {
     /** One week of my hours; the no-arg form is the prefix of every week (the clock writes invalidate it). */
     weekHours: (weekStart?: string) =>
       weekStart ? (["me", "week-hours", weekStart] as const) : (["me", "week-hours"] as const),
-    /** My open tasks (Mi espacio). */
+    /** The prefix of every Mi espacio task key: a task write invalidates it (summary and lists). */
     tasks: () => ["me", "tasks"] as const,
+    /** Mi espacio's task counts for the Analítico filters (#1051), from one grouped SQL read. */
+    tasksSummary: (input: MyTasksSummaryInput) => ["me", "tasks", "summary", input] as const,
+    /** One Mi espacio task list (#1051): an Analítico group, a board column or an Esencial card, 30 a page. */
+    tasksList: (f: MeTasksListFilters) => ["me", "tasks", "list", f] as const,
     preferences: () => ["me", "preferences"] as const,
     profile: () => ["me", "profile"] as const,
     notifications: (f: { unreadOnly?: boolean; kinds?: string[] }) => ["me", "notifications", f] as const,
@@ -137,6 +142,12 @@ export const qk = {
      */
     tareasSummary: (id: string, f: { responsable: string | null; q: string }) =>
       ["proyectos", id, "tareas", "summary", f] as const,
+    /**
+     * The Resumen's task numbers (#1051): KPIs, tramos and fases, team load,
+     * "Lo que sigue". Under `tab(id, "tareas")`, so every task invalidation
+     * of the project refreshes it.
+     */
+    resumenSummary: (id: string) => ["proyectos", id, "tareas", "resumen-summary"] as const,
     archivos: (id: string, folder: string | null) => ["proyectos", id, "archivos", folder ?? "root"] as const,
     cronograma: (id: string) => ["proyectos", id, "cronograma"] as const,
     history: (id: string) => ["proyectos", id, "history"] as const,

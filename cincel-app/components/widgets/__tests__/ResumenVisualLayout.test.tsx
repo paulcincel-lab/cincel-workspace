@@ -37,6 +37,10 @@ import { ResumenVisualLayout, type ResumenVisualLayoutProps } from "@/components
 import { RESUMEN_NO_TRAMO } from "@/lib/proyectos/project-summary";
 import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { fixtureProject, fixtureSummaryInput, fixtureTaskRow, HISTORY_EVENTS, TASK_ROWS, TRAMOS } from "@/tests/unit/fixtures/project-summary";
+import { resumenSummaryOfRows } from "@/tests/unit/fixtures/resumen-summary";
+
+/** The task numbers of these rows (`qk.proyectos.resumenSummary`). */
+const numbers = (rows: Parameters<typeof resumenSummaryOfRows>[0]) => resumenSummaryOfRows(rows, "2026-11-06");
 
 afterEach(cleanup);
 
@@ -45,7 +49,7 @@ const NOW = new Date("2026-11-06T18:00:00.000Z");
 function renderLayout(overrides: Partial<ResumenVisualLayoutProps> = {}) {
   const props: ResumenVisualLayoutProps = {
     data: fixtureSummaryInput(),
-    tasks: TASK_ROWS,
+    summary: numbers(TASK_ROWS),
     history: { events: HISTORY_EVENTS, status: "success", onRetry: vi.fn() },
     canCreate: true,
     onQuickAdd: vi.fn(async (draft) => ({ id: "t-new", title: draft.title })),
@@ -133,7 +137,7 @@ describe("ResumenVisualLayout", () => {
     renderWithQueryClient(
       <ResumenVisualLayout
         data={fixtureSummaryInput({ project })}
-        tasks={[]}
+        summary={numbers([])}
         history={{ events: [], status: "success", onRetry: vi.fn() }}
         canCreate
         onQuickAdd={vi.fn()}
@@ -155,7 +159,7 @@ describe("ResumenVisualLayout", () => {
       tramos: [{ ...diseno!, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
       stages: [diseno!],
     });
-    renderLayout({ data: fixtureSummaryInput({ project }), tasks: [] });
+    renderLayout({ data: fixtureSummaryInput({ project }), summary: numbers([]) });
     const hero = screen.getByRole("region", { name: "Avance del proyecto" });
     expect(hero.textContent).toContain("Siguiente: Construcción");
     expect(hero.textContent).not.toContain("Presale");
@@ -163,7 +167,7 @@ describe("ResumenVisualLayout", () => {
 
   it("new project empty states", () => {
     const { props } = renderLayout({
-      tasks: [],
+      summary: numbers([]),
       history: { events: [], status: "success", onRetry: vi.fn() },
       data: fixtureSummaryInput({ portfolio: null, project: fixtureProject({ progress: 0 }), files: [] }),
     });
@@ -190,20 +194,20 @@ describe("ResumenVisualLayout", () => {
     });
     expect(props.onQuickAdd).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisar planos", projectId: "p1" }));
 
-    // The refreshed task list carries the new task; the store marks it recent.
+    // The refreshed task numbers carry the new task; the store marks it recent.
     const created = fixtureTaskRow("t-new", { title: "Revisar planos", status: "pendiente" });
-    rerender(<ResumenVisualLayout {...props} tasks={[...TASK_ROWS, created]} recentIds={["t-new"]} />);
+    rerender(<ResumenVisualLayout {...props} summary={numbers([...TASK_ROWS, { ...created, createdAt: "2026-11-06T17:00:00.000Z" }])} recentIds={["t-new"]} />);
     const next = screen.getByRole("region", { name: "Lo que sigue" });
     const first = within(next).getAllByRole("link").find((a) => a.getAttribute("href")?.startsWith("/tareas?tarea="))!;
     expect(first.getAttribute("href")).toBe("/tareas?tarea=t-new");
     expect(first.className).toContain("row-new");
-    // Donut and chips follow the task list.
+    // Donut and chips follow the task numbers.
     expect(screen.getByRole("img", { name: /^9 tareas: 1 en proceso, 4 pendientes/ })).toBeTruthy();
     expect(screen.getByText("6 tareas abiertas")).toBeTruthy();
   });
 
   it("hides «Nueva tarea» and the quick-add without create permission", () => {
-    renderLayout({ canCreate: false, tasks: [] });
+    renderLayout({ canCreate: false, summary: numbers([]) });
     expect(screen.queryByRole("button", { name: "Nueva tarea" })).toBeNull();
     expect(screen.queryByPlaceholderText("Nueva tarea en Local Espinopapa")).toBeNull();
   });

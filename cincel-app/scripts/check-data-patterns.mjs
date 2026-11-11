@@ -29,6 +29,12 @@
  * - (#1051) a sort over `useInfiniteQuery` pages in the same function
  *   (`pages.flatMap(…)` then `.sort(` / `sortBy…(`): the loaded rows reorder
  *   when "Cargar más" lands; the server sorts instead
+ * - (#1051) a full task read in the Proyecto · Resumen (`Resumen*Layout`,
+ *   `ProjectSummary`, the `/proyectos/[id]` page): `listTaskRows(`,
+ *   `loadProyectoTareas(` / `getProyectoTareasData(` / `proyectoTareasOptions(`,
+ *   or `qk.proyectos.tab(…, "tareas")` used as anything but an entry of a key
+ *   list (invalidations). The Resumen reads `qk.proyectos.resumenSummary(id)`
+ *   and pages its rows through `qk.tareas.list`
  *
  * A reported line ending in `// data-patterns: auth` is allowed (auth flows only);
  * a sort ending in `// data-patterns: server-order` is allowed: it keeps the
@@ -56,6 +62,9 @@ const SERVER_ORDER_COMMENT = /\/\/\s*data-patterns:\s*server-order\s*$/;
 const EFFECT_HOOKS = new Set(["useEffect", "useLayoutEffect", "startTransition"]);
 const LOADER_NAME = /^(load([A-Z_]\w*)?|reload\w*|refetch\w*)$/;
 const STORE_MODULE = /^@\/lib\/stores\//;
+/** The Proyecto · Resumen files (#1051): they read the task numbers, never the project's task list. */
+const RESUMEN_FILE = /^(components\/widgets\/Resumen\w*Layout\.tsx|components\/proyectos\/ProjectSummary\.tsx|app\/\(staff\)\/proyectos\/\[id\]\/page\.tsx)$/;
+const RESUMEN_FULL_READS = new Set(["listTaskRows", "loadProyectoTareas", "getProyectoTareasData", "proyectoTareasOptions"]);
 const STORE_DIR = "lib/stores";
 const STORE_EXPORT = /export const (use[A-Z]\w*)(?:\s*:[^=]+)?\s*=\s*(?:create|createDashboardStore)\b/g;
 
@@ -271,6 +280,20 @@ export function checkSource(file, text) {
     if (ts.isCallExpression(node)) {
       const name = calleeName(node);
       const callee = node.expression;
+
+      // A full task read in the Resumen (#1051).
+      if (RESUMEN_FILE.test(rel)) {
+        if (name && RESUMEN_FULL_READS.has(name)) report(node, `Resumen full task read → ${name}(`);
+        if (
+          name === "tab" &&
+          ts.isPropertyAccessExpression(callee) &&
+          /(^|\.)proyectos$/.test(callee.expression.getText(source)) &&
+          stringValue(node.arguments[1]) === "tareas" &&
+          !ts.isArrayLiteralExpression(node.parent)
+        ) {
+          report(node, 'Resumen full task read → qk.proyectos.tab(…, "tareas")');
+        }
+      }
 
       // useXStore() without a selector
       if (ts.isIdentifier(callee) && stores.has(callee.text) && node.arguments.length === 0) {

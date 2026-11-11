@@ -8,7 +8,6 @@ import { after } from "next/server";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { canSeeAdminData, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { flowError } from "@/lib/project-flow/errors";
-import { openTasksInOrder } from "@/lib/my-space/my-tasks";
 import { scopeTaskDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
 import * as taskDependenciesRepository from "@/lib/repositories/task-dependencies-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
@@ -59,18 +58,6 @@ export async function fetchTasksAction(filters: TaskFilters = {}): Promise<TaskL
 export async function fetchMyTasksAction(filters: TaskFilters = {}): Promise<TaskListItem[]> {
   const user = await requireCapabilityUser();
   return tasksRepository.listMyTasks(user.member.id, filters, viewerScopeOf(user));
-}
-
-/**
- * My open tasks (Mi espacio): the `fetchMyTasksAction` rows without
- * `completado` and without a custom status that closes the task, by
- * commitment date (undated last), then title. Staff id from the session.
- */
-export async function fetchMyOpenTasksAction(): Promise<TaskListItem[]> {
-  const user = await requireCapabilityUser();
-  // Open ones only, in the statement (#1051): the closed history never leaves the database here.
-  const rows = await tasksRepository.listMyTasks(user.member.id, { mostrar: "abiertas" }, viewerScopeOf(user));
-  return openTasksInOrder(rows);
 }
 
 export async function fetchCalendarAction(

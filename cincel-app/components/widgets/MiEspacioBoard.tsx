@@ -30,7 +30,6 @@ import { actionErrorText } from "@/lib/errors";
 import {
   MY_TASK_BUCKET_LABEL,
   MY_TASK_BUCKETS,
-  bucketMyTasks,
   bucketPresetDate,
   clockTime,
   daySentence,
@@ -44,7 +43,7 @@ import {
   type MyTaskBucket,
 } from "@/lib/my-space/my-tasks";
 import { NOTE_COLOR_TINT, sortNotes } from "@/lib/my-space/note-ui";
-import { qk } from "@/lib/query/keys";
+import { ME_BOARD_FIRST_PAGE, MY_TASKS_ALL, meTasksBucketFilters } from "@/lib/my-space/my-tasks-summary";
 import { mutationErrorText, useActionMutation } from "@/lib/query/mutation";
 import { meProfileOptions, meTodayOptions } from "@/lib/query/options/me";
 import {
@@ -54,14 +53,18 @@ import {
   meChecklistsOptions,
   meNotesOptions,
   meNotificationsOptions,
+  insertMeTaskRow,
   meRemindersOptions,
-  meTasksOptions,
+  meTasksListOptions,
+  meTasksSummaryOptions,
   meWeekHoursOptions,
 } from "@/lib/query/options/mi-espacio";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { addDays, localDate, mondayOf } from "@/lib/time-tracking/local-time";
 import { tramoColorSlot, tramoColorVar } from "@/lib/tramos/tramo-color";
+import { listItemOfRow } from "@/lib/tareas/page-data";
 import type { TaskDetail, TaskListItem, UserTaskInput } from "@/lib/types/core";
+import { loadMoreText } from "@/components/widgets/table-rows";
 import type { Checklist, Note, NotificationItem, NotificationKind, TodayStatus, WeekHours } from "@/lib/types/redesign";
 
 /**
@@ -85,7 +88,8 @@ export const MI_ESPACIO_VISUAL_DESCRIPTION = "Tu día, tus tareas y tus pendient
 export const SECTION_ERROR_TEXT = "No pudimos cargar esta sección.";
 export const MY_TASKS_HREF = "/tareas?responsable=yo";
 export const NOTES_HREF = "/mi-espacio/notas";
-export const BOARD_COLUMN_LIMIT = 5;
+/** Cards a column shows before "Cargar más" (its first page). */
+export const BOARD_COLUMN_LIMIT = ME_BOARD_FIRST_PAGE;
 export const BANDEJA_LIMIT = 4;
 export const NOTES_LIMIT = 3;
 export const CHECKLIST_ITEMS_LIMIT = 6;
@@ -142,11 +146,10 @@ export function MiEspacioBoard({ notice, reader, canCreateTask }: MiEspacioBoard
   const profileQuery = useQuery(meProfileOptions());
   const me = profileQuery.data ?? null;
 
-  const tasksQuery = useQuery(meTasksOptions());
-  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
-  const buckets = useMemo(() => bucketMyTasks(tasks, today), [tasks, today]);
-  const dueToday = buckets.hoy.filter((t) => dueInfo(t, today).tone === "today").length;
-  const overdue = buckets.hoy.length - dueToday;
+  // #1051: the counts from `me.tasksSummary`; each column pages its own rows.
+  const tasksQuery = useQuery(meTasksSummaryOptions(MY_TASKS_ALL));
+  const dueToday = tasksQuery.data?.all.dueToday ?? 0;
+  const overdue = tasksQuery.data?.all.overdue ?? 0;
 
   const showNotifications = NOTIFICATIONS.fetchNotificationsAction;
   const notificationsQuery = useInfiniteQuery({ ...meNotificationsOptions(), enabled: showNotifications });
@@ -212,7 +215,7 @@ export function MiEspacioBoard({ notice, reader, canCreateTask }: MiEspacioBoard
         <div className="min-w-0 lg:col-span-2">
           <TasksBoard
             query={tasksQuery}
-            buckets={buckets}
+            counts={tasksQuery.data?.all.buckets ?? null}
             today={today}
             meId={me?.id ?? null}
             canCreate={canCreateTask}
@@ -493,14 +496,15 @@ type CreateVars = { input: UserTaskInput; bucket: MyTaskBucket };
 
 function TasksBoard({
   query,
-  buckets,
+  counts,
   today,
   meId,
   canCreate,
   onAnnounce,
 }: {
   query: { isPending: boolean; isError: boolean; refetch(): unknown };
-  buckets: ReturnType<typeof bucketMyTasks>;
+  /** Tasks per column (the summary); null while it loads. */
+  counts: Record<MyTaskBucket, number> | null;
   today: string;
   meId: string | null;
   canCreate: boolean;
@@ -511,8 +515,7 @@ function TasksBoard({
 
   const create = useActionMutation<CreateVars, TaskDetail>(({ input }) => createUserTaskAction(input), {
     setData: (qc, task) => {
-      const row: TaskListItem = task;
-      qc.setQueryData<TaskListItem[]>(qk.me.tasks(), (old) => [...(old ?? []).filter((t) => t.id !== row.id), row]);
+      insertMeTaskRow(qc, task, today);
     },
     invalidate: (vars) => newTaskInvalidations(vars.input.projectId),
   });
@@ -548,7 +551,7 @@ function TasksBoard({
           Ver todas →
         </Link>
       </div>
-      {query.isError ? (
+      {query.isError && !counts ? (
         <Card className="px-5 py-4">
           <SectionError onRetry={() => void query.refetch()} />
         </Card>
@@ -558,8 +561,7 @@ function TasksBoard({
             <BoardColumn
               key={bucket}
               bucket={bucket}
-              tasks={buckets[bucket]}
-              loading={query.isPending}
+              count={counts?.[bucket] ?? null}
               today={today}
               created={created}
               columnIndex={columnIndex}
@@ -587,29 +589,33 @@ function TasksBoard({
 
 function BoardColumn({
   bucket,
-  tasks,
-  loading,
+  count,
   today,
   created,
   columnIndex,
   quickAdd,
 }: {
   bucket: MyTaskBucket;
-  tasks: TaskListItem[];
-  loading: boolean;
+  /** Every task of the column (the summary); null while it loads. */
+  count: number | null;
   today: string;
   created: ReadonlySet<string>;
   columnIndex: number;
   quickAdd: ReactNode;
 }) {
   const label = MY_TASK_BUCKET_LABEL[bucket];
-  const shown = tasks.slice(0, BOARD_COLUMN_LIMIT);
-  const more = tasks.length - shown.length;
+  // #1051: the first cards, then 30 more per "Cargar más", in due-date order from the server.
+  const list = useInfiniteQuery(meTasksListOptions(meTasksBucketFilters(bucket)));
+  const pages = list.data?.pages;
+  const tasks = useMemo(() => (pages ?? []).flatMap((page) => page.rows.map(listItemOfRow)), [pages]);
+  const loading = list.isPending;
+  const total = count ?? pages?.at(-1)?.total ?? 0;
+  const remaining = Math.max(0, total - tasks.length);
   return (
     <div className="flex min-w-0 flex-col gap-2.5 rounded-lg bg-input p-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[13.5px] font-semibold">{label}</h3>
-        <span className="rounded-full bg-card px-2 py-0.5 font-mono text-xs">{loading ? "…" : tasks.length}</span>
+        <span className="rounded-full bg-card px-2 py-0.5 font-mono text-xs">{count === null ? "…" : count}</span>
       </div>
       {loading ? (
         <div className="flex flex-col gap-2.5">
@@ -617,12 +623,14 @@ function BoardColumn({
             <Skeleton key={i} className="h-[110px] rounded-md bg-card" />
           ))}
         </div>
+      ) : list.isError && !pages ? (
+        <SectionError onRetry={() => void list.refetch()} />
       ) : (
         <ul role="list" aria-label={label} className="flex min-w-0 flex-col gap-2.5">
-          {shown.length === 0 ? (
+          {tasks.length === 0 ? (
             <li className="py-4 text-center text-sm text-muted-foreground">Nada aquí</li>
           ) : (
-            shown.map((task, i) => (
+            tasks.map((task, i) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -634,10 +642,17 @@ function BoardColumn({
           )}
         </ul>
       )}
-      {more > 0 ? (
-        <Link href={MY_TASKS_HREF} className="text-[13px] text-muted-foreground hover:text-foreground">
-          Ver {more} más →
-        </Link>
+      {list.hasNextPage ? (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="self-start px-0 text-[13px] text-muted-foreground hover:text-foreground"
+          disabled={list.isFetchingNextPage}
+          onClick={() => void list.fetchNextPage()}
+        >
+          {loadMoreText(remaining)}
+        </Button>
       ) : null}
       {quickAdd ? (
         <div className="rounded-md border border-dashed border-input bg-card px-3 py-2 text-[13px]">{quickAdd}</div>

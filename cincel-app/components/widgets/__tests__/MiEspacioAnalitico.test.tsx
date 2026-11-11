@@ -23,6 +23,9 @@ import type { TaskListItem, TaskStatusOption } from "@/lib/types/core";
 import type { RecordColumn } from "@/lib/types/widgets";
 import type { Checklist, NotificationKindSummary, TodayStatus, WeekHours } from "@/lib/types/redesign";
 import { seedSessionUser } from "@/tests/helpers/session-user";
+import { fakeMyTasks, type FakeMyTasks } from "@/tests/helpers/my-tasks-fake";
+import { myTasksSummaryInput, type MeTasksListFilters, type MyTasksSummaryInput } from "@/lib/my-space/my-tasks-summary";
+import { parseMiEspacioFilters } from "@/components/mi-espacio/search-params";
 import { settle } from "@/tests/helpers/settle";
 
 const flags = vi.hoisted(() => ({}) as Record<string, boolean>);
@@ -32,7 +35,6 @@ vi.mock("@/lib/actions/gmail-actions.flags", () => ({ IMPLEMENTED: flags }));
 vi.mock("@/lib/actions/time-tracking-actions.flags", () => ({ IMPLEMENTED: flags }));
 
 const tasksActions = vi.hoisted(() => ({
-  fetchMyOpenTasksAction: vi.fn(),
   createUserTaskAction: vi.fn(),
   updateTaskAction: vi.fn(),
   setTaskStatusAction: vi.fn(),
@@ -45,10 +47,14 @@ vi.mock("@/lib/actions/my-space-actions", () => ({
   toggleChecklistItemAction: vi.fn(),
   addChecklistItemAction: vi.fn(),
 }));
+// Mi espacio's task reads (#1051), answered from the fixture by the fake.
+const myTasks = vi.hoisted(() => ({ server: null as FakeMyTasks | null }));
 vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
   getMiEspacioPageData: vi.fn(),
   fetchMiEspacioNotesPage: vi.fn(),
   fetchMiEspacioChecklistsPage: vi.fn(),
+  getMyTasksSummary: vi.fn(async (input: MyTasksSummaryInput) => myTasks.server!.summary(input)),
+  getMyTasksPage: vi.fn(async (input: { filters: MeTasksListFilters; cursor: string | null }) => myTasks.server!.page(input)),
 }));
 vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
   fetchCatalogProjectOptions: vi.fn(async () => [
@@ -276,9 +282,20 @@ const CHECKLISTS: Checklist[] = [
   },
 ];
 
+/** The summary and the first page of every tramo group of the URL's filters, as the page seeds them. */
+function seedTasks(client: ReturnType<typeof createTestQueryClient>, tasks: TaskListItem[] = TASKS) {
+  const server = fakeMyTasks(tasks, TODAY);
+  myTasks.server = server;
+  const f = parseMiEspacioFilters(new URLSearchParams(nav.search));
+  const input = myTasksSummaryInput({ tramo: f.tramo, q: f.q, retraso: f.estado === "retraso" });
+  const withClosed = new URLSearchParams(nav.search).get("completadas") === "1";
+  server.seed(client, input, server.analiticoLists(input, withClosed));
+  return server;
+}
+
 function renderAnalitico(over: { today?: TodayStatus; tasks?: TaskListItem[] } = {}) {
   const client = createTestQueryClient();
-  client.setQueryData(qk.me.tasks(), over.tasks ?? TASKS);
+  seedTasks(client, over.tasks);
   client.setQueryData(meTodayOptions().queryKey, over.today ?? TODAY_STATUS);
   client.setQueryData(meWeekHoursOptions(THIS_MONDAY).queryKey, week(THIS_MONDAY, [8, 0, 0, 0, 0]));
   client.setQueryData(meWeekHoursOptions(LAST_MONDAY).queryKey, week(LAST_MONDAY, [8, 8, 8, 8, 6]));
@@ -313,7 +330,7 @@ beforeEach(() => {
   caps.canCreateActivity = true;
   caps.statusScope = "all";
   grouped.props = null;
-  tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
+  myTasks.server = fakeMyTasks(TASKS, TODAY);
   // A test that leaves the week-hours cache empty still gets a week back from the fetch.
   vi.mocked(fetchMyWeekHoursAction).mockImplementation(async (input) => week(input?.weekStart ?? THIS_MONDAY, []));
   seedSessionUser({ member: { id: "me", name: "Ana López" }, access: "Colaborador" });
@@ -414,7 +431,7 @@ describe("MiEspacioAnalitico", () => {
 
   it("hides Bandeja por tipo alone when the summary fails", () => {
     const client = createTestQueryClient();
-    client.setQueryData(qk.me.tasks(), TASKS);
+    seedTasks(client);
     client.setQueryData(meTodayOptions().queryKey, TODAY_STATUS);
     flags.fetchNotificationsSummaryAction = false;
     renderWithQueryClient(<MiEspacioAnalitico />, { client });
@@ -431,8 +448,8 @@ describe("MiEspacioAnalitico", () => {
   it("quick add adds a nueva row and updates the footer", async () => {
     const created = task("t9", "Cotizar herrería");
     tasksActions.createUserTaskAction.mockResolvedValue({ ok: true, data: detail(created) });
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue([...TASKS, created]);
     renderAnalitico();
+    myTasks.server!.tasks = [...TASKS, created];
 
     const input = screen.getByRole("textbox", { name: "Agregar tarea en Casa Lomas" });
     expect(input.getAttribute("placeholder")).toBe(
@@ -454,7 +471,7 @@ describe("MiEspacioAnalitico", () => {
     );
   });
 
-  it("Exportar downloads visible rows", async () => {
+  it("Exportar downloads every matching row, also the ones not loaded yet", async () => {
     const blobs: Blob[] = [];
     const createObjectURL = vi.fn((blob: Blob) => {
       blobs.push(blob);
@@ -463,10 +480,11 @@ describe("MiEspacioAnalitico", () => {
     Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     nav.search = "estado=retraso";
-    renderAnalitico();
+    const { client } = renderAnalitico();
+    await settle(client);
 
     fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
-    expect(click).toHaveBeenCalled();
+    await waitFor(() => expect(click).toHaveBeenCalled());
     const csv = await blobs[0]!.text();
     const lines = csv.replace(/^﻿/, "").trim().split("\r\n");
     expect(lines[0]).toBe("Proyecto;Tramo;Tarea;Estatus;Vence;Prioridad;Subtareas;Días de retraso");
@@ -487,6 +505,38 @@ describe("MiEspacioAnalitico", () => {
   });
 });
 
+describe("MiEspacioAnalitico paging (#1051)", () => {
+  const MANY = Array.from({ length: 35 }, (_, i) =>
+    task(`m${String(i).padStart(2, "0")}`, `Tarea ${String(i).padStart(2, "0")}`, { commitmentDate: addDays(TODAY, 1 + i) }),
+  );
+  const diseno = () => grouped.props!.groups.find((g) => g.id === "p1")!.children!.find((c) => c.id === "p1:w-dis")!;
+
+  it("a tramo group loads 30 rows, says how many remain and loads the next page", async () => {
+    const { client } = renderAnalitico({ tasks: MANY });
+    expect(diseno().rows).toHaveLength(30);
+    expect(diseno()).toMatchObject({ hasMore: true, remaining: 5 });
+    // Counts come from the summary, not from the loaded rows.
+    expect(screen.getByTestId("totals").textContent).toBe("Total · 35 tareas | 0 d");
+    await act(async () => grouped.props!.onLoadMore!("p1:w-dis"));
+    await settle(client);
+    await waitFor(() => expect(diseno().rows).toHaveLength(35));
+    expect(diseno()).toMatchObject({ hasMore: false, remaining: 0 });
+  });
+
+  it("closed tasks: counted per project while hidden, listed last in their group when shown", () => {
+    const done = task("t5", "Entrega cerrada", { status: "completado", commitmentDate: addDays(TODAY, -30) });
+    renderAnalitico({ tasks: [...TASKS, done] });
+    expect(screen.queryByText("Entrega cerrada")).toBeNull();
+    expect(within(screen.getByRole("table", { name: "Casa Lomas" })).getByText(/1 completada/)).toBeTruthy();
+    cleanup();
+
+    nav.search = "completadas=1";
+    renderAnalitico({ tasks: [...TASKS, done] });
+    expect(diseno().rows!.map((r) => r.id)).toEqual(["t1", "t2", "t5"]);
+    expect(screen.getByTestId("totals").textContent).toBe("Total · 5 tareas | 8 d");
+  });
+});
+
 describe("MiEspacioAnalitico editable cells", () => {
   const ok = (t: TaskListItem) => ({ ok: true as const, data: detail(t) });
 
@@ -503,6 +553,7 @@ describe("MiEspacioAnalitico editable cells", () => {
     return found as unknown as TaskRow;
   }
 
+  /** Commits like the cell editor: the column's `commit`, then `CellCommitProvider` invalidates `me.tasks` on settle. */
   async function commit(key: string, id: string, value: string | null) {
     const edit = column(key).edit!;
     let result: Awaited<ReturnType<typeof edit.commit>> | undefined;
@@ -510,8 +561,18 @@ describe("MiEspacioAnalitico editable cells", () => {
       result = await edit.commit(row(id), value);
     });
     await settle();
+    await act(async () => {
+      await view!.client.invalidateQueries({ queryKey: qk.me.tasks() });
+    });
+    await settle();
     return result!;
   }
+
+  let view: ReturnType<typeof renderAnalitico> | null = null;
+  const renderTable = () => {
+    view = renderAnalitico();
+    return view;
+  };
 
   /** Lets the query cache notify its observers (batched on a timer). */
   const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
@@ -523,7 +584,7 @@ describe("MiEspacioAnalitico editable cells", () => {
       .parentElement!.querySelector('[data-slot="kpi-value"]')!.textContent;
 
   it("Tarea, Estatus, Vence and Prioridad edit; Subtareas and Días de retraso stay calculated", () => {
-    renderAnalitico();
+    renderTable();
     const kinds = Object.fromEntries(grouped.props!.columns.map((c) => [c.key, c.edit?.kind ?? null]));
     expect(kinds).toEqual({
       title: "text",
@@ -543,7 +604,7 @@ describe("MiEspacioAnalitico editable cells", () => {
   it("Tarea saves the trimmed title through updateTaskAction and shows it at once", async () => {
     let resolve!: (value: unknown) => void;
     tasksActions.updateTaskAction.mockReturnValue(new Promise((r) => (resolve = r)));
-    renderAnalitico();
+    renderTable();
     const edit = column("title").edit!;
     expect(edit.value(row("t2"))).toBe("Revisar presupuesto");
     let pending!: Promise<unknown>;
@@ -562,7 +623,7 @@ describe("MiEspacioAnalitico editable cells", () => {
   });
 
   it("Estatus lists base and custom statuses with colours", async () => {
-    renderAnalitico();
+    renderTable();
     await waitFor(() => {
       const edit = column("estatus").edit!;
       if (edit.kind !== "select") throw new Error("select");
@@ -581,10 +642,10 @@ describe("MiEspacioAnalitico editable cells", () => {
     expect(edit.value(row("t2"))).toBe("pendiente");
   });
 
-  it("completing a task takes it out of the table and updates the KPI strip", async () => {
+  it("completing a task takes it out of the table and the summary follows", async () => {
     tasksActions.setTaskStatusAction.mockResolvedValue(ok(task("t1", "Planos de cimentación", { status: "completado" })));
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS.filter((t) => t.id !== "t1"));
-    renderAnalitico();
+    renderTable();
+    myTasks.server!.tasks = TASKS.filter((t) => t.id !== "t1");
     expect(kpi("Mis abiertas")).toBe("4");
     expect(kpi("Vencidas")).toBe("2");
     const result = await commit("estatus", "t1", "completado");
@@ -599,13 +660,15 @@ describe("MiEspacioAnalitico editable cells", () => {
 
   it("a status that stays open keeps the row and moves its label", async () => {
     tasksActions.setTaskCustomStatusAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto")));
-    renderAnalitico();
+    renderTable();
     await waitFor(() => expect(column("estatus").edit!.kind).toBe("select"));
     await waitFor(() => {
       const edit = column("estatus").edit!;
       if (edit.kind !== "select") throw new Error("select");
       expect(edit.options(row("t2")).length).toBe(6);
     });
+    const rev = { id: "cs-rev", name: "En revisión cliente", closes: false, countsAsCompleted: false };
+    myTasks.server!.tasks = TASKS.map((t) => (t.id === "t2" ? { ...t, customStatusId: rev.id, customStatus: rev } : t));
     await commit("estatus", "t2", "custom:cs-rev");
     expect(tasksActions.setTaskCustomStatusAction).toHaveBeenCalledWith("t2", "cs-rev");
     expect(within(screen.getByText("Revisar presupuesto").closest("tr")!).getByText("En revisión cliente")).toBeTruthy();
@@ -614,13 +677,13 @@ describe("MiEspacioAnalitico editable cells", () => {
 
   it("a closing custom status takes the task out", async () => {
     tasksActions.setTaskCustomStatusAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto")));
-    renderAnalitico();
+    renderTable();
     await waitFor(() => {
       const edit = column("estatus").edit!;
       if (edit.kind !== "select") throw new Error("select");
       expect(edit.options(row("t2")).length).toBe(6);
     });
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS.filter((t) => t.id !== "t2"));
+    myTasks.server!.tasks = TASKS.filter((t) => t.id !== "t2");
     await commit("estatus", "t2", "custom:cs-ent");
     expect(screen.queryByText("Revisar presupuesto")).toBeNull();
     expect(kpi("Mis abiertas")).toBe("3");
@@ -628,7 +691,7 @@ describe("MiEspacioAnalitico editable cells", () => {
 
   it("a refused save puts the row and the KPIs back", async () => {
     tasksActions.setTaskStatusAction.mockResolvedValue({ ok: false, error: "FORBIDDEN: task status change" });
-    renderAnalitico();
+    renderTable();
     const result = await commit("estatus", "t1", "completado");
     expect(result.ok).toBe(false);
     expect(screen.getByText("Planos de cimentación")).toBeTruthy();
@@ -636,18 +699,24 @@ describe("MiEspacioAnalitico editable cells", () => {
     expect(kpi("Vencidas")).toBe("2");
   });
 
-  it("undoing a completion puts the task back at once", async () => {
+  it("undoing a completion puts the task back", async () => {
     tasksActions.setTaskStatusAction.mockImplementation(async (id: string, status: TaskListItem["status"]) =>
       ok(task(id, "Planos de cimentación", { status })),
     );
-    renderAnalitico();
+    renderTable();
+    myTasks.server!.tasks = TASKS.filter((t) => t.id !== "t1");
     await commit("estatus", "t1", "completado");
     expect(screen.queryByText("Planos de cimentación")).toBeNull();
-    // Deshacer commits the previous value with the row it had.
+    // Deshacer commits the previous value with the row it had; the refetch brings the row back.
     const edit = column("estatus").edit!;
     const previous = { ...row("t2"), id: "t1", projectId: "p1", title: "Planos de cimentación" };
+    myTasks.server!.tasks = TASKS;
     await act(async () => {
       await edit.commit(previous, "pendiente");
+    });
+    await settle();
+    await act(async () => {
+      await view!.client.invalidateQueries({ queryKey: qk.me.tasks() });
     });
     await settle();
     expect(tasksActions.setTaskStatusAction).toHaveBeenLastCalledWith("t1", "pendiente");
@@ -657,15 +726,17 @@ describe("MiEspacioAnalitico editable cells", () => {
 
   it("Vence saves the commitment date and the overdue figures follow", async () => {
     tasksActions.updateTaskAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto")));
-    renderAnalitico();
+    renderTable();
     expect(column("vence").edit!.value(row("t2"))).toBe(addDays(TODAY, 3));
     const past = addDays(TODAY, -6);
+    myTasks.server!.tasks = TASKS.map((t) => (t.id === "t2" ? { ...t, commitmentDate: past } : t));
     await commit("vence", "t2", past);
     expect(tasksActions.updateTaskAction).toHaveBeenCalledWith("t2", { commitmentDate: past });
     expect(kpi("Vencidas")).toBe("3");
     const cell = within(screen.getByText("Revisar presupuesto").closest("tr")!).getByText("6");
     expect(cell.className).toMatch(/bg-warning/);
     // Sin fecha clears it.
+    myTasks.server!.tasks = TASKS.map((t) => (t.id === "t2" ? { ...t, commitmentDate: null } : t));
     await commit("vence", "t2", null);
     expect(tasksActions.updateTaskAction).toHaveBeenLastCalledWith("t2", { commitmentDate: null });
     expect(kpi("Vencidas")).toBe("2");
@@ -673,11 +744,12 @@ describe("MiEspacioAnalitico editable cells", () => {
 
   it("Prioridad offers Alta, Media and Baja and saves through updateTaskAction", async () => {
     tasksActions.updateTaskAction.mockResolvedValue(ok(task("t2", "Revisar presupuesto", { priority: "alta" })));
-    renderAnalitico();
+    renderTable();
     const edit = column("prioridad").edit!;
     if (edit.kind !== "select") throw new Error("select");
     expect(edit.options(row("t2")).map((o) => o.value)).toEqual(["alta", "media", "baja"]);
     expect(edit.value(row("t2"))).toBe("media");
+    myTasks.server!.tasks = TASKS.map((t) => (t.id === "t2" ? { ...t, priority: "alta" as const } : t));
     await commit("prioridad", "t2", "alta");
     expect(tasksActions.updateTaskAction).toHaveBeenCalledWith("t2", { priority: "alta" });
     expect(within(screen.getByText("Revisar presupuesto").closest("tr")!).getByText("Alta")).toBeTruthy();
@@ -686,7 +758,7 @@ describe("MiEspacioAnalitico editable cells", () => {
   it("locks the cells the viewer can't change, with the reason", () => {
     caps.canCreateActivity = false;
     caps.statusScope = "none";
-    renderAnalitico();
+    renderTable();
     const t2 = row("t2");
     expect(column("title").canEdit!(t2)).toBe(LOCK_REASON.taskWriter);
     expect(column("vence").canEdit!(t2)).toBe(LOCK_REASON.taskWriter);
@@ -696,7 +768,7 @@ describe("MiEspacioAnalitico editable cells", () => {
 
   it("an owner with status rights edits every editable column", () => {
     caps.statusScope = "assigned_or_participant";
-    renderAnalitico();
+    renderTable();
     const t2 = row("t2");
     for (const key of ["title", "estatus", "vence", "prioridad"]) expect(column(key).canEdit!(t2)).toBe(true);
   });

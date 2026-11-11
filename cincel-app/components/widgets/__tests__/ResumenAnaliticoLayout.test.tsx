@@ -39,7 +39,8 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
 }));
 
 const actions = vi.hoisted(() => ({
-  getProyectoTareasData: vi.fn(),
+  getProyectoResumenSummary: vi.fn(),
+  getTareasListPage: vi.fn(),
   getProyectoAssigneeSuggestion: vi.fn(),
   createUserTaskAction: vi.fn(),
   updateTaskAction: vi.fn(),
@@ -49,7 +50,7 @@ const actions = vi.hoisted(() => ({
   fetchCatalogTaskStatuses: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
-  getProyectoTareasData: actions.getProyectoTareasData,
+  getProyectoResumenSummary: actions.getProyectoResumenSummary,
   getProyectoAssigneeSuggestion: actions.getProyectoAssigneeSuggestion,
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
@@ -96,14 +97,17 @@ vi.mock("@/lib/actions/tramo-start-actions", () => ({
   startTramoAction: vi.fn(),
   undoStartTramoAction: vi.fn(),
 }));
-vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasStartSlotData: vi.fn(() => new Promise(() => {})) }));
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTareasStartSlotData: vi.fn(() => new Promise(() => {})),
+  getTareasListPage: actions.getTareasListPage,
+}));
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { ResumenAnaliticoLayout, NO_SCHEDULE_TEXT } from "@/components/widgets/ResumenAnaliticoLayout";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
-import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import { TASK_ROWS, TRAMOS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { seedResumenTasks } from "@/tests/unit/fixtures/resumen-summary";
 
 beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
@@ -119,7 +123,8 @@ beforeEach(() => {
   caps.canChangeResponsible = true;
   caps.statusScope = "all";
   // A refetch after a save (invalidation) stays in flight, so the cache keeps what the test wrote.
-  actions.getProyectoTareasData.mockReturnValue(new Promise(() => {}));
+  actions.getProyectoResumenSummary.mockReturnValue(new Promise(() => {}));
+  actions.getTareasListPage.mockReturnValue(new Promise(() => {}));
   actions.fetchCatalogTaskStatuses.mockResolvedValue([]);
   actions.createUserTaskAction.mockResolvedValue({ ok: true, data: { id: "nueva", title: "Revisar plafones" } });
   actions.getProyectoAssigneeSuggestion.mockResolvedValue({
@@ -136,9 +141,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderLayout(input: ProjectSummaryInput = fixtureSummaryInput()) {
+function renderLayout(input: ProjectSummaryInput = fixtureSummaryInput(), options: { pageSize?: number } = {}) {
   const client = createTestQueryClient();
-  client.setQueryData(qk.proyectos.tab(input.project.id, "tareas"), { tasks: TASK_ROWS, includeAdmin: true });
+  seedResumenTasks(client, input, TASK_ROWS, { includeAdmin: true, ...options });
   return renderWithQueryClient(
     <StyleProvider style="analitico" scope="staff">
       <ResumenAnaliticoLayout data={input} />
@@ -169,7 +174,28 @@ describe("ResumenAnaliticoLayout", () => {
     expect(document.getElementById("s-avance")).toBeTruthy();
     expect(document.getElementById("s-equipo")).toBeTruthy();
     expect(document.getElementById("s-tareas")).toBeTruthy();
-    expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+    expect(actions.getProyectoResumenSummary).not.toHaveBeenCalled();
+    expect(actions.getTareasListPage).not.toHaveBeenCalled();
+  });
+
+  it("«Tareas por tramo» pages each group from the server; the counts come from the summary (#1051)", async () => {
+    actions.getTareasListPage.mockResolvedValue({ rows: [], nextCursor: null, total: 4 });
+    renderLayout(fixtureSummaryInput(), { pageSize: 2 });
+    const section = document.getElementById("s-tareas")!;
+    // The header counts every listed task, not the loaded rows.
+    expect(section.textContent).toContain("8 tareas · 5 abiertas · 1 vencida");
+    const rows = [...section.querySelectorAll<HTMLElement>("[data-slot='leaf-row']")].map((row) => row.dataset.rowId);
+    expect(rows).toEqual(expect.arrayContaining(["t-obra-1", "t-obra-3"]));
+    expect(rows).not.toContain("t-obra-2");
+    const more = within(section).getByRole("button", { name: "Cargar más (2 restantes)" });
+    fireEvent.click(more);
+    await waitFor(() =>
+      expect(actions.getTareasListPage).toHaveBeenCalledWith({
+        filters: expect.objectContaining({ proyecto: "p1", tramo: "construccion", orderBy: "retraso" }),
+        cursor: "next",
+        orderBy: "retraso",
+      }),
+    );
   });
 
   it("an Ir a anchor focuses its section heading", () => {

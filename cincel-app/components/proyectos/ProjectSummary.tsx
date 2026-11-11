@@ -11,7 +11,8 @@ import { ErrorState } from "@/components/shell/ErrorState";
 import { useQuickAddCreate } from "@/components/tareas/quick-add-create";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
-import { proyectoHistoryOptions, proyectoResumenOptions, proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { proyectoHistoryOptions, proyectoResumenOptions, proyectoResumenSummaryOptions } from "@/lib/query/options/proyectos";
+import { EMPTY_RESUMEN_SUMMARY } from "@/lib/proyectos/resumen-summary";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { useQuickAddRecent } from "@/lib/stores/quick-add-store";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
@@ -61,16 +62,16 @@ export function ProjectSummaryContent({ data }: ProjectSummaryContentProps) {
 }
 
 /**
- * Visual Resumen (`ResumenVisualLayout`): also reads the project's task list
- * (`qk.proyectos.tab(id, "tareas")`) and the first bitácora page
- * (`qk.proyectos.history(id)`), both prefetched by the page. A failed
+ * Visual Resumen (`ResumenVisualLayout`): also reads the task numbers
+ * (`qk.proyectos.resumenSummary(id)`, server aggregates) and the first
+ * bitácora page (`qk.proyectos.history(id)`), both prefetched by the page. A failed
  * history read only affects "Actividad reciente". The quick-add creates the
- * task in this project; its invalidations refresh the task list, the
+ * task in this project; its invalidations refresh the task numbers, the
  * Resumen, the shell counts and the portfolio list.
  */
 function ResumenVisual({ data }: ProjectSummaryContentProps) {
   const projectId = data.project.id;
-  const { data: tareas } = useSuspenseQuery(proyectoTareasOptions(projectId));
+  const { data: summary } = useSuspenseQuery(proyectoResumenSummaryOptions(projectId));
   const history = useInfiniteQuery(proyectoHistoryOptions(projectId));
   const user = useSessionStore(selectAuthenticatedUser);
   // No signed-in user (not yet seeded) means no create permission.
@@ -82,7 +83,7 @@ function ResumenVisual({ data }: ProjectSummaryContentProps) {
   return (
     <ResumenVisualLayout
       data={data}
-      tasks={tareas?.tasks ?? []}
+      summary={summary ?? EMPTY_RESUMEN_SUMMARY}
       history={{
         events: history.data?.pages[0]?.events ?? [],
         status: history.isPending ? "pending" : history.isError && !history.data ? "error" : "success",

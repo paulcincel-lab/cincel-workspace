@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   user: { member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" } as unknown,
   shell: null as unknown,
   resumen: null as unknown,
+  style: "visual" as string,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -24,25 +25,34 @@ vi.mock("@/lib/auth/session", () => ({
 const loaders = vi.hoisted(() => ({
   loadProyectoResumen: vi.fn(async () => state.resumen),
   loadProyectoShell: vi.fn(async () => state.shell),
-  loadProyectoTareas: vi.fn(async () => ({ tasks: [{ id: "t1" }], includeAdmin: true })),
+  loadProyectoResumenSummary: vi.fn(async () => SUMMARY),
+  loadTareasListFirstPages: vi.fn(async (_user: unknown, input: { lists: unknown[] }) =>
+    input.lists.map(() => ({ rows: [{ id: "t-admin" }], nextCursor: null, total: 1 })),
+  ),
   loadProyectoHistory: vi.fn(async () => ({ events: [{ id: "h1" }], nextCursor: null })),
 }));
 vi.mock("@/lib/loaders/proyectos", () => ({
   loadProyectoResumen: loaders.loadProyectoResumen,
-  loadProyectoTareas: loaders.loadProyectoTareas,
+  loadProyectoResumenSummary: loaders.loadProyectoResumenSummary,
   loadProyectoHistory: loaders.loadProyectoHistory,
+}));
+vi.mock("@/lib/loaders/tareas", () => ({ loadTareasListFirstPages: loaders.loadTareasListFirstPages }));
+vi.mock("@/lib/ui/preferences-server", () => ({
+  getResolvedAppearance: vi.fn(async () => ({ style: state.style })),
+  getStoredOrgAppearance: vi.fn(async () => ({ styleDefault: "visual", allowUserOverride: true })),
+  getMyPreferences: vi.fn(async () => ({ hideCompletedTasks: false })),
 }));
 vi.mock("@/lib/loaders/proyectos-shell", () => ({ loadProyectoShell: loaders.loadProyectoShell }));
 // The client query functions: the first render must never need them.
 const actions = vi.hoisted(() => ({
   getProyectoResumenData: vi.fn(),
-  getProyectoTareasData: vi.fn(),
+  getProyectoResumenSummary: vi.fn(),
   getProyectoHistoryPage: vi.fn(),
   getProyectoShell: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
   getProyectoResumenData: actions.getProyectoResumenData,
-  getProyectoTareasData: actions.getProyectoTareasData,
+  getProyectoResumenSummary: actions.getProyectoResumenSummary,
   getProyectoHistoryPage: actions.getProyectoHistoryPage,
 }));
 vi.mock("@/lib/actions/page-data/proyectos-shell-actions", () => ({ getProyectoShell: actions.getProyectoShell }));
@@ -70,12 +80,12 @@ vi.mock("@/components/proyectos/ProjectSummary", async () => {
     ProjectSummary: ({ projectId }: { projectId: string }) => {
       const client = useQueryClient();
       const data = client.getQueryData<{ project: { name: string } } | null>(qk.proyectos.resumen(projectId));
-      const tareas = client.getQueryData<{ tasks: { id: string }[] } | null>(qk.proyectos.tab(projectId, "tareas"));
+      const numbers = client.getQueryData<{ next: { id: string }[] } | null>(qk.proyectos.resumenSummary(projectId));
       const history = client.getQueryData<{ pages: { events: { id: string }[] }[] }>(qk.proyectos.history(projectId));
       return (
         <div
           data-testid="summary"
-          data-tasks={tareas?.tasks.map((t) => t.id).join(",") ?? ""}
+          data-next={numbers?.next.map((t) => t.id).join(",") ?? ""}
           data-events={history?.pages[0]?.events.map((e) => e.id).join(",") ?? ""}
         >
           {data?.project.name ?? "empty"}
@@ -96,18 +106,50 @@ const SHELL = {
   canManagePortal: false,
 };
 const RESUMEN = {
-  project: { id: PID, name: "Local Espinopapa" },
+  project: { id: PID, name: "Local Espinopapa", tramos: [] },
+  tramoCatalog: [],
   files: [{ id: "f1" }, { id: "f2" }],
 };
+/** One admin task: "Tareas por tramo" has one group ("Administración"). */
+const SUMMARY = vi.hoisted(() => ({
+  canViewTasks: true,
+  includeAdmin: true,
+  today: "2026-11-06",
+  buckets: [
+    {
+      workflow: null,
+      phase: null,
+      total: 1,
+      done: 0,
+      closed: 0,
+      pendiente: 1,
+      enProceso: 0,
+      blocked: 0,
+      overdue: 0,
+      daysLateSum: 0,
+      shownOverdue: 0,
+      shownDaysLateSum: 0,
+      shownBlocked: 0,
+      earliestDue: null,
+      latestDue: null,
+      earliestCreated: "2026-11-01",
+      latestClosed: null,
+    },
+  ],
+  managers: [],
+  next: [{ id: "t-admin" }],
+  recent: [],
+}));
 
-async function renderPage(id = PID) {
-  return renderWithQueryClient(await ProjectPage({ params: Promise.resolve({ id }) }));
+async function renderPage(id = PID, searchParams: Record<string, string> = {}) {
+  return renderWithQueryClient(await ProjectPage({ params: Promise.resolve({ id }), searchParams: Promise.resolve(searchParams) }));
 }
 
 beforeEach(() => {
   state.user = { member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" };
   state.shell = SHELL;
   state.resumen = RESUMEN;
+  state.style = "visual";
   vi.clearAllMocks();
 });
 
@@ -122,23 +164,39 @@ describe("/proyectos/[id]", () => {
     expect(screen.getByTestId("summary").textContent).toBe("Local Espinopapa");
   });
 
-  it("prefetches four keys (shell, Resumen, task list, history) through the loaders, with 0 client action calls", async () => {
+  it("prefetches four keys (shell, Resumen, task numbers, history) through the loaders, with 0 client action calls", async () => {
     await renderPage();
     expect(loaders.loadProyectoShell).toHaveBeenCalledTimes(1);
     expect(loaders.loadProyectoShell).toHaveBeenCalledWith(state.user, { id: PID });
     expect(loaders.loadProyectoResumen).toHaveBeenCalledTimes(1);
     expect(loaders.loadProyectoResumen).toHaveBeenCalledWith(state.user, { id: PID });
-    expect(loaders.loadProyectoTareas).toHaveBeenCalledTimes(1);
-    expect(loaders.loadProyectoTareas).toHaveBeenCalledWith(state.user, { id: PID });
+    expect(loaders.loadProyectoResumenSummary).toHaveBeenCalledTimes(1);
+    expect(loaders.loadProyectoResumenSummary).toHaveBeenCalledWith(state.user, { id: PID });
     expect(loaders.loadProyectoHistory).toHaveBeenCalledTimes(1);
     expect(loaders.loadProyectoHistory).toHaveBeenCalledWith(state.user, { id: PID, cursor: null });
-    // The hydrated cache answers the Visual's task list and "Actividad reciente".
-    expect(screen.getByTestId("summary").getAttribute("data-tasks")).toBe("t1");
+    // The hydrated cache answers the task numbers and "Actividad reciente"; Visual reads no task rows.
+    expect(screen.getByTestId("summary").getAttribute("data-next")).toBe("t-admin");
+    expect(loaders.loadTareasListFirstPages).not.toHaveBeenCalled();
     expect(screen.getByTestId("summary").getAttribute("data-events")).toBe("h1");
     expect(actions.getProyectoResumenData).not.toHaveBeenCalled();
-    expect(actions.getProyectoTareasData).not.toHaveBeenCalled();
+    expect(actions.getProyectoResumenSummary).not.toHaveBeenCalled();
     expect(actions.getProyectoHistoryPage).not.toHaveBeenCalled();
     expect(actions.getProyectoShell).not.toHaveBeenCalled();
+  });
+
+  it("Analítico: the first page of every «Tareas por tramo» group in one call (#1051)", async () => {
+    state.style = "analitico";
+    await renderPage();
+    expect(loaders.loadTareasListFirstPages).toHaveBeenCalledTimes(1);
+    expect(loaders.loadTareasListFirstPages).toHaveBeenCalledWith(state.user, {
+      lists: [expect.objectContaining({ proyecto: PID, tramo: "__sin_tramo", orderBy: "retraso", incluirAdmin: true })],
+    });
+    cleanup();
+    vi.clearAllMocks();
+    // `?estilo=` wins over the viewer's style.
+    state.style = "analitico";
+    await renderPage(PID, { estilo: "esencial" });
+    expect(loaders.loadTareasListFirstPages).not.toHaveBeenCalled();
   });
 
   it("fills the shell's Archivos count from the Resumen's root listing", async () => {
@@ -159,7 +217,7 @@ describe("/proyectos/[id]", () => {
     expect(screen.getByRole("heading", { name: "Proyecto no encontrado" })).toBeTruthy();
     expect(loaders.loadProyectoResumen).not.toHaveBeenCalled();
     expect(loaders.loadProyectoShell).not.toHaveBeenCalled();
-    expect(loaders.loadProyectoTareas).not.toHaveBeenCalled();
+    expect(loaders.loadProyectoResumenSummary).not.toHaveBeenCalled();
   });
 
   it("asks to sign in without a session", async () => {

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NO_TASKS_SEED } from "@/tests/helpers/my-tasks-seed";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -49,6 +50,8 @@ vi.mock("@/lib/actions/my-space-actions", () => ({
 }));
 vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
   getMiEspacioPageData: vi.fn(),
+  getMyTasksSummary: vi.fn(),
+  getMyTasksPage: vi.fn(async () => ({ rows: [], nextCursor: null, total: 0 })),
   fetchMiEspacioNotesPage: actions.fetchNotesPage,
   fetchMiEspacioChecklistsPage: actions.fetchChecklistsPage,
 }));
@@ -130,7 +133,6 @@ vi.mock("./GmailReader", () => ({
 }));
 // The Esencial layout reads my tasks and opens the task sheet (MiEspacioEsencial.test.tsx covers them).
 vi.mock("@/lib/actions/tasks-actions", () => ({
-  fetchMyOpenTasksAction: vi.fn(async () => []),
   setTaskStatusAction: vi.fn(),
   createUserTaskAction: vi.fn(),
   deleteTaskAction: vi.fn(),
@@ -204,7 +206,7 @@ function pageData(overrides: Partial<MiEspacioPageData> = {}): MiEspacioPageData
     checklistsCursor: null,
     notes: NOTES,
     notesCursor: null,
-    tasks: [],
+    tasks: NO_TASKS_SEED,
     canCreateTask: true,
     ...overrides,
   };

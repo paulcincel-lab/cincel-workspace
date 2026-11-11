@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NO_TASKS_SEED } from "@/tests/helpers/my-tasks-seed";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import type { MouseEvent, ReactNode } from "react";
@@ -239,7 +240,7 @@ function seededClient(seed: Seed): QueryClient {
     checklistsCursor: null,
     notes: [],
     notesCursor: null,
-    tasks: [],
+    tasks: NO_TASKS_SEED,
     canCreateTask: true,
   });
   client.setQueryData<ShellBadges>(qk.shell.badges(), {

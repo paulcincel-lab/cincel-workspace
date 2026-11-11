@@ -36,15 +36,9 @@ import {
   mergeUnread,
   type InboxRow,
 } from "@/lib/my-space/inbox";
-import {
-  dueInfo,
-  greeting,
-  groupMyTasksByProject,
-  noteDayLabel,
-  remainderText,
-  timeAgo,
-  type MyTasksGroup,
-} from "@/lib/my-space/my-tasks";
+import { dueInfo, greeting, noteDayLabel, remainderText, timeAgo } from "@/lib/my-space/my-tasks";
+import { ME_ESENCIAL_LIMITS, MY_TASKS_ALL, meTasksProjectFilters } from "@/lib/my-space/my-tasks-summary";
+import { listItemOfRow } from "@/lib/tareas/page-data";
 import { sortNotes } from "@/lib/my-space/note-ui";
 import {
   REMINDER_TIME_ZONE,
@@ -62,8 +56,13 @@ import {
   meGmailThreadsOptions,
   meNotesOptions,
   meNotificationsOptions,
+  insertMeTaskRow,
   meRemindersOptions,
-  meTasksOptions,
+  meTasksListOptions,
+  meTasksSummaryOptions,
+  patchMeTaskRows,
+  restoreMeTaskLists,
+  snapshotMeTaskLists,
 } from "@/lib/query/options/mi-espacio";
 import { taskStatusInvalidations } from "@/lib/query/options/tareas";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
@@ -87,7 +86,7 @@ export type MiEspacioEsencialProps = {
   reader?: ReactNode;
 };
 
-export const MI_ESPACIO_ESENCIAL_LIMITS = { projects: 3, perProject: 4 } as const;
+export const MI_ESPACIO_ESENCIAL_LIMITS = ME_ESENCIAL_LIMITS;
 /** How long "Agregada · Deshacer" stays under a task created here. */
 export const CREATED_UNDO_MS = 8_000;
 
@@ -213,9 +212,9 @@ function CardLink({ href, children }: { href: string; children: ReactNode }) {
 
 // ── Mis tareas ──────────────────────────────────────────────────────────────
 
-type Created = { id: string; projectId: string };
+type Created = { id: string; projectId: string; task: TaskListItem };
 
-/** A task detail as the `me.tasks()` row it becomes. */
+/** A task detail as the list item it becomes (`me.tasksList` rows). */
 function listItemOfDetail(detail: TaskDetail): TaskListItem {
   const { createdBy: _c, checklistItems: _i, attachments: _a, links: _l, history: _h, ...item } = detail;
   void _c;
@@ -232,8 +231,12 @@ function dueStatus(task: TaskListItem, today: string): EsencialStatus {
   return { kind: "text", label: info.label, tone };
 }
 
+/** One project card's open tasks: what the summary says it has, the rows its own list loads. */
+type ProjectGroup = { projectId: string; name: string; open: number };
+
 function MyTasksCard({ announce }: { announce(text: string): void }) {
-  const query = useQuery(meTasksOptions());
+  // #1051: the counts from `me.tasksSummary`; each project card pages its own rows.
+  const query = useQuery(meTasksSummaryOptions(MY_TASKS_ALL));
   const user = useSessionStore(selectAuthenticatedUser);
   const capabilities = useMemo(() => resolveActivitiesCapabilities(user), [user]);
   const viewerId = user?.member.id ?? "";
@@ -256,13 +259,22 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
   }, []);
 
   const today = localDate(new Date());
-  const tasks = useMemo(() => query.data ?? [], [query.data]);
-  const createdIds = useMemo(() => new Set(created.map((c) => c.id)), [created]);
-  const { groups, remaining } = useMemo(
-    () => groupMyTasksByProject(tasks.filter((t) => !createdIds.has(t.id)), today, MI_ESPACIO_ESENCIAL_LIMITS),
-    [tasks, createdIds, today],
+  const summary = query.data;
+  const openCount = summary?.all.open ?? 0;
+  const overdueCount = summary?.all.overdue ?? 0;
+  const groups = useMemo<ProjectGroup[]>(
+    () =>
+      (summary?.esencial ?? [])
+        .slice(0, MI_ESPACIO_ESENCIAL_LIMITS.projects)
+        .map((p) => ({ projectId: p.project.id, name: p.project.name, open: p.open })),
+    [summary],
   );
-  const overdueCount = tasks.filter((t) => dueInfo(t, today).tone === "overdue").length;
+  // The projects past the first cards: "9 tareas más en …".
+  const remaining = useMemo(() => {
+    const hidden = (summary?.esencial ?? []).slice(MI_ESPACIO_ESENCIAL_LIMITS.projects);
+    return { count: hidden.reduce((sum, p) => sum + p.open, 0), projectNames: hidden.map((p) => p.project.name) };
+  }, [summary]);
+  const createdIds = useMemo(() => new Set(created.map((c) => c.id)), [created]);
 
   const dropCreated = useCallback((id: string) => {
     const timer = timers.current.get(id);
@@ -286,36 +298,34 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
     invalidate: (task) => [qk.me.tasks(), ...taskStatusInvalidations(task.projectId)],
   });
 
-  const complete = useActionMutation<TaskListItem, TaskDetail, { previous: TaskListItem[] | undefined }>(
+  const complete = useActionMutation<TaskListItem, TaskDetail, { previous: Awaited<ReturnType<typeof snapshotMeTaskLists>> }>(
     (task) => setTaskStatusAction(task.id, "completado"),
     {
       optimistic: {
         async onMutate(qc, task) {
-          await qc.cancelQueries({ queryKey: qk.me.tasks(), exact: true });
-          const previous = qc.getQueryData<TaskListItem[]>(qk.me.tasks());
-          qc.setQueryData<TaskListItem[]>(qk.me.tasks(), (old) => old?.filter((t) => t.id !== task.id));
+          const previous = await snapshotMeTaskLists(qc);
+          patchMeTaskRows(qc, task.id, () => null);
           return { previous };
         },
-        rollback: (qc, snap) => qc.setQueryData(qk.me.tasks(), snap.previous),
+        rollback: (qc, snap) => restoreMeTaskLists(qc, snap.previous),
       },
       invalidate: (task) => [qk.me.tasks(), ...taskStatusInvalidations(task.projectId)],
     },
   );
 
-  const createTask = useActionMutation<{ draft: QuickAddDraft; group: MyTasksGroup }, TaskDetail>(
-    ({ draft, group }) =>
+  const createTask = useActionMutation<{ draft: QuickAddDraft; group: ProjectGroup; tramoId: string | null }, TaskDetail>(
+    ({ draft, group, tramoId }) =>
       createUserTaskAction({
         projectId: group.projectId,
         title: draft.title,
-        workflowId: draft.tramoId ?? currentTramoOf(group),
+        workflowId: draft.tramoId ?? tramoId,
         managerId: draft.assigneeId ?? viewerId,
         priority: draft.priority,
         commitmentDate: draft.dueDate,
       }),
     {
       setData: (qc, detail) => {
-        const item = listItemOfDetail(detail);
-        qc.setQueryData<TaskListItem[]>(qk.me.tasks(), (old) => [...(old ?? []).filter((t) => t.id !== item.id), item]);
+        insertMeTaskRow(qc, listItemOfDetail(detail), today);
       },
       invalidate: (vars) => newTaskInvalidations(vars.group.projectId),
     },
@@ -323,14 +333,14 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
 
   const removeTask = useActionMutation<Created, void>((c) => deleteTaskAction(c.id), {
     setData: (qc, _result, c) => {
-      qc.setQueryData<TaskListItem[]>(qk.me.tasks(), (old) => old?.filter((t) => t.id !== c.id));
+      patchMeTaskRows(qc, c.id, () => null);
     },
     invalidate: (c) => newTaskInvalidations(c.projectId),
   });
 
-  function currentTramoOf(group: MyTasksGroup): string | null {
+  function currentTramoOf(group: ProjectGroup, rows: readonly TaskListItem[]): string | null {
     const project = projectsQuery.data?.find((p) => p.id === group.projectId);
-    return project?.currentWorkflowId ?? group.tasks.find((t) => t.workflowId)?.workflowId ?? null;
+    return project?.currentWorkflowId ?? rows.find((t) => t.workflowId)?.workflowId ?? null;
   }
 
   function onComplete(task: TaskListItem, rows: TaskListItem[], projectId: string) {
@@ -348,9 +358,9 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
     focusAfter(next ? `input[data-task-check="${next.id}"]` : `[data-quick-add="${projectId}"] input`);
   }
 
-  async function onCreate(group: MyTasksGroup, draft: QuickAddDraft): Promise<QuickAddCreated> {
-    const detail = await createTask.mutateAsync({ draft, group });
-    const entry: Created = { id: detail.id, projectId: group.projectId };
+  async function onCreate(group: ProjectGroup, rows: readonly TaskListItem[], draft: QuickAddDraft): Promise<QuickAddCreated> {
+    const detail = await createTask.mutateAsync({ draft, group, tramoId: currentTramoOf(group, rows) });
+    const entry: Created = { id: detail.id, projectId: group.projectId, task: listItemOfDetail(detail) };
     setCreated((list) => [...list.filter((c) => c.id !== entry.id), entry]);
     timers.current.set(
       entry.id,
@@ -367,10 +377,10 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
   }
 
   const headingMeta =
-    tasks.length > 0 ? (
+    openCount > 0 ? (
       <span className="flex flex-wrap items-center gap-1.5">
         <span className={MUTED_PILL}>
-          <span className="font-mono">{tasks.length}</span>&nbsp;{tasks.length === 1 ? "abierta" : "abiertas"}
+          <span className="font-mono">{openCount}</span>&nbsp;{openCount === 1 ? "abierta" : "abiertas"}
         </span>
         {overdueCount > 0 ? (
           <span className={DESTRUCTIVE_PILL}>
@@ -385,7 +395,7 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
     body = <SkeletonRows count={6} className="h-11" />;
   } else if (query.isError && !query.data) {
     body = <SectionError onRetry={() => void query.refetch()} />;
-  } else if (tasks.length === 0) {
+  } else if (openCount === 0 && created.length === 0) {
     body = (
       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         <span>No tienes tareas abiertas.</span>
@@ -400,90 +410,79 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
     const remainder = remainderText(remaining);
     body = (
       <div ref={listRef} className="flex flex-col gap-3.5">
-        {groups.map((group, index) => {
-          const extra = created
-            .filter((c) => c.projectId === group.projectId)
-            .map((c) => tasks.find((t) => t.id === c.id))
-            .filter((t): t is TaskListItem => t !== undefined);
-          const rows = [...group.tasks, ...extra];
-          return (
-            <section key={group.projectId} aria-label={group.name} className="flex min-w-0 flex-col">
-              <h3 className="truncate py-1 text-[12.5px] font-semibold text-foreground">{group.name}</h3>
-              <ul className="flex flex-col">
-                {rows.map((task) => {
-                  const isNew = createdIds.has(task.id);
-                  const allowed = canChangeActivityStatus({ capabilities, task, viewerId });
-                  const href = taskSheetHref(pathname, search, task.id);
-                  const tramo = task.workflow ? tramoBadgeModel(task.workflow) : null;
-                  return (
-                    <li key={task.id} className={cn("border-b border-muted text-sm", isNew && "row-new")}>
-                      <EsencialItemRow
-                        title={task.title}
-                        onOpen={() => window.history.pushState(null, "", href)}
-                        leading={
-                          <input
-                            type="checkbox"
-                            className="size-4 shrink-0 accent-primary"
-                            data-task-check={task.id}
-                            aria-label={`Completar ${task.title}`}
-                            title={allowed ? undefined : "No puedes cambiar el estatus"}
-                            disabled={!allowed}
-                            checked={false}
-                            onChange={() => onComplete(task, rows, group.projectId)}
-                          />
-                        }
-                        meta={
-                          tramo
-                            ? [{ key: "tramo", label: tramo.label, dot: tramo.slot ? `var(--chart-${tramo.slot})` : undefined }]
-                            : []
-                        }
-                        status={dueStatus(task, today)}
-                        isNew={isNew}
+        {groups.map((group, index) => (
+          <ProjectTasksSection
+            key={group.projectId}
+            group={group}
+            first={index === 0}
+            created={created}
+            renderRow={(task, rows) => {
+              const isNew = createdIds.has(task.id);
+              const allowed = canChangeActivityStatus({ capabilities, task, viewerId });
+              const href = taskSheetHref(pathname, search, task.id);
+              const tramo = task.workflow ? tramoBadgeModel(task.workflow) : null;
+              return (
+                <li key={task.id} className={cn("border-b border-muted text-sm", isNew && "row-new")}>
+                  <EsencialItemRow
+                    title={task.title}
+                    onOpen={() => window.history.pushState(null, "", href)}
+                    leading={
+                      <input
+                        type="checkbox"
+                        className="size-4 shrink-0 accent-primary"
+                        data-task-check={task.id}
+                        aria-label={`Completar ${task.title}`}
+                        title={allowed ? undefined : "No puedes cambiar el estatus"}
+                        disabled={!allowed}
+                        checked={false}
+                        onChange={() => onComplete(task, rows, group.projectId)}
                       />
-                      {isNew ? (
-                        <p className="pb-2 text-xs text-secondary-foreground">
-                          Agregada
-                          {canDelete ? (
-                            <>
-                              {" · "}
-                              <button
-                                type="button"
-                                className="underline underline-offset-2"
-                                onClick={() => onUndoCreate({ id: task.id, projectId: group.projectId })}
-                              >
-                                Deshacer
-                              </button>
-                            </>
-                          ) : null}
-                        </p>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-              {canCreate ? (
-                <div data-quick-add={group.projectId} className="pt-1.5">
-                  <QuickAddRow
-                    variant="row"
-                    context={{
-                      label: `Agregar tarea en ${group.name}`,
-                      projectId: group.projectId,
-                      tramoId: currentTramoOf(group),
-                      assigneeId: viewerId || null,
-                      placeholder: "Escribe para agregar…",
-                    }}
-                    onCreate={(draft) => onCreate(group, draft)}
+                    }
+                    meta={
+                      tramo ? [{ key: "tramo", label: tramo.label, dot: tramo.slot ? `var(--chart-${tramo.slot})` : undefined }] : []
+                    }
+                    status={dueStatus(task, today)}
+                    isNew={isNew}
                   />
-                  {index === 0 ? (
-                    <p className="pt-1 font-mono text-[11.5px] text-muted-foreground" aria-hidden="true">
-                      @persona&nbsp;&nbsp;#tramo&nbsp;&nbsp;viernes
+                  {isNew ? (
+                    <p className="pb-2 text-xs text-secondary-foreground">
+                      Agregada
+                      {canDelete ? (
+                        <>
+                          {" · "}
+                          <button
+                            type="button"
+                            className="underline underline-offset-2"
+                            onClick={() => onUndoCreate({ id: task.id, projectId: group.projectId, task })}
+                          >
+                            Deshacer
+                          </button>
+                        </>
+                      ) : null}
                     </p>
                   ) : null}
-                </div>
-              ) : null}
-            </section>
-          );
-        })}
+                </li>
+              );
+            }}
+            quickAdd={
+              canCreate
+                ? (rows) => (
+                    <QuickAddRow
+                      variant="row"
+                      context={{
+                        label: `Agregar tarea en ${group.name}`,
+                        projectId: group.projectId,
+                        tramoId: currentTramoOf(group, rows),
+                        assigneeId: viewerId || null,
+                        placeholder: "Escribe para agregar…",
+                      }}
+                      onCreate={(draft) => onCreate(group, rows, draft)}
+                    />
+                  )
+                : null
+            }
+          />
+        ))}
         {remainder ? <CardLink href={ALL_MY_TASKS_HREF}>{remainder}</CardLink> : null}
       </div>
     );
@@ -498,6 +497,77 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
       {body}
     </EsencialCard>
   );
+}
+
+/**
+ * One project of Mis tareas (#1051): its first rows from its own list
+ * (`me.tasksList`, by due date), "Ver más (n restantes)" for the next 30,
+ * and the tasks created here last (with their undo) until they settle.
+ */
+function ProjectTasksSection({
+  group,
+  first,
+  created,
+  renderRow,
+  quickAdd,
+}: {
+  group: ProjectGroup;
+  first: boolean;
+  created: readonly Created[];
+  renderRow(task: TaskListItem, rows: TaskListItem[]): ReactNode;
+  quickAdd: ((rows: readonly TaskListItem[]) => ReactNode) | null;
+}) {
+  const list = useInfiniteQuery(meTasksListOptions(meTasksProjectFilters(group.projectId)));
+  const pages = list.data?.pages;
+  const createdHere = useMemo(() => created.filter((c) => c.projectId === group.projectId), [created, group.projectId]);
+  const rows = useMemo(() => {
+    const createdIds = new Set(createdHere.map((c) => c.id));
+    const loaded = (pages ?? []).flatMap((page) => page.rows.filter((row) => !createdIds.has(row.id)).map(listItemOfRow));
+    return [...loaded, ...createdHere.map((c) => c.task)];
+  }, [pages, createdHere]);
+  const loadedCount = (pages ?? []).reduce((sum, page) => sum + page.rows.length, 0);
+  const remaining = Math.max(0, (pages?.at(-1)?.total ?? group.open) - loadedCount);
+
+  return (
+    <section aria-label={group.name} className="flex min-w-0 flex-col">
+      <h3 className="truncate py-1 text-[12.5px] font-semibold text-foreground">{group.name}</h3>
+      {list.isPending ? (
+        <SkeletonRows count={Math.min(group.open, MI_ESPACIO_ESENCIAL_LIMITS.perProject)} className="h-11" />
+      ) : list.isError && !pages ? (
+        <SectionError onRetry={() => void list.refetch()} />
+      ) : (
+        <ul className="flex flex-col">{rows.map((task) => renderRow(task, rows))}</ul>
+      )}
+      {list.hasNextPage ? (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="self-start px-0 text-[13px] text-muted-foreground"
+          disabled={list.isFetchingNextPage}
+          onClick={() => void list.fetchNextPage()}
+        >
+          {verMasText(remaining)}
+        </Button>
+      ) : null}
+      {quickAdd ? (
+        <div data-quick-add={group.projectId} className="pt-1.5">
+          {quickAdd(rows)}
+          {first ? (
+            <p className="pt-1 font-mono text-[11.5px] text-muted-foreground" aria-hidden="true">
+              @persona&nbsp;&nbsp;#tramo&nbsp;&nbsp;viernes
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** "Ver más (12 restantes)"; just "Ver más" without a count. */
+export function verMasText(remaining: number): string {
+  if (remaining <= 0) return "Ver más";
+  return `Ver más (${remaining} ${remaining === 1 ? "restante" : "restantes"})`;
 }
 
 // ── Notas ───────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Download, Lock, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 
 import { ChecklistCard } from "@/components/mi-espacio/ChecklistCard";
 import { Inbox } from "@/components/mi-espacio/Inbox";
@@ -60,12 +60,21 @@ import {
   clockTime,
   miEspacioCsv,
   miEspacioCsvFileName,
-  myTasksGroups,
   shortDate,
-  taskMetrics,
+  taskRow,
   timeAgo,
+  tramoGroupId,
   type TaskRow,
 } from "@/lib/my-space/my-tasks";
+import {
+  EMPTY_MY_TASKS_SUMMARY,
+  groupRowCount,
+  meTasksGroupFilters,
+  myTasksSummaryGroups,
+  myTasksSummaryInput,
+  shownMetrics,
+  type MeTasksListFilters,
+} from "@/lib/my-space/my-tasks-summary";
 import { useActionMutation } from "@/lib/query/mutation";
 import { catalogOptions } from "@/lib/query/options/catalog";
 import { meTodayOptions } from "@/lib/query/options/me";
@@ -77,20 +86,19 @@ import {
   meGmailThreadsOptions,
   meNotificationsOptions,
   meNotificationsSummaryOptions,
-  meClosedTaskCountsOptions,
-  meClosedTasksOptions,
-  meTasksOptions,
+  insertMeTaskRow,
+  fetchAllMeTasksListRows,
+  meTasksListOptions,
+  meTasksSummaryOptions,
   meWeekHoursOptions,
 } from "@/lib/query/options/mi-espacio";
-import { qk } from "@/lib/query/keys";
 import { listItemOfRow } from "@/lib/tareas/page-data";
-import { loadMoreText } from "@/components/widgets/table-rows";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { isTaskClosed, statusColorToken, statusDotClass } from "@/lib/tasks/status-options";
 import { addDays, localDate, mondayOf } from "@/lib/time-tracking/local-time";
 import { tramoColorVar } from "@/lib/tramos/tramo-color";
-import type { TaskDetail, TaskListItem } from "@/lib/types/core";
+import type { TaskDetail, TaskListItem, TaskListRow } from "@/lib/types/core";
 import type {
   Checklist,
   GmailThreadSummary,
@@ -195,7 +203,7 @@ function hasHours(week: WeekHours | undefined): boolean {
   return (week?.days ?? []).some((day) => day.hours > 0);
 }
 
-/** A task detail as the `me.tasks()` row it becomes. */
+/** A task detail as the list item it becomes (`me.tasksList` rows). */
 function listItemOfDetail(detail: TaskDetail): TaskListItem {
   const { createdBy: _c, checklistItems: _i, attachments: _a, links: _l, history: _h, ...item } = detail;
   void _c;
@@ -284,7 +292,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   const openNewTask = useNewTaskUi((s) => s.openNewTask);
 
   // ── Queries ──
-  const tasksQuery = useQuery(meTasksOptions());
   const todayQuery = useQuery({ ...meTodayOptions(), enabled: TIME_TRACKING.fetchMyTodayAction });
   const tracking = TIME_TRACKING.fetchMyWeekHoursAction && todayQuery.data?.enabled === true;
   const hoursPerDay = todayQuery.data?.hoursPerDay ?? 8;
@@ -317,13 +324,12 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   const checklistsQuery = useInfiniteQuery({ ...meChecklistsOptions(), enabled: MY_SPACE.fetchChecklistsAction });
   const projectsQuery = useQuery({ ...catalogOptions.projectOptions(), enabled: canCreateTask || MY_SPACE.createChecklistAction });
 
-  // ── Tasks ──
+  // ── Tasks (#1051): every count from `me.tasksSummary`, the rows 30 a page per open tramo group.
   const queryClient = useQueryClient();
   const statusesQuery = useQuery(catalogOptions.taskStatuses());
   const { canCreateActivity, statusScope, canChangeResponsible } = capabilities;
   // Apoyo (#1038): the people list loads once the viewer can change it.
   const staffQuery = useQuery({ ...catalogOptions.staff(), enabled: canChangeResponsible });
-  const [closedTasks] = useState(() => new Map<string, TaskListItem>());
   const taskColumns = useMemo(
     () =>
       miEspacioTaskColumns({
@@ -331,88 +337,63 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
         capabilities: { canCreateActivity, statusScope, canChangeResponsible },
         statuses: statusesQuery.data ?? [],
         staff: staffQuery.data ?? NO_STAFF,
-        left: closedTasks,
       }),
-    [queryClient, canCreateActivity, statusScope, canChangeResponsible, statusesQuery.data, staffQuery.data, closedTasks],
+    [queryClient, canCreateActivity, statusScope, canChangeResponsible, statusesQuery.data, staffQuery.data],
   );
   const [created, setCreated] = useState<ReadonlySet<string>>(() => new Set());
-  // Delete (#1041): deleted tasks (and their subtasks) leave the table and the counts right away.
+  // Delete (#1041): deleted tasks (and their subtasks) leave the table right away; the counts follow the refetch.
   const deletes = useDeleteTasks();
   const isHidden = deletes.isHidden;
-  const allTasks = useMemo(
-    () => (tasksQuery.data ?? []).filter((task) => !isHidden(task.id, task.parentTaskId)),
-    [tasksQuery.data, isHidden],
-  );
-  const tasksById = useMemo(() => new Map(allTasks.map((task) => [task.id, task])), [allTasks]);
-  const tramoOptions = useMemo(() => {
-    const byKey = new Map<string, { label: string; count: number; color: string; sortOrder: number }>();
-    for (const task of allTasks) {
-      const workflow = task.workflow;
-      if (!workflow) continue;
-      const entry = byKey.get(workflow.key) ?? { label: workflow.name, count: 0, color: tramoColorVar(workflow), sortOrder: workflow.sortOrder };
-      entry.count += 1;
-      byKey.set(workflow.key, entry);
-    }
-    return [...byKey.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
-  }, [allTasks]);
-  const tramo = filters.tramo && tramoOptions.some(([key]) => key === filters.tramo) ? filters.tramo : null;
-  const visibleTasks = useMemo(
-    () =>
-      allTasks.filter((task) => {
-        if (tramo && task.workflow?.key !== tramo) return false;
-        if (filters.estado === "retraso") {
-          const due = task.commitmentDate?.slice(0, 10);
-          if (!due || due >= today) return false;
-        }
-        return matches(task.title, q);
-      }),
-    [allTasks, tramo, filters.estado, today, q],
-  );
-  // "Ocultar completadas" (#1039): off adds my closed tasks (muted, never late) to the table;
-  // on leaves them out and each project says how many. The counts and KPIs stay on open work.
-  // Hidden by default here (Mi espacio always listed open work only); the switch shows them.
+  // "Ocultar completadas" (#1039): off lists my closed tasks too (muted, never late, last in each group);
+  // on leaves them out and each project says how many. Hidden by default here; the switch shows them.
   const [hideCompleted, setHideCompleted] = useHideCompletedTasks({ defaultHidden: true });
-  // #1051: the closed rows load 30 at a time only while shown, searched and filtered on the server;
-  // while hidden, one summary query counts them per project.
-  const closedFilters = useMemo(() => ({ tramo, q: filters.q }), [tramo, filters.q]);
-  const closedWanted = filters.estado !== "retraso";
-  const doneQuery = useInfiniteQuery({ ...meClosedTasksOptions(closedFilters), enabled: closedWanted && !hideCompleted });
-  const doneCounts = useQuery({ ...meClosedTaskCountsOptions(closedFilters), enabled: closedWanted && hideCompleted });
-  const donePages = doneQuery.data?.pages;
-  const visibleDone = useMemo(
-    () =>
-      closedWanted
-        ? (donePages ?? []).flatMap((page) => page.rows.filter((row) => !isHidden(row.id, row.parentTaskId)).map(listItemOfRow))
-        : [],
-    [donePages, isHidden, closedWanted],
+  const retraso = filters.estado === "retraso";
+  const withClosed = !hideCompleted && !retraso;
+  // The search reaches the server once typing pauses.
+  const searchText = useDebouncedValue(filters.q, SEARCH_DEBOUNCE_MS);
+  const summaryInput = useMemo(
+    () => myTasksSummaryInput({ tramo: filters.tramo, q: searchText, retraso }),
+    [filters.tramo, searchText, retraso],
   );
-  const doneLoaded = useMemo(() => (donePages ?? []).reduce((sum, page) => sum + page.rows.length, 0), [donePages]);
-  const doneRemaining = Math.max(0, (donePages?.at(-1)?.total ?? 0) - doneLoaded);
-  const tableTasks = useMemo(() => {
-    if (hideCompleted) return visibleTasks;
-    const open = new Set(visibleTasks.map((t) => t.id));
-    return [...visibleTasks, ...visibleDone.filter((t) => !open.has(t.id))];
-  }, [hideCompleted, visibleTasks, visibleDone]);
-  const hiddenDoneByProject = useMemo(() => {
-    const out = new Map<string, number>();
-    if (!hideCompleted || !closedWanted) return out;
-    for (const [id, count] of Object.entries(doneCounts.data ?? {})) out.set(id, count);
-    return out;
-  }, [hideCompleted, closedWanted, doneCounts.data]);
-  const groups = useMemo(() => myTasksGroups(tableTasks, today), [tableTasks, today]);
+  const tasksQuery = useQuery(meTasksSummaryOptions(summaryInput));
+  const summary = tasksQuery.data ?? EMPTY_MY_TASKS_SUMMARY;
+  const tramoOptions = summary.tramos;
+  const tramo = filters.tramo;
+
+  // ── Rows per open tramo group.
+  const [groupRows, setGroupRows] = useState<Record<string, GroupRowsState>>({});
+  const rowActions = useRef(new Map<string, GroupRowsActions>());
+  const onGroupState = useCallback((id: string, state: GroupRowsState) => {
+    setGroupRows((prev) => (sameState(prev[id], state) ? prev : { ...prev, [id]: state }));
+  }, []);
+  const rowsOf = useCallback(
+    (id: string): TaskRow[] | undefined => {
+      const state = groupRows[id];
+      if (!state?.rows) return state?.error ? [] : undefined;
+      return state.rows.filter((row) => !isHidden(row.id, row.parentTaskId)).map((row) => taskRow(listItemOfRow(row), today));
+    },
+    [groupRows, isHidden, today],
+  );
+  const groups = useMemo(() => myTasksSummaryGroups(summary, { withClosed, rowsOf }), [summary, withClosed, rowsOf]);
   const visibleRows = useMemo(() => groups.flatMap((g) => (g.children ?? []).flatMap((c) => c.rows ?? [])), [groups]);
+  const loadedTasks = useMemo(
+    () =>
+      Object.values(groupRows).flatMap((state) =>
+        (state.rows ?? []).filter((row) => !isHidden(row.id, row.parentTaskId)).map(listItemOfRow),
+      ),
+    [groupRows, isHidden],
+  );
+  const tasksById = useMemo(() => new Map(loadedTasks.map((task) => [task.id, task])), [loadedTasks]);
   // ── Row checkboxes and the bulk bar (#1040): a filter change clears the selection.
   const visibleIds = useMemo(() => visibleRows.map((row) => row.id), [visibleRows]);
   const selection = useTaskSelection({
     visibleIds,
-    resetKey: JSON.stringify([filters.estado, tramo, q, hideCompleted]),
+    resetKey: JSON.stringify([filters.estado, tramo, searchText, hideCompleted]),
   });
-  const taskOfId = useMemo(() => {
-    const byId = new Map(tableTasks.map((task) => [task.id, task]));
-    return (id: string) => byId.get(id);
-  }, [tableTasks]);
-  const all = useMemo(() => taskMetrics(allTasks, today), [allTasks, today]);
-  const shown = useMemo(() => taskMetrics(visibleTasks, today), [visibleTasks, today]);
+  const taskOfId = useCallback((id: string) => tasksById.get(id), [tasksById]);
+  const all = summary.all;
+  const shown = summary.shown;
+  const shownPct = shownMetrics(shown);
 
   // ── Checklists ──
   const checklists = useMemo(() => flattenPages(checklistsQuery.data?.pages), [checklistsQuery.data]);
@@ -447,6 +428,25 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   ];
   const everythingOpen =
     SECTIONS.every((key) => openSections[key]) && openProjects.length === projectIds.length && closedTramos.size === 0;
+  // The rows load only for the open tramo groups.
+  const openGroups = useMemo(() => {
+    const projects = new Set(openProjects);
+    return summary.projects.flatMap((p) =>
+      projects.has(p.project.id)
+        ? p.tramos
+            .filter((t) => groupRowCount(t, withClosed) > 0 && !closedTramos.has(tramoGroupId(p.project.id, t.tramo.id)))
+            .map((t) => ({
+              id: tramoGroupId(p.project.id, t.tramo.id),
+              filters: meTasksGroupFilters(summaryInput, p.project.id, t.tramo.key, withClosed),
+            }))
+        : [],
+    );
+  }, [openProjects, summary.projects, closedTramos, withClosed, summaryInput]);
+
+  function retryGroup(id: string) {
+    const group = openGroups.find((g) => g.id === id);
+    if (group) void queryClient.refetchQueries({ queryKey: meTasksListOptions(group.filters).queryKey, exact: true });
+  }
 
   const setParam = (key: string, value: string | null) => replaceMiEspacioParam(key, value);
 
@@ -492,9 +492,8 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
       }),
     {
       setData: (qc, detail) => {
-        const item = listItemOfDetail(detail);
-        qc.setQueryData<TaskListItem[]>(qk.me.tasks(), (old) => [...(old ?? []).filter((t) => t.id !== item.id), item]);
-        setCreated((ids) => new Set(ids).add(item.id));
+        insertMeTaskRow(qc, listItemOfDetail(detail), today);
+        setCreated((ids) => new Set(ids).add(detail.id));
       },
       invalidate: (vars) => newTaskInvalidations(vars.projectId),
     },
@@ -504,11 +503,32 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   function fallbackTramo(group: Group<TaskRow>): string | null {
     const current = projectsQuery.data?.find((p) => p.id === group.id)?.currentWorkflowId ?? null;
     if (current) return current;
-    const ids = new Set((group.children ?? []).flatMap((c) => (c.rows ?? []).map((r) => r.tramoId)).filter(Boolean));
+    const tramos = summary.projects.find((p) => p.project.id === group.id)?.tramos ?? [];
+    const ids = new Set(tramos.map((t) => t.tramo.id).filter(Boolean));
     return ids.size === 1 ? ([...ids][0] as string) : null;
   }
 
-  const tableGroups: Group<TaskRow>[] = groups.map((group) => {
+  // A failed group says so in its last row, with a retry.
+  const withErrors: Group<TaskRow>[] = groups.map((group) => ({
+    ...group,
+    children: (group.children ?? []).map((child) =>
+      groupRows[child.id]?.error
+        ? {
+            ...child,
+            loading: false,
+            quickAdd: (
+              <tr>
+                <td colSpan={taskColumns.length + 2} className="border-b border-border px-3 py-2">
+                  <ErrorState title={SECTION_ERROR} onRetry={() => retryGroup(child.id)} />
+                </td>
+              </tr>
+            ),
+          }
+        : { ...child, loading: child.loading && openGroups.some((g) => g.id === child.id), hasMore: groupRows[child.id]?.hasMore ?? false },
+    ),
+  }));
+
+  const tableGroups: Group<TaskRow>[] = withErrors.map((group) => {
     if (!canCreateTask || !group.children || group.children.length === 0) return group;
     const quickAdd = (
       <QuickAddRow
@@ -532,7 +552,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   });
 
   const shownGroups: Group<TaskRow>[] = tableGroups.map((group) => {
-    const hidden = hiddenDoneByProject.get(group.id) ?? 0;
+    const hidden = hideCompleted && !retraso ? (summary.projects.find((p) => p.project.id === group.id)?.closed ?? 0) : 0;
     if (hidden === 0 || !group.children || group.children.length === 0) return group;
     const line = (
       <HiddenCompletedLine count={hidden} colSpan={taskColumns.length + 2} onShow={() => setHideCompleted(false)} />
@@ -553,14 +573,33 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     return { ...group, children };
   });
 
+  // The footer counts every listed task (the summary), not only the loaded rows.
   const newCount = visibleRows.filter((row) => created.has(row.id)).length;
-  const lateSum = visibleRows.reduce((sum, row) => sum + row.retraso, 0);
-  const totalsLabel = `Total · ${visibleRows.length} ${visibleRows.length === 1 ? "tarea" : "tareas"}${
-    newCount > 0 ? ` (${visibleRows.length - newCount} abiertas + ${newCount} ${newCount === 1 ? "nueva" : "nuevas"})` : ""
+  const listed = groupRowCount(shown, withClosed);
+  const lateSum = shown.daysLateSum;
+  const totalsLabel = `Total · ${listed} ${listed === 1 ? "tarea" : "tareas"}${
+    newCount > 0 ? ` (${listed - newCount} abiertas + ${newCount} ${newCount === 1 ? "nueva" : "nuevas"})` : ""
   }`;
 
-  function exportCsv() {
-    downloadText(miEspacioCsv(visibleRows), miEspacioCsvFileName(today));
+  // The export lists every task the filters match, also the rows not loaded yet: read on demand, group by group.
+  const [exporting, setExporting] = useState(false);
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const lists = summary.projects.flatMap((p) =>
+        p.tramos
+          .filter((t) => groupRowCount(t, withClosed) > 0)
+          .map((t) => meTasksGroupFilters(summaryInput, p.project.id, t.tramo.key, withClosed)),
+      );
+      const pages = await Promise.all(lists.map((f) => fetchAllMeTasksListRows(f)));
+      const rows = pages.flatMap((list) =>
+        list.filter((row) => !isHidden(row.id, row.parentTaskId)).map((row) => taskRow(listItemOfRow(row), today)),
+      );
+      downloadText(miEspacioCsv(rows), miEspacioCsvFileName(today));
+    } finally {
+      setExporting(false);
+    }
   }
 
   // ── Sheets ──
@@ -615,12 +654,12 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
       value: tramo ?? "todos",
       options: [
         { value: "todos", label: "Todos" },
-        ...tramoOptions.map(([key, entry]) => ({ value: key, label: entry.label, count: entry.count, color: entry.color })),
+        ...tramoOptions.map((t) => ({ value: t.key, label: t.name, count: t.open, color: tramoColorVar(t) })),
       ],
     },
   ];
 
-  const tasksError = tasksQuery.isError;
+  const tasksError = tasksQuery.isError && !tasksQuery.data;
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -635,7 +674,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
         }
         actions={
           <>
-            <Button type="button" variant="outline" onClick={exportCsv} disabled={visibleRows.length === 0}>
+            <Button type="button" variant="outline" onClick={() => void exportCsv()} disabled={listed === 0 || exporting}>
               <Download aria-hidden="true" />
               Exportar
             </Button>
@@ -702,10 +741,10 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
               Vencidas <b className={cn("font-mono font-semibold", shown.overdue > 0 && "text-destructive")}>{shown.overdue}</b>
             </span>
             <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
-              {shown.overduePct} % vencidas
+              {shownPct.overduePct} % vencidas
             </span>
             <span className="text-[12.5px]">
-              Retraso prom. <b className="font-mono font-semibold">{hoursText(shown.avgDaysLate)} d</b>
+              Retraso prom. <b className="font-mono font-semibold">{hoursText(shownPct.avgDaysLate)} d</b>
             </span>
           </>
         }
@@ -716,7 +755,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
           </div>
         ) : tasksError ? (
           <ErrorState title={SECTION_ERROR} onRetry={() => void tasksQuery.refetch()} />
-        ) : allTasks.length === 0 ? (
+        ) : all.open === 0 && listed === 0 ? (
           <EmptyState
             title="No tienes tareas abiertas."
             action={
@@ -725,11 +764,14 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
                 : undefined
             }
           />
-        ) : visibleTasks.length === 0 ? (
+        ) : shown.open === 0 && listed === 0 ? (
           <EmptyState title={NO_MATCH} action={{ label: CLEAR_FILTERS, onClick: clearFilters }} />
         ) : (
           <div className="flex flex-col gap-2 p-3">
             <HideCompletedSwitch className="self-end" checked={hideCompleted} onCheckedChange={setHideCompleted} />
+            {openGroups.map((g) => (
+              <GroupRowsLoader key={g.id} id={g.id} filters={g.filters} onState={onGroupState} actions={rowActions} />
+            ))}
             <CellCommitProvider<TaskRow> queryKeys={MI_ESPACIO_COMMIT_KEYS}>
               <GroupedTable<TaskRow>
                 label="Mis tareas"
@@ -738,6 +780,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
                 isRowMuted={(row) => isTaskClosed(row)}
                 expanded={expanded}
                 onExpandedChange={onExpandedChange}
+                onLoadMore={(id) => rowActions.current.get(id)?.more()}
                 getRowId={(row) => row.id}
                 rowHref={(row) => taskSheetHref("/mi-espacio", search, row.id)}
                 isRowNew={(row) => created.has(row.id)}
@@ -766,18 +809,6 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
               />
               {deletes.dialog}
             </CellCommitProvider>
-            {!hideCompleted && doneQuery.hasNextPage ? (
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="self-start"
-                disabled={doneQuery.isFetchingNextPage}
-                onClick={() => void doneQuery.fetchNextPage()}
-              >
-                {loadMoreText(doneRemaining)}
-              </Button>
-            ) : null}
             <TaskBulkBar
               selection={selection}
               taskOf={taskOfId}
@@ -922,6 +953,69 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
 }
 
 // ── Pieces ──────────────────────────────────────────────────────────────────
+
+/** How long typing waits before the search reaches the server. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** `value`, once it has stopped changing for `ms`. */
+function useDebouncedValue<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    if (Object.is(value, settled)) return;
+    const timer = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, settled, ms]);
+  return settled;
+}
+
+/** What one tramo group's rows query reports to the page. */
+type GroupRowsState = { rows: TaskListRow[] | undefined; loading: boolean; error: boolean; hasMore: boolean };
+type GroupRowsActions = { more(): void };
+
+function sameState(a: GroupRowsState | undefined, b: GroupRowsState): boolean {
+  return !!a && a.rows === b.rows && a.loading === b.loading && a.error === b.error && a.hasMore === b.hasMore;
+}
+
+/**
+ * One tramo group's rows (`useInfiniteQuery(me.tasksList(f))`, "retraso"
+ * order, 30 a page; the first groups come seeded by the page). Renders
+ * nothing: it reports the rows to the page, which hands them to
+ * `GroupedTable`. Mounted only while its group is open.
+ */
+function GroupRowsLoader({
+  id,
+  filters,
+  onState,
+  actions,
+}: {
+  id: string;
+  filters: MeTasksListFilters;
+  onState(id: string, state: GroupRowsState): void;
+  actions: RefObject<Map<string, GroupRowsActions>>;
+}) {
+  const list = useInfiniteQuery(meTasksListOptions(filters));
+  const pages = list.data?.pages;
+  const rows = useMemo(() => pages?.flatMap((p) => p.rows), [pages]);
+  const loading = list.isPending || list.isFetchingNextPage;
+  const error = list.isError && !rows;
+  const hasMore = Boolean(list.hasNextPage);
+  const { fetchNextPage } = list;
+
+  // Registers "Cargar más" only; nothing loads here. A retry refetches the group's key from the page.
+  useEffect(() => {
+    const map = actions.current;
+    map.set(id, { more: () => void fetchNextPage() });
+    return () => {
+      map.delete(id);
+    };
+  }, [id, fetchNextPage, actions]);
+
+  useEffect(() => {
+    onState(id, { rows, loading, error, hasMore });
+  }, [id, rows, loading, error, hasMore, onState]);
+
+  return null;
+}
 
 const NO_STAFF: { id: string; name: string }[] = [];
 

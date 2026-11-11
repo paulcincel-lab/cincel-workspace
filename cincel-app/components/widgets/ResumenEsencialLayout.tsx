@@ -19,24 +19,22 @@ import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { EsencialItemRow, type EsencialStatus } from "@/components/widgets/EsencialItemRow";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
-import { dominantTramo } from "@/lib/people/aggregates";
 import {
   esencialTramoLine,
-  nextTasks,
   recentFileRows,
   shortDate,
   teamLine,
-  tramoProgress,
   type EsencialTramoStep,
   type NextTask,
   type ProjectSummaryInput,
   type RecentFileRow,
   type TeamAvatar,
 } from "@/lib/proyectos/project-summary";
-import { proyectoTareasOptions } from "@/lib/query/options/proyectos";
+import { EMPTY_RESUMEN_SUMMARY, resumenAvatarTramo, resumenTramoProgress, type ResumenTareasSummary } from "@/lib/proyectos/resumen-summary";
+import { proyectoResumenSummaryOptions } from "@/lib/query/options/proyectos";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import { tramoColorVar } from "@/lib/tramos/compat";
-import type { TaskListRow, WorkflowRef } from "@/lib/types/core";
+import type { WorkflowRef } from "@/lib/types/core";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,8 +42,9 @@ import { cn } from "@/lib/utils";
  * four soft cards, dots and one or two numbers per group, no tables or
  * charts. Tramo line, Próximas tareas (five rows and the quick-add), Equipo
  * and the three newest Drive files. Reads `qk.proyectos.resumen(id)` (passed
- * in as `data`) and `qk.proyectos.tab(id, "tareas")` (prefetched by the
- * page, so the first render makes no call).
+ * in as `data`) and the task numbers `qk.proyectos.resumenSummary(id)`
+ * (server aggregates, prefetched by the page, so the first render makes no
+ * call; never the task list, #1051).
  */
 export type ResumenEsencialLayoutProps = { data: ProjectSummaryInput };
 
@@ -128,10 +127,10 @@ function StepDetail({ step }: { step: EsencialTramoStep }) {
   return <span className={cn("block", step.state === "current" && "text-foreground")}>{step.detail}</span>;
 }
 
-function TramoCard({ data, tasks }: { data: ProjectSummaryInput; tasks: TaskListRow[] }) {
+function TramoCard({ data, summary }: { data: ProjectSummaryInput; summary: ResumenTareasSummary }) {
   const line = useMemo(
-    () => esencialTramoLine(data, tramoProgress(tasks, data.tramoCatalog, data.project, data.today)),
-    [data, tasks],
+    () => esencialTramoLine(data, resumenTramoProgress(summary, data.tramoCatalog, data.project)),
+    [data, summary],
   );
   const tones = line.steps.map((step) => tramoTone(step.key, data.tramoCatalog));
   const noTramo = line.steps.every((step) => step.state === "next");
@@ -208,25 +207,25 @@ type CreatedTask = { id: string; title: string; tramoKey: string | null };
 
 function NextTasksCard({
   data,
-  tasks,
+  summary,
   canCreate,
   tareasHref,
 }: {
   data: ProjectSummaryInput;
-  tasks: TaskListRow[];
+  summary: ResumenTareasSummary;
   canCreate: boolean;
   tareasHref: string;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { create } = useQuickAddCreate();
-  // Rows created here, tied to the Tareas rows they were added to: a refetch of the
-  // rows replaces them (the list trims back to five).
-  const [created, setCreated] = useState<{ tasks: TaskListRow[]; rows: CreatedTask[] }>(() => ({ tasks, rows: [] }));
-  const pending = created.tasks === tasks ? created.rows : [];
+  // Rows created here, tied to the summary they were added to: a refetch of the
+  // summary replaces them (the list trims back to five).
+  const [created, setCreated] = useState<{ summary: ResumenTareasSummary; rows: CreatedTask[] }>(() => ({ summary, rows: [] }));
+  const pending = created.summary === summary ? created.rows : [];
   const [createdIds, setCreatedIds] = useState<ReadonlySet<string>>(() => new Set());
 
-  const next = useMemo(() => nextTasks(tasks, data.today, RESUMEN_ESENCIAL_NEXT_TASKS), [tasks, data.today]);
+  const next = useMemo(() => summary.next.slice(0, RESUMEN_ESENCIAL_NEXT_TASKS), [summary]);
   const listed = new Set(next.map((t) => t.id));
   const extra = pending.filter((t) => !listed.has(t.id));
   const currentKey = data.project.currentWorkflow?.key ?? null;
@@ -235,8 +234,8 @@ function NextTasksCard({
     const row = await create(draft);
     const tramoKey = data.tramoCatalog.find((t) => t.id === draft.tramoId)?.key ?? currentKey;
     setCreated((prev) => ({
-      tasks,
-      rows: [{ id: row.id, title: row.title, tramoKey }, ...(prev.tasks === tasks ? prev.rows : [])],
+      summary,
+      rows: [{ id: row.id, title: row.title, tramoKey }, ...(prev.summary === summary ? prev.rows : [])],
     }));
     setCreatedIds((ids) => new Set(ids).add(row.id));
     return row;
@@ -324,15 +323,12 @@ function Avatar({ avatar, catalog }: { avatar: TeamAvatar; catalog: WorkflowRef[
   );
 }
 
-function TeamCard({ data, tasks, fichaHref }: { data: ProjectSummaryInput; tasks: TaskListRow[]; fichaHref: string }) {
+function TeamCard({ data, summary, fichaHref }: { data: ProjectSummaryInput; summary: ResumenTareasSummary; fichaHref: string }) {
   const team = useMemo(() => {
     const line = teamLine(data.project);
-    const avatars = line.avatars.map((avatar) => ({
-      ...avatar,
-      tramoKey: dominantTramo(tasks.filter((t) => t.manager?.id === avatar.id).map((t) => t.workflow?.key ?? null)),
-    }));
+    const avatars = line.avatars.map((avatar) => ({ ...avatar, tramoKey: resumenAvatarTramo(summary, avatar.id) }));
     return { ...line, avatars };
-  }, [data.project, tasks]);
+  }, [data.project, summary]);
   const count = team.avatars.length + team.overflow;
 
   return (
@@ -478,8 +474,8 @@ function NextTasksSkeleton() {
 
 export function ResumenEsencialLayout({ data }: ResumenEsencialLayoutProps): ReactNode {
   const id = data.project.id;
-  const tareas = useQuery(proyectoTareasOptions(id));
-  const tasks = useMemo(() => tareas.data?.tasks ?? [], [tareas.data]);
+  const tareas = useQuery(proyectoResumenSummaryOptions(id));
+  const summary = tareas.data ?? EMPTY_RESUMEN_SUMMARY;
   const user = useSessionStore(selectAuthenticatedUser);
   const canCreate = useMemo(() => resolveActivitiesCapabilities(user).canCreateActivity, [user]);
   const searchParams = useSearchParams();
@@ -494,7 +490,7 @@ export function ResumenEsencialLayout({ data }: ResumenEsencialLayoutProps): Rea
       {tareas.isError ? (
         <SectionError label="Tramos" onRetry={retry} />
       ) : (
-        <TramoCard data={data} tasks={tasks} />
+        <TramoCard data={data} summary={summary} />
       )}
 
       <div className="flex flex-wrap items-start gap-4">
@@ -504,11 +500,11 @@ export function ResumenEsencialLayout({ data }: ResumenEsencialLayoutProps): Rea
           ) : tareas.isPending ? (
             <NextTasksSkeleton />
           ) : (
-            <NextTasksCard data={data} tasks={tasks} canCreate={canCreate} tareasHref={`${base}/tareas${keep}`} />
+            <NextTasksCard data={data} summary={summary} canCreate={canCreate} tareasHref={`${base}/tareas${keep}`} />
           )}
         </div>
         <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
-          <TeamCard data={data} tasks={tasks} fichaHref={`${base}/ficha${keep}`} />
+          <TeamCard data={data} summary={summary} fichaHref={`${base}/ficha${keep}`} />
           <FilesCard data={data} archivosHref={`${base}/archivos${keep}`} />
         </div>
       </div>

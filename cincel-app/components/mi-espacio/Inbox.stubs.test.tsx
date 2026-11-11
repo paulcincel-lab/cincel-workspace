@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NO_TASKS_SEED } from "@/tests/helpers/my-tasks-seed";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -149,7 +150,7 @@ describe("Inbox while the actions are stubs", () => {
       checklistsCursor: null,
       notes: [],
       notesCursor: null,
-      tasks: [],
+      tasks: NO_TASKS_SEED,
       canCreateTask: true,
     });
     renderWithQueryClient(<Inbox />, { client });
