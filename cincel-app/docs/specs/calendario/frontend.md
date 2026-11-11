@@ -46,6 +46,7 @@ Each Estilo has a Día / Semana / Mes selector and "Hoy". The asistente plans fr
 | `evento` | `e:<uuid>` or `t:<uuid>` | event detail open (§5) |
 | `tarea` | `<uuid>` | existing task sheet (`TASK_SHEET_PARAM`) |
 | `propuesta` | `<uuid>` | an open proposal (§7.1) |
+| `nueva` | `reunion` | reopens the Nueva reunión dialog after the Google grant redirect (§6.1) |
 
 `parseCalendarioQuery(search): CalendarioQuery`, `toCalendarioSearch(q)`, `calendarioHref(q)`, `rangeOf(view, fecha): { from, to }` (from `lib/calendario/range.ts`), and the hook `useCalendarioQuery()` (reads `useSearchParams`). Writes use `replaceCalendarioUrl(q)` (`history.replaceState`, keeps `?estilo=`) for filters and `pushCalendarioUrl(q)` for range navigation, so Back walks through ranges. `estilo` is never part of a query key.
 
@@ -121,11 +122,45 @@ Shared fields:
 
 ## 6. Meetings (Phase 2)
 
-- `NewMeetingDialog` (`components/calendario/NewMeetingDialog.tsx`, form with shadcn form primitives): Título, Fecha, Inicio, Fin (default +60 min), Proyecto (optional, `qk.catalog.projectOptions()`), Asistentes (staff combobox + free email; "Agregar al equipo del proyecto"), Lugar, "Crear enlace de Meet" (checkbox, default on when Google is connected with events grant; disabled with hint "Conecta Google Calendar para crear enlaces de Meet"), Descripción. Submit "Crear reunión" → `createMeetingAction` → toast "Reunión creada. Envié la invitación a {n} personas." / without Google "Reunión creada en Cincel. Envié la invitación por correo.".
+**Decision D1 (decided 2026-11-11):** Google Calendar is the main path for meetings. A meeting is created in the organizer's Google Calendar with a Meet link and Google's invitations; the Cincel-only meeting with an email invitation is only the failure path (no grant yet, token revoked, Google unavailable; backend §7.1, §7.6). The UI asks for the grant where it matters and always says which path a meeting took.
+
+### 6.1 Nueva reunión dialog
+- `NewMeetingDialog` (`components/calendario/NewMeetingDialog.tsx`, form with shadcn form primitives): Título, Fecha, Inicio, Fin (default +60 min), Proyecto (optional, `qk.catalog.projectOptions()`), Asistentes (staff combobox + free email; "Agregar al equipo del proyecto"), Lugar, "Crear enlace de Meet" (checkbox, default on), Descripción. Submit "Crear reunión" → `createMeetingAction`.
+- **With the grant** (`google.eventsGrant`): the footer line reads "Se creará en tu Google Calendar y Google enviará la invitación." Toast "Reunión creada. Envié la invitación a {n} personas.".
+- **Without the grant** (not connected, or connected without `calendar_events`): an inline `Alert` above the footer: "Conecta Google Calendar para crear la reunión con enlace de Meet y que Google envíe la invitación." with the primary "Conectar Google Calendar" and the secondary "Crear solo en Cincel". "Crear enlace de Meet" is disabled with the hint "Conecta Google Calendar para crear enlaces de Meet".
+  - "Conectar Google Calendar" keeps the form draft in `sessionStorage` (`calendario.meetingDraft`, try/catch; a missing draft just opens an empty dialog) and goes to `/api/auth/google/start?scope=calendar_events&return_to=/calendario?nueva=reunion`; on return the dialog reopens with the draft and the alert gone (Decision F10).
+  - "Crear solo en Cincel" saves on the failure path; toast "Reunión creada en Cincel. Envié la invitación por correo.".
+  - When the admin has not allowed the scopes (`primary_error = 'ACCESS_DENIED'`), the alert reads "Tu administrador todavía no habilita Google Calendar para Cincel." with only "Crear solo en Cincel".
+- **Google fails on save** (`GOOGLE_UNAVAILABLE`, `GOOGLE_REAUTH`): the meeting is saved on the failure path; toast "Reunión creada en Cincel. Envié la invitación por correo." with the reason line "Google Calendar no respondió; la agregaré en cuanto responda." or "Vuelve a conectar Google Calendar para agregarla.".
+
+### 6.2 Google state of a meeting (detail, all Estilos)
+The detail of a Cincel meeting shows a note with one action when it is not (yet) in Google, from `google_sync_error` and `invites_via` (backend §7.5–§7.6):
+
+| State | Note | Action |
+|---|---|---|
+| in Google (no error) | origin "Google Calendar · sincronizado hace {t}" | "Abrir en Google Calendar" |
+| `NO_GRANT` | "Esta reunión solo está en Cincel. La invitación se envió por correo." | "Conectar y crear en Google" (grant → `retryMeetingSyncAction`) |
+| `ACCESS_DENIED` | "Tu administrador todavía no habilita Google Calendar para Cincel." | none |
+| `UNAVAILABLE`, `RATE_LIMITED` | "Google Calendar no respondió. La invitación se envió por correo; la agregaré a Google en cuanto responda." | "Reintentar ahora" (`retryMeetingSyncAction`) |
+| `REAUTH` | "Vuelve a conectar Google Calendar para que la reunión se agregue a Google." | "Volver a conectar" |
+| `GONE` | "Ya no está en Google Calendar." | "Volver a crear en Google" |
+| `NOT_ORGANIZER` | "Solo quien organiza puede actualizar Google Calendar. El cambio quedó en Cincel." | none |
+
+Success of a retry: toast "Ya está en Google Calendar." and the note disappears. Visual shows the note inside the floating card, Esencial as a soft line above the primary action, Analítico in the ORIGEN field ("Cincel · pendiente de Google") with the action under the field list. Only the organizer sees the actions; attendees see the origin only.
+
+### 6.3 Connection, refresh and settings
 - Google status line (Analítico drawer and Ajustes › Integraciones): "Google Calendar · sincronizado hace {t}", "No conectado", "Vuelve a conectar Google Calendar".
 - Refresh: the page runs `refreshGoogleEventsAction()` at most once per session when `google.syncedAt` is older than 5 min, as a mutation (`useActionMutation`, invalidating the `qk.calendario.range` family), and the "Actualizar" button runs it with `force`. It is never a `queryFn` and never an action call inside a bare `useEffect` (check-data-patterns rule 4): a small `useRefreshOnce(mutation, shouldRun)` hook in `components/calendario/` triggers the mutation from the hydration callback, mirroring the old auto-sync rule of query-migration §4.8 rule 5 (Decision F8).
-- Ajustes › Integraciones (`lib/shell/settings-sections/integraciones/google-calendar.tsx`): new row "Reuniones y disponibilidad" with "Conectar" → `/api/auth/google/start?scope=calendar_events&return_to=/ajustes/integraciones`.
-- `AgendaWidget` (Inicio) keeps its API; `AgendaItem` gets meetings from the same source in Phase 2 (`todayAgendaItems`).
+- Ajustes › Integraciones (`lib/shell/settings-sections/integraciones/google-calendar.tsx`): new row "Reuniones y disponibilidad" with "Conectar" → `/api/auth/google/start?scope=calendar_events&return_to=/ajustes/integraciones`; when connected, "Conectado · sincronizado hace {t}"; on `ACCESS_DENIED` the admin copy of §6.1.
+
+### 6.4 Meetings outside the calendar
+- **Inicio** (`AgendaWidget`, `components/inicio/MyDayAgenda.tsx`): `AgendaItem` gets meetings from the same source in Phase 2 (`todayAgendaItems`). `AgendaItem` gains `meetUrl?: string` (Google Meet) next to the existing `meetingUrl` (Cutto). A Meet link renders "Unirse a Meet" (new tab, `rel="noopener noreferrer"`); a Cutto link keeps "Abrir en Cutto". The title opens `/calendario?evento=e:<id>`. A meeting on the failure path shows the same "solo en Cincel" origin as the detail, without actions.
+- **Mi espacio › Bandeja** (`components/mi-espacio/Inbox.tsx`, `lib/my-space/inbox.ts`): the notification kind `reunion` gets the label "Reunión" and the `CalendarDays` icon; the row text comes from the server ("Ana García te invitó a «Revisión con cliente» · jue 12 nov, 10:00", "Cambió la hora de «Revisión con cliente»", "Se canceló «Revisión con cliente»") and opens `/calendario?evento=e:<id>`.
+- **Ajustes › Notificaciones** (`components/ajustes/NotificacionesClient.tsx`): `NOTIFICATION_KIND_LABELS.reunion = "Reuniones"` with the description "Te invitan a una reunión o cambia una reunión tuya", in the channel matrix like the other kinds.
+
+### 6.5 Calendario settings (Phase 5)
+- **Ajustes › General** (`lib/shell/settings-sections/general/`, admin): a number field "Horas de trabajo por día" (`calendario.workday_hours`, 1–12, step 0.5, default 6) with the hint "Se usa para la carga del Calendario cuando el puesto no tiene capacidad semanal." Save through the existing general settings action.
+- **Ajustes › Tramos** (`app/(staff)/ajustes/(admin)/tramos/TramosClient.tsx`): each task template row gains "Horas estimadas" (number, 0.5 step, empty = 1 h) for `workflow_task_templates.default_estimated_hours`.
 
 ## 7. Asistente features
 
@@ -185,6 +220,7 @@ Shared fields:
 - Keyboard alternative to drag: each backlog row has "Mover a…" (person + day selects) and Space/Enter to pick + arrow keys to choose a cell + Enter to drop, announced through a live region.
 - Per Estilo: Visual = lanes grid (the board); Esencial = one card per day with the viewer's planned tasks and one big "Planear mi semana" (lanes of others hidden); Analítico = table person × day with hours and a checkbox proposal table.
 - Others' lanes only with permission (backend §13); otherwise only the viewer's lane, and the subtitle says "tu semana".
+- The canvas shows a reassignment chip ("MP→AG") on one placed task. `plan_week` does not reassign in v1 (D7), so the chip is not built; the task is deferred with "Sin responsable" or kept on its owner.
 
 ## 8. Components
 
@@ -299,7 +335,9 @@ The asistente page context is built by `useCalendarioAssistantContext()` from th
 | Empty because of filters | "No hay resultados con estos filtros." + "Quitar filtros" | same | same |
 | Error | `ErrorState` "No se pudo cargar el calendario." + "Reintentar" (filters stay usable) | same | same |
 | Google not connected | one-time banner "Conecta Google Calendar para ver tus reuniones." + "Conectar" / "Ahora no" | same | origin field "No conectado" |
-| Google error | detail note "No se pudo actualizar Google Calendar." + "Reintentar" | | |
+| Google scopes not allowed by the admin | banner "Tu administrador todavía no habilita Google Calendar para Cincel." (no Conectar) | same | same |
+| Google error (refresh) | detail note "No se pudo actualizar Google Calendar." + "Reintentar" | | |
+| Meeting not in Google (failure path) | the note and action of §6.2 | same | same |
 | Proposal stale/expired | card "Esta propuesta ya no está vigente." + "Pedir de nuevo" | | |
 | No permission (team) | "Todos" option hidden | "Todo el equipo" hidden | RESPONSABLE group without "Todos" |
 
@@ -319,7 +357,9 @@ The asistente page context is built by `useCalendarioAssistantContext()` from th
 | detail (meeting) | Reunión · {n} asistentes · Google Calendar · Cincel · Unirse a Meet · Cómo llegar · Abrir proyecto · ✦ Prepara la reunión · Abrir en Google Calendar · Crear minuta · ✦ Resume lo pendiente · Enlace de Meet listo. · {n} tareas del proyecto vencen antes de esta reunión. · RELACIONADO · HISTORIAL · Google Calendar · sincronizado hace {t} · Editar · Cancelar reunión · Cerrar detalle |
 | detail (task) | Tarea · Vence el {fecha} · Vencía el {fecha} · Marcar completada · Reabrir · Abrir tarea · Abrir ficha · Cambiar fecha · ✦ Propón otra fecha · Fecha compromiso. Arrastra la tarea a otro día para cambiarla. · Lleva días de retraso. Reprográmala o pide al asistente que proponga una fecha. · Sin asignar |
 | meeting dialog | Nueva reunión · Título · Fecha · Inicio · Fin · Proyecto · Asistentes · Agregar al equipo del proyecto · Lugar · Crear enlace de Meet · Descripción · Crear reunión · Guardar cambios · Reunión creada. Envié la invitación a {n} personas. · Reunión creada en Cincel. Envié la invitación por correo. · ¿Cancelar la reunión? Se avisará a los asistentes. |
-| google | Conecta Google Calendar para ver tus reuniones. · Conectar · Ahora no · Vuelve a conectar Google Calendar · No se pudo actualizar Google Calendar. · Reintentar · Actualizar · Reuniones y disponibilidad · Conecta Google Calendar para crear enlaces de Meet |
+| google | Conecta Google Calendar para ver tus reuniones. · Conectar · Ahora no · Vuelve a conectar Google Calendar · No se pudo actualizar Google Calendar. · Reintentar · Actualizar · Reuniones y disponibilidad · Conecta Google Calendar para crear enlaces de Meet · Conecta Google Calendar para crear la reunión con enlace de Meet y que Google envíe la invitación. · Conectar Google Calendar · Crear solo en Cincel · Se creará en tu Google Calendar y Google enviará la invitación. · Tu administrador todavía no habilita Google Calendar para Cincel. · Esta reunión solo está en Cincel. La invitación se envió por correo. · Conectar y crear en Google · Google Calendar no respondió. La invitación se envió por correo; la agregaré a Google en cuanto responda. · Reintentar ahora · Vuelve a conectar Google Calendar para que la reunión se agregue a Google. · Volver a conectar · Ya no está en Google Calendar. · Volver a crear en Google · Solo quien organiza puede actualizar Google Calendar. El cambio quedó en Cincel. · Ya está en Google Calendar. · Cincel · pendiente de Google · Google Calendar no respondió; la agregaré en cuanto responda. · Vuelve a conectar Google Calendar para agregarla. |
+| fuera del calendario | Unirse a Meet · Abrir en Cutto · Reunión · Reuniones · Te invitan a una reunión o cambia una reunión tuya · {nombre} te invitó a «{título}» · {día} {n} {mes}, {hora} · Cambió la hora de «{título}» · Se canceló «{título}» |
+| ajustes | Horas de trabajo por día · Se usa para la carga del Calendario cuando el puesto no tiene capacidad semanal. · Horas estimadas |
 | barra | Pide algo para tu calendario · Pide algo: “Junta con el cliente de Madrid 22 mañana a las 10” · Pedir · Ejemplos · Pensando… · No entendí qué cambiar. Prueba con "Pasa lo vencido al jueves". |
 | proposal | Aplicar · Editar · Cancelar · Aplicar cambios · Aplicar {n} cambios · Aplicar y avisar · Deshacer · propuesta: desde {fecha} · propuesta: nueva reunión · Cambiar {n} fechas compromiso · Incluir {título} · Esta propuesta ya no está vigente. · Pedir de nuevo · Apliqué {a} de {n} cambios. {s} no se pudo: {motivo}. · Cambio deshecho. · No cupo |
 | resumen | Buenos días, {nombre} · Buenas tardes, {nombre} · Buenas noches, {nombre} · Reuniones · Vence hoy · Vence esta semana · En riesgo · Bloqueas a otros · Prepárame · Pasar a mañana · Asignar · Avisa a {nombre} · Propón fecha · Resolver · Reparte esto · ✦ Pasa a mañana lo que no alcances hoy · ✦ Planea mi semana · Reparte el {día} · Tu día · Tu semana, {rango} · Ocultar resumen · Mostrar resumen |
@@ -356,3 +396,5 @@ The asistente page context is built by `useCalendarioAssistantContext()` from th
 | F7 | Analítico Mes grouping | One group per ISO week (the canvas merges weeks 48–49) |
 | F8 | Google refresh trigger | Once-per-session mutation on mount when older than 5 min, plus "Actualizar" |
 | F9 | Where Resumen and Barra sit in Esencial on mobile | Barra first, Resumen collapsed to the greeting line |
+| F10 | Keep the Nueva reunión draft across the Google grant redirect | Yes: `sessionStorage` draft + `?nueva=reunion` reopens the dialog |
+| F11 | The "Tramos" legend in the sidebar (`Sidebar` board) | Not built: the shell sidebar is shared by every page; the tramo legend lives in the Visual filter row (§3) |

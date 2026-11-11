@@ -125,6 +125,7 @@ notificationKind += "reunion"
 | status | `calendar_event_status` default `confirmada` | cancel = status, never delete (history rule) |
 | google_calendar_id, google_event_id, google_etag, google_html_link | text null | |
 | google_sync_error | text null | last write-through error code |
+| invites_via | text null, check in (`google`, `cincel`) | how the attendees were invited when the meeting was created (§7.6, D13); later updates and the cancel notice go the same way |
 | synced_at | timestamptz null | last time read from / written to Google |
 | created_by_id | uuid → staff | |
 | created_at, updated_at, deleted_at | stamps | |
@@ -343,8 +344,9 @@ export type UndoProposalResult = { restored: string[]; skipped: { changeId: stri
 
 ### 7.1 Scopes and grant
 - New incremental grant key `calendar_events` in `STAFF_OAUTH_EXTRA_SCOPES` = `https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy`. `parseStaffOauthScope` accepts it; `/api/auth/google/start?scope=calendar_events&return_to=/calendario` asks for it. `calendarEventsGrantAvailable()` becomes true, so the existing agenda tools' `available()` turns on.
-- The Workspace admin must allow the two scopes for the OAuth client (add them to `docs/google-workspace-admin-checklist.md`). Until then the grant fails with `access_denied` and the page shows "Conecta Google Calendar para ver tus reuniones" (Decision D1).
-- Without the grant: Cincel meetings still work (stored, shown, invitations by email and in-app notification), with no Google event, no Meet link and no free/busy.
+- **Decision D1 (decided 2026-11-11):** the Workspace admin grants `calendar.events` and `calendar.freebusy` for the OAuth client as an incremental grant (add them to `docs/google-workspace-admin-checklist.md` and the ops checklist #690). **Google is the main path:** every Cincel meeting is written to the organizer's primary calendar with a Meet link and Google's invitations, and every availability lookup (`find_free_slots`, `resolve_overlap`, `plan_week` when it reads meetings) uses free/busy.
+- **The Cincel-only meeting is the failure path, not a mode.** It is used only when (a) the organizer has not granted `calendar_events` yet (or the admin hasn't allowed the scopes, so the grant ends in `access_denied`), (b) the token was revoked (`REAUTH`), or (c) Google is unavailable after the retries of §7.5. Then the meeting is stored and shown in Cincel, invitations go by email and in-app (§7.6), and there is no Meet link and no free/busy. The UI always says which path a meeting took and offers the way back to Google (connect, reconnect, retry).
+- The UI asks for the grant at the moment it matters: the page banner, the Nueva reunión dialog and the meeting detail (frontend §6). It never silently falls back.
 
 ### 7.2 Read cache (`lib/google/calendar-events-sync.ts`)
 ```ts
@@ -361,6 +363,7 @@ export async function refreshPrimaryEvents(staffId: string, opts?: { force?: boo
 - Cincel meeting with the organizer's grant: `insertPrimaryEvent(organizerId, { summary, description, start, end, location, attendees, conferenceData: { createRequest: { requestId: eventId, conferenceSolutionKey: { type: "hangoutsMeet" } } } })` with `conferenceDataVersion=1&sendUpdates=all`. Stores `google_event_id`, `etag`, `html_link`, `meet_url`. Update: `patchPrimaryEvent` with `If-Match: etag`; `412` → re-read, apply the patch on top, retry once; cancel: `deletePrimaryEvent` with `sendUpdates=all`.
 - `GoogleEventWrite` in `lib/assistant/agenda/google-calendar.ts` gains `conferenceData?` and `sendUpdates?`.
 - Only the organizer's own calendar is written. Editing a cached Google event that someone else organized is refused (`ORGANIZER_ONLY_COPY` already exists).
+- `retryMeetingSyncAction(eventId)` (organizer only) and the cron `calendar-meetings-resync` (every 15 min, `cron_leases`, meetings with `google_sync_error` in (`UNAVAILABLE`, `RATE_LIMITED`) that start in the future, max 3 tries) create or patch the Google event. When `invites_via = 'cincel'` the retry uses `sendUpdates=none`, so attendees are not invited twice (§7.6).
 
 ### 7.4 Free/busy
 ```ts
@@ -371,12 +374,19 @@ export async function freeBusy(staffId: string, emails: string[], timeMin: strin
 ### 7.5 Failure modes
 | Failure | Behaviour |
 |---|---|
-| Not connected / no grant | page works on Cincel data; `google.connected=false`; meetings saved without Google; banner "Conecta Google Calendar…" once per session |
-| Token revoked / `invalid_grant` | `google_oauth_accounts` flagged by the existing `staff-token.ts` path; `primary_error = 'REAUTH'`; detail shows "Vuelve a conectar Google Calendar" |
-| 403 rate limit / 5xx | retry with backoff (2 tries) inside the action; then `primary_error`; cache stays as it was; meeting write keeps the Cincel row with `google_sync_error` and a retry action `retryMeetingSyncAction(eventId)` |
+| Not connected / no grant | page works on Cincel data; `google.connected=false`, `google.eventsGrant=false`; banner "Conecta Google Calendar…" once per session; the Nueva reunión dialog shows the connect prompt before saving (frontend §6); a meeting saved anyway is Cincel-only (`invites_via='cincel'`, `google_sync_error='NO_GRANT'`) and its detail offers "Conectar y crear en Google" |
+| Scopes not allowed by the admin (`access_denied` on the grant) | same as no grant; `primary_error = 'ACCESS_DENIED'`; copy "Tu administrador todavía no habilita Google Calendar para Cincel." (no retry button, the admin step is #690) |
+| Token revoked / `invalid_grant` | `google_oauth_accounts` flagged by the existing `staff-token.ts` path; `primary_error = 'REAUTH'`; a meeting write keeps the Cincel row with `google_sync_error='REAUTH'` (failure path, §7.6); detail shows "Vuelve a conectar Google Calendar" |
+| 403 rate limit / 5xx | retry with backoff (2 tries) inside the action; then `primary_error`; cache stays as it was; meeting write keeps the Cincel row with `google_sync_error = 'UNAVAILABLE'` or `'RATE_LIMITED'`, takes the failure path for invitations (§7.6) and is retried by `retryMeetingSyncAction(eventId)` and the resync cron (§7.3) |
 | 410 sync token | full window re-read |
 | 412 etag | re-read and retry once, else `CONFLICT` "La reunión cambió en Google Calendar. Vuelve a intentarlo." |
-| Event deleted in Google | cache delete; a Cincel meeting whose Google event vanished keeps the row and shows "Ya no está en Google Calendar" with "Volver a crear en Google" |
+| Event deleted in Google | cache delete; a Cincel meeting whose Google event vanished keeps the row (`google_sync_error='GONE'`) and shows "Ya no está en Google Calendar" with "Volver a crear en Google" (`retryMeetingSyncAction`, `sendUpdates=none`) |
+
+### 7.6 Invitations on the failure path (Decision D13)
+- **Google path** (`invites_via='google'`): Google sends the invitation, updates and the cancel notice (`sendUpdates=all`). Cincel adds only the in-app notification for staff attendees (`notify(staffIds, { kind: "reunion" })`).
+- **Failure path** (`invites_via='cincel'`): at create, Cincel sends the invitation at once: `sendMail` with `invitacion-reunion` (text + html with date, place and the meeting link in Cincel; no `.ics` attachment, so no calendar copy exists that Google would later duplicate) to every attendee email, plus the in-app notification. Updates and the cancel go the same way.
+- **When Google comes back** (retry, cron or "Conectar y crear en Google"): the Google event is created with `sendUpdates=none`; attendees in the Workspace see it on their calendar without a second email, and external attendees keep the email they already have. Later updates of that meeting keep `invites_via='cincel'` for the email notices and patch Google with `sendUpdates=none`, so nobody gets two notices for one change. The toast says "Ya está en Google Calendar." and the detail note disappears.
+- The toast at create tells the organizer which path was taken: "Reunión creada. Envié la invitación a {n} personas." (Google) or "Reunión creada en Cincel. Envié la invitación por correo." (failure path, plus the reason line of frontend §6).
 
 ## 8. Meetings and minutes
 
@@ -392,7 +402,7 @@ These are the direct UI paths (Nueva reunión dialog, detail edits). The asisten
 
 Default attendees when the asistente proposes a meeting for a project: project members (`project_members`) with role manager/coordinator plus the project's client contact when it has an email ("invito a Ana García, Luis Martínez y al cliente"). Default length 60 min; site visits 120 (`SITE_VISIT_MINUTES`).
 
-Invitations: with Google, Google sends them (`sendUpdates=all`). Without, `sendMail` with `invitacion-reunion` (text + html with date, place, link) to every attendee email and `notify(staffIds, { kind: "reunion", … })` for staff.
+Invitations: §7.6. With Google (the main path), Google sends them (`sendUpdates=all`) and Cincel only adds the in-app notification; on the failure path, `sendMail` with `invitacion-reunion` to every attendee email plus `notify(staffIds, { kind: "reunion", … })`. `createMeetingAction` sets `invites_via` once and never changes it.
 
 ### 8.2 Visibility
 - `source = 'google'`: owner only (`owner_staff_id = viewer`). Another person's cached events are never returned, also not to admins (owner-only data, redesign BE §9.1). In "Todos", other people's meetings come only from Cincel meetings.
@@ -635,7 +645,7 @@ New codes in `lib/errors.ts` → Spanish copy: `STALE` "Esta propuesta ya no est
 
 | # | Decision | Default |
 |---|---|---|
-| D1 | Ask for `calendar.events` + `calendar.freebusy` scopes (Workspace admin must allow them) | Yes, as the incremental grant `calendar_events`; without it meetings are Cincel-only with email invitations |
+| D1 | Ask for `calendar.events` + `calendar.freebusy` scopes (Workspace admin must allow them) | **Decided (2026-11-11):** the admin grants both scopes as the incremental grant `calendar_events`. Google write-through and free/busy are the main path; the Cincel-only meeting with email invitation is only the failure path (no grant yet, token revoked, Google unavailable), §7.1 |
 | D2 | Cache other people's Google events for the team view | No: owner-only. Team view shows Cincel meetings and free/busy only |
 | D3 | Workday hours source | `positions.weekly_capacity_hours / 5` of the person's highest-capacity position, else `calendario.workday_hours` = 6 |
 | D4 | Task duration estimate | `tasks.estimated_hours` (nullable) → `workflow_task_templates.default_estimated_hours` → 1 h; Phase 5 seeds template defaults only where the catalog states one, else null |
@@ -647,3 +657,4 @@ New codes in `lib/errors.ts` → Spanish copy: `STALE` "Esta propuesta ya no est
 | D10 | Load label thresholds | < 50 % Libre, ≤ 85 % Bien, ≤ 100 % Casi lleno, > 100 % Sobrecargado (P5 board's "Con espacio / Lleno" map to Bien / Casi lleno) |
 | D11 | Where a task's hours fall | All on its due day (no spreading across days in v1) |
 | D12 | Meeting default length and attendees from the asistente | 60 min; project manager, coordinator and client contact with email |
+| D13 | Invitations when a meeting takes the failure path and Google comes back later | Email (no `.ics`) and in-app at once, so nobody waits on Google; the resync (button, cron every 15 min, max 3 tries) creates the Google event with `sendUpdates=none` so attendees are never invited twice (§7.6) |
