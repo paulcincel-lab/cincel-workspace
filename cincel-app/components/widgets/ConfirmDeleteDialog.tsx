@@ -28,6 +28,10 @@ export type ConfirmDeleteDialogProps = {
   confirmLabel?: string;
   /** The delete is running: the confirm button is disabled. */
   pending?: boolean;
+  /** The confirm button is disabled, e.g. until the name is typed (#1050). */
+  confirmDisabled?: boolean;
+  /** Extra content between the question and the buttons (a typed confirmation, a footnote). */
+  children?: ReactNode;
   onConfirm(): void;
 };
 
@@ -38,6 +42,8 @@ export function ConfirmDeleteDialog({
   description,
   confirmLabel = DELETE_LABEL,
   pending = false,
+  confirmDisabled = false,
+  children,
   onConfirm,
 }: ConfirmDeleteDialogProps): ReactNode {
   return (
@@ -47,9 +53,10 @@ export function ConfirmDeleteDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel>{CANCEL_LABEL}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" disabled={pending} onClick={onConfirm}>
+          <AlertDialogAction variant="destructive" disabled={pending || confirmDisabled} onClick={onConfirm}>
             {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>

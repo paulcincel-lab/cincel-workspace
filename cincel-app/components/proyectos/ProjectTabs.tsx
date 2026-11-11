@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronLeft, Ellipsis, Plus } from "lucide-react";
 
 import {
@@ -15,9 +16,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/shadcn/dropdown-menu";
-import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { PROJECT_DELETE_LABEL } from "@/components/proyectos/project-delete-copy";
+import { useDeleteProject } from "@/components/proyectos/use-delete-project";
+import { resolveActivitiesCapabilities, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import type { StaffRef, WorkflowRef } from "@/lib/types/core";
@@ -87,6 +91,39 @@ export function projectDescription(
   return parts;
 }
 
+/** The header's "Más opciones" menu. */
+function ProjectMoreMenu({ children }: { children: ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger aria-label="Más opciones" className={buttonVariants({ variant: "ghost", size: "icon-lg" })}>
+        <Ellipsis aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">{children}</DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * "Más opciones" with "Eliminar proyecto" last (#1050), on every width, for
+ * `canDeleteProject`. After the delete the page goes back to /proyectos.
+ */
+function ProjectDeleteMenu({ project, children }: { project: { id: string; name: string }; children: ReactNode }) {
+  const router = useRouter();
+  const deleteProject = useDeleteProject({ onDeleted: () => router.push("/proyectos") });
+  return (
+    <>
+      <ProjectMoreMenu>
+        {children}
+        <DropdownMenuSeparator className="md:hidden" />
+        <DropdownMenuItem variant="destructive" onClick={() => deleteProject.request({ id: project.id, name: project.name })}>
+          {PROJECT_DELETE_LABEL}
+        </DropdownMenuItem>
+      </ProjectMoreMenu>
+      {deleteProject.dialog}
+    </>
+  );
+}
+
 /**
  * Project header + tabs (Estilos header, redesign FE §3.5), shared by every
  * project tab: back link "← Proyectos" (keeps `?estilo=`), the name, the
@@ -109,6 +146,26 @@ export function ProjectTabs({ project, active, counts, canManagePortal, showEsti
   const backHref = estilo ? `/proyectos?${new URLSearchParams({ estilo }).toString()}` : "/proyectos";
   const moreLinks = projectSectionLinks(project.id, { showClientes: canManagePortal }).filter(
     (link) => !MOBILE_PROJECT_SECTIONS.includes(link.section)
+  );
+  // "Eliminar proyecto" (#1050): with it the menu shows on every width; the other entries stay phone-only.
+  const canDeleteProject = useMemo(() => (user ? resolveProjectsCapabilities(user).canDeleteProject : false), [user]);
+  const phoneOnly = canDeleteProject ? "md:hidden" : undefined;
+  const menuItems = (
+    <>
+      {canCreate ? (
+        <DropdownMenuItem className={phoneOnly} onClick={openCreate}>
+          Nueva tarea
+        </DropdownMenuItem>
+      ) : null}
+      {moreLinks.map((link) => (
+        <DropdownMenuItem key={link.section} className={phoneOnly} render={<Link href={link.href} />}>
+          {link.label}
+        </DropdownMenuItem>
+      ))}
+      <DropdownMenuItem className={phoneOnly} render={<Link href={reportHref(project.id)} />}>
+        Reporte
+      </DropdownMenuItem>
+    </>
   );
 
   return (
@@ -154,22 +211,13 @@ export function ProjectTabs({ project, active, counts, canManagePortal, showEsti
             ) : null}
             {showEstilo ? <EstiloSwitch /> : null}
           </div>
-          <div className="md:hidden">
-            <DropdownMenu>
-              <DropdownMenuTrigger aria-label="Más opciones" className={buttonVariants({ variant: "ghost", size: "icon-lg" })}>
-                <Ellipsis aria-hidden="true" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {canCreate ? <DropdownMenuItem onClick={openCreate}>Nueva tarea</DropdownMenuItem> : null}
-                {moreLinks.map((link) => (
-                  <DropdownMenuItem key={link.section} render={<Link href={link.href} />}>
-                    {link.label}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem render={<Link href={reportHref(project.id)} />}>Reporte</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          {canDeleteProject ? (
+            <ProjectDeleteMenu project={project}>{menuItems}</ProjectDeleteMenu>
+          ) : (
+            <div className="md:hidden">
+              <ProjectMoreMenu>{menuItems}</ProjectMoreMenu>
+            </div>
+          )}
         </div>
       </header>
 

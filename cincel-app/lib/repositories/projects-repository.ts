@@ -1,16 +1,20 @@
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
 import {
   contacts,
   driveFiles,
+  historyEvents,
+  portalAuditEvents,
   projectContacts,
   projectLinks,
   projectMembers,
+  projectPortalAccess,
   projectStages,
   projects,
   staff,
+  tasks,
   workflows,
 } from "@/lib/db/schema";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
@@ -41,6 +45,13 @@ import { autoStartOnCreate, startChosenOnCreate } from "@/lib/project-flow/auto-
 import type { FlowExecutor } from "@/lib/project-flow/db";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import { parseInput, ProjectCreateInputSchema } from "@/lib/validation/project-flow";
+import {
+  PROJECT_RESTORE_DAYS,
+  type DeletedProjectRow,
+  type ProjectDeletePreview,
+  type ProjectDeleteResult,
+  type ProjectRestoreResult,
+} from "@/lib/types/project-delete";
 
 type ProjectRow = typeof projects.$inferSelect;
 
@@ -582,21 +593,204 @@ export async function assignProjectTramo(id: string, workflowId: string, actorId
   return (await getProject(id, UNSCOPED_VIEWER))!;
 }
 
-/** Soft delete. Tasks stay linked; they disappear with the project on read. */
-export async function softDeleteProject(id: string, actorId: string): Promise<void> {
-  const [row] = await db
-    .update(projects)
-    .set({ deletedAt: new Date() })
+// ── Delete and restore (#1050) ───────────────────────────────────────────────
+
+const PROJECT_RESTORE_WINDOW_MS = PROJECT_RESTORE_DAYS * 24 * 60 * 60 * 1000;
+
+/** Open: not completado and not in a live custom status that closes (as in the tasks repository). */
+const openTaskSql = sql`(${tasks.status} <> 'completado' and not exists (select 1 from core.task_statuses ts_open where ts_open.id = ${tasks.customStatusId} and ts_open.deleted_at is null and ts_open.closes))`;
+
+/** One `deleted` change per task, in one statement. */
+async function recordTasksDeleted(tx: FlowExecutor, taskIds: string[], actorId: string | null, deleted: boolean) {
+  if (taskIds.length === 0) return;
+  await tx.insert(historyEvents).values(
+    taskIds.map((entityId) => ({
+      entity: "task" as const,
+      entityId,
+      kind: "cambio" as const,
+      actorId,
+      field: "deleted",
+      beforeValue: String(!deleted),
+      afterValue: String(deleted),
+    }))
+  );
+}
+
+/**
+ * The delete dialog's counts: live tasks and subtasks of a live project, and
+ * how many of them are open. Null when the project doesn't exist or is deleted.
+ */
+export async function getProjectDeletePreview(id: string): Promise<ProjectDeletePreview | null> {
+  const [project] = await db
+    .select({ id: projects.id, name: projects.name })
+    .from(projects)
     .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
-    .returning();
-  if (!row) throw new Error("PROJECT_NOT_FOUND");
-  await recordChanges({
-    entity: "project",
-    entityId: id,
-    actorId,
-    before: { deleted: false },
-    after: { deleted: true },
-    fields: ["deleted"],
+    .limit(1);
+  if (!project) return null;
+  const [counts] = await db
+    .select({
+      taskCount: sql<number>`count(*)::int`,
+      openTaskCount: sql<number>`count(*) filter (where ${openTaskSql})::int`,
+    })
+    .from(tasks)
+    .where(and(eq(tasks.projectId, id), isNull(tasks.deletedAt)));
+  return { ...project, taskCount: counts?.taskCount ?? 0, openTaskCount: counts?.openTaskCount ?? 0 };
+}
+
+/**
+ * Deletes a project in one transaction (#1050): the project and all its live
+ * tasks and subtasks get the same `deleted_at`, every active portal access to
+ * it is revoked (with the portal audit row, as `revokeAccess` writes) and the
+ * history rows are written. The Drive folder, the stages and the monday data
+ * stay as they are. PROJECT_NOT_FOUND when it doesn't exist or is already deleted.
+ */
+export async function deleteProjectWithTasks(id: string, actorId: string): Promise<ProjectDeleteResult> {
+  const deletedAt = new Date();
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(projects)
+      .set({ deletedAt })
+      .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
+      .returning({ id: projects.id });
+    if (!row) throw new Error("PROJECT_NOT_FOUND");
+    const gone = await tx
+      .update(tasks)
+      .set({ deletedAt })
+      .where(and(eq(tasks.projectId, id), isNull(tasks.deletedAt)))
+      .returning({ id: tasks.id });
+    const revoked = await tx
+      .update(projectPortalAccess)
+      .set({ revokedAt: deletedAt, revokedByStaffId: actorId, updatedAt: deletedAt })
+      .where(and(eq(projectPortalAccess.projectId, id), isNull(projectPortalAccess.revokedAt)))
+      .returning({ portalUserId: projectPortalAccess.portalUserId });
+    if (revoked.length > 0) {
+      await tx
+        .insert(portalAuditEvents)
+        .values(revoked.map((r) => ({ kind: "revoke" as const, portalUserId: r.portalUserId, projectId: id, staffId: actorId })));
+    }
+    await recordChanges(
+      { entity: "project", entityId: id, actorId, before: { deleted: false }, after: { deleted: true }, fields: ["deleted"] },
+      tx
+    );
+    await recordTasksDeleted(
+      tx,
+      gone.map((t) => t.id),
+      actorId,
+      true
+    );
+    return { id, deletedAt: deletedAt.toISOString(), deletedTaskCount: gone.length };
+  });
+}
+
+/** Who deleted the project last (its latest `deleted → true` history row). */
+async function projectDeleterId(id: string): Promise<string | null> {
+  const [event] = await db
+    .select({ actorId: historyEvents.actorId })
+    .from(historyEvents)
+    .where(
+      and(
+        eq(historyEvents.entity, "project"),
+        eq(historyEvents.entityId, id),
+        eq(historyEvents.field, "deleted"),
+        eq(historyEvents.afterValue, "true")
+      )
+    )
+    .orderBy(desc(historyEvents.eventAt), desc(historyEvents.createdAt))
+    .limit(1);
+  return event?.actorId ?? null;
+}
+
+/**
+ * Undoes `deleteProjectWithTasks` (#1050): the project and exactly the tasks
+ * deleted with it (same `deleted_at`) come back. Within `PROJECT_RESTORE_DAYS`,
+ * for an admin or the person who deleted it. Portal access is not restored.
+ * Errors: NOT_FOUND (missing or not deleted), INVALID (window passed),
+ * FORBIDDEN, NAME_TAKEN (a live project took the name meanwhile).
+ */
+export async function restoreProject(
+  id: string,
+  actor: { staffId: string; isAdmin: boolean },
+  now: Date = new Date()
+): Promise<ProjectRestoreResult> {
+  const [row] = await db.select({ deletedAt: projects.deletedAt }).from(projects).where(eq(projects.id, id)).limit(1);
+  const deletedAt = row?.deletedAt ?? null;
+  if (!deletedAt) throw flowError(FLOW_ERROR.NOT_FOUND, "project");
+  if (now.getTime() - deletedAt.getTime() > PROJECT_RESTORE_WINDOW_MS) throw flowError(FLOW_ERROR.INVALID, "restore window");
+  if (!actor.isAdmin && (await projectDeleterId(id)) !== actor.staffId) {
+    throw flowError(FLOW_ERROR.FORBIDDEN, "project restore");
+  }
+  try {
+    return await db.transaction(async (tx) => {
+      const [project] = await tx
+        .update(projects)
+        .set({ deletedAt: null })
+        .where(and(eq(projects.id, id), eq(projects.deletedAt, deletedAt)))
+        .returning({ id: projects.id });
+      if (!project) throw flowError(FLOW_ERROR.NOT_FOUND, "project");
+      const back = await tx
+        .update(tasks)
+        .set({ deletedAt: null })
+        .where(and(eq(tasks.projectId, id), eq(tasks.deletedAt, deletedAt)))
+        .returning({ id: tasks.id });
+      await recordChanges(
+        {
+          entity: "project",
+          entityId: id,
+          actorId: actor.staffId || null,
+          before: { deleted: true },
+          after: { deleted: false },
+          fields: ["deleted"],
+        },
+        tx
+      );
+      await recordTasksDeleted(
+        tx,
+        back.map((t) => t.id),
+        actor.staffId || null,
+        false
+      );
+      return { id, restoredTaskCount: back.length };
+    });
+  } catch (err) {
+    if (isProjectNameTaken(err)) throw flowError(FLOW_ERROR.NAME_TAKEN);
+    throw err;
+  }
+}
+
+/**
+ * Projects deleted within the last `PROJECT_RESTORE_DAYS`, newest first, with
+ * who deleted them and how many tasks went with them.
+ */
+export async function listDeletedProjects(now: Date = new Date()): Promise<DeletedProjectRow[]> {
+  const since = new Date(now.getTime() - PROJECT_RESTORE_WINDOW_MS);
+  const deleter = alias(staff, "deleter");
+  const deleterId = sql<string | null>`(select he.actor_id from core.history_events he where he.entity = 'project' and he.entity_id = ${projects.id} and he.field = 'deleted' and he.after_value = 'true' order by he.event_at desc, he.created_at desc limit 1)`;
+  const rows = await db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      clientName: contacts.name,
+      deletedAt: projects.deletedAt,
+      deletedById: deleter.id,
+      deletedByName: deleter.name,
+      taskCount: sql<number>`(select count(*)::int from core.tasks t where t.project_id = ${projects.id} and t.deleted_at = ${projects.deletedAt})`,
+    })
+    .from(projects)
+    .leftJoin(contacts, eq(contacts.id, projects.clientId))
+    .leftJoin(deleter, eq(deleter.id, deleterId))
+    .where(and(isNotNull(projects.deletedAt), gte(projects.deletedAt, since)))
+    .orderBy(desc(projects.deletedAt));
+  return rows.map((r) => {
+    const deletedAt = r.deletedAt!;
+    return {
+      id: r.id,
+      name: r.name,
+      clientName: r.clientName ?? null,
+      deletedAt: deletedAt.toISOString(),
+      deletedBy: r.deletedById ? { id: r.deletedById, name: r.deletedByName ?? "" } : null,
+      taskCount: r.taskCount,
+      restorableUntil: new Date(deletedAt.getTime() + PROJECT_RESTORE_WINDOW_MS).toISOString(),
+    };
   });
 }
 

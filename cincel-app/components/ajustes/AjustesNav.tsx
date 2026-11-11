@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 export type AjustesNavKey =
   | "perfil" | "apariencia" | "notificaciones" | "integraciones"
-  | "general" | "tema" | "horario" | "tramos" | "puestos" | "estatus" | "permisos" | "monday" | "google";
+  | "general" | "tema" | "horario" | "tramos" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
 
 export type AjustesNavProps = {
   active: AjustesNavKey;
@@ -55,6 +55,7 @@ const ORGANIZATION_ITEMS: ReadonlyArray<{ key: AjustesAdminSegment; label: strin
   { key: "permisos", label: "Permisos" },
   { key: "monday", label: "Importar de monday" },
   { key: "google", label: "Google" },
+  { key: "eliminados", label: "Proyectos eliminados" },
 ];
 
 const AJUSTES_NAV_KEYS: ReadonlySet<string> = new Set<string>([

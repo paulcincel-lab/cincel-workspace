@@ -1,8 +1,18 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/proyectos/p1" }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/proyectos/p1", useRouter: () => router }));
+vi.mock("@/lib/actions/projects-actions", () => ({
+  deleteProjectAction: vi.fn(async (id: string) => ({ ok: true, data: { id, deletedTaskCount: 3 } })),
+  restoreProjectAction: vi.fn(async (id: string) => ({ ok: true, data: { id, restoredTaskCount: 3 } })),
+}));
+vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
+  getProjectDeletePreview: vi.fn(async (id: string) => ({ id, name: "Local Espinopapa", taskCount: 3, openTaskCount: 2 })),
+  getDeletedProjects: vi.fn(async () => []),
+}));
 // Custom permission overrides live in localStorage; stub it so the tests use the default matrix.
 vi.mock("@/lib/repositories/browser-state-repository", () => ({
   readStorage: vi.fn().mockReturnValue(null),
@@ -18,6 +28,8 @@ vi.mock("@/components/widgets/TramoBadge", () => ({
 }));
 
 import type { SessionAccess } from "@/lib/auth/session";
+import { deleteProjectAction } from "@/lib/actions/projects-actions";
+import { createTestQueryClient } from "@/lib/query/test-utils";
 import { resetNewTaskUi, useNewTaskUi } from "@/lib/stores/new-task-store";
 import { useSessionStore } from "@/lib/stores/session-store";
 
@@ -35,7 +47,11 @@ const PROJECT: ProjectTabsProps["project"] = {
 const COUNTS = { tareas: 39, archivos: 48, clientes: 2 };
 
 function renderTabs(props: Partial<ProjectTabsProps> = {}) {
-  return render(<ProjectTabs project={PROJECT} active="resumen" counts={COUNTS} canManagePortal={false} {...props} />);
+  return render(
+    <QueryClientProvider client={createTestQueryClient()}>
+      <ProjectTabs project={PROJECT} active="resumen" counts={COUNTS} canManagePortal={false} {...props} />
+    </QueryClientProvider>,
+  );
 }
 
 /** The tab link whose text starts with `label` (Base UI gives each tab role="tab"). */
@@ -128,5 +144,46 @@ describe("ProjectTabs", () => {
     cleanup();
     renderTabs({ showEstilo: true });
     expect(screen.getByTestId("estilo-switch")).toBeTruthy();
+  });
+
+  describe("Eliminar proyecto (#1050)", () => {
+    const signIn = (access: string) =>
+      useSessionStore.setState({
+        access: {
+          status: "active",
+          user: { id: "s1", name: "Ana", email: "ana@example.test", role: access, area: null, active: true, access },
+        } as unknown as SessionAccess,
+      });
+
+    it("is not offered without canDeleteProject", () => {
+      signIn("Colaborador");
+      renderTabs();
+      act(() => screen.getByRole("button", { name: "Más opciones" }).click());
+      expect(screen.queryByRole("menuitem", { name: "Eliminar proyecto" })).toBeNull();
+    });
+
+    it("asks for the name when the project has open tasks, then deletes and goes back to Proyectos", async () => {
+      signIn("Administrador");
+      renderTabs();
+      act(() => screen.getByRole("button", { name: "Más opciones" }).click());
+      act(() => screen.getByRole("menuitem", { name: "Eliminar proyecto" }).click());
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog.textContent).toContain("¿Eliminar «Local Espinopapa»?");
+      await waitFor(() =>
+        expect(dialog.textContent).toContain(
+          "Se eliminan también sus 3 tareas y se quita el acceso al portal de sus clientes.",
+        ),
+      );
+      expect(dialog.textContent).toContain("La carpeta de Drive no se borra.");
+      const confirm = screen.getByRole("button", { name: "Eliminar" }) as HTMLButtonElement;
+      expect(confirm.disabled).toBe(true);
+      fireEvent.change(screen.getByRole("textbox", { name: "Nombre del proyecto" }), {
+        target: { value: "local espinopapa" },
+      });
+      expect(confirm.disabled).toBe(false);
+      act(() => confirm.click());
+      await waitFor(() => expect(deleteProjectAction).toHaveBeenCalledWith("p1"));
+      await waitFor(() => expect(router.push).toHaveBeenCalledWith("/proyectos"));
+    });
   });
 });

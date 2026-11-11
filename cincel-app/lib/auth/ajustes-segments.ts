@@ -22,7 +22,8 @@ export type AjustesAdminSegment =
   | "estatus"
   | "permisos"
   | "monday"
-  | "google";
+  | "google"
+  | "eliminados";
 
 export const AJUSTES_ADMIN_SEGMENTS: readonly AjustesAdminSegment[] = [
   "general",
@@ -34,6 +35,7 @@ export const AJUSTES_ADMIN_SEGMENTS: readonly AjustesAdminSegment[] = [
   "permisos",
   "monday",
   "google",
+  "eliminados",
 ];
 
 export type AjustesSegmentCapability = (user: AuthenticatedUser) => boolean;
@@ -66,6 +68,8 @@ export const AJUSTES_SEGMENT_CAPABILITY: Readonly<Record<AjustesAdminSegment, Aj
   permisos: (user) => isSettingsAdministrator(user),
   monday: (user) => isSettingsAdministrator(user),
   google: (user) => isSettingsAdministrator(user),
+  // "Proyectos eliminados" (#1050): restore within 30 days, admins only.
+  eliminados: (user) => isSettingsAdministrator(user),
 };
 
 export type AjustesVisibleSegments = Readonly<Record<AjustesAdminSegment, boolean>>;

@@ -31,6 +31,9 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/sh
 import { ProjectsEsencialSkeleton } from "@/components/widgets/route-skeletons";
 import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { PageHeader } from "@/components/widgets/PageHeader";
+import { RowActionsMenu } from "@/components/widgets/RowActionsMenu";
+import type { TableRowAction } from "@/components/widgets/table-rows";
+import { useDeleteProject } from "@/components/proyectos/use-delete-project";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
 import { selectSelectedTramo, useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
@@ -253,44 +256,58 @@ function TramoLine({ row, tramoName }: { row: EsencialProjectRow; tramoName: str
   );
 }
 
-function ProjectCard({ row, tramoName, index }: { row: EsencialProjectRow; tramoName: string | null; index: number }) {
+function ProjectCard({
+  row,
+  tramoName,
+  index,
+  actions = [],
+}: {
+  row: EsencialProjectRow;
+  tramoName: string | null;
+  index: number;
+  /** The card's `⋯` entries ("Eliminar proyecto", #1050); none hides the menu. */
+  actions?: TableRowAction[];
+}) {
   return (
-    <EsencialCard
-      title={row.name}
-      href={`/proyectos/${row.id}`}
-      headingLevel={2}
-      index={index}
-      meta={row.subtitle ? <span className="block truncate text-[12.5px] text-muted-foreground">{row.subtitle}</span> : undefined}
-    >
-      <div className="flex flex-col gap-3.5" data-slot="project-card-body">
-        <TramoLine row={row} tramoName={tramoName} />
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-muted px-2.5 py-[3px] text-[12.5px] font-medium text-foreground">
-            <span className="font-mono tabular-nums">{row.open}</span> {row.open === 1 ? "abierta" : "abiertas"}
-          </span>
-          {row.status === "vencidas" ? (
-            <Badge variant="destructive" className="h-auto px-2.5 py-[3px] text-[12.5px]">
-              <span className="font-mono tabular-nums">{row.overdue}</span> {row.overdue === 1 ? "vencida" : "vencidas"}
-            </Badge>
-          ) : (
-            <Badge variant="success" className="h-auto px-2.5 py-[3px] text-[12.5px]">
-              Al día
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-3 border-t border-muted pt-3 text-[12.5px]">
-          <span className="shrink-0 text-muted-foreground">{NEXT_DELIVERY_LABEL}</span>
-          {row.nextDelivery ? (
-            <span className="min-w-0 truncate text-right">
-              <span className="font-medium">{row.nextDelivery.title} ·</span>{" "}
-              <span className="font-mono tabular-nums">{formatDeliveryDate(row.nextDelivery.date)}</span>
+    <div className="group/row contents">
+      <EsencialCard
+        title={row.name}
+        href={`/proyectos/${row.id}`}
+        headingLevel={2}
+        index={index}
+        action={actions.length > 0 ? <RowActionsMenu rowLabel={row.name} actions={actions} /> : undefined}
+        meta={row.subtitle ? <span className="block truncate text-[12.5px] text-muted-foreground">{row.subtitle}</span> : undefined}
+      >
+        <div className="flex flex-col gap-3.5" data-slot="project-card-body">
+          <TramoLine row={row} tramoName={tramoName} />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-muted px-2.5 py-[3px] text-[12.5px] font-medium text-foreground">
+              <span className="font-mono tabular-nums">{row.open}</span> {row.open === 1 ? "abierta" : "abiertas"}
             </span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
+            {row.status === "vencidas" ? (
+              <Badge variant="destructive" className="h-auto px-2.5 py-[3px] text-[12.5px]">
+                <span className="font-mono tabular-nums">{row.overdue}</span> {row.overdue === 1 ? "vencida" : "vencidas"}
+              </Badge>
+            ) : (
+              <Badge variant="success" className="h-auto px-2.5 py-[3px] text-[12.5px]">
+                Al día
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-muted pt-3 text-[12.5px]">
+            <span className="shrink-0 text-muted-foreground">{NEXT_DELIVERY_LABEL}</span>
+            {row.nextDelivery ? (
+              <span className="min-w-0 truncate text-right">
+                <span className="font-medium">{row.nextDelivery.title} ·</span>{" "}
+                <span className="font-mono tabular-nums">{formatDeliveryDate(row.nextDelivery.date)}</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </div>
         </div>
-      </div>
-    </EsencialCard>
+      </EsencialCard>
+    </div>
   );
 }
 
@@ -321,6 +338,8 @@ function EsencialList({
   const [search, setSearch] = useState(() => searchParams?.get(SEARCH_PARAM) ?? "");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchId = useId();
+  // Card menu "Eliminar proyecto" (#1050), only with `canDeleteProject`.
+  const deleteProject = useDeleteProject();
 
   useEffect(
     () => () => {
@@ -455,10 +474,17 @@ function EsencialList({
           data-slot="projects-esencial-grid"
         >
           {rows.map((row, index) => (
-            <ProjectCard key={row.id} row={row} tramoName={tramoNames.get(row.id) ?? null} index={index} />
+            <ProjectCard
+              key={row.id}
+              row={row}
+              tramoName={tramoNames.get(row.id) ?? null}
+              index={index}
+              actions={deleteProject.rowActions({ id: row.id, name: row.name })}
+            />
           ))}
         </div>
       )}
+      {deleteProject.dialog}
     </div>
   );
 }
