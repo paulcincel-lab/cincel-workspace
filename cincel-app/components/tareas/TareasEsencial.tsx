@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { EsencialItemRow, type EsencialMeta } from "@/components/widgets/EsencialItemRow";
+import { ProjectFilter } from "@/components/widgets/ProjectFilter";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { tramoDot } from "@/components/widgets/esencial-tokens";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
@@ -36,6 +37,8 @@ import {
   esencialResponsable,
   hasEsencialFilters,
   isEsencialSoloMias,
+  proyectosPatch,
+  selectedProyectos,
   tareasHref,
   type TareasMostrar,
   type TareasQuery,
@@ -182,6 +185,8 @@ function ChipCount({ value, destructive = false }: { value: number; destructive?
 function ChipDot({ color }: { color: string }) {
   return <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />;
 }
+
+const NO_PROJECT_OPTIONS: TareasFacets["projects"] = [];
 
 function ChipDivider() {
   return <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />;
@@ -403,6 +408,13 @@ export function TareasEsencial({ startSlot }: TareasEsencialProps = {}) {
         <UserRound aria-hidden="true" className="size-[13px]" />
         <span>{ESENCIAL_SOLO_MIAS}</span>
       </FilterChip>
+      <ChipDivider />
+      <ProjectFilter
+        options={facets?.projects ?? NO_PROJECT_OPTIONS}
+        selected={selectedProyectos(query)}
+        onChange={(ids) => replaceQuery(proyectosPatch(ids))}
+        triggerClassName="h-8 rounded-full px-3 text-[12.5px] font-medium"
+      />
     </div>
   );
 

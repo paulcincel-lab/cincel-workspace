@@ -10,6 +10,7 @@
  * - daysLateSum: the days late of the overdue tasks, summed.
  */
 import type { TareasListFilters } from "@/lib/query/keys";
+import type { TaskSort } from "@/lib/tareas/sort";
 
 export type TareasSummaryCounts = { total: number; open: number; overdue: number; blocked: number; daysLateSum: number };
 
@@ -41,14 +42,20 @@ export const summaryTramoKey = (tramoId: string | null): string => tramoId ?? ""
 /**
  * The list filters of one Analítico tramo group (`qk.tareas.list`): the page
  * filters narrowed to the project and the tramo ("Sin tramo" is
- * `SIN_TRAMO_KEY`), in the "retraso" order.
+ * `SIN_TRAMO_KEY`), in the "retraso" order or the header sort (`sort`,
+ * #1044; `orderDir` left out for asc, so the default key stays the same).
  */
 export function tareasGroupFilters(
   f: TareasListFilters,
   projectId: string,
   tramoKey: string | null,
+  sort?: TaskSort | null,
 ): TareasListFilters {
-  return { ...f, proyecto: projectId, tramo: tramoKey ?? SIN_TRAMO_KEY, orderBy: "retraso" };
+  // The group is one project: the Proyecto multi-select (#1045) adds nothing, so its key stays the same.
+  const { proyectos: _proyectos, ...rest } = f;
+  const orderBy = sort?.orderBy ?? "retraso";
+  const orderDir = sort?.orderDir === "desc" ? { orderDir: "desc" as const } : {};
+  return { ...rest, proyecto: projectId, tramo: tramoKey ?? SIN_TRAMO_KEY, orderBy, ...orderDir };
 }
 
 /** Name of the tramo group of the tasks without a tramo. */

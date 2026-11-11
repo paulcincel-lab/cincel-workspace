@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { tareasListFiltersOf, tareasPageKeyInputOf, tareasPageOptions } from "@/lib/query/options/tareas";
 import type { TareasListFilters } from "@/lib/query/keys";
 import { DEFAULT_TAREAS_QUERY, parseTareasQuery, type TareasQuery } from "@/lib/tareas/query";
+import type { TaskSort } from "@/lib/tareas/sort";
 import { useStyle } from "@/components/shell/StyleProvider";
 import { useHideCompletedPreference } from "@/lib/stores/appearance-store";
 import { ESTILO_PARAM } from "@/lib/ui/style-override";
@@ -31,10 +32,31 @@ export function useTareasQuery(): TareasQuery {
 /** The filters of a query, stable while their values stay the same. */
 export function useTareasFilters(query: TareasQuery): TareasListFilters {
   const { tramo, proyecto, responsable, estado, q, mostrar, completadas, apoyo } = query;
+  // The Proyecto multi-select (#1045) by value: a new array with the same ids keeps the filters.
+  const proyectosKey = (query.proyectos ?? []).join(",");
   return useMemo(
-    () => tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, tramo, proyecto, responsable, estado, q, mostrar, completadas, apoyo }),
-    [tramo, proyecto, responsable, estado, q, mostrar, completadas, apoyo],
+    () =>
+      tareasListFiltersOf({
+        ...DEFAULT_TAREAS_QUERY,
+        tramo,
+        proyecto,
+        proyectos: proyectosKey ? proyectosKey.split(",") : [],
+        responsable,
+        estado,
+        q,
+        mostrar,
+        completadas,
+        apoyo,
+      }),
+    [tramo, proyecto, proyectosKey, responsable, estado, q, mostrar, completadas, apoyo],
   );
+}
+
+/** The `?orden=` sort of a query (#1044), stable while its values stay the same; null for the default. */
+export function useTareasSort(query: TareasQuery): TaskSort | null {
+  const orderBy = query.orden?.orderBy;
+  const orderDir = query.orden?.orderDir ?? "asc";
+  return useMemo(() => (orderBy ? { orderBy, orderDir } : null), [orderBy, orderDir]);
 }
 
 /**

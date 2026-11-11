@@ -360,6 +360,7 @@ export function patchTaskListPages(
     tramoFilter &&
     pages.length > 0 &&
     (!filters?.proyecto || filters.proyecto === moved.projectId) &&
+    (!filters?.proyectos?.length || filters.proyectos.includes(moved.projectId)) &&
     matchesTramoFilter(tramoFilter, moved.workflow?.key ?? null)
   ) {
     changed = true;
