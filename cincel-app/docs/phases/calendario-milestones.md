@@ -1,6 +1,6 @@
 # Calendario: the calendar page and planning with the asistente
 
-Reference for GitHub milestones **#87–#95** ("Calendario Phase 0" to "Calendario Phase 8") and issues **#1059–#1093**, created 2026-11-11. Supersedes #1056; the new tools follow #1055 (PR #1057).
+Reference for GitHub milestones **#87–#95** ("Calendario Phase 0" to "Calendario Phase 8") and issues **#1059–#1095**, created 2026-11-11 (#1094 and #1095 added the same day after the UI coverage review). Supersedes #1056; the new tools follow #1055 (PR #1057).
 
 - **Specs:** [frontend](../specs/calendario/frontend.md), [backend](../specs/calendario/backend.md).
 - **Decision:** [ADR 0007](../adr/0007-calendar-proposals-and-undo.md): asistente changes are stored proposals, applied and undone by id.
@@ -50,7 +50,7 @@ Goal: the menu item and the page in three Estilos with Día / Semana / Mes, task
 
 ### Phase 2: Meetings (milestone #89)
 
-Goal: meetings created in Cincel and the viewer's Google events on the calendar, with attendees, Meet links and detail actions. Depends on Phase 0; the UI builds on Phase 1's widgets.
+Goal: meetings created in Cincel and the viewer's Google events on the calendar, with attendees, Meet links and detail actions. **Google Calendar is the main path (D1, decided):** a meeting is written to the organizer's Google Calendar with Meet and Google's invitations; the Cincel-only meeting with an email invitation is only the failure path. Depends on Phase 0; the UI builds on Phase 1's widgets.
 
 | Code | Issue | Title |
 |---|---|---|
@@ -58,7 +58,8 @@ Goal: meetings created in Cincel and the viewer's Google events on the calendar,
 | 2.2 | #1069 | [BE]: Google Calendar: calendar_events grant, primary calendar cache with sync tokens, write-through with Meet, free/busy |
 | 2.3 | #1070 | [BE]: Meetings in the range loader, the ICS feed and the agenda tools |
 | 2.4 | #1071 | [FE]: Meetings in the three Estilos, meeting detail actions and the Nueva reunión dialog |
-| 2.5 | #1072 | [FE]: Google Calendar connection for meetings: Integraciones row, status line and refresh |
+| 2.5 | #1072 | [FE]: Google Calendar connection for meetings: Integraciones row, status line and refresh (also owns the Google state of a meeting in the detail, frontend §6.2) |
+| 2.6 | #1094 | [FE]: Meetings outside the calendar: Inicio agenda, Bandeja and Ajustes › Notificaciones for the reunion kind |
 
 ### Phase 3: Barra para pedir and the proposal overlay (milestone #90)
 
@@ -88,6 +89,7 @@ Goal: the shared proposal model (ADR 0007), its overlay in every view, apply wit
 | 5.3 | #1082 | [BE]: propose_redistribution and resolve_overlap with attendees' free/busy and "Aplicar y avisar" |
 | 5.4 | #1083 | [FE]: Días que avisan: day meters, load labels, overload edge, "Se traslapan" and banners in the three Estilos |
 | 5.5 | #1084 | [FE]: Estimated hours in the task sheet, the task tables and quick-add |
+| 5.6 | #1095 | [FE]: Calendario settings: workday hours in Ajustes › General and Horas estimadas in the Tramos template editor |
 
 ### Phase 6: Antes y después de la reunión (milestone #93)
 
@@ -121,7 +123,8 @@ Phase 1 widgets ──► Phase 2 FE (meetings drawn by the same chips and detai
 #1073 apply/undo + #1075 overlay ──► Phase 4, #1082/#1083, #1086/#1088, Phase 7 proposals
 #1069 free/busy ──► #1082 resolve_overlap
 #1080 hours ──► #1081 load ──► #1082, #1089
-#1068 meetings ──► Phase 6
+#1068 meetings ──► Phase 6, #1094
+#1080 / #1081 settings ──► #1095
 ```
 These are build-order hints for integration; with Phase 0 merged, every issue codes against stubs and is merged in one integration branch, then tested together.
 
@@ -131,7 +134,7 @@ Every item has a recommended default, so work can start now.
 
 | # | Topic | Issues | Recommended default |
 |---|---|---|---|
-| D1 | Google scopes `calendar.events` + `calendar.freebusy` (Workspace admin must allow) | #1069 | Yes, as the incremental grant `calendar_events`; without it meetings are Cincel-only with email invitations |
+| D1 | Google scopes `calendar.events` + `calendar.freebusy` (Workspace admin must allow) | #1059, #1068, #1069, #1071, #1072 | **Decided 2026-11-11:** the admin grants both as the incremental grant `calendar_events` (ops step in #690). Write-through and free/busy are the main path; the Cincel-only meeting with email invitation is only the failure path |
 | D2 | Cache other people's Google events for "Todos" | #1069, #1070 | No: owner-only; the team view shows Cincel meetings and free/busy only |
 | D3 | Workday hours | #1081, #1089 | `positions.weekly_capacity_hours / 5` (highest-capacity position), else org setting `calendario.workday_hours` = 6 |
 | D4 | Task duration estimate | #1080 | `tasks.estimated_hours` → `workflow_task_templates.default_estimated_hours` → 1 h |
@@ -143,11 +146,14 @@ Every item has a recommended default, so work can start now.
 | D10 | Load labels | #1081, #1083, #1090 | < 50 % Libre, ≤ 85 % Bien, ≤ 100 % Casi lleno, > 100 % Sobrecargado |
 | D11 | Where a task's hours fall | #1081 | All on its due day |
 | D12 | Meeting defaults from the asistente | #1074 | 60 min; project manager, coordinator and client contact with email; Meet link when Google is connected |
+| D13 | Invitations on the failure path, and when Google comes back | #1068, #1069 | Email (no `.ics`) and in-app at once; the resync (button, cron every 15 min, max 3 tries) creates the Google event with `sendUpdates=none`, so nobody is invited twice |
 | F1 | Calendario in mobile bottom tabs | #1061 | No; in "Más" |
 | F3 | Default vista per Estilo | #1061 | Visual Mes, Esencial Semana, Analítico Semana |
 | F4 | Date set by "+ Tarea para este día" | #1063 | Commitment date |
 | F6 | Drag meetings | #1062, #1071 | No in v1 |
 | F7 | Analítico Mes grouping | #1065 | One group per ISO week |
 | F8 | Google refresh trigger | #1072 | Once per session on mount when older than 5 min, plus "Actualizar" |
+| F10 | Keep the Nueva reunión draft across the Google grant redirect | #1071 | Yes: `sessionStorage` draft and `?nueva=reunion` |
+| F11 | "Tramos" legend in the shell sidebar (`Sidebar` board) | #1061 | Not built: the sidebar is shared by every page; the legend is in the Visual filter row |
 
 `docs/phases/milestones.json` is not updated: like the Estilos milestones (#74–#84), these milestones have no per-phase labels in the repo.
