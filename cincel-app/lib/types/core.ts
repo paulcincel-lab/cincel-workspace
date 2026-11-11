@@ -653,6 +653,8 @@ export type TaskFilters = {
   kind?: TaskKind | TaskKind[];
   status?: TaskStatus | TaskStatus[];
   managerId?: string;
+  /** Only the tasks without a Responsable (`manager_id is null`). */
+  unassigned?: boolean;
   involvesStaffId?: string;
   archived?: boolean;
   dateFrom?: string;
