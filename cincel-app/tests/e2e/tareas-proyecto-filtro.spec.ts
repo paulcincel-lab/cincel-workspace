@@ -69,13 +69,14 @@ test.describe("Tareas · Proyecto filter", () => {
     for (const p of [a, b, c]) await expect(table.getByText(p.task)).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole("button", { name: /^Proyecto:/ }).click();
-    const search = page.getByRole("combobox");
+    const search = page.getByPlaceholder("Buscar proyecto");
     await search.fill(MARKER);
     await page.getByRole("option", { name: new RegExp(`^${a.name}`) }).click();
     await page.getByRole("option", { name: new RegExp(`^${b.name}`) }).click();
     await page.keyboard.press("Escape");
 
-    const ids = [a.id, b.id].sort().join(",");
+    // URLSearchParams writes the comma as %2C.
+    const ids = [a.id, b.id].sort().join("(,|%2C)");
     await expect(page).toHaveURL(new RegExp(`[?&]proyecto=${ids}`));
     await expect(table.getByText(a.task)).toBeVisible({ timeout: 15_000 });
     await expect(table.getByText(b.task)).toBeVisible();
