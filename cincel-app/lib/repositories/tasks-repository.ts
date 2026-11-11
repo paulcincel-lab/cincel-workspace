@@ -17,7 +17,9 @@ import {
   tasks,
   workflowPhases,
   workflows,
+  foldedText,
 } from "@/lib/db/schema";
+import { foldText } from "@/lib/search/search";
 import { closedAtPatch } from "@/lib/project-flow/closing";
 import { TASK_TRAMO_CHANGE_FORBIDDEN, flowError } from "@/lib/project-flow/errors";
 import { completionsFromStatusEvents } from "@/lib/dashboard/task-trend";
@@ -42,6 +44,12 @@ import {
   type TareasSummaryUnfilteredProject,
   summaryTramoKey,
 } from "@/lib/tareas/summary";
+import {
+  EMPTY_MY_TASKS_COUNTS,
+  type MyTasksCounts,
+  type MyTasksSummary,
+  type MyTasksSummaryProject,
+} from "@/lib/my-space/my-tasks-summary";
 import type {
   AdminTaskInput,
   HistoryEvent,
@@ -403,9 +411,21 @@ function rowFilters(f: TaskFilters, viewer: ViewerScope) {
     f.dateTo
       ? or(lte(tasks.commitmentDate, f.dateTo), lte(tasks.reviewDate, f.dateTo), lte(tasks.deliveryDate, f.dateTo))
       : undefined,
-    f.search ? searchMatch(f.search) : undefined,
-    mostrarCondition(f.mostrar, f.today)
+    f.search ? (f.searchFolded ? foldedSearchMatch(f.search) : searchMatch(f.search)) : undefined,
+    mostrarCondition(f.mostrar, f.today),
+    f.commitment ? commitmentWindow(f.commitment) : undefined
   );
+}
+
+/** `TaskFilters.commitment` (Mi espacio, #1051): the commitment date in a window, or undated too. */
+function commitmentWindow(w: NonNullable<TaskFilters["commitment"]>): SQL | undefined {
+  const inWindow = and(
+    w.from || w.to ? sql`${tasks.commitmentDate} is not null` : undefined,
+    w.from ? gte(tasks.commitmentDate, w.from) : undefined,
+    w.to ? lte(tasks.commitmentDate, w.to) : undefined
+  );
+  if (!w.orUndated) return inWindow;
+  return or(isNull(tasks.commitmentDate), inWindow);
 }
 
 /** Title, fase name or espacio name (listTasks joins both). */
@@ -415,6 +435,20 @@ function searchMatch(search: string) {
     sql`${tasks.title} ilike ${pattern}`,
     sql`${workflowPhases.name} ilike ${pattern}`,
     sql`${projectSpaces.name} ilike ${pattern}`
+  );
+}
+
+/**
+ * `searchMatch` without accents or case (`TaskFilters.searchFolded`): the
+ * folded title, fase and espacio contain the folded search, LIKE wildcards
+ * escaped. The title side is what `idx_tasks_title_folded_trgm` indexes.
+ */
+function foldedSearchMatch(search: string) {
+  const pattern = "%" + foldText(search).replace(/[\\%_]/g, (c) => `\\${c}`) + "%";
+  return or(
+    sql`${foldedText(tasks.title)} like ${pattern}`,
+    sql`${foldedText(workflowPhases.name)} like ${pattern}`,
+    sql`${foldedText(projectSpaces.name)} like ${pattern}`
   );
 }
 
@@ -2575,4 +2609,163 @@ export async function taskSummary(filters: TaskFilters, viewer: ViewerScope, tod
       projectList,
     },
   };
+}
+
+// ── Mi espacio counts (#1051) ───────────────────────────────────────────────
+
+/** Days late by the commitment date only (Mi espacio's rule, `dueInfo`). */
+function commitmentDaysLateSql(today: string): SQL {
+  return sql`(${today}::date - ${tasks.commitmentDate})`;
+}
+
+/**
+ * Mi espacio's task counts (`qk.me.tasksSummary(input)`) in one statement:
+ * `GROUP BY GROUPING SETS ((project, tramo), (project), (tramo), ())` over
+ * the tasks of `scope` (mine: Responsable or apoyo, live, not archived),
+ * with `FILTER` columns for every open task (KPIs, Tramo chips, board
+ * columns, Esencial cards) and for the ones `match` narrows to (tramo,
+ * search, En retraso: the Analítico groups). Mi espacio's date rule: the
+ * commitment date only; overdue = open and committed before `today`.
+ * Closed tasks are counted per group for "Ocultar completadas" off.
+ */
+export async function myTaskSummary(
+  scope: TaskFilters,
+  match: TaskFilters,
+  viewer: ViewerScope,
+  dates: { today: string; sunday: string }
+): Promise<MyTasksSummary> {
+  const { today, sunday } = dates;
+  const open = openTaskSql();
+  const matches = rowFilters({ ...scope, ...match, today }, viewer);
+  const overdue = sql`(${open} and ${tasks.commitmentDate} < ${today}::date)`;
+  const shownOpen = sql`(${open} and ${matches})`;
+  const shownOverdue = sql`(${overdue} and ${matches})`;
+  const late = commitmentDaysLateSql(today);
+  const rows = await db
+    .select({
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      workflowId: tasks.workflowId,
+      workflowKey: workflows.key,
+      workflowName: workflows.name,
+      workflowSortOrder: workflows.sortOrder,
+      projectLevel: sql<number>`grouping(${tasks.projectId})::int`,
+      tramoLevel: sql<number>`grouping(${tasks.workflowId})::int`,
+      openAll: sql<number>`(count(*) filter (where ${open}))::int`,
+      overdueAll: sql<number>`(count(*) filter (where ${overdue}))::int`,
+      dueToday: sql<number>`(count(*) filter (where ${open} and ${tasks.commitmentDate} = ${today}::date))::int`,
+      semana: sql<number>`(count(*) filter (where ${open} and ${tasks.commitmentDate} > ${today}::date and ${tasks.commitmentDate} <= ${sunday}::date))::int`,
+      despues: sql<number>`(count(*) filter (where ${open} and (${tasks.commitmentDate} is null or ${tasks.commitmentDate} > ${sunday}::date)))::int`,
+      nearestDue: sql<string | null>`(min(${tasks.commitmentDate}) filter (where ${open}))::text`,
+      open: sql<number>`(count(*) filter (where ${shownOpen}))::int`,
+      overdue: sql<number>`(count(*) filter (where ${shownOverdue}))::int`,
+      blocked: sql<number>`(count(*) filter (where ${shownOpen} and ${tasks.status} = 'bloqueado'))::int`,
+      daysLateSum: sql<number>`(coalesce(sum(${late}) filter (where ${shownOverdue}), 0))::int`,
+      maxDaysLate: sql<number>`(coalesce(max(${late}) filter (where ${shownOverdue}), 0))::int`,
+      closed: sql<number>`(count(*) filter (where not ${open} and ${matches}))::int`,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(workflows, eq(workflows.id, tasks.workflowId))
+    // The search matches fase and espacio names too.
+    .leftJoin(workflowPhases, eq(workflowPhases.id, tasks.phaseId))
+    .leftJoin(projectSpaces, eq(projectSpaces.id, tasks.spaceId))
+    .where(rowFilters(scope, viewer))
+    .groupBy(
+      sql`grouping sets ((${tasks.projectId}, ${projects.name}, ${tasks.workflowId}, ${workflows.key}, ${workflows.name}, ${workflows.sortOrder}), (${tasks.projectId}, ${projects.name}), (${tasks.workflowId}, ${workflows.key}, ${workflows.name}, ${workflows.sortOrder}), ())`
+    );
+
+  const counts = (r: (typeof rows)[number]): MyTasksCounts => ({
+    open: Number(r.open),
+    overdue: Number(r.overdue),
+    blocked: Number(r.blocked),
+    daysLateSum: Number(r.daysLateSum),
+    maxDaysLate: Number(r.maxDaysLate),
+    closed: Number(r.closed),
+  });
+  const summary: MyTasksSummary = {
+    today,
+    all: { open: 0, overdue: 0, dueToday: 0, buckets: { hoy: 0, semana: 0, despues: 0 }, projects: 0 },
+    tramos: [],
+    shown: { ...EMPTY_MY_TASKS_COUNTS, projects: 0 },
+    projects: [],
+    esencial: [],
+  };
+  const byProject = new Map<string, MyTasksSummaryProject>();
+  const projectOf = (id: string, name: string): MyTasksSummaryProject => {
+    let entry = byProject.get(id);
+    if (!entry) {
+      entry = { project: { id, name }, ...EMPTY_MY_TASKS_COUNTS, tramos: [] };
+      byProject.set(id, entry);
+    }
+    return entry;
+  };
+  for (const r of rows) {
+    const projectLevel = Number(r.projectLevel) === 1;
+    const tramoLevel = Number(r.tramoLevel) === 1;
+    if (projectLevel && tramoLevel) {
+      const openAll = Number(r.openAll);
+      const overdueAll = Number(r.overdueAll);
+      const dueToday = Number(r.dueToday);
+      summary.all = {
+        open: openAll,
+        overdue: overdueAll,
+        dueToday,
+        buckets: { hoy: overdueAll + dueToday, semana: Number(r.semana), despues: Number(r.despues) },
+        projects: 0,
+      };
+      summary.shown = { ...counts(r), projects: 0 };
+    } else if (projectLevel) {
+      // A tramo across projects: the Tramo chips count every open task of mine.
+      if (r.workflowId && r.workflowKey && Number(r.openAll) > 0) {
+        summary.tramos.push({
+          id: r.workflowId,
+          key: r.workflowKey,
+          name: r.workflowName ?? "",
+          sortOrder: r.workflowSortOrder ?? SIN_TRAMO_SORT,
+          open: Number(r.openAll),
+        });
+      }
+    } else if (tramoLevel) {
+      const entry = projectOf(r.projectId, r.projectName);
+      Object.assign(entry, counts(r));
+      if (Number(r.openAll) > 0) {
+        summary.esencial.push({
+          project: { id: r.projectId, name: r.projectName },
+          open: Number(r.openAll),
+          overdue: Number(r.overdueAll),
+          nearestDue: r.nearestDue ? r.nearestDue.slice(0, 10) : null,
+        });
+      }
+    } else {
+      const c = counts(r);
+      if (c.open + c.closed === 0) continue;
+      projectOf(r.projectId, r.projectName).tramos.push({
+        tramo: r.workflowId
+          ? { id: r.workflowId, key: r.workflowKey ?? null, name: r.workflowName ?? SIN_TRAMO_LABEL, sortOrder: r.workflowSortOrder ?? SIN_TRAMO_SORT }
+          : { id: null, key: null, name: SIN_TRAMO_LABEL, sortOrder: SIN_TRAMO_SORT },
+        ...c,
+      });
+    }
+  }
+  const byName = (a: string, b: string) => a.localeCompare(b, "es");
+  summary.tramos.sort((a, b) => a.sortOrder - b.sortOrder || byName(a.name, b.name));
+  summary.projects = [...byProject.values()].filter((p) => p.open + p.closed > 0);
+  for (const p of summary.projects) {
+    p.tramos.sort((a, b) => a.tramo.sortOrder - b.tramo.sortOrder || byName(a.tramo.name, b.tramo.name));
+  }
+  summary.projects.sort((a, b) => Number(b.overdue > 0) - Number(a.overdue > 0) || byName(a.project.name, b.project.name));
+  summary.shown.projects = summary.projects.filter((p) => p.open > 0).length;
+  summary.all.projects = summary.esencial.length;
+  summary.esencial.sort((a, b) => {
+    const late = Number(b.overdue > 0) - Number(a.overdue > 0);
+    if (late !== 0) return late;
+    if (a.nearestDue !== b.nearestDue) {
+      if (a.nearestDue === null) return 1;
+      if (b.nearestDue === null) return -1;
+      return a.nearestDue < b.nearestDue ? -1 : 1;
+    }
+    return byName(a.project.name, b.project.name);
+  });
+  return summary;
 }

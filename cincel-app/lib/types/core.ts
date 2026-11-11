@@ -660,10 +660,21 @@ export type TaskFilters = {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  /**
+   * Match `search` without accents or case on both sides (`foldedText`, as
+   * the workspace search does). Mi espacio sets it (#1051): its search
+   * filtered on the client with that folding before it paged.
+   */
+  searchFolded?: true;
   /** Tareas "Mostrar": open tasks, or open tasks past `coalesce(commitment, delivery)`. */
   mostrar?: "abiertas" | "en_retraso";
   /** `YYYY-MM-DD` the overdue rule compares with; default today in America/Mexico_City. */
   today?: string;
+  /**
+   * Mi espacio's due-date windows (#1051): `commitment_date` between `from`
+   * and `to` (both inclusive, either optional), or undated with `orUndated`.
+   */
+  commitment?: { from?: string; to?: string; orUndated?: boolean };
   /** Tareas Proyecto multi-select (#1045): any of these projects; ANDed with `projectId`. */
   projectIds?: string[];
   /**

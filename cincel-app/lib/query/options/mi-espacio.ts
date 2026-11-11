@@ -6,8 +6,6 @@ import {
   fetchGmailThreadsAction,
 } from "@/lib/actions/gmail-actions";
 import { fetchRemindersAction } from "@/lib/actions/my-space-actions";
-import { fetchMyOpenTasksAction } from "@/lib/actions/tasks-actions";
-import { getTareasListPage, getTareasSummary } from "@/lib/actions/page-data/tareas-actions";
 import type { TareasRowsPage } from "@/lib/tareas/page-data";
 import { fetchMyWeekHoursAction } from "@/lib/actions/time-tracking-actions";
 import { fetchNotificationsAction, fetchNotificationsSummaryAction } from "@/lib/actions/notifications-actions";
@@ -15,11 +13,22 @@ import {
   fetchMiEspacioChecklistsPage,
   fetchMiEspacioNotesPage,
   getMiEspacioPageData,
+  getMyTasksPage,
+  getMyTasksSummary,
 } from "@/lib/actions/page-data/mi-espacio-actions";
+import { sundayOf, type MyTaskBucket } from "@/lib/my-space/my-tasks";
+import {
+  rowFitsMeList,
+  type MeTasksListFilters,
+  type MyTasksCounts,
+  type MyTasksSummary,
+  type MyTasksSummaryInput,
+} from "@/lib/my-space/my-tasks-summary";
+import { isTaskClosed } from "@/lib/tasks/status-options";
 import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
-import { STALE, qk, type TareasListFilters } from "@/lib/query/keys";
+import { STALE, qk } from "@/lib/query/keys";
 import { setShellBadgesUnread } from "@/lib/query/options/shell";
-import type { TaskListItem } from "@/lib/types/core";
+import type { TaskListItem, TaskListRow } from "@/lib/types/core";
 import type { GmailThreadsPage, GmailThreadView, MiEspacioPageData, MySpaceListPage } from "@/lib/types/mi-espacio";
 import type {
   Checklist,
@@ -46,7 +55,10 @@ import type {
  * - `me.reminders('today-tomorrow')`.
  * - `me.notes()`, `me.checklists()`: infinite bounded pages, 5 min stale;
  *   their mutations patch the cache (optimistic where the issue asks).
- * - `me.tasks()`: my open tasks; the task writes invalidate it.
+ * - `me.tasksSummary(input)`: my task counts (one grouped SQL read, #1051);
+ *   `me.tasksList(f)`: one list of my tasks (an Analítico group, a board
+ *   column, an Esencial card), 30 a page with "Cargar más". Both sit under
+ *   the `me.tasks()` prefix, which every task write invalidates.
  * - `me.weekHours(weekStart)`: one week of my hours (not seeded; the clock
  *   writes invalidate the `me.weekHours()` prefix).
  */
@@ -152,32 +164,28 @@ export function meChecklistsOptions() {
   });
 }
 
-/** My open tasks (`fetchMyOpenTasksAction`), seeded by the page. */
-export function meTasksOptions() {
-  return queryOptions<TaskListItem[]>({
-    queryKey: qk.me.tasks(),
-    queryFn: () => fetchMyOpenTasksAction(),
+export type MeTasksListData = InfiniteData<TareasRowsPage, string | null>;
+
+/** My task counts for the Analítico filters (#1051), seeded by the page. */
+export function meTasksSummaryOptions(input: MyTasksSummaryInput) {
+  return queryOptions<MyTasksSummary>({
+    queryKey: qk.me.tasksSummary(input),
+    queryFn: () => getMyTasksSummary(input),
     staleTime: STALE.screen,
+    placeholderData: keepPreviousData,
   });
 }
 
-/** The list filters of my closed tasks in Mi espacio (#1051): mine (Responsable or apoyo), completado, the tramo and search. */
-export function meClosedTasksFilters(f: { tramo: string | null; q: string }): TareasListFilters {
-  return { tramo: f.tramo, proyecto: null, responsable: "yo", estado: "completado", q: f.q.trim() || null };
-}
-
 /**
- * My closed tasks (Mi espacio with "Ocultar completadas" off, #1039), 30 a
- * page with "Cargar más" (#1051): completado (a closing custom status is
- * completado underneath), searched and narrowed by tramo on the server.
- * Under the `me.tasks` prefix, so every invalidation of my tasks refreshes
- * it too. The caller enables it only while the switch shows them.
+ * One list of my tasks (#1051): 30 a page with "Cargar más" (a board
+ * column's or an Esencial card's first page is shorter, the server decides),
+ * searched, filtered and ordered on the server. The first pages of what the
+ * style shows first come seeded by the page.
  */
-export function meClosedTasksOptions(f: { tramo: string | null; q: string }) {
-  const filters = meClosedTasksFilters(f);
-  return infiniteQueryOptions<TareasRowsPage, Error, InfiniteData<TareasRowsPage, string | null>, readonly unknown[], string | null>({
-    queryKey: [...qk.me.tasks(), "closed", filters] as const,
-    queryFn: ({ pageParam }) => getTareasListPage({ filters, cursor: pageParam }),
+export function meTasksListOptions(f: MeTasksListFilters) {
+  return infiniteQueryOptions<TareasRowsPage, Error, MeTasksListData, readonly unknown[], string | null>({
+    queryKey: qk.me.tasksList(f),
+    queryFn: ({ pageParam }) => getMyTasksPage({ filters: f, cursor: pageParam }),
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
     staleTime: STALE.screen,
@@ -186,21 +194,20 @@ export function meClosedTasksOptions(f: { tramo: string | null; q: string }) {
 }
 
 /**
- * How many of my closed tasks each project has (#1051): the "n completadas
- * ocultas" line per project while the switch hides them, from one summary
- * query instead of loading the rows. Under the `me.tasks` prefix.
+ * Every row of `qk.me.tasksList(f)`, page after page, without touching the
+ * cache (the loaded groups keep their "Cargar más"): what the CSV export
+ * reads, on demand only. Stops after `maxPages`.
  */
-export function meClosedTaskCountsOptions(f: { tramo: string | null; q: string }) {
-  const filters = meClosedTasksFilters(f);
-  return queryOptions<Record<string, number>>({
-    queryKey: [...qk.me.tasks(), "closed-counts", filters] as const,
-    queryFn: async () => {
-      const summary = await getTareasSummary({ filters });
-      return Object.fromEntries(summary.projects.map((p) => [p.project.id, p.total]));
-    },
-    staleTime: STALE.screen,
-    placeholderData: keepPreviousData,
-  });
+export async function fetchAllMeTasksListRows(f: MeTasksListFilters, maxPages = 100): Promise<TaskListRow[]> {
+  const rows: TaskListRow[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < maxPages; i++) {
+    const page: TareasRowsPage = await getMyTasksPage({ filters: f, cursor });
+    rows.push(...page.rows);
+    cursor = page.nextCursor;
+    if (!cursor) break;
+  }
+  return rows;
 }
 
 /** One week of my hours; no `weekStart` = this week. */
@@ -237,7 +244,8 @@ export function seedMiEspacio(qc: QueryClient, data: MiEspacioPageData, updatedA
   qc.setQueryData(meRemindersOptions().queryKey, data.reminders, at);
   qc.setQueryData(meChecklistsOptions().queryKey, firstPage({ items: data.checklists, nextCursor: data.checklistsCursor }), at);
   qc.setQueryData(meNotesOptions().queryKey, firstPage({ items: data.notes, nextCursor: data.notesCursor }), at);
-  qc.setQueryData(meTasksOptions().queryKey, data.tasks, at);
+  qc.setQueryData(meTasksSummaryOptions(data.tasks.input).queryKey, data.tasks.summary, at);
+  for (const list of data.tasks.lists) qc.setQueryData(meTasksListOptions(list.filters).queryKey, firstPage(list.page), at);
 }
 
 /**
@@ -297,6 +305,195 @@ async function snapshot<D>(qc: QueryClient, key: readonly unknown[]): Promise<Sn
 /** Restores what `snapshot` saved (a mutation's rollback). */
 export function restoreSnapshot<D>(qc: QueryClient, snap: Snapshot<D>): void {
   qc.setQueryData(snap.key, snap.data);
+}
+
+// My tasks (#1051)
+
+const ME_TASK_LISTS = ["me", "tasks", "list"] as const;
+
+/** The list filters of a `qk.me.tasksList(f)` key. */
+function listFiltersOf(key: readonly unknown[]): MeTasksListFilters {
+  return (key[3] ?? {}) as MeTasksListFilters;
+}
+
+/** Every cached list of my tasks, to put back when a write fails. */
+export async function snapshotMeTaskLists(qc: QueryClient): Promise<[readonly unknown[], MeTasksListData | undefined][]> {
+  await qc.cancelQueries({ queryKey: ME_TASK_LISTS });
+  return qc.getQueriesData<MeTasksListData>({ queryKey: ME_TASK_LISTS });
+}
+
+export function restoreMeTaskLists(qc: QueryClient, snap: [readonly unknown[], MeTasksListData | undefined][]): void {
+  for (const [key, data] of snap) qc.setQueryData(key, data);
+}
+
+/** The loaded row of a task in any list of mine, or undefined. */
+export function findMeTaskRow(qc: QueryClient, id: string): TaskListRow | undefined {
+  for (const [, data] of qc.getQueriesData<MeTasksListData>({ queryKey: ME_TASK_LISTS })) {
+    for (const page of data?.pages ?? []) {
+      const row = page.rows.find((r) => r.id === id);
+      if (row) return row;
+    }
+  }
+  return undefined;
+}
+
+function mapListRows(data: MeTasksListData | undefined, fn: (rows: TaskListRow[]) => TaskListRow[]): MeTasksListData | undefined {
+  if (!data) return data;
+  return { ...data, pages: data.pages.map((page) => ({ ...page, rows: fn(page.rows) })) };
+}
+
+/**
+ * Patches one task in every loaded list of mine. A task that closes leaves
+ * the open lists (the lists with `cerradas` keep it, muted); `null` removes
+ * it everywhere (deleted). The lists' totals follow, so "Cargar más (n)"
+ * stays right until the refetch.
+ */
+export function patchMeTaskRows(qc: QueryClient, id: string, fn: (row: TaskListRow) => TaskListRow | null): void {
+  for (const [key, data] of qc.getQueriesData<MeTasksListData>({ queryKey: ME_TASK_LISTS })) {
+    if (!data?.pages.some((page) => page.rows.some((r) => r.id === id))) continue;
+    const f = listFiltersOf(key);
+    let removed = false;
+    const next = mapListRows(data, (rows) =>
+      rows.flatMap((row) => {
+        if (row.id !== id) return [row];
+        const patched = fn(row);
+        if (patched === null || (!f.cerradas && isTaskClosed(patched))) {
+          removed = true;
+          return [];
+        }
+        return [patched];
+      }),
+    );
+    qc.setQueryData(key, removed && next ? { ...next, pages: next.pages.map((p) => ({ ...p, total: Math.max(0, p.total - 1) })) } : next);
+  }
+}
+
+const ME_TASK_SUMMARIES = ["me", "tasks", "summary"] as const;
+
+export type MeTasksSummarySnapshot = [readonly unknown[], MyTasksSummary | undefined][];
+
+/** Every cached summary of my tasks, to put back when a write fails. */
+export async function snapshotMeTasksSummaries(qc: QueryClient): Promise<MeTasksSummarySnapshot> {
+  await qc.cancelQueries({ queryKey: ME_TASK_SUMMARIES });
+  return qc.getQueriesData<MyTasksSummary>({ queryKey: ME_TASK_SUMMARIES });
+}
+
+export function restoreMeTasksSummaries(qc: QueryClient, snap: MeTasksSummarySnapshot): void {
+  for (const [key, data] of snap) qc.setQueryData(key, data);
+}
+
+/**
+ * Moves one task between open and closed (or in and out of blocked) in
+ * every cached summary of mine, so the KPIs, chips, columns and group
+ * headers follow a status edit before the refetch. The parts the filters
+ * narrow (`shown`, the Analítico groups) are patched only in the summaries
+ * whose filters the client can check (no search); the refetch settles the
+ * rest, and the Esencial cards' nearest date. A change that is neither is
+ * left to the refetch.
+ */
+export function patchMeTasksSummaryStatus(qc: QueryClient, before: TaskListRow, after: TaskListRow): void {
+  const wasOpen = !isTaskClosed(before);
+  const isOpen = !isTaskClosed(after);
+  const wasBlocked = wasOpen && before.status === "bloqueado";
+  const isBlocked = isOpen && after.status === "bloqueado";
+  if (wasOpen === isOpen && wasBlocked === isBlocked) return;
+  const open = (isOpen ? 1 : 0) - (wasOpen ? 1 : 0);
+  const blocked = (isBlocked ? 1 : 0) - (wasBlocked ? 1 : 0);
+  const tramoId = before.workflowId ?? null;
+  const tramoKey = before.workflow?.key ?? null;
+  for (const [key, summary] of qc.getQueriesData<MyTasksSummary>({ queryKey: ME_TASK_SUMMARIES })) {
+    if (!summary || !summary.today) continue;
+    const input = (key[3] ?? {}) as MyTasksSummaryInput;
+    const today = summary.today;
+    const due = before.commitmentDate ? before.commitmentDate.slice(0, 10) : null;
+    const overdue = due !== null && due < today ? open : 0;
+    const daysLate = overdue !== 0 ? Math.round((Date.parse(today) - Date.parse(due!)) / 86_400_000) : 0;
+    const sunday = sundayOf(today);
+    const bucket: MyTaskBucket = due !== null && due <= today ? "hoy" : due !== null && due <= sunday ? "semana" : "despues";
+    const counts = <C extends MyTasksCounts>(c: C): C => {
+      const lateCount = Math.max(0, c.overdue + overdue);
+      // The max of the others is unknown when the latest one closes: the refetch settles it.
+      const maxDaysLate = lateCount === 0 ? 0 : overdue > 0 ? Math.max(c.maxDaysLate, daysLate) : c.maxDaysLate;
+      return {
+        ...c,
+        open: Math.max(0, c.open + open),
+        overdue: lateCount,
+        blocked: Math.max(0, c.blocked + blocked),
+        daysLateSum: Math.max(0, c.daysLateSum + overdue * daysLate),
+        maxDaysLate,
+        closed: Math.max(0, c.closed - open),
+      };
+    };
+    const all = {
+      ...summary.all,
+      open: Math.max(0, summary.all.open + open),
+      overdue: Math.max(0, summary.all.overdue + overdue),
+      dueToday: Math.max(0, summary.all.dueToday + (due === today ? open : 0)),
+      buckets: { ...summary.all.buckets, [bucket]: Math.max(0, summary.all.buckets[bucket] + open) },
+    };
+    const tramos = summary.tramos.map((t) => (t.id === tramoId ? { ...t, open: Math.max(0, t.open + open) } : t));
+    const esencial = summary.esencial.map((e) =>
+      e.project.id === before.projectId
+        ? { ...e, open: Math.max(0, e.open + open), overdue: Math.max(0, e.overdue + overdue) }
+        : e,
+    );
+    const matches =
+      !input.q &&
+      (input.tramo === null || input.tramo === undefined || input.tramo === tramoKey) &&
+      (!input.retraso || (due !== null && due < today));
+    const next: MyTasksSummary = matches
+      ? {
+          ...summary,
+          all,
+          tramos,
+          esencial,
+          shown: counts(summary.shown),
+          projects: summary.projects.map((p) =>
+            p.project.id === before.projectId
+              ? { ...counts(p), tramos: p.tramos.map((t) => (t.tramo.id === tramoId ? counts(t) : t)) }
+              : p,
+          ),
+        }
+      : { ...summary, all, tramos, esencial };
+    qc.setQueryData(key, next);
+  }
+}
+
+/** A task detail or list item as a list row (the counts it has; the refetch fills the rest). */
+export function meTaskRowOf(item: TaskListItem): TaskListRow {
+  const { notes: _notes, ...rest } = item;
+  void _notes;
+  return {
+    ...rest,
+    subtaskDone: item.subtaskDoneCount,
+    commentCount: 0,
+    attachmentCount: 0,
+    checklistTotal: item.checklist.total,
+    checklistDone: item.checklist.completed,
+  };
+}
+
+/**
+ * Adds a task (created or reopened here) to the end of the loaded lists of
+ * mine it fits (project, tramo, board column); the refetch puts it in its
+ * server place.
+ */
+export function insertMeTaskRow(qc: QueryClient, item: TaskListItem, today: string): void {
+  const row = meTaskRowOf(item);
+  for (const [key, data] of qc.getQueriesData<MeTasksListData>({ queryKey: ME_TASK_LISTS })) {
+    if (!data || data.pages.length === 0) continue;
+    if (data.pages.some((page) => page.rows.some((r) => r.id === row.id))) continue;
+    if (!rowFitsMeList(listFiltersOf(key), row, today)) continue;
+    const last = data.pages.length - 1;
+    qc.setQueryData<MeTasksListData>(key, {
+      ...data,
+      pages: data.pages.map((page, i) => ({
+        ...page,
+        total: page.total + 1,
+        rows: i === last ? [...page.rows, row] : page.rows,
+      })),
+    });
+  }
 }
 
 // Notes

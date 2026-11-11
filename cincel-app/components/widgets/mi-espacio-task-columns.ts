@@ -20,6 +20,15 @@ import type { ActivitiesCapabilities } from "@/lib/auth/permissions";
 import type { TaskRow } from "@/lib/my-space/my-tasks";
 import { qk } from "@/lib/query/keys";
 import {
+  findMeTaskRow,
+  patchMeTaskRows,
+  patchMeTasksSummaryStatus,
+  restoreMeTaskLists,
+  restoreMeTasksSummaries,
+  snapshotMeTaskLists,
+  snapshotMeTasksSummaries,
+} from "@/lib/query/options/mi-espacio";
+import {
   BASE_STATUSES,
   BASE_STATUS_COLOR,
   customStatusBase,
@@ -29,17 +38,19 @@ import {
   statusSelectItems,
   statusSelectValue,
 } from "@/lib/tasks/status-options";
-import type { StaffRef, TaskListItem, TaskPatch, TaskPriority, TaskStatusOption } from "@/lib/types/core";
+import type { StaffRef, TaskListRow, TaskPatch, TaskPriority, TaskStatusOption } from "@/lib/types/core";
 import type { ActionResult } from "@/lib/types/schedule";
 import type { RecordColumn } from "@/lib/types/widgets";
 
 /**
  * Mis tareas columns of Mi espacio Analítico (#1027). Tarea, Estatus, Vence
  * and Prioridad edit in place; Subtareas and Días de retraso are calculated.
- * Each commit patches `me.tasks` first (the row, its groups and the KPI strip
- * follow at once; a task that closes leaves the open list) and puts the cache
- * back when the server refuses. `CellCommitProvider` invalidates `me.tasks`
- * on settle; the other views of the task are invalidated here on success.
+ * Each commit patches the task in every loaded `me.tasksList` page first (a
+ * task that closes leaves the open lists) and puts the cache back when the
+ * server refuses. `CellCommitProvider` invalidates the `me.tasks` prefix on
+ * settle; a status edit that opens, closes or blocks the task patches the
+ * summary's counts first (`patchMeTasksSummaryStatus`). The other views of
+ * the task are invalidated here on success.
  */
 export type MiEspacioColumnsDeps = {
   qc: QueryClient;
@@ -49,11 +60,6 @@ export type MiEspacioColumnsDeps = {
   staff?: readonly StaffRef[];
   /** Custom statuses of the catalog (after the base ones in the Estatus list). */
   statuses: readonly TaskStatusOption[];
-  /**
-   * Tasks that left the list (closed), so an undo puts them back at once.
-   * The page keeps one map across rebuilds of the columns.
-   */
-  left?: Map<string, TaskListItem>;
 };
 
 /** Query keys every Mis tareas column refreshes on settle. */
@@ -79,8 +85,8 @@ export function statusOptions(statuses: readonly TaskStatusOption[]): CellOption
   });
 }
 
-/** The cached task with the edit applied; null = it leaves the open list (it closed). */
-type Patch = (task: TaskListItem) => TaskListItem | null;
+/** The cached row with the edit applied (a closed one leaves the open lists). */
+type Patch = (task: TaskListRow) => TaskListRow;
 
 /** Views outside Mi espacio that show the task. */
 function otherViews(projectId: string): QueryKey[] {
@@ -99,26 +105,19 @@ export function miEspacioTaskColumns({
   capabilities,
   statuses,
   staff = [],
-  left = new Map(),
 }: MiEspacioColumnsDeps): RecordColumn<TaskRow>[] {
 
   async function save(row: TaskRow, patch: Patch, run: () => Promise<ActionResult<unknown>>): Promise<ActionResult<unknown>> {
-    const key = qk.me.tasks();
-    await qc.cancelQueries({ queryKey: key });
-    const before = qc.getQueryData<TaskListItem[]>(key);
-    if (before) {
-      const cached = before.find((t) => t.id === row.id) ?? left.get(row.id);
-      if (cached) {
-        const next = patch(cached);
-        if (next === null) left.set(row.id, cached);
-        else left.delete(row.id);
-        const rest = before.filter((t) => t.id !== row.id);
-        qc.setQueryData<TaskListItem[]>(key, next === null ? rest : [...rest, next]);
-      }
-    }
+    const before = await snapshotMeTaskLists(qc);
+    const summaries = await snapshotMeTasksSummaries(qc);
+    // A status edit that opens, closes or blocks the task moves the counts at once.
+    const cached = findMeTaskRow(qc, row.id);
+    if (cached) patchMeTasksSummaryStatus(qc, cached, patch(cached));
+    patchMeTaskRows(qc, row.id, patch);
     const result = await run();
     if (!result.ok) {
-      if (before) qc.setQueryData<TaskListItem[]>(key, before);
+      restoreMeTaskLists(qc, before);
+      restoreMeTasksSummaries(qc, summaries);
       return result;
     }
     for (const queryKey of otherViews(row.projectId)) void qc.invalidateQueries({ queryKey });
@@ -151,7 +150,7 @@ export function miEspacioTaskColumns({
         const status = parsed.status;
         return save(
           row,
-          (task) => (status === "completado" ? null : { ...task, status, customStatusId: null, customStatus: null }),
+          (task) => ({ ...task, status, customStatusId: null, customStatus: null }),
           () => setTaskStatusAction(row.id, status),
         );
       }
@@ -160,7 +159,6 @@ export function miEspacioTaskColumns({
         row,
         (task) => {
           if (!custom) return task;
-          if (custom.closes) return null;
           const { id, name, closes, countsAsCompleted } = custom;
           return { ...task, status: customStatusBase(custom), customStatusId: id, customStatus: { id, name, closes, countsAsCompleted } };
         },

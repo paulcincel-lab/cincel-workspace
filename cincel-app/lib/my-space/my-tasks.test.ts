@@ -2,105 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { TaskListItem } from "@/lib/types/core";
 
-import { dueInfo, groupMyTasksByProject, remainderText } from "./my-tasks";
-import {
-  bucketMyTasks,
-  bucketPresetDate,
-  daySentence,
-  greeting,
-  nextReminderToday,
-  openTasksInOrder,
-  timeAgo,
-} from "./my-tasks";
-import {
-  checklistMetrics,
-  miEspacioCsv,
-  miEspacioCsvFileName,
-  myTasksGroups,
-  taskMetrics,
-  taskRow,
-  type TaskRow,
-} from "./my-tasks";
+import { dueInfo, remainderText } from "./my-tasks";
+import { bucketPresetDate, daySentence, greeting, nextReminderToday, timeAgo } from "./my-tasks";
+import { checklistMetrics, miEspacioCsv, miEspacioCsvFileName, taskRow, type TaskRow } from "./my-tasks";
 
-describe("Esencial: Mis tareas by project", () => {
+describe("Esencial: Mis tareas", () => {
   const TODAY = "2026-11-09";
-
-  function mine(id: string, projectId: string, commitmentDate: string | null, over: Partial<TaskListItem> = {}): TaskListItem {
-    return {
-      id,
-      projectId,
-      kind: "workflow",
-      templateId: null,
-      workflowId: "w1",
-      phaseId: null,
-      spaceId: null,
-      closedAt: null,
-      title: id,
-      notes: null,
-      createdById: "me",
-      managerId: "me",
-      status: "pendiente",
-      customStatusId: null,
-      priority: "media",
-      sortOrder: null,
-      commitmentDate,
-      reviewDate: null,
-      deliveryDate: null,
-      archived: false,
-      createdAt: "2026-11-01T00:00:00.000Z",
-      updatedAt: "2026-11-01T00:00:00.000Z",
-      customStatus: null,
-      project: { id: projectId, name: `Proyecto ${projectId}`, clientName: null },
-      workflow: { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 },
-      phase: null,
-      space: null,
-      manager: { id: "me", name: "Ana López" },
-      support: [],
-      checklist: { total: 0, completed: 0 },
-      parentTaskId: null,
-      parentTitle: null,
-      subtaskCount: 0,
-      subtaskDoneCount: 0,
-      waitingOn: 0,
-      ...over,
-    };
-  }
-
-  it("groups overdue projects first", () => {
-    const tasks = [
-      mine("a1", "a", "2026-11-10"),
-      mine("b1", "b", "2026-11-20"),
-      mine("b2", "b", "2026-11-07"),
-      mine("c1", "c", null),
-      mine("d1", "d", "2026-11-12"),
-    ];
-    const { groups, remaining } = groupMyTasksByProject(tasks, TODAY);
-    expect(groups.map((g) => g.projectId)).toEqual(["b", "a", "d"]);
-    // Inside a group: by due date.
-    expect(groups[0]!.tasks.map((t) => t.id)).toEqual(["b2", "b1"]);
-    expect(groups[0]!.name).toBe("Proyecto b");
-    expect(remaining).toEqual({ count: 1, projectNames: ["Proyecto c"] });
-  });
-
-  it("limits 3 × 4 and counts the remainder", () => {
-    const tasks = [
-      ...["1", "2", "3", "4", "5", "6"].map((n) => mine(`a${n}`, "a", `2026-11-1${n}`)),
-      ...["1", "2"].map((n) => mine(`b${n}`, "b", `2026-11-2${n}`)),
-      mine("c1", "c", "2026-11-28"),
-      mine("d1", "d", null),
-      mine("d2", "d", null),
-    ];
-    const { groups, remaining } = groupMyTasksByProject(tasks, TODAY, { projects: 3, perProject: 4 });
-    expect(groups).toHaveLength(3);
-    expect(groups.map((g) => g.tasks.length)).toEqual([4, 2, 1]);
-    expect(groups[0]!.tasks.map((t) => t.id)).toEqual(["a1", "a2", "a3", "a4"]);
-    expect(remaining).toEqual({ count: 4, projectNames: ["Proyecto a", "Proyecto d"] });
-
-    const one = groupMyTasksByProject([mine("x", "a", null)], TODAY);
-    expect(one.groups).toHaveLength(1);
-    expect(one.groups[0]!.tasks).toHaveLength(1);
-    expect(one.remaining).toEqual({ count: 0, projectNames: [] });
-  });
 
   it("remainderText 1/2/3+ projects", () => {
     expect(remainderText({ count: 0, projectNames: [] })).toBe("");
@@ -184,30 +91,11 @@ describe("Analítico: Mis tareas tables", () => {
     task("Permisos", "p2", "2026-11-07"),
   ];
 
-  it("myTasksGroups project → tramo", () => {
-    const groups = myTasksGroups(TASKS, TODAY);
-    expect(groups.map((g) => g.label)).toEqual(["Casa Lomas", "Torre Sur"]);
-    const [lomas, torre] = groups;
-    expect(lomas!.caption).toBe("3 tareas");
-    expect(lomas!.metrics[0]).toMatchObject({ value: "1 vencida · 5 d", tone: "destructive" });
-    expect(lomas!.children!.map((c) => c.label)).toEqual(["Presale", "Diseño"]);
-    const diseno = lomas!.children![1]!;
-    expect(diseno.caption).toBe("2 · 1 vencida · bloqueada");
-    expect(diseno.rows!.map((r) => r.title)).toEqual(["Planos", "Render"]);
-    expect(torre!.metrics[0]!.value).toBe("1 vencida · 2 d");
-    expect(myTasksGroups([task("Sola", "p2", "2026-11-20")], TODAY)[0]!.metrics[0]!.value).toBe("0 vencidas");
-  });
-
   it("taskRow labels", () => {
     const planos = taskRow(TASKS[0]!, TODAY);
     expect(planos).toMatchObject({ estatus: "Bloqueado", vence: "4 nov", overdue: true, retraso: 5, subtareas: "1/3" });
     expect(taskRow(TASKS[3]!, TODAY)).toMatchObject({ vence: "hoy", overdue: false, prioridad: "Alta", subtareas: "—" });
     expect(taskRow(TASKS[2]!, TODAY)).toMatchObject({ vence: "—", tramoName: "Presale" });
-  });
-
-  it("taskMetrics overduePct and avgDaysLate", () => {
-    expect(taskMetrics(TASKS, TODAY)).toEqual({ open: 5, overdue: 2, overduePct: 40, avgDaysLate: 3.5, projects: 2 });
-    expect(taskMetrics([], TODAY)).toEqual({ open: 0, overdue: 0, overduePct: 0, avgDaysLate: 0, projects: 0 });
   });
 
   it("checklistMetrics sums items and averages percents", () => {
@@ -241,31 +129,6 @@ describe("Visual: Mis tareas board and day hero", () => {
   function t(id: string, commitmentDate: string | null, patch: Partial<TaskListItem> = {}): TaskListItem {
     return { id, title: id, status: "pendiente", customStatus: null, commitmentDate, ...patch } as TaskListItem;
   }
-  const ids = (tasks: TaskListItem[]) => tasks.map((x) => x.id);
-
-  it("bucketMyTasks puts overdue in Hoy", () => {
-    const b = bucketMyTasks(
-      [t("vencida", "2026-11-06"), t("hoy", MONDAY), t("jueves", "2026-11-12"), t("domingo", "2026-11-15"), t("lunes", "2026-11-16")],
-      MONDAY,
-    );
-    expect(ids(b.hoy)).toEqual(["vencida", "hoy"]);
-    expect(ids(b.semana)).toEqual(["jueves", "domingo"]);
-    expect(ids(b.despues)).toEqual(["lunes"]);
-  });
-
-  it("Sunday leaves Esta semana empty", () => {
-    const b = bucketMyTasks([t("hoy", "2026-11-15"), t("lunes", "2026-11-16")], "2026-11-15");
-    expect(ids(b.hoy)).toEqual(["hoy"]);
-    expect(b.semana).toEqual([]);
-    expect(ids(b.despues)).toEqual(["lunes"]);
-  });
-
-  it("undated → Después", () => {
-    const b = bucketMyTasks([t("sin-fecha", null)], MONDAY);
-    expect(ids(b.despues)).toEqual(["sin-fecha"]);
-    expect(b.hoy).toEqual([]);
-    expect(b.semana).toEqual([]);
-  });
 
   it("dueInfo labels", () => {
     expect(dueInfo(t("a", "2026-11-06"), MONDAY)).toEqual({ tone: "overdue", label: "Vencida · 6 nov", daysLate: 3 });
@@ -319,17 +182,6 @@ describe("Visual: Mis tareas board and day hero", () => {
     ];
     expect(nextReminderToday(list, now)?.id).toBe("pronto");
     expect(nextReminderToday([list[4]!], now)).toBeNull();
-  });
-
-  it("openTasksInOrder drops closed tasks and sorts by date, then title", () => {
-    const rows = openTasksInOrder([
-      t("Zeta", null),
-      t("Beta", "2026-11-12"),
-      t("Hecha", "2026-11-01", { status: "completado" }),
-      t("Cerrada", "2026-11-02", { customStatus: { id: "s", name: "Entregada", closes: true, countsAsCompleted: true } }),
-      t("Alfa", "2026-11-12"),
-    ]);
-    expect(ids(rows)).toEqual(["Alfa", "Beta", "Zeta"]);
   });
 
   it("timeAgo", () => {

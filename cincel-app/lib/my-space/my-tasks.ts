@@ -1,14 +1,13 @@
 /**
  * Mi espacio "Mis tareas" and day helpers (pure, client-safe): due labels,
- * the Hoy / Esta semana / Después buckets, the quick-add date presets, the
- * greeting and the day sentence of the hero. Every "today" is the org's
+ * the Hoy / Esta semana / Después quick-add date presets, the row of the
+ * Analítico table, the greeting and the day sentence of the hero. The
+ * counts and the lists come from the server (`my-tasks-summary.ts`, #1051). Every "today" is the org's
  * local calendar date (`YYYY-MM-DD`, America/Mexico_City), handled as UTC
  * midnights so no browser clock zone leaks in.
  */
-import type { Group } from "@/components/widgets/GroupedTable";
 import { isTaskClosed, taskStatusLabel } from "@/lib/tasks/status-options";
 import { addDays, dayOfWeek, localDate, localHourMinute, mondayOf } from "@/lib/time-tracking/local-time";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
 import type { TaskListItem } from "@/lib/types/core";
 import type { Checklist } from "@/lib/types/redesign";
 import { CSV_BOM, escapeCsvFormula } from "@/lib/utils/export-service";
@@ -18,8 +17,7 @@ export type DueTone = "overdue" | "today" | "soon" | "later" | "none";
 /** Label wording: Visual ("Vencida · 6 nov", "Hoy") or Esencial ("7 nov · 2 d tarde", "hoy"). */
 export type DueLabelVariant = "visual" | "esencial";
 
-export type MyTaskBuckets = { hoy: TaskListItem[]; semana: TaskListItem[]; despues: TaskListItem[] };
-export type MyTaskBucket = keyof MyTaskBuckets;
+export type MyTaskBucket = "hoy" | "semana" | "despues";
 
 export const MY_TASK_BUCKETS: readonly MyTaskBucket[] = ["hoy", "semana", "despues"];
 
@@ -109,25 +107,6 @@ export function sundayOf(today: string): string {
 }
 
 /**
- * Hoy = overdue and due today; Esta semana = tomorrow … Sunday of this week;
- * Después = later or undated. Order inside a bucket is kept.
- */
-export function bucketMyTasks(tasks: readonly TaskListItem[], today: string): MyTaskBuckets {
-  const sunday = sundayOf(today);
-  const out: MyTaskBuckets = { hoy: [], semana: [], despues: [] };
-  for (const task of tasks) out[bucketOf(task, today, sunday)].push(task);
-  return out;
-}
-
-function bucketOf(task: Pick<TaskListItem, "commitmentDate">, today: string, sunday: string): MyTaskBucket {
-  const due = dateOnly(task.commitmentDate);
-  if (!due) return "despues";
-  if (due <= today) return "hoy";
-  if (due <= sunday) return "semana";
-  return "despues";
-}
-
-/**
  * The commitment date a column's quick add presets: Hoy → today; Esta
  * semana → Friday of this week (today from Friday on); Después → next Monday.
  */
@@ -138,22 +117,6 @@ export function bucketPresetDate(bucket: MyTaskBucket, today: string): string {
     return today >= friday ? today : friday;
   }
   return addDays(mondayOf(today), 7);
-}
-
-/** Open tasks only (no `completado`, no closing custom status), by commitment date (undated last), then title. */
-export function openTasksInOrder(rows: readonly TaskListItem[]): TaskListItem[] {
-  return rows
-    .filter((task) => task.status !== "completado" && !task.customStatus?.closes)
-    .sort((a, b) => {
-      const da = dateOnly(a.commitmentDate);
-      const db = dateOnly(b.commitmentDate);
-      if (da !== db) {
-        if (da === null) return 1;
-        if (db === null) return -1;
-        return da < db ? -1 : 1;
-      }
-      return a.title.localeCompare(b.title, "es");
-    });
 }
 
 /** "Buenos días" (< 12:00), "Buenas tardes" (12:00–18:59), "Buenas noches" (≥ 19:00), org time; with the first name. */
@@ -246,72 +209,7 @@ export function hoursMinutes(seconds: number): { h: number; mm: string } {
 
 // ── Esencial: Mis tareas by project ─────────────────────────────────────────
 
-export type MyTasksGroup = { projectId: string; name: string; tasks: TaskListItem[] };
 export type MyTasksRemaining = { count: number; projectNames: string[] };
-
-/** Commitment date ascending (undated last), then title. */
-function byDueThenTitle(a: TaskListItem, b: TaskListItem): number {
-  const da = dateOnly(a.commitmentDate);
-  const db = dateOnly(b.commitmentDate);
-  if (da !== db) {
-    if (da === null) return 1;
-    if (db === null) return -1;
-    return da < db ? -1 : 1;
-  }
-  return a.title.localeCompare(b.title, "es");
-}
-
-/**
- * Mis tareas by project (Esencial): projects with an overdue task first, then
- * by their nearest commitment date (undated last), then by name; at most
- * `limits.projects` groups of `limits.perProject` rows each, by due date.
- * `remaining` counts every task left out and names their projects in order.
- */
-export function groupMyTasksByProject(
-  tasks: readonly TaskListItem[],
-  today: string,
-  limits: { projects: number; perProject: number } = { projects: 3, perProject: 4 },
-): { groups: MyTasksGroup[]; remaining: MyTasksRemaining } {
-  const byProject = new Map<string, MyTasksGroup>();
-  for (const task of tasks) {
-    const id = task.project?.id ?? task.projectId;
-    let group = byProject.get(id);
-    if (!group) {
-      group = { projectId: id, name: task.project?.name ?? "", tasks: [] };
-      byProject.set(id, group);
-    }
-    group.tasks.push(task);
-  }
-  const all = [...byProject.values()].map((g) => ({ ...g, tasks: [...g.tasks].sort(byDueThenTitle) }));
-  const overdue = new Set(
-    all.filter((g) => g.tasks.some((t) => dueInfo(t, today).tone === "overdue")).map((g) => g.projectId),
-  );
-  all.sort((a, b) => {
-    const late = Number(overdue.has(b.projectId)) - Number(overdue.has(a.projectId));
-    if (late !== 0) return late;
-    const da = dateOnly(a.tasks[0]!.commitmentDate);
-    const db = dateOnly(b.tasks[0]!.commitmentDate);
-    if (da !== db) {
-      if (da === null) return 1;
-      if (db === null) return -1;
-      return da < db ? -1 : 1;
-    }
-    return a.name.localeCompare(b.name, "es");
-  });
-
-  const groups: MyTasksGroup[] = [];
-  const remaining: MyTasksRemaining = { count: 0, projectNames: [] };
-  all.forEach((group, index) => {
-    const shown = index < limits.projects ? group.tasks.slice(0, limits.perProject) : [];
-    const hidden = group.tasks.length - shown.length;
-    if (shown.length > 0) groups.push({ ...group, tasks: shown });
-    if (hidden > 0) {
-      remaining.count += hidden;
-      remaining.projectNames.push(group.name);
-    }
-  });
-  return { groups, remaining };
-}
 
 /**
  * The remainder link text (without the arrow): "1 tarea más en Casa Lomas",
@@ -403,105 +301,9 @@ export function taskRow(task: TaskListItem, today: string): TaskRow {
   };
 }
 
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
-
 /** Id of a tramo group inside its project group. */
 export function tramoGroupId(projectId: string, tramoId: string | null): string {
   return `${projectId}:${tramoId ?? "sin-tramo"}`;
-}
-
-/**
- * Mis tareas grouped project → tramo (Analítico). Projects with an overdue
- * task first, then by name; tramos by their order ("Sin tramo" last); rows by
- * commitment date (undated last), then title. Project metric: "{k} vencida ·
- * {max} d" or "0 vencidas"; tramo caption "{n} · {k} vencidas" (+ " ·
- * bloqueada" when one is blocked).
- */
-export function myTasksGroups(tasks: readonly TaskListItem[], today: string): Group<TaskRow>[] {
-  const ordered = [...tasks].sort(byDueThenTitle).map((task) => taskRow(task, today));
-  const projects = new Map<string, { name: string; rows: TaskRow[] }>();
-  for (const row of ordered) {
-    const project = projects.get(row.projectId) ?? { name: row.projectName, rows: [] };
-    project.rows.push(row);
-    projects.set(row.projectId, project);
-  }
-  const groups = [...projects.entries()].map(([projectId, project]) => {
-    const overdue = project.rows.filter((row) => row.overdue);
-    const maxLate = overdue.reduce((max, row) => Math.max(max, row.retraso), 0);
-    const tramos = new Map<string, { row: TaskRow; rows: TaskRow[] }>();
-    for (const row of project.rows) {
-      const id = tramoGroupId(projectId, row.tramoId);
-      const tramo = tramos.get(id) ?? { row, rows: [] };
-      tramo.rows.push(row);
-      tramos.set(id, tramo);
-    }
-    const children: Group<TaskRow>[] = [...tramos.entries()]
-      .sort(([, a], [, b]) => a.row.tramoSortOrder - b.row.tramoSortOrder || a.row.tramoName.localeCompare(b.row.tramoName, "es"))
-      .map(([id, tramo]) => {
-        const late = tramo.rows.filter((row) => row.overdue).length;
-        const blocked = tramo.rows.some((row) => row.blocked) ? " · bloqueada" : "";
-        return {
-          id,
-          label: tramo.row.tramoName,
-          color: tramo.row.tramoKey
-            ? tramoColorVar({ key: tramo.row.tramoKey, sortOrder: tramo.row.tramoSortOrder })
-            : undefined,
-          caption: `${tramo.rows.length} · ${plural(late, "vencida", "vencidas")}${blocked}`,
-          metrics: [],
-          rows: tramo.rows,
-        };
-      });
-    const group: Group<TaskRow> = {
-      id: projectId,
-      label: project.name,
-      caption: plural(project.rows.length, "tarea", "tareas"),
-      metrics: [
-        overdue.length > 0
-          ? { key: "vencidas", value: `${plural(overdue.length, "vencida", "vencidas")} · ${maxLate} d`, tone: "destructive" }
-          : { key: "vencidas", value: "0 vencidas", tone: "muted" },
-      ],
-      children,
-    };
-    return { group, late: overdue.length > 0 };
-  });
-  groups.sort((a, b) => Number(b.late) - Number(a.late) || a.group.label.localeCompare(b.group.label, "es"));
-  return groups.map((entry) => entry.group);
-}
-
-export type TaskMetrics = {
-  open: number;
-  overdue: number;
-  /** Whole percent of open tasks that are overdue (0 without tasks). */
-  overduePct: number;
-  /** Average days late of the overdue tasks, one decimal (0 without overdue). */
-  avgDaysLate: number;
-  /** Distinct projects. */
-  projects: number;
-};
-
-/** Counts of the Mis tareas header and KPIs. */
-export function taskMetrics(tasks: readonly TaskListItem[], today: string): TaskMetrics {
-  let overdue = 0;
-  let late = 0;
-  const projects = new Set<string>();
-  for (const task of tasks) {
-    projects.add(task.project?.id ?? task.projectId);
-    const info = dueInfo(task, today);
-    if (info.tone === "overdue") {
-      overdue += 1;
-      late += info.daysLate;
-    }
-  }
-  const open = tasks.length;
-  return {
-    open,
-    overdue,
-    overduePct: open === 0 ? 0 : Math.round((overdue / open) * 100),
-    avgDaysLate: overdue === 0 ? 0 : Math.round((late / overdue) * 10) / 10,
-    projects: projects.size,
-  };
 }
 
 export type ChecklistMetrics = {

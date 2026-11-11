@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 
-import { qk } from "@/lib/query/keys";
 import {
   meChecklistsOptions,
   meGmailStatusOptions,
@@ -37,7 +36,6 @@ vi.mock("@/lib/actions/notifications-actions.flags", () => ({ IMPLEMENTED: flags
 vi.mock("@/lib/actions/gmail-actions.flags", () => ({ IMPLEMENTED: flags }));
 
 const tasksActions = vi.hoisted(() => ({
-  fetchMyOpenTasksAction: vi.fn(),
   setTaskStatusAction: vi.fn(),
   createUserTaskAction: vi.fn(),
   deleteTaskAction: vi.fn(),
@@ -48,10 +46,22 @@ vi.mock("@/lib/actions/my-space-actions", () => ({
   toggleChecklistItemAction: vi.fn(),
   addChecklistItemAction: vi.fn(),
 }));
+// Mi espacio's task reads (#1051), answered from the fixture by the fake.
+const myTasks = vi.hoisted(() => ({
+  server: null as FakeMyTasks | null,
+  /** A test can hold the refetches (a promise that never answers). */
+  hold: false,
+}));
 vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
   getMiEspacioPageData: vi.fn(),
   fetchMiEspacioNotesPage: vi.fn(),
   fetchMiEspacioChecklistsPage: vi.fn(),
+  getMyTasksSummary: vi.fn((input: MyTasksSummaryInput) =>
+    myTasks.hold ? new Promise(() => undefined) : Promise.resolve(myTasks.server!.summary(input)),
+  ),
+  getMyTasksPage: vi.fn((input: { filters: MeTasksListFilters; cursor: string | null }) =>
+    myTasks.hold ? new Promise(() => undefined) : Promise.resolve(myTasks.server!.page(input)),
+  ),
 }));
 vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
   fetchCatalogProjectOptions: vi.fn(async () => [
@@ -120,6 +130,9 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
 }));
 
 import { CREATED_UNDO_MS, MiEspacioEsencial } from "@/components/widgets/MiEspacioEsencial";
+import { MY_TASKS_ALL, type MeTasksListFilters, type MyTasksSummaryInput } from "@/lib/my-space/my-tasks-summary";
+import { localDate } from "@/lib/time-tracking/local-time";
+import { fakeMyTasks, type FakeMyTasks } from "@/tests/helpers/my-tasks-fake";
 
 const NOW = new Date();
 
@@ -215,7 +228,9 @@ const NOTE: Note = {
 
 function renderEsencial(tasks: TaskListItem[] = TASKS) {
   const client = createTestQueryClient();
-  client.setQueryData(qk.me.tasks(), tasks);
+  const server = fakeMyTasks(tasks, localDate(NOW));
+  myTasks.server = server;
+  server.seed(client, MY_TASKS_ALL, server.esencialLists());
   client.setQueryData(meNotificationsOptions().queryKey, {
     pages: [{ items: [NOTIFICATION], nextCursor: null, unreadCount: 1 }],
     pageParams: [null],
@@ -246,7 +261,7 @@ beforeEach(() => {
   caps.statusScope = "all";
   caps.canCreateActivity = true;
   caps.canDeleteActivity = true;
-  tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
+  myTasks.hold = false;
   seedSessionUser({ member: { id: "me", name: "Ana López" }, access: "Colaborador" });
 });
 
@@ -269,12 +284,30 @@ describe("MiEspacioEsencial", () => {
     expect(screen.getByRole("link", { name: /Ver todas/ }).getAttribute("href")).toBe("/tareas?responsable=yo");
   });
 
+  it("4 rows per project, Ver más loads the rest; projects past the third go to the remainder (#1051)", async () => {
+    const at = (p: string, name: string) => ({ projectId: p, project: { id: p, name, clientName: null } });
+    const many = [
+      ...Array.from({ length: 6 }, (_, i) => task(`a${i}`, `Lomas ${i}`, { commitmentDate: `2030-06-1${i}` })),
+      task("b1", "Torre 1", { ...at("p2", "Torre Sur"), commitmentDate: "2030-07-01" }),
+      task("c1", "Loft 1", { ...at("p3", "Loft"), commitmentDate: "2030-07-02" }),
+      task("d1", "Bodega 1", { ...at("p4", "Bodega"), commitmentDate: "2030-07-03" }),
+      task("d2", "Bodega 2", { ...at("p4", "Bodega"), commitmentDate: null }),
+    ];
+    renderEsencial(many);
+    const casa = screen.getByRole("region", { name: "Casa Lomas" });
+    expect(within(casa).getAllByRole("checkbox")).toHaveLength(4);
+    expect(screen.getByRole("link", { name: /2 tareas más en Bodega/ })).toBeTruthy();
+    fireEvent.click(within(casa).getByRole("button", { name: "Ver más (2 restantes)" }));
+    await waitFor(() => expect(within(casa).getAllByRole("checkbox")).toHaveLength(6));
+    expect(within(casa).queryByRole("button", { name: /^Ver más/ })).toBeNull();
+  });
+
   it("completes a task optimistically and rolls back on error", async () => {
     const pending = deferred<{ ok: false; error: string }>();
     tasksActions.setTaskStatusAction.mockReturnValue(pending.promise);
-    // The settle refetch never answers, so only the rollback can bring the row back.
-    tasksActions.fetchMyOpenTasksAction.mockReturnValue(new Promise(() => undefined));
     renderEsencial();
+    // The settle refetch never answers, so only the rollback can bring the row back.
+    myTasks.hold = true;
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Completar Revisar presupuesto" }));
     await waitFor(() => expect(tasksActions.setTaskStatusAction).toHaveBeenCalledWith("t2", "completado"));
@@ -292,7 +325,6 @@ describe("MiEspacioEsencial", () => {
       ok: true,
       data: detail({ ...TASKS[1]!, id, status: status as TaskListItem["status"] }),
     }));
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
     renderEsencial();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Completar Revisar presupuesto" }));
@@ -310,8 +342,8 @@ describe("MiEspacioEsencial", () => {
   it("quick add presets the project and shows Agregada · Deshacer", async () => {
     const created = task("t9", "Cotizar herrería");
     tasksActions.createUserTaskAction.mockResolvedValue({ ok: true, data: detail(created) });
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue([...TASKS, created]);
     renderEsencial();
+    myTasks.server!.tasks = [...TASKS, created];
 
     const input = await screen.findByRole("textbox", { name: "Agregar tarea en Casa Lomas" });
     expect(input.getAttribute("placeholder")).toBe("Escribe para agregar…");
@@ -334,13 +366,13 @@ describe("MiEspacioEsencial", () => {
     const created = task("t9", "Cotizar herrería");
     tasksActions.createUserTaskAction.mockResolvedValue({ ok: true, data: detail(created) });
     tasksActions.deleteTaskAction.mockResolvedValue({ ok: true, data: undefined });
+    renderEsencial();
     // The create's refetch has the new task; the delete's refetch no longer does.
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue([...TASKS, created]);
+    myTasks.server!.tasks = [...TASKS, created];
     tasksActions.deleteTaskAction.mockImplementation(async () => {
-      tasksActions.fetchMyOpenTasksAction.mockResolvedValue(TASKS);
+      myTasks.server!.tasks = TASKS;
       return { ok: true, data: undefined };
     });
-    renderEsencial();
 
     const input = await screen.findByRole("textbox", { name: "Agregar tarea en Casa Lomas" });
     fireEvent.change(input, { target: { value: "Cotizar herrería" } });
@@ -355,8 +387,8 @@ describe("MiEspacioEsencial", () => {
   it(`the undo is gone after ${CREATED_UNDO_MS / 1000} s`, async () => {
     const created = task("t9", "Cotizar herrería");
     tasksActions.createUserTaskAction.mockResolvedValue({ ok: true, data: detail(created) });
-    tasksActions.fetchMyOpenTasksAction.mockResolvedValue([...TASKS, created]);
     renderEsencial();
+    myTasks.server!.tasks = [...TASKS, created];
 
     const input = await screen.findByRole("textbox", { name: "Agregar tarea en Casa Lomas" });
     vi.useFakeTimers({ shouldAdvanceTime: true });

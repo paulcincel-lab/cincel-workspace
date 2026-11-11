@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NO_TASKS_SEED } from "@/tests/helpers/my-tasks-seed";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 
@@ -17,6 +18,13 @@ vi.mock("@/lib/auth/session", () => session);
 const loader = vi.hoisted(() => ({ loadMiEspacio: vi.fn() }));
 vi.mock("@/lib/loaders/mi-espacio", () => loader);
 
+// The style the page renders (#1051): the viewer's choice, or the org default.
+const appearance = vi.hoisted(() => ({ style: "esencial" as string | null }));
+vi.mock("@/lib/ui/preferences-server", () => ({
+  getResolvedAppearance: vi.fn(async () => ({ style: appearance.style })),
+  getStoredOrgAppearance: vi.fn(async () => ({ styleDefault: "visual", allowUserOverride: true })),
+}));
+
 // The page prefetches into one request-scoped client; the test hands it a fresh one.
 const server = vi.hoisted(() => ({ client: null as QueryClient | null }));
 vi.mock("@/lib/query/server", () => ({ getQueryClient: () => server.client }));
@@ -31,6 +39,7 @@ vi.mock("@/components/mi-espacio/MiEspacioClient", () => ({ MiEspacioClient: () 
 
 import type { MiEspacioClientProps } from "@/components/mi-espacio/MiEspacioClient";
 import { qk } from "@/lib/query/keys";
+import { MY_TASKS_ALL } from "@/lib/my-space/my-tasks-summary";
 import { createTestQueryClient } from "@/lib/query/test-utils";
 import type { MiEspacioPageData } from "@/lib/types/mi-espacio";
 
@@ -56,7 +65,7 @@ const DATA: MiEspacioPageData = {
   checklistsCursor: null,
   notes: [],
   notesCursor: "24",
-  tasks: [],
+  tasks: NO_TASKS_SEED,
   canCreateTask: true,
 };
 
@@ -85,7 +94,11 @@ describe("/mi-espacio page", () => {
   it("loads the page data once, as the viewer, and seeds every granular key", async () => {
     const { qc, client } = await renderPage({ nota: "n1" });
     expect(loader.loadMiEspacio).toHaveBeenCalledTimes(1);
-    expect(loader.loadMiEspacio).toHaveBeenCalledWith(USER);
+    expect(loader.loadMiEspacio).toHaveBeenCalledWith(USER, expect.any(Date), {
+      style: "esencial",
+      analiticoInput: MY_TASKS_ALL,
+      withClosed: false,
+    });
     expect(qc).toBe(server.client);
 
     expect(qc.getQueryData(qk.me.notifications({}))).toEqual({ pages: [DATA.notifications], pageParams: [null] });
@@ -97,9 +110,27 @@ describe("/mi-espacio page", () => {
     expect(qc.getQueryData(qk.me.reminders("today-tomorrow"))).toEqual([]);
     expect(qc.getQueryData(qk.me.checklists())).toEqual({ pages: [{ items: [], nextCursor: null }], pageParams: [null] });
     expect(qc.getQueryData(qk.me.notes())).toEqual({ pages: [{ items: [], nextCursor: "24" }], pageParams: [null] });
-    expect(qc.getQueryData(qk.me.tasks())).toEqual([]);
+    expect(qc.getQueryData(qk.me.tasksSummary(MY_TASKS_ALL))).toEqual(NO_TASKS_SEED.summary);
     expect(client.noteParam).toBe("n1");
     expect(client.canCreateTask).toBe(true);
+  });
+
+  it("Analítico narrows the task counts by the URL's filters and the closed-task switch (#1051)", async () => {
+    appearance.style = "analitico";
+    await renderPage({ tramo: "diseno", q: " planos ", estado: "retraso", completadas: "1" });
+    expect(loader.loadMiEspacio).toHaveBeenCalledWith(USER, expect.any(Date), {
+      style: "analitico",
+      analiticoInput: { tramo: "diseno", q: "planos", retraso: true },
+      withClosed: true,
+    });
+    // `?estilo=` wins over the viewer's style.
+    await renderPage({ estilo: "visual", tramo: "diseno" });
+    expect(loader.loadMiEspacio).toHaveBeenLastCalledWith(USER, expect.any(Date), {
+      style: "visual",
+      analiticoInput: { tramo: "diseno", q: null },
+      withClosed: false,
+    });
+    appearance.style = "esencial";
   });
 
   it("seeds no Gmail keys while the Gmail read is a stub", async () => {

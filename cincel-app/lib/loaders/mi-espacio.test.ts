@@ -18,7 +18,8 @@ const h = vi.hoisted(() => ({
   listReminders: vi.fn(),
   listNotesPage: vi.fn(),
   listChecklistsPage: vi.fn(),
-  listMyTasks: vi.fn(),
+  myTaskSummary: vi.fn(),
+  listTasksPage: vi.fn(),
 }));
 
 vi.mock("@/lib/gmail/access", () => ({ loadGmailAccess: h.loadGmailAccess }));
@@ -38,13 +39,25 @@ vi.mock("@/lib/my-space/notes-checklists", () => ({
   listChecklistsPage: h.listChecklistsPage,
 }));
 
-vi.mock("@/lib/repositories/tasks-repository", () => ({ listMyTasks: h.listMyTasks }));
+vi.mock("@/lib/repositories/tasks-repository", () => ({ myTaskSummary: h.myTaskSummary, listTasksPage: h.listTasksPage }));
 vi.mock("@/lib/auth/permissions", () => ({
   resolveActivitiesCapabilities: () => ({ canCreateActivity: true }),
   canSeeAdminData: () => false,
 }));
 
 const { loadMiEspacio } = await import("./mi-espacio");
+const { EMPTY_MY_TASKS_COUNTS, EMPTY_MY_TASKS_SUMMARY, MY_TASKS_ALL } = await import("@/lib/my-space/my-tasks-summary");
+
+const ESENCIAL = ["p1", "p2", "p3", "p4"].map((id) => ({ project: { id, name: id }, open: 1, overdue: 0, nearestDue: null }));
+const PROJECTS = ["p1", "p2"].map((id) => ({
+  project: { id, name: id },
+  ...EMPTY_MY_TASKS_COUNTS,
+  open: 2,
+  tramos: [
+    { tramo: { id: null, key: null, name: "Sin tramo", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
+    { tramo: { id: null, key: null, name: "Sin tramo", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
+  ],
+}));
 
 const user = {
   member: { id: "staff-ana", name: "Ana" },
@@ -62,7 +75,8 @@ beforeEach(() => {
   h.listReminders.mockResolvedValue([]);
   h.listNotesPage.mockResolvedValue({ items: [], nextCursor: "24" });
   h.listChecklistsPage.mockResolvedValue({ items: [], nextCursor: null });
-  h.listMyTasks.mockResolvedValue([]);
+  h.myTaskSummary.mockResolvedValue({ ...EMPTY_MY_TASKS_SUMMARY, esencial: ESENCIAL, projects: PROJECTS });
+  h.listTasksPage.mockResolvedValue({ rows: [], nextCursor: null, total: 0 });
 });
 
 describe("loadMiEspacio", () => {
@@ -93,16 +107,35 @@ describe("loadMiEspacio", () => {
     expect(data).toMatchObject({ notesCursor: "24", checklistsCursor: null, notifications: page });
   });
 
-  it("reads my open tasks as the viewer, in order, and the create permission", async () => {
-    h.listMyTasks.mockResolvedValue([
-      { id: "b", title: "B", status: "pendiente", customStatus: null, commitmentDate: null },
-      { id: "x", title: "X", status: "completado", customStatus: null, commitmentDate: "2026-11-01" },
-      { id: "a", title: "A", status: "en_proceso", customStatus: null, commitmentDate: "2026-11-10" },
-    ]);
-    const data = await loadMiEspacio(user);
-    expect(h.listMyTasks).toHaveBeenCalledWith("staff-ana", { mostrar: "abiertas" }, { staffId: "staff-ana", isAdmin: false });
-    expect(data.tasks.map((t) => t.id)).toEqual(["a", "b"]);
-    expect(data.canCreateTask).toBe(true);
+  it("counts my tasks in one summary and reads only the first page of what the style shows (#1051)", async () => {
+    const plain = await loadMiEspacio(user);
+    // No style (the hover prefetch): the summary only.
+    expect(h.myTaskSummary).toHaveBeenCalledTimes(1);
+    expect(h.myTaskSummary.mock.calls[0]![0]).toEqual({ involvesStaffId: "staff-ana" });
+    expect(h.listTasksPage).not.toHaveBeenCalled();
+    expect(plain.tasks).toMatchObject({ input: MY_TASKS_ALL, lists: [] });
+    expect(plain.canCreateTask).toBe(true);
+
+    const visual = await loadMiEspacio(user, new Date(), { style: "visual" });
+    expect(visual.tasks.lists.map((l) => l.filters.vence)).toEqual(["hoy", "semana", "despues"]);
+    // Mine, open ones, by due date; the first page of a column is 5.
+    expect(h.listTasksPage.mock.calls[0]![0]).toMatchObject({ involvesStaffId: "staff-ana", mostrar: "abiertas" });
+    expect(h.listTasksPage.mock.calls[0]![2]).toMatchObject({ cursor: null, limit: 5, orderBy: "vence" });
+
+    h.listTasksPage.mockClear();
+    const esencial = await loadMiEspacio(user, new Date(), { style: "esencial" });
+    expect(esencial.tasks.lists.map((l) => l.filters.proyecto)).toEqual(["p1", "p2", "p3"]);
+    expect(h.listTasksPage.mock.calls[0]![2]).toMatchObject({ limit: 4 });
+
+    h.listTasksPage.mockClear();
+    const analitico = await loadMiEspacio(user, new Date(), { style: "analitico" });
+    expect(analitico.tasks.lists).toHaveLength(3);
+    expect(h.listTasksPage.mock.calls[0]![2]).toMatchObject({ limit: 30, orderBy: "retraso" });
+
+    // The URL's Analítico filters narrow the counts in Analítico only.
+    const narrowed = { tramo: null, q: "planos" };
+    expect((await loadMiEspacio(user, new Date(), { style: "analitico", analiticoInput: narrowed })).tasks.input).toEqual(narrowed);
+    expect((await loadMiEspacio(user, new Date(), { style: "visual", analiticoInput: narrowed })).tasks.input).toEqual(MY_TASKS_ALL);
   });
 
   it("skips the thread read when Gmail is not connected", async () => {

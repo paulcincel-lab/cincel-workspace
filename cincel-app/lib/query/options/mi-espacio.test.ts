@@ -15,10 +15,10 @@ const actions = vi.hoisted(() => ({
   getMiEspacioPageData: vi.fn(),
   fetchMiEspacioNotesPage: vi.fn(),
   fetchMiEspacioChecklistsPage: vi.fn(),
-  fetchMyOpenTasksAction: vi.fn(),
+  getMyTasksSummary: vi.fn(),
+  getMyTasksPage: vi.fn(),
   fetchMyWeekHoursAction: vi.fn(),
 }));
-vi.mock("@/lib/actions/tasks-actions", () => ({ fetchMyOpenTasksAction: actions.fetchMyOpenTasksAction }));
 vi.mock("@/lib/actions/time-tracking-actions", () => ({ fetchMyWeekHoursAction: actions.fetchMyWeekHoursAction }));
 vi.mock("@/lib/actions/notifications-actions", () => ({ fetchNotificationsAction: actions.fetchNotificationsAction }));
 vi.mock("@/lib/actions/gmail-actions", () => ({
@@ -31,6 +31,8 @@ vi.mock("@/lib/actions/page-data/mi-espacio-actions", () => ({
   getMiEspacioPageData: actions.getMiEspacioPageData,
   fetchMiEspacioNotesPage: actions.fetchMiEspacioNotesPage,
   fetchMiEspacioChecklistsPage: actions.fetchMiEspacioChecklistsPage,
+  getMyTasksSummary: actions.getMyTasksSummary,
+  getMyTasksPage: actions.getMyTasksPage,
 }));
 
 import { qk } from "@/lib/query/keys";
@@ -40,8 +42,14 @@ import {
   markCachedNotificationsRead,
   meNotificationsOptions,
   meNotesOptions,
-  meTasksOptions,
+  insertMeTaskRow,
+  meTaskRowOf,
+  meTasksListOptions,
+  meTasksSummaryOptions,
   meWeekHoursOptions,
+  patchMeTaskRows,
+  patchMeTasksSummaryStatus,
+  type MeTasksListData,
   patchCachedGmailThread,
   prefetchMiEspacio,
   seedMiEspacio,
@@ -49,7 +57,11 @@ import {
   type NotificationsData,
 } from "@/lib/query/options/mi-espacio";
 import { createTestQueryClient } from "@/lib/query/test-utils";
+import { fakeMyTasks } from "@/tests/helpers/my-tasks-fake";
+import type { MyTasksSummary } from "@/lib/my-space/my-tasks-summary";
+import { EMPTY_MY_TASKS_SUMMARY, MY_TASKS_ALL, meTasksBucketFilters, meTasksGroupFilters } from "@/lib/my-space/my-tasks-summary";
 import type { MiEspacioPageData } from "@/lib/types/mi-espacio";
+import type { TaskListItem } from "@/lib/types/core";
 import type { NotificationItem } from "@/lib/types/redesign";
 import type { ShellBadges } from "@/lib/types/shell";
 
@@ -90,7 +102,11 @@ const DATA: MiEspacioPageData = {
   checklistsCursor: null,
   notes: [],
   notesCursor: null,
-  tasks: [{ id: "k1", title: "Planos", commitmentDate: "2026-11-09" } as MiEspacioPageData["tasks"][number]],
+  tasks: {
+    input: MY_TASKS_ALL,
+    summary: { ...EMPTY_MY_TASKS_SUMMARY, today: "2026-11-09" },
+    lists: [{ filters: meTasksBucketFilters("hoy"), page: { rows: [], nextCursor: null, total: 0 } }],
+  },
   canCreateTask: true,
 };
 
@@ -153,14 +169,136 @@ describe("seeding", () => {
   });
 });
 
-describe("me.tasks", () => {
-  it("seedMiEspacio seeds me.tasks", async () => {
+describe("me.tasks (#1051)", () => {
+  it("seedMiEspacio seeds the summary and the first pages; nothing reads every task", async () => {
     const client = createTestQueryClient();
     seedMiEspacio(client, DATA);
-    expect(client.getQueryData(qk.me.tasks())).toEqual(DATA.tasks);
+    expect(client.getQueryData(qk.me.tasksSummary(MY_TASKS_ALL))).toEqual(DATA.tasks.summary);
+    expect(client.getQueryData(qk.me.tasksList(meTasksBucketFilters("hoy")))).toEqual({
+      pages: [DATA.tasks.lists[0]!.page],
+      pageParams: [null],
+    });
     // Seeded: no request of its own on the first render.
-    await client.prefetchQuery(meTasksOptions());
-    expect(actions.fetchMyOpenTasksAction).not.toHaveBeenCalled();
+    await client.prefetchQuery(meTasksSummaryOptions(MY_TASKS_ALL));
+    await client.prefetchInfiniteQuery(meTasksListOptions(meTasksBucketFilters("hoy")));
+    expect(actions.getMyTasksSummary).not.toHaveBeenCalled();
+    expect(actions.getMyTasksPage).not.toHaveBeenCalled();
+    // Both live under the `me.tasks` prefix every task write invalidates.
+    expect(meTasksSummaryOptions(MY_TASKS_ALL).queryKey.slice(0, 2)).toEqual(qk.me.tasks());
+    expect(meTasksListOptions(meTasksBucketFilters("hoy")).queryKey.slice(0, 2)).toEqual(qk.me.tasks());
+  });
+
+  it("pages by cursor with the list filters", async () => {
+    const client = createTestQueryClient();
+    const f = meTasksGroupFilters(MY_TASKS_ALL, "p1", "diseno", false);
+    actions.getMyTasksPage.mockResolvedValue({ rows: [], nextCursor: "c1", total: 40 });
+    await client.fetchInfiniteQuery(meTasksListOptions(f));
+    expect(actions.getMyTasksPage).toHaveBeenLastCalledWith({ filters: f, cursor: null });
+    const options = meTasksListOptions(f);
+    const data = client.getQueryData<MeTasksListData>(options.queryKey)!;
+    expect(options.getNextPageParam(data.pages[0]!, data.pages, null, data.pageParams)).toBe("c1");
+    await options.queryFn!({ pageParam: "c1", queryKey: options.queryKey, signal: new AbortController().signal, meta: undefined, client, direction: "forward" } as never);
+    expect(actions.getMyTasksPage).toHaveBeenLastCalledWith({ filters: f, cursor: "c1" });
+  });
+
+  it("patchMeTaskRows edits a row in every list; a closed task leaves the open lists only", () => {
+    const client = createTestQueryClient();
+    const row = meTaskRowOf({
+      id: "k1",
+      title: "Planos",
+      status: "pendiente",
+      customStatus: null,
+      checklist: { total: 0, completed: 0 },
+      subtaskDoneCount: 0,
+      notes: null,
+    } as unknown as TaskListItem);
+    const open = qk.me.tasksList(meTasksGroupFilters(MY_TASKS_ALL, "p1", "diseno", false));
+    const all = qk.me.tasksList(meTasksGroupFilters(MY_TASKS_ALL, "p1", "diseno", true));
+    for (const key of [open, all]) client.setQueryData(key, { pages: [{ rows: [row], nextCursor: null, total: 1 }], pageParams: [null] });
+
+    patchMeTaskRows(client, "k1", (r) => ({ ...r, title: "Planos v2" }));
+    expect(client.getQueryData<MeTasksListData>(open)!.pages[0]!.rows[0]!.title).toBe("Planos v2");
+
+    patchMeTaskRows(client, "k1", (r) => ({ ...r, status: "completado" }));
+    expect(client.getQueryData<MeTasksListData>(open)!.pages[0]).toMatchObject({ rows: [], total: 0 });
+    expect(client.getQueryData<MeTasksListData>(all)!.pages[0]!.rows[0]!.status).toBe("completado");
+
+    patchMeTaskRows(client, "k1", () => null);
+    expect(client.getQueryData<MeTasksListData>(all)!.pages[0]).toMatchObject({ rows: [], total: 0 });
+  });
+
+  it("patchMeTasksSummaryStatus moves a closed or reopened task in every cached summary", () => {
+    const today = "2026-11-10";
+    const task = (id: string, extra: Partial<TaskListItem>) =>
+      ({
+        id,
+        title: id,
+        projectId: "p1",
+        project: { id: "p1", name: "Casa Lomas" },
+        workflow: { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 },
+        workflowId: "w1",
+        status: "pendiente",
+        customStatus: null,
+        archived: false,
+        commitmentDate: null,
+        checklist: { total: 0, completed: 0 },
+        subtaskDoneCount: 0,
+        notes: null,
+        ...extra,
+      }) as unknown as TaskListItem;
+    const fake = fakeMyTasks(
+      [
+        task("late", { commitmentDate: "2026-11-07", status: "bloqueado" }),
+        task("hoy", { commitmentDate: today }),
+        task("libre", {}),
+      ],
+      today,
+    );
+    const client = createTestQueryClient();
+    const plain = qk.me.tasksSummary(MY_TASKS_ALL);
+    const searched = qk.me.tasksSummary({ tramo: null, q: "late" });
+    client.setQueryData(plain, fake.summary(MY_TASKS_ALL));
+    client.setQueryData(searched, fake.summary({ tramo: null, q: "late" }));
+
+    const before = meTaskRowOf(fake.tasks[0]!);
+    const after = { ...before, status: "completado" as const };
+    // The Esencial cards' nearest date is left to the refetch.
+    const counted = (summary: MyTasksSummary | undefined) => ({
+      ...summary!,
+      esencial: summary!.esencial.map(({ nearestDue: _nearest, ...rest }) => rest),
+    });
+    patchMeTasksSummaryStatus(client, before, after);
+    fake.tasks[0] = { ...fake.tasks[0]!, status: "completado" };
+    expect(counted(client.getQueryData<MyTasksSummary>(plain))).toEqual(counted(fake.summary(MY_TASKS_ALL)));
+    // A searched summary: the filter-free counts follow, the rest waits for the refetch.
+    expect(client.getQueryData<MyTasksSummary>(searched)!.all).toEqual(fake.summary(MY_TASKS_ALL).all);
+
+    patchMeTasksSummaryStatus(client, after, before);
+    fake.tasks[0] = { ...fake.tasks[0]!, status: "bloqueado" };
+    expect(counted(client.getQueryData<MyTasksSummary>(plain))).toEqual(counted(fake.summary(MY_TASKS_ALL)));
+  });
+
+  it("insertMeTaskRow adds a created task to the loaded lists it fits", () => {
+    const client = createTestQueryClient();
+    const hoy = qk.me.tasksList(meTasksBucketFilters("hoy"));
+    const semana = qk.me.tasksList(meTasksBucketFilters("semana"));
+    for (const key of [hoy, semana]) client.setQueryData(key, { pages: [{ rows: [], nextCursor: null, total: 0 }], pageParams: [null] });
+    insertMeTaskRow(
+      client,
+      {
+        id: "n1",
+        projectId: "p1",
+        workflow: null,
+        commitmentDate: "2026-11-09",
+        checklist: { total: 0, completed: 0 },
+        subtaskDoneCount: 0,
+        notes: null,
+      } as unknown as TaskListItem,
+      "2026-11-09",
+    );
+    expect(client.getQueryData<MeTasksListData>(hoy)!.pages[0]).toMatchObject({ total: 1 });
+    expect(client.getQueryData<MeTasksListData>(hoy)!.pages[0]!.rows.map((r) => r.id)).toEqual(["n1"]);
+    expect(client.getQueryData<MeTasksListData>(semana)!.pages[0]!.rows).toEqual([]);
   });
 
   it("meWeekHoursOptions keys one week under the me.weekHours prefix", async () => {
