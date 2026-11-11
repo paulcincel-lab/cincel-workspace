@@ -12,3 +12,4 @@ ADR instead).
 | [0004](0004-estilo-replaces-view-switch.md) | The Estilo replaces the Tablero / Lista / Calendario view switch | Accepted |
 | [0005](0005-per-style-widget-kit.md) | Pages build their three styles from one shared widget kit | Accepted |
 | [0006](0006-mock-elements-without-data.md) | Mock elements without a data source | Proposed |
+| [0007](0007-calendar-proposals-and-undo.md) | Calendar changes from the asistente are stored proposals, applied and undone by id | Proposed |
