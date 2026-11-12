@@ -9,6 +9,7 @@ import type { CalItem, DetailAction, MeetingDetail } from "@/lib/types/calendari
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction } from "./event-detail-model";
 import { DetailActionButton, KindChip, TaskFacts, TramoBand } from "./EventDetailParts";
+import { MeetingDetailSheet } from "./MeetingParts";
 
 export type EventDetailSheetProps = {
   item: CalItem;
@@ -21,7 +22,7 @@ export type EventDetailSheetProps = {
 const SHEET_ORDER = [TASK_ACTION.complete, TASK_ACTION.reopen, TASK_ACTION.changeDate, TASK_ACTION.propose];
 
 /** Detail of an item in the Esencial Estilo: a modal bottom sheet with a big title and one primary action. */
-export function EventDetailSheet({ item, actions, onClose }: EventDetailSheetProps) {
+function TaskDetailSheet({ item, actions, onClose }: EventDetailSheetProps) {
   const [picking, setPicking] = useState(false);
   const shown = actionsFor(item, actions, SHEET_ORDER);
   const primary = findAction(shown, TASK_ACTION.complete, TASK_ACTION.reopen) ?? shown.find((a) => a.primary);
@@ -75,4 +76,10 @@ export function EventDetailSheet({ item, actions, onClose }: EventDetailSheetPro
       </SheetContent>
     </Sheet>
   );
+}
+
+/** Detail of a task or meeting (per-Estilo container): meetings render their own detail, tasks the task detail. */
+export function EventDetailSheet(props: EventDetailSheetProps) {
+  if (props.item.kind === "event") return <MeetingDetailSheet item={props.item} detail={props.detail} onClose={props.onClose} />;
+  return <TaskDetailSheet {...props} />;
 }

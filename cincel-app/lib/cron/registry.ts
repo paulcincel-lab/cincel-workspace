@@ -14,6 +14,7 @@ export const CRON_JOB_NAMES = [
   "auto-close-jornadas",
   "calendar-events-refresh",
   "calendar-meetings-resync",
+  "proposals-expire",
 ] as const;
 export type CronJobName = (typeof CRON_JOB_NAMES)[number];
 

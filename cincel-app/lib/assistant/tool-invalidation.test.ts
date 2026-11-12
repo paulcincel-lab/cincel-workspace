@@ -11,7 +11,6 @@ function done(tool: string, output: unknown = { ok: true }): Part {
 }
 
 const REMINDERS_PREFIX = ["me", "reminders"];
-const INICIO = ["inicio"];
 
 describe("keysForToolParts", () => {
   it.each([
@@ -57,6 +56,8 @@ describe("keysForToolParts", () => {
       done("list_my_tasks"),
       done("search_workspace"),
       done("render_chart"),
+      done("create_event"),
+      done("move_tasks"),
       done("not_a_tool"),
     ];
     expect(keysForToolParts(parts)).toEqual([]);

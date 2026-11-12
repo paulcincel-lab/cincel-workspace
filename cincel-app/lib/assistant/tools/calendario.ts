@@ -21,7 +21,13 @@ import { loadCalendarioRange } from "@/lib/loaders/calendario";
 import { normalizeCalendarioFilters } from "@/lib/calendario/url-state";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+import { actionErrorCode, actionErrorText } from "@/lib/errors";
+import { loadDaySummary, loadWeekSummary } from "@/lib/loaders/calendario";
+import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import { notImplemented } from "@/lib/stubs";
+import { mondayOf } from "@/lib/time-tracking/local-time";
+import { proposeFromText } from "@/lib/calendario/propose-from-text";
+import { proposalResult, proposeMoveTasks } from "@/lib/calendario/propose";
 import {
   ApplyProposalToolSchema,
   CalendarRangeToolSchema,
@@ -99,7 +105,7 @@ export const summarize_day = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.summarize_day,
-  run: async (ctx, input) => notImplemented("summarize_day", ctx, input),
+  run: async (ctx, input) => loadDaySummary(ctx.user, { date: input.date ?? todayInAppTimeZone() }),
 });
 
 export const summarize_week = defineTool({
@@ -112,7 +118,7 @@ export const summarize_week = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.summarize_week,
-  run: async (ctx, input) => notImplemented("summarize_week", ctx, input),
+  run: async (ctx, input) => loadWeekSummary(ctx.user, { from: mondayOf(input.from ?? todayInAppTimeZone()) }),
 });
 
 export const day_load = defineTool({
@@ -166,7 +172,10 @@ export const move_tasks = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.move_tasks,
-  run: async (ctx, input) => notImplemented("move_tasks", ctx, input),
+  async run(ctx, input) {
+    const made = await proposeMoveTasks({ user: ctx.user, threadId: ctx.threadId }, input);
+    return made.ok ? proposalResult(made.proposal) : made;
+  },
 });
 
 export const propose_from_text = defineTool({
@@ -180,7 +189,10 @@ export const propose_from_text = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.propose_from_text,
-  run: async (ctx, input) => notImplemented("propose_from_text", ctx, input),
+  async run(ctx, input) {
+    const made = await proposeFromText(ctx, input);
+    return made.ok ? proposalResult(made.proposal) : made;
+  },
 });
 
 export const propose_redistribution = defineTool({
@@ -237,6 +249,12 @@ export const extract_minutes = defineTool({
 
 // ── Write tools (§11.3) ─────────────────────────────────────────────────────
 
+/** A failed apply or undo as a tool result, with the calendar copy ("La propuesta expiró."). */
+function proposalFailure(err: unknown) {
+  const code = actionErrorCode(err) || "ERROR";
+  return { ok: false as const, error: code, message: actionErrorText(code, { area: "calendario" }) };
+}
+
 export const apply_proposal = defineTool({
   name: "apply_proposal",
   description:
@@ -247,7 +265,14 @@ export const apply_proposal = defineTool({
   confirm: true,
   write: true,
   summarize: toolSummaries.apply_proposal,
-  run: async (ctx, input) => notImplemented("apply_proposal", ctx, input),
+  run: async (ctx, input) => {
+    const { applyProposal } = await import("@/lib/calendario/apply");
+    try {
+      return await applyProposal(ctx.user, input.proposalId, input.changeIds);
+    } catch (err) {
+      return proposalFailure(err);
+    }
+  },
 });
 
 export const undo_proposal = defineTool({
@@ -260,7 +285,14 @@ export const undo_proposal = defineTool({
   confirm: true,
   write: true,
   summarize: toolSummaries.undo_proposal,
-  run: async (ctx, input) => notImplemented("undo_proposal", ctx, input),
+  run: async (ctx, input) => {
+    const { undoProposal } = await import("@/lib/calendario/apply");
+    try {
+      return await undoProposal(ctx.user, input.undoToken);
+    } catch (err) {
+      return proposalFailure(err);
+    }
+  },
 });
 
 export const create_tasks_from_minutes = defineTool({

@@ -35,7 +35,22 @@ type RangeStatus = ReturnType<typeof useCalendarioRange>;
  * filtros"). While another range loads the previous one stays, dimmed, under a
  * top progress line (FE §12).
  */
-export function CalendarioChrome({ query, status, children }: { query: CalendarioQuery; status: RangeStatus; children: ReactNode }): ReactNode {
+export function CalendarioChrome({
+  query,
+  status,
+  aboveBody,
+  onRefresh,
+  refreshing,
+  children,
+}: {
+  query: CalendarioQuery;
+  status: RangeStatus;
+  /** Rendered between the filters and the body: new meeting host, Google banner, Barra para pedir. */
+  aboveBody?: ReactNode;
+  onRefresh?(): void;
+  refreshing?: boolean;
+  children: ReactNode;
+}): ReactNode {
   const { range, isFetching, isPlaceholderData, isError, refetch } = status;
   const defaults = useCalendarioDefaults();
   const nav = useCalendarioNavigation(query);
@@ -61,6 +76,8 @@ export function CalendarioChrome({ query, status, children }: { query: Calendari
         todayDisabled={query.fecha === today}
         onPrefetch={nav.prefetchAdjacent}
         onPrefetchCancel={nav.cancelPrefetch}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
       />
       <CalendarioFilters
         filters={query.filters}
@@ -70,6 +87,7 @@ export function CalendarioChrome({ query, status, children }: { query: Calendari
         tramos={tramos}
         onChange={nav.patchFilters}
       />
+      {aboveBody}
       {changingRange ? (
         <Progress value={null} aria-label={copy.loadingRange} className="mb-2" trackClassName="h-0.5 rounded-none" />
       ) : null}

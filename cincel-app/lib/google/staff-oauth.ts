@@ -31,6 +31,9 @@ export const STAFF_SIGN_IN_SCOPES = ["openid", "email", "profile"];
 export const DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 
 /** Incremental grants (§A.6.2), the `scope` query value of `/api/auth/google/start`. */
+/** The `calendar_events` grant: meetings on the primary calendar and free/busy (Calendario BE §7.1, D1). */
+export const CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+export const CALENDAR_FREEBUSY_SCOPE = "https://www.googleapis.com/auth/calendar.freebusy";
 export const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export const GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
 
@@ -42,6 +45,7 @@ export const GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compos
 export const STAFF_OAUTH_EXTRA_SCOPES = {
   drive: DRIVE_READONLY_SCOPE,
   calendar: CALENDAR_SCOPE,
+  calendar_events: `${CALENDAR_EVENTS_SCOPE} ${CALENDAR_FREEBUSY_SCOPE}`,
   gmail: `${GMAIL_READONLY_SCOPE} ${GMAIL_COMPOSE_SCOPE}`,
   /** Primary calendar events (read, write with Meet) and free/busy (Calendario BE §7.1). */
   calendar_events: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy",

@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { CalendarFeedLinkSection, GoogleCalendarSyncSection } from "@/components/calendario/CalendarFeedDialog";
+import { GoogleMeetingsRow } from "@/components/calendario/GoogleMeetingsRow";
 import { FormDialog } from "@/components/patterns/FormDialog";
 import { SettingsSection } from "@/components/patterns/SettingsSection";
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
@@ -388,6 +389,7 @@ export function IntegracionesGoogleCalendar() {
       ) : (
         <p className="text-sm text-muted-foreground">{GOOGLE_UNAVAILABLE_COPY}</p>
       )}
+      {googleConfigured ? <GoogleMeetingsRow /> : null}
       <CalendarFeedLinkSection />
     </SettingsSection>
   );

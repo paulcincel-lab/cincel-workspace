@@ -10,6 +10,7 @@ import type { CalItem, DetailAction, MeetingDetail } from "@/lib/types/calendari
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction } from "./event-detail-model";
 import { DetailActionButton, KindChip, TaskFacts, TramoBand } from "./EventDetailParts";
+import { MeetingDetailCard } from "./MeetingParts";
 
 export type EventDetailCardProps = {
   item: CalItem;
@@ -78,7 +79,7 @@ function CardBody({ item, actions, onClose, headingId, showClose }: Pick<EventDe
  * item (`role="dialog"`, named by the title) that traps nothing; Escape closes.
  * Under 640 px it is a bottom sheet.
  */
-export function EventDetailCard({ item, actions, onClose, anchor }: EventDetailCardProps) {
+function TaskDetailCard({ item, actions, onClose, anchor }: EventDetailCardProps) {
   const narrow = useNarrow();
   const found = useMemo(
     () =>
@@ -133,4 +134,10 @@ export function EventDetailCard({ item, actions, onClose, anchor }: EventDetailC
       </PopoverContent>
     </Popover>
   );
+}
+
+/** Detail of a task or meeting (per-Estilo container): meetings render their own detail, tasks the task detail. */
+export function EventDetailCard(props: EventDetailCardProps) {
+  if (props.item.kind === "event") return <MeetingDetailCard item={props.item} detail={props.detail} onClose={props.onClose} />;
+  return <TaskDetailCard {...props} />;
 }

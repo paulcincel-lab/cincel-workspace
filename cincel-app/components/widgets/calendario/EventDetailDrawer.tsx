@@ -8,6 +8,7 @@ import type { CalItem, CalTaskItem, DetailAction, MeetingDetail } from "@/lib/ty
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction, projectTramoLine, taskNote, taskWhen } from "./event-detail-model";
 import { DetailActionButton, KindChip, TramoBand } from "./EventDetailParts";
+import { MeetingDetailDrawer } from "./MeetingParts";
 
 export type EventDetailDrawerProps = {
   item: CalItem;
@@ -61,7 +62,7 @@ function TaskFields({ item, task }: { item: CalTaskItem; task?: TaskDetail | nul
 }
 
 /** Detail of an item in the Analítico Estilo: a modal right drawer (420 px) with a field list and HISTORIAL. */
-export function EventDetailDrawer({ item, task, actions, onClose }: EventDetailDrawerProps) {
+function TaskDetailDrawer({ item, task, actions, onClose }: EventDetailDrawerProps) {
   const shown = actionsFor(item, actions, DRAWER_ORDER);
   const done = findAction(shown, TASK_ACTION.complete, TASK_ACTION.reopen);
   return (
@@ -103,4 +104,10 @@ export function EventDetailDrawer({ item, task, actions, onClose }: EventDetailD
       </SheetContent>
     </Sheet>
   );
+}
+
+/** Detail of a task or meeting (per-Estilo container): meetings render their own detail, tasks the task detail. */
+export function EventDetailDrawer(props: EventDetailDrawerProps) {
+  if (props.item.kind === "event") return <MeetingDetailDrawer item={props.item} detail={props.detail} onClose={props.onClose} />;
+  return <TaskDetailDrawer {...props} />;
 }

@@ -18,6 +18,18 @@ export async function getCalendarSync(staffId: string): Promise<GoogleCalendarSy
   return { calendarId: row.calendarId, enabled: row.enabled, lastSyncedAt: row.lastSyncedAt, lastError: row.lastError };
 }
 
+export type GooglePrimarySyncState = { syncedAt: Date | null; error: string | null };
+
+/** Where the viewer's primary-calendar events cache stands (Calendario, FE §6.3). */
+export async function getPrimarySync(staffId: string): Promise<GooglePrimarySyncState | null> {
+  const [row] = await db
+    .select({ syncedAt: googleCalendarSyncs.primarySyncedAt, error: googleCalendarSyncs.primaryError })
+    .from(googleCalendarSyncs)
+    .where(eq(googleCalendarSyncs.staffId, staffId))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function upsertCalendarSync(
   staffId: string,
   patch: Partial<GoogleCalendarSyncState>

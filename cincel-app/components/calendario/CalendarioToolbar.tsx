@@ -23,6 +23,9 @@ export type CalendarioToolbarProps = {
   onPrefetch?(direction: -1 | 1): void;
   /** Pointer or focus left Anterior / Siguiente. */
   onPrefetchCancel?(): void;
+  /** "Actualizar" (Google refresh with `force`); shown only when connected. */
+  onRefresh?(): void;
+  refreshing?: boolean;
 };
 
 /** Vista selector, Anterior / Hoy / Siguiente and the range label (FE §3). */
@@ -36,6 +39,8 @@ export function CalendarioToolbar({
   todayDisabled,
   onPrefetch,
   onPrefetchCancel,
+  onRefresh,
+  refreshing,
 }: CalendarioToolbarProps) {
   const hover = (direction: -1 | 1) => ({
     onMouseEnter: () => onPrefetch?.(direction),
@@ -62,6 +67,11 @@ export function CalendarioToolbar({
         <ChevronRight aria-hidden />
       </Button>
       <span aria-live="polite" className="text-sm text-muted-foreground">{rangeLabel}</span>
+      {onRefresh ? (
+        <Button variant="ghost" size="sm" className="ml-auto" onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? "Actualizando…" : "Actualizar"}
+        </Button>
+      ) : null}
     </div>
   );
 }

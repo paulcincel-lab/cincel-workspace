@@ -65,9 +65,27 @@ function utcStamp(now: Date): string {
   return now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
+/** A confirmed Cincel meeting as a timed `VEVENT` (Calendario BE §8.4). */
+export type IcsMeeting = {
+  id: string;
+  title: string;
+  description?: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  allDay?: boolean;
+  location?: string | null;
+  /** Meet link; without it the URL is the meeting in the calendar. */
+  meetUrl?: string | null;
+  projectName?: string | null;
+};
+
+function utcDateTime(date: Date): string {
+  return utcStamp(date);
+}
+
 export function buildIcs(
   events: CalendarEvent[],
-  options: { baseUrl: string; calendarName: string; now?: Date }
+  options: { baseUrl: string; calendarName: string; now?: Date; meetings?: IcsMeeting[] }
 ): string {
   const stamp = utcStamp(options.now ?? new Date());
   const lines: string[] = [
@@ -99,6 +117,25 @@ export function buildIcs(
       "TRANSP:TRANSPARENT",
       "END:VEVENT"
     );
+  }
+
+  for (const meeting of options.meetings ?? []) {
+    const description = [meeting.projectName ? `Proyecto: ${meeting.projectName}` : null, meeting.description?.trim() || null]
+      .filter((line): line is string => !!line)
+      .join("\n");
+    const date = meeting.startsAt.toISOString().slice(0, 10);
+    const url = meeting.meetUrl?.trim() || new URL(`/calendario?vista=dia&fecha=${date}&evento=e:${meeting.id}`, options.baseUrl).toString();
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${meeting.id}@cincel`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART:${utcDateTime(meeting.startsAt)}`,
+      `DTEND:${utcDateTime(meeting.endsAt)}`,
+      `SUMMARY:${escapeIcsText(meeting.title)}`
+    );
+    if (description) lines.push(`DESCRIPTION:${escapeIcsText(description)}`);
+    if (meeting.location?.trim()) lines.push(`LOCATION:${escapeIcsText(meeting.location.trim())}`);
+    lines.push(`URL:${url}`, "STATUS:CONFIRMED", "TRANSP:OPAQUE", "END:VEVENT");
   }
 
   lines.push("END:VCALENDAR");

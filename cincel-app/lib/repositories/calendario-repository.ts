@@ -28,6 +28,14 @@ import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import { openTaskSql, taskDueSql, whereFilters } from "@/lib/repositories/tasks-repository";
 import { stubDefault } from "@/lib/stubs";
 import { addDays } from "@/lib/time-tracking/local-time";
+import {
+  eventDayAggregates,
+  eventItemsInRange,
+  eventKpis,
+  mergeEventDays,
+  mergeEventItems,
+  mergeEventKpis,
+} from "@/lib/repositories/calendario-events-range";
 import type {
   CalDay,
   CalItem,
@@ -108,7 +116,9 @@ export async function dayAggregates(user: AuthenticatedUser, input: CalendarioRa
       .groupBy(due);
     for (const r of rows) byDay.set(r.day, { tasks: Number(r.tasks), overdue: Number(r.overdue), completed: Number(r.completed) });
   }
-  return datesBetween(input.from, input.to).map((date) => ({ ...emptyDay(date), ...(byDay.get(date) ?? {}) }));
+  const days = datesBetween(input.from, input.to).map((date) => ({ ...emptyDay(date), ...(byDay.get(date) ?? {}) }));
+  const events = await eventDayAggregates(user, input, input.filters, eventScope(user));
+  return mergeEventDays(days, events, input.filters);
 }
 
 /** The people supporting each task (`task_support`), by task id. */
@@ -166,6 +176,10 @@ async function toItems(rows: ItemRow[], today: string, canEdit: boolean): Promis
   return rows.map((r) => taskRowToItem({ ...r, support: support.get(r.id) ?? [] }, { today, canEdit }));
 }
 
+function eventScope(user: AuthenticatedUser) {
+  return { canViewTeam: resolveCalendarCapabilities(user).canViewTeamCalendar };
+}
+
 /** Task and event items of the range, at most `perDayLimit` per day. */
 export async function rangeItems(
   user: AuthenticatedUser,
@@ -174,7 +188,16 @@ export async function rangeItems(
   today: string = todayInAppTimeZone(),
 ): Promise<{ items: CalItem[]; truncated: boolean }> {
   const scope = taskScope(user, input.from, input.to, input.filters);
-  if (scope.none) return { items: [], truncated: false };
+  const taskPart = scope.none ? { items: [] as CalItem[], truncated: false } : await taskItemsInRange(scope, today, perDayLimit);
+  const events = await eventItemsInRange(user, input, input.filters, eventScope(user), { perDayLimit });
+  return mergeEventItems(taskPart, events, input.filters);
+}
+
+async function taskItemsInRange(
+  scope: ReturnType<typeof taskScope>,
+  today: string,
+  perDayLimit: number,
+): Promise<{ items: CalItem[]; truncated: boolean }> {
   const due = taskDueSql();
   // Rank the tasks of each day: overdue, then open by priority, then completed.
   const ranked = db
@@ -208,7 +231,11 @@ export async function rangeItems(
 export async function rangeKpis(user: AuthenticatedUser, input: CalendarioRangeInput, today: string): Promise<CalKpis> {
   const scope = taskScope(user, input.from, input.to, input.filters);
   const kpis: CalKpis = { tasks: 0, meetings: 0, meetingHours: 0, overdue: 0, overduePct: 0, unassigned: 0 };
-  if (scope.none) return kpis;
+  const taskKpis = scope.none ? kpis : await taskKpisOf(scope, today, kpis);
+  return mergeEventKpis(taskKpis, await eventKpis(user, input, input.filters, eventScope(user)), input.filters);
+}
+
+async function taskKpisOf(scope: ReturnType<typeof taskScope>, today: string, kpis: CalKpis): Promise<CalKpis> {
   const due = taskDueSql();
   const [row] = await db
     .select({
@@ -229,6 +256,7 @@ export async function rangeKpis(user: AuthenticatedUser, input: CalendarioRangeI
     overduePct: open === 0 ? 0 : Math.round((overdue / open) * 100),
     unassigned: Number(row?.unassigned ?? 0),
   };
+}
 }
 
 type ListKey = { d: string; t: string; i: string };

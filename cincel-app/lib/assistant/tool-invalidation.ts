@@ -62,7 +62,7 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
   meeting_to_tasks: [TASKS],
   schedule_site_visit: [TASKS, EVENTS, CALENDARIO],
   schedule_from_template: [TASKS],
-  // Calendario y planeación (BE §11.3): the proposing tools write nothing, so they have no entry.
+  // Calendario y planeación (BE §11.3): the proposing tools (move_tasks, create_event, update_event, cancel_event, ...) write nothing, so they have no entry.
   apply_proposal: [CALENDARIO, PROPOSALS, TASKS, EVENTS],
   undo_proposal: [CALENDARIO, PROPOSALS, TASKS, EVENTS],
   create_tasks_from_minutes: [CALENDARIO, PROPOSALS, TASKS, EVENTS, PROJECTS],

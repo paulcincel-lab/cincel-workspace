@@ -11,6 +11,7 @@ import type { CalItem, CalTramoRef } from "@/lib/types/calendario";
 import { COMPLETED_TAG, MOVE_TO_OTHER_DAY, OVERDUE_TAG } from "./grid-copy";
 import { MoveDayDialog } from "./MoveDayDialog";
 
+
 export type CalendarItemChipProps = {
   item: CalItem;
   density: "chip" | "card" | "block";
