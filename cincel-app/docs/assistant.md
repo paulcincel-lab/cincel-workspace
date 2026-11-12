@@ -60,6 +60,33 @@ Requiere `GITHUB_PAT` (fine-grained, scope `Issues: write` solo sobre
 `GITHUB_REPO`) y `GITHUB_REPO` (`owner/repo`) — sin ellas, la herramienta
 responde `{ ok: false, error }` en vez de fallar silenciosamente.
 
+## Calendario: herramientas, propuestas y deshacer
+
+El grupo `calendario` (`lib/assistant/tools/calendario.ts`, ADR 0007) deja que el
+asistente planee desde `/calendario` sin cambiar datos por su cuenta: toda
+modificación es una **propuesta guardada** (`assistant_proposals`) que la persona
+aplica o cancela y que se puede deshacer.
+
+- **Lectura:** `calendar_range`, `summarize_day`, `summarize_week`, `day_load`,
+  `find_overloads`, `meeting_prep`. Las descripciones de eventos de Google se
+  entregan marcadas como contenido no confiable.
+- **Proponen (no escriben tareas ni eventos):** `move_tasks`, `propose_from_text`
+  (la Barra para pedir; «Pasa lo vencido al jueves» se resuelve sin modelo),
+  `propose_redistribution`, `resolve_overlap`, `plan_week`, `extract_minutes`.
+  Cada una devuelve `proposalId`, `changes` y `deferred`.
+- **Escriben, con confirmación:** `apply_proposal` (completa o solo los cambios
+  elegidos), `undo_proposal` (con el token, 15 minutos; solo restaura lo que no
+  cambió después), `create_tasks_from_minutes`, `send_agenda`, `send_minutes`.
+- **Deshacer:** aplicar guarda un token; deshacer retira las tareas y reuniones
+  creadas, devuelve las fechas y retira las decisiones de la minuta del historial
+  del proyecto. Al aplicar `planear_semana`, cada responsable distinto de quien
+  aplica recibe un solo aviso «Tu semana cambió».
+- **Límites de uso (por persona):** modelo de la Barra 20 cada 10 min; aplicar y
+  deshacer 60 cada 10 min; extraer minuta 20 cada 10 min; enviar minuta o agenda
+  10 por hora y 3 por evento por hora; crear reuniones 30 por hora.
+- **Sugerencias:** cada sugerencia de la página nombra una herramienta registrada
+  y disponible para el rol (`tool-references.test.ts`).
+
 ## Cómo agregar una herramienta
 
 1. Si escribe datos, agrega una Server Action en `lib/actions/<entidad>-actions.ts`

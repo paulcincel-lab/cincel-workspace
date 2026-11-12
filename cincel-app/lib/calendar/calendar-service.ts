@@ -1,16 +1,8 @@
-import type { CalendarEvent, CalendarEventType, CalendarFilterOptions, CalendarFilters, CalendarTypeSummaryRow } from "@/lib/types/calendar";
+import type { CalendarEvent, CalendarEventType } from "@/lib/types/calendar";
 import type { TaskListItem } from "@/lib/types/core";
 
 /** What the calendar reads of a task: a `TaskListItem` or a slim `TaskListRow` (no `notes`). */
 type CalendarTask = Omit<TaskListItem, "notes">;
-
-const DEFAULT_FILTERS: CalendarFilters = {
-  project: "Todos",
-  responsible: "Todos",
-  type: "Todos",
-  tramo: "Todos",
-  phase: "Todas",
-};
 
 export const NO_TRAMO_LABEL = "Sin tramo";
 export const ADMIN_TRAMO_LABEL = "Administración";
@@ -167,89 +159,6 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEvent[] {
 
     return a.title.localeCompare(b.title);
   });
-}
-
-export function buildCalendarFilterOptions(events: CalendarEvent[]): CalendarFilterOptions {
-  const projects = new Set<string>();
-  const responsibles = new Set<string>();
-  const types = new Set<string>();
-  const phasesByTramo = new Map<string, Set<string>>();
-
-  for (const event of events) {
-    if (event.project) projects.add(event.project);
-    if (event.responsible) responsibles.add(event.responsible);
-    if (event.type) types.add(event.type);
-    if (event.tramoLabel) {
-      const phases = phasesByTramo.get(event.tramoLabel) ?? new Set<string>();
-      if (event.phaseLabel) phases.add(event.phaseLabel);
-      phasesByTramo.set(event.tramoLabel, phases);
-    }
-  }
-
-  const sorted = (values: Iterable<string>) => Array.from(values).sort((a, b) => a.localeCompare(b));
-  return {
-    projects: ["Todos", ...sorted(projects)],
-    responsibles: ["Todos", ...sorted(responsibles)],
-    types: ["Todos", ...sorted(types)],
-    tramos: ["Todos", ...sorted(phasesByTramo.keys())],
-    phasesByTramo: Object.fromEntries(
-      Array.from(phasesByTramo.entries()).map(([tramo, phases]) => [tramo, ["Todas", ...sorted(phases)]])
-    ),
-  };
-}
-
-export function applyCalendarFilters(events: CalendarEvent[], filters: Partial<CalendarFilters>): CalendarEvent[] {
-  const safeFilters: CalendarFilters = {
-    ...DEFAULT_FILTERS,
-    ...filters,
-  };
-  const anyTramo = safeFilters.tramo === "Todos";
-
-  return events.filter((event) => {
-    const matchesProject = safeFilters.project === "Todos" || event.project === safeFilters.project;
-    const matchesResponsible = safeFilters.responsible === "Todos" || event.responsible === safeFilters.responsible;
-    const matchesType = safeFilters.type === "Todos" || event.type === safeFilters.type;
-    const matchesTramo = anyTramo || event.tramoLabel === safeFilters.tramo;
-    // The fase filter only applies once a tramo is picked (FE §3.9).
-    const matchesPhase = anyTramo || safeFilters.phase === "Todas" || event.phaseLabel === safeFilters.phase;
-
-    return matchesProject && matchesResponsible && matchesType && matchesTramo && matchesPhase;
-  });
-}
-
-export function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
-  const grouped = new Map<string, CalendarEvent[]>();
-
-  for (const event of events) {
-    const list = grouped.get(event.date) ?? [];
-    list.push(event);
-    grouped.set(event.date, list);
-  }
-
-  for (const list of grouped.values()) {
-    list.sort((a, b) => {
-      const timeDiff = a.time.localeCompare(b.time);
-      if (timeDiff !== 0) {
-        return timeDiff;
-      }
-
-      return a.title.localeCompare(b.title);
-    });
-  }
-
-  return grouped;
-}
-
-export function buildTypeSummary(events: CalendarEvent[]): CalendarTypeSummaryRow[] {
-  const counts = new Map<CalendarEventType, number>();
-
-  for (const event of events) {
-    counts.set(event.type, (counts.get(event.type) ?? 0) + 1);
-  }
-
-  return Array.from(counts.entries())
-    .map(([type, total]) => ({ type, total }))
-    .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type));
 }
 
 export function startOfWeek(date: Date): Date {

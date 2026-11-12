@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyCalendarFilters, buildCalendarEvents, buildCalendarFilterOptions } from "./calendar-service";
+import { buildCalendarEvents } from "./calendar-service";
 import type { TaskListItem } from "@/lib/types/core";
 
 function makeTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
@@ -92,31 +92,5 @@ describe("buildCalendarEvents — tramo and fase", () => {
     expect(none).toMatchObject({ tramo: "sin-tramo", tramoLabel: "Sin tramo", phaseId: null, phaseLabel: "" });
     const [admin] = buildCalendarEvents([makeTask({ kind: "admin" })]);
     expect(admin).toMatchObject({ tramo: "admin", tramoLabel: "Administración" });
-  });
-});
-
-describe("calendar filters — tramo and fase", () => {
-  const diseno = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
-  const presale = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
-  const events = buildCalendarEvents([
-    makeTask({ id: "a", workflow: diseno, phase: { id: "f1", name: "Ejecutivo", sortOrder: 1 } }),
-    makeTask({ id: "b", workflow: diseno, phase: { id: "f2", name: "Anteproyecto", sortOrder: 0 } }),
-    makeTask({ id: "c", workflow: presale, phase: null }),
-  ]);
-
-  it("lists tramos and each tramo's fases", () => {
-    const options = buildCalendarFilterOptions(events);
-    expect(options.tramos).toEqual(["Todos", "Diseño", "Presale"]);
-    expect(options.phasesByTramo).toEqual({ Diseño: ["Todas", "Anteproyecto", "Ejecutivo"], Presale: ["Todas"] });
-  });
-
-  it("filters by tramo, then by fase within it", () => {
-    const ids = (filters: Parameters<typeof applyCalendarFilters>[1]) =>
-      applyCalendarFilters(events, filters).map((e) => e.taskId);
-    expect(ids({})).toEqual(["a", "b", "c"]);
-    expect(ids({ tramo: "Diseño" })).toEqual(["a", "b"]);
-    expect(ids({ tramo: "Diseño", phase: "Ejecutivo" })).toEqual(["a"]);
-    // The fase filter is ignored until a tramo is picked.
-    expect(ids({ tramo: "Todos", phase: "Ejecutivo" })).toEqual(["a", "b", "c"]);
   });
 });

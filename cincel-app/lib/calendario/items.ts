@@ -1,5 +1,4 @@
-/** Row → CalItem mapping (BE §5.2, §5.3). Pure and client-safe. Task mapping lives here; `eventRowToItem` belongs to the meetings issue. */
-import { notImplemented } from "@/lib/stubs";
+/** Row → CalItem mapping (BE §5.2, §5.3). Pure and client-safe. Task mapping lives here; meetings map in `calendario-events-range.ts`. */
 import { BASE_STATUS_LABEL } from "@/lib/tasks/status-options";
 import { tramoColorSlot } from "@/lib/tramos/tramo-color";
 import type { CalEventItem, CalItem, CalPersonRef, CalTaskItem, CalTramoRef, CalendarioFilters } from "@/lib/types/calendario";
@@ -108,11 +107,6 @@ export function taskRowToItem(row: TaskItemRow, ctx: { today: string; canEdit: b
 export function effectiveFilters(filters: CalendarioFilters, canViewTeamCalendar: boolean): CalendarioFilters {
   const quien = canViewTeamCalendar ? filters.quien : "yo";
   return { ...filters, quien, responsable: quien === "todos" ? filters.responsable : null };
-}
-
-/** An event row as a `CalEventItem`. */
-export function eventRowToItem(row: unknown, ctx: { canEdit: boolean; viewerId: string }): CalEventItem {
-  return notImplemented("eventRowToItem", row, ctx);
 }
 
 const PRIORITY_RANK: Record<TaskPriority, number> = { alta: 0, media: 1, baja: 2 };
