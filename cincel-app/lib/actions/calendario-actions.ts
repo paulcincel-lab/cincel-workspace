@@ -13,8 +13,6 @@ import { calendarEvents } from "@/lib/db/schema";
 import { actionCodeOf, refreshPrimaryEvents, writeMeetingToGoogle } from "@/lib/google/calendar-events-sync";
 import * as calendarEventsRepository from "@/lib/repositories/calendar-events-repository";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
-import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
-import { requireCapabilityUser } from "@/lib/auth/session";
 import { notImplementedAction } from "@/lib/stubs";
 import type {
   ApplyProposalResult,
@@ -26,9 +24,14 @@ import type {
 } from "@/lib/types/calendario";
 import type { TaskDetail } from "@/lib/types/core";
 import type { ActionResult } from "@/lib/types/schedule";
-import { CancelMeetingOptsSchema, MeetingDraftSchema, UpdateMeetingInputSchema } from "@/lib/validation/calendario";
-import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
-import { ApplyProposalToolSchema, ProposeFromTextToolSchema, UndoProposalToolSchema } from "@/lib/validation/calendario";
+import {
+  ApplyProposalToolSchema,
+  CancelMeetingOptsSchema,
+  MeetingDraftSchema,
+  ProposeFromTextToolSchema,
+  UndoProposalToolSchema,
+  UpdateMeetingInputSchema,
+} from "@/lib/validation/calendario";
 import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 /** The proposing tools a button on the page may run (BE §12). */

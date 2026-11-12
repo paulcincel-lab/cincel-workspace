@@ -257,7 +257,6 @@ async function taskKpisOf(scope: ReturnType<typeof taskScope>, today: string, kp
     unassigned: Number(row?.unassigned ?? 0),
   };
 }
-}
 
 type ListKey = { d: string; t: string; i: string };
 

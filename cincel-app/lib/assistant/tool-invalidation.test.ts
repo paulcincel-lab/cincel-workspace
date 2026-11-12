@@ -23,7 +23,6 @@ describe("keysForToolParts", () => {
     ["create_task", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks(), qk.calendario.all]],
     ["update_task_status", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
     ["create_tasks_from_notes", [qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks()]],
-    ["create_event", [INICIO, qk.calendario.all]],
     ["send_email", [qk.me.gmail.all]],
     ["draft_email", [qk.me.gmail.all]],
     ["invite_client_to_portal", [qk.proyectos.all]],

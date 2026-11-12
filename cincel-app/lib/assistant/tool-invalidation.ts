@@ -67,10 +67,6 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
   undo_proposal: [CALENDARIO, PROPOSALS, TASKS, EVENTS],
   create_tasks_from_minutes: [CALENDARIO, PROPOSALS, TASKS, EVENTS, PROJECTS],
   send_minutes: [CALENDARIO],
-  // Calendar events
-  create_event: [EVENTS, CALENDARIO],
-  update_event: [EVENTS, CALENDARIO],
-  cancel_event: [EVENTS, CALENDARIO],
   // Email
   draft_email: [EMAIL],
   send_email: [EMAIL],

@@ -47,8 +47,6 @@ export const STAFF_OAUTH_EXTRA_SCOPES = {
   calendar: CALENDAR_SCOPE,
   calendar_events: `${CALENDAR_EVENTS_SCOPE} ${CALENDAR_FREEBUSY_SCOPE}`,
   gmail: `${GMAIL_READONLY_SCOPE} ${GMAIL_COMPOSE_SCOPE}`,
-  /** Primary calendar events (read, write with Meet) and free/busy (Calendario BE §7.1). */
-  calendar_events: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy",
 } as const;
 
 export type StaffOauthScope = keyof typeof STAFF_OAUTH_EXTRA_SCOPES;
