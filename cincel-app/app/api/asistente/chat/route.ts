@@ -23,6 +23,7 @@ import {
 } from "@/lib/assistant/approvals";
 import { buildChatTools } from "@/lib/assistant/chat-tools";
 import { resolveAssistantContext } from "@/lib/assistant/context";
+import { AssistantCalendarContextSchema } from "@/lib/validation/calendario";
 import { loadOwnerMail } from "@/lib/assistant/owner-mail";
 import {
   applyApprovalResponses,
@@ -123,6 +124,8 @@ const contextSchema = z.object({
   projectId: z.string().max(100).optional(),
   taskId: z.string().max(100).optional(),
   personId: z.string().max(100).optional(),
+  /** Calendario page context (dates, ids and enums); an invalid one is dropped, not a 400. */
+  calendar: AssistantCalendarContextSchema.optional().catch(undefined),
 });
 
 const chatBodySchema = z.object({

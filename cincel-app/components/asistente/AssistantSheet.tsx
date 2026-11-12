@@ -29,7 +29,11 @@ import {
 } from "@/components/ui/shadcn/dropdown-menu";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Textarea } from "@/components/ui/shadcn/textarea";
+import { useAssistantToolGroups } from "@/components/asistente/assistant-tool-groups";
+import { calendarioComposerPlaceholder, calendarioContextLine } from "@/lib/assistant/calendar-hints";
+import { calendarioSuggestions } from "@/lib/assistant/suggestions";
 import { actionErrorText } from "@/lib/errors";
+import { calendarioAssistantHintsOptions } from "@/lib/query/options/calendario";
 import { asistenteThreadOptions, asistenteThreadsOptions } from "@/lib/query/options/asistente";
 import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
 import type { AssistantContext } from "@/lib/types/redesign";
@@ -200,7 +204,11 @@ export function AssistantSheet({ open, onOpenChange, context, finalFocus }: Assi
             <SheetDescription className="sr-only">
               Asistente de Cincel. Pregunta sobre tus proyectos, tareas y equipo.
             </SheetDescription>
-            {confirmed ? (
+            {effectiveContext.calendar ? (
+              <Badge variant="outline" className="max-w-full" data-testid="asistente-contexto">
+                <span className="truncate">{calendarioContextLine(effectiveContext.calendar)}</span>
+              </Badge>
+            ) : confirmed ? (
               <Badge variant="outline" className="max-w-full" data-testid="asistente-contexto">
                 <span className="truncate">Viendo: {confirmed.label}</span>
               </Badge>
@@ -297,6 +305,16 @@ function SheetConversation({ threadId, seedMessages, openingError, context, onTu
     onTurnFinishedRef.current = onTurnFinished;
   }, [context, contextStore, onTurnFinished]);
 
+  // On /calendario the suggestions and the placeholder use the viewer's real dates and names (BE §11.5).
+  const calendarOpen = Boolean(context.calendar);
+  const toolGroups = useAssistantToolGroups();
+  const hintsQuery = useQuery({ ...calendarioAssistantHintsOptions(), enabled: calendarOpen });
+  const suggestions = useMemo(
+    () => (calendarOpen ? calendarioSuggestions(hintsQuery.data, toolGroups) : []),
+    [calendarOpen, hintsQuery.data, toolGroups],
+  );
+  const placeholder = calendarOpen ? calendarioComposerPlaceholder(hintsQuery.data?.project ?? null) : COMPOSER_PLACEHOLDER;
+
   const transport = useMemo(() => createAssistantChatTransport(ASSISTANT_CHAT_API, contextStore), [contextStore]);
 
   const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
@@ -343,6 +361,12 @@ function SheetConversation({ threadId, seedMessages, openingError, context, onTu
     requestAnimationFrame(() => focusComposerAtEnd(textareaRef.current, pendingPrompt.text.length));
     useAssistantUi.getState().consumePrompt();
   }, [pendingPrompt]);
+
+  const sendSuggestion = (text: string) => {
+    if (isBusy) return;
+    setError(null);
+    void Promise.resolve(sendMessage({ text })).catch((err) => setError(actionErrorText(err)));
+  };
 
   const submit = async () => {
     const text = input.trim();
@@ -433,11 +457,17 @@ function SheetConversation({ threadId, seedMessages, openingError, context, onTu
         ) : null}
 
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Acciones rápidas">
-          {QUICK_ACTIONS.map((action) => (
-            <Button key={action.label} variant="outline" size="xs" onClick={() => applyPrompt(action.prompt)}>
-              {action.label}
-            </Button>
-          ))}
+          {suggestions.length > 0
+            ? suggestions.map((suggestion) => (
+                <Button key={suggestion.text} variant="outline" size="xs" disabled={isBusy} onClick={() => sendSuggestion(suggestion.text)}>
+                  {suggestion.text}
+                </Button>
+              ))
+            : QUICK_ACTIONS.map((action) => (
+                <Button key={action.label} variant="outline" size="xs" onClick={() => applyPrompt(action.prompt)}>
+                  {action.label}
+                </Button>
+              ))}
         </div>
 
         <form
@@ -463,7 +493,7 @@ function SheetConversation({ threadId, seedMessages, openingError, context, onTu
             ref={textareaRef}
             value={input}
             rows={1}
-            placeholder={COMPOSER_PLACEHOLDER}
+            placeholder={placeholder}
             disabled={isBusy}
             className="max-h-40 resize-none"
             onChange={(e) => {

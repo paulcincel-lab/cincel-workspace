@@ -33,9 +33,18 @@ Cómo funciona, en corto:
   - Inicio de sesión: `openid`, `email`, `profile`.
   - Drive (se pide aparte, la primera vez que alguien abre archivos): `https://www.googleapis.com/auth/drive.readonly`.
   - Calendario (se pide aparte, al activar la sincronización): `https://www.googleapis.com/auth/calendar.app.created`.
+  - Calendario de reuniones (se pide aparte, desde Calendario, `?scope=calendar_events`): el administrador las habilita
+    para el cliente y cada persona las concede al conectar Google Calendar.
+    - `https://www.googleapis.com/auth/calendar.events` (leer y escribir eventos del calendario principal, con Meet)
+    - `https://www.googleapis.com/auth/calendar.freebusy` (ver si las personas están libres u ocupadas)
   - Gmail (se pide aparte, al conectar Gmail en Mi espacio, `?grant=gmail`):
     - `https://www.googleapis.com/auth/gmail.readonly`
     - `https://www.googleapis.com/auth/gmail.compose`
+- [ ] Agregar los dos permisos de Calendario de reuniones (`calendar.events` y `calendar.freebusy`) en **APIs y
+      servicios → Pantalla de consentimiento OAuth → Acceso a los datos → Agregar o quitar permisos** del cliente
+      "Cincel Staff", y guardar. Mientras el administrador no los habilite, Google responde `access_denied` al
+      conectar y Cincel muestra "Tu administrador todavía no habilita Google Calendar para Cincel." (las reuniones
+      se guardan solo en Cincel).
 - [ ] Agregar los dos permisos de Gmail en **APIs y servicios → Pantalla de consentimiento OAuth → Acceso a los datos →
       Agregar o quitar permisos** del cliente "Cincel Staff" (paso 3), y guardar.
 - [ ] Confirmar que el **público** de la app sigue en **Interno**. `gmail.readonly` es un permiso **restringido**: con

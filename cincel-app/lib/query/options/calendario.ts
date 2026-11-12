@@ -12,6 +12,8 @@ import {
   getPlanWeek,
   getProposal,
 } from "@/lib/actions/page-data/calendario-actions";
+import { fetchCalendarioAssistantHintsAction } from "@/lib/actions/calendario-assistant-actions";
+import type { CalendarioAssistantHints } from "@/lib/assistant/calendar-hints";
 import { normalizeCalendarioFilters } from "@/lib/calendario/url-state";
 import { STALE, qk } from "@/lib/query/keys";
 import type {
@@ -141,4 +143,13 @@ export function calendarioInvalidations(kind: CalendarioInvalidationKind, projec
     case "minutes":
       return [qk.calendario.all, qk.inicio(), ...(projectId ? [qk.proyectos.history(projectId)] : [])];
   }
+}
+
+/** Next delivery, a teammate and a project for the asistente's Calendario suggestions (BE §11.5). */
+export function calendarioAssistantHintsOptions() {
+  return queryOptions<CalendarioAssistantHints>({
+    queryKey: qk.calendario.assistantHints(),
+    queryFn: () => fetchCalendarioAssistantHintsAction(),
+    staleTime: STALE.screen,
+  });
 }

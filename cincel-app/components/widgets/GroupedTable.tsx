@@ -235,13 +235,18 @@ function leadingColumns<Row extends Record<string, unknown>>(props: GroupedTable
 }
 
 /** Every row id of the groups (and their children, and the open nested rows), in the order the table shows them. */
-function orderedRowIds<Row>(groups: Group<Row>[], idOf: (row: Row, index: number) => string, detail?: RowDetail<Row>): string[] {
+function orderedRowIds<Row>(
+  groups: Group<Row>[],
+  idOf: (row: Row, index: number) => string,
+  detail?: RowDetail<Row>,
+  selectable?: (row: Row) => boolean,
+): string[] {
   return groups.flatMap((group) => [
     ...(group.rows ?? []).flatMap((row, index) => [
-      idOf(row, index),
+      ...(selectable && !selectable(row) ? [] : [idOf(row, index)]),
       ...(detail?.rows && hasRowDetail(detail, row) && detail.isOpen(row) ? (detail.rows(row) ?? []).map((child, i) => idOf(child, i)) : []),
     ]),
-    ...orderedRowIds(group.children ?? [], idOf, detail),
+    ...orderedRowIds(group.children ?? [], idOf, detail, selectable),
   ]);
 }
 
@@ -516,7 +521,9 @@ function LeafRow<Row extends Record<string, unknown>>({
     >
       {ctx.selection.enabled ? (
         <td data-slot="row-select-cell" className={cn("border-b border-border py-0 group-hover/row:bg-muted/50 group-data-[selected]/row:bg-muted", SELECT_CELL_CLASS)}>
-          <RowSelectCheckbox selection={ctx.selection} id={id} label={props.getRowLabel?.(row) ?? id} />
+          {props.isRowSelectable?.(row) === false ? null : (
+            <RowSelectCheckbox selection={ctx.selection} id={id} label={props.getRowLabel?.(row) ?? id} />
+          )}
         </td>
       ) : null}
       {columns.map((column, columnIndex) => {
@@ -801,7 +808,7 @@ function TopGroup<Row extends Record<string, unknown>>({
               style={{ minWidth }}
             >
               <thead className="sticky top-0">
-                <HeaderRow ctx={ctx} rowIds={orderedRowIds([group], ctx.idOf, ctx.props.rowDetail)} />
+                <HeaderRow ctx={ctx} rowIds={orderedRowIds([group], ctx.idOf, ctx.props.rowDetail, ctx.props.isRowSelectable)} />
               </thead>
               {ownRows ? (
                 <tbody data-slot="group-rows">
@@ -831,7 +838,7 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
     () => (row: Row, index: number) => getRowId?.(row, index) ?? rowId(row, index),
     [getRowId],
   );
-  const rowOrder = useMemo(() => orderedRowIds(groups, idOf, p.rowDetail), [groups, idOf, p.rowDetail]);
+  const rowOrder = useMemo(() => orderedRowIds(groups, idOf, p.rowDetail, p.isRowSelectable), [groups, idOf, p.rowDetail, p.isRowSelectable]);
   const selection = useTableSelection(p, rowOrder);
 
   // Uncontrolled: the ids whose state differs from `defaultExpanded`.

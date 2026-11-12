@@ -72,10 +72,11 @@ describe("staffOauthConfig", () => {
 });
 
 describe("parseStaffOauthScope", () => {
-  it("accepts drive, calendar and gmail only", () => {
+  it("accepts drive, calendar, calendar_events and gmail only", () => {
     expect(parseStaffOauthScope("drive")).toBe("drive");
     expect(parseStaffOauthScope("calendar")).toBe("calendar");
     expect(parseStaffOauthScope("gmail")).toBe("gmail");
+    expect(parseStaffOauthScope("calendar_events")).toBe("calendar_events");
     expect(parseStaffOauthScope("admin")).toBeNull();
     expect(parseStaffOauthScope(null)).toBeNull();
   });
@@ -96,6 +97,24 @@ describe("hasGrantedScope", () => {
     expect(hasGrantedScope(`openid email ${read} ${compose}`, "gmail")).toBe(true);
     expect(hasGrantedScope(`openid email ${read}`, "gmail")).toBe(false);
     expect(hasGrantedScope(`openid email ${compose}`, "gmail")).toBe(false);
+  });
+});
+
+describe("calendar_events grant", () => {
+  const events = "https://www.googleapis.com/auth/calendar.events";
+  const freebusy = "https://www.googleapis.com/auth/calendar.freebusy";
+
+  it("needs both calendar.events and calendar.freebusy", () => {
+    expect(hasGrantedScope(`openid email ${events} ${freebusy}`, "calendar_events")).toBe(true);
+    expect(hasGrantedScope(`openid email ${events}`, "calendar_events")).toBe(false);
+    expect(hasGrantedScope(`openid email ${freebusy}`, "calendar_events")).toBe(false);
+  });
+
+  it("the auth URL asks for both scopes on top of sign-in", () => {
+    const { url, cookie } = startStaffOauth({ scope: "calendar_events", loginHint: "ana@example.test" }, env);
+    expect(params(url).get("scope")).toBe(`openid email profile ${events} ${freebusy}`);
+    expect(params(url).get("prompt")).toBe("consent");
+    expect(stateFromCookie(cookie.value).scope).toBe("calendar_events");
   });
 });
 

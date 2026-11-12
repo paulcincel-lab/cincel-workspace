@@ -2,8 +2,10 @@
  * Calendario URL state (FE §2.4). Client-safe. `vista` and `fecha` are URL
  * state, not store state: they are shareable and survive a reload.
  */
+import { defaultCalVista } from "@/lib/calendario/labels";
 import { rangeOf } from "@/lib/calendario/range";
-import type { CalMostrar, CalView, CalendarioFilters, CalendarioQuery } from "@/lib/types/calendario";
+import type { CalMostrar, CalView, CalendarioFilters, CalendarioQuery, CalendarioRangeInput } from "@/lib/types/calendario";
+import type { PresentationStyle } from "@/lib/types/redesign";
 
 export const CALENDARIO_PATH = "/calendario";
 
@@ -136,4 +138,14 @@ export function calendarioHref(q: CalendarioQuery, defaults: CalendarioQueryDefa
 /** The range input of a query, for `qk.calendario.range` and the loader. */
 export function rangeInputOf(q: CalendarioQuery) {
   return { view: q.vista, ...rangeOf(q.vista, q.fecha), filters: q.filters };
+}
+
+/** The range a visit to `/calendario` without params shows in `style`: its default vista around today (nav hover prefetch, FE §2.2). */
+export function defaultRangeInput(
+  style: PresentationStyle | null | undefined,
+  today: string,
+  defaults?: Pick<CalendarioQueryDefaults, "ocultarCompletadas">,
+): CalendarioRangeInput {
+  const vista = defaultCalVista(style);
+  return { view: vista, ...rangeOf(vista, today), filters: normalizeCalendarioFilters(undefined, defaults) };
 }

@@ -226,6 +226,7 @@ export const qk = {
     prep: (id: string) => ["calendario", "meeting", id, "prep"] as const,
     minutes: (id: string) => ["calendario", "meeting", id, "minutes"] as const,
     planWeek: (i: { weekStart: string; staffIds: string[] }) => ["calendario", "plan-week", i] as const,
+    assistantHints: () => ["calendario", "assistant-hints"] as const,
     proposals: () => ["calendario", "proposals"] as const,
     proposal: (id: string) => ["calendario", "proposals", id] as const,
   },

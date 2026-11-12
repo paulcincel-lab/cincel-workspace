@@ -8,6 +8,7 @@
 import type { UIMessage } from "ai";
 
 import type { AssistantContext } from "@/lib/types/redesign";
+import { AssistantCalendarContextSchema } from "@/lib/validation/calendario";
 
 export type AssistantApprovalResponse = { toolCallId: string; approved: boolean };
 
@@ -42,7 +43,8 @@ export function pendingApprovalResponses(message: UIMessage | undefined): Assist
 }
 
 /**
- * The context as sent: the route and the three entity ids, nothing else, so
+ * The context as sent: the route, the three entity ids and the Calendario
+ * context (dates, ids and enums), nothing else, so
  * a caller's context override can never carry profile or other fields.
  */
 export function requestContext(context: AssistantContext): AssistantContext {
@@ -50,6 +52,9 @@ export function requestContext(context: AssistantContext): AssistantContext {
   if (typeof context.projectId === "string") out.projectId = context.projectId;
   if (typeof context.taskId === "string") out.taskId = context.taskId;
   if (typeof context.personId === "string") out.personId = context.personId;
+  // The Calendario context carries dates, ids and enums only: parsed, so no other field can ride along.
+  const calendar = AssistantCalendarContextSchema.safeParse(context.calendar);
+  if (calendar.success) out.calendar = calendar.data;
   return out;
 }
 

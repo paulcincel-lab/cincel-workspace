@@ -8,6 +8,8 @@ import { clientIp } from "@/lib/auth/rate-limit";
 import { getAppOrigin } from "@/lib/auth/safe-return-to";
 import { createSession, getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
+import { refreshPrimaryEvents } from "@/lib/google/calendar-events-sync";
+import { savePrimarySyncState } from "@/lib/repositories/google-calendar-sync-repository";
 import { connectGmailAccount } from "@/lib/gmail/accounts";
 import { syncGmailInBackground } from "@/lib/gmail/sync";
 import {
@@ -114,6 +116,11 @@ async function consentCallback(
 
   const params = request.nextUrl.searchParams;
   const code = params.get("code");
+  // The admin has not allowed the Calendar scopes yet (Calendario BE §7.5): not an error of the app.
+  if (params.get("error") === "access_denied" && scope === "calendar_events") {
+    await savePrimarySyncState(session.user.id, { error: "ACCESS_DENIED" });
+    return fail("access_denied");
+  }
   if (params.get("error") || !code) return fail("retry");
 
   try {
@@ -129,6 +136,12 @@ async function consentCallback(
         const staffId = session.user.id;
         await connectGmailAccount(db, staffId);
         after(() => syncGmailInBackground(db, staffId));
+      }
+      if (scope === "calendar_events") {
+        // A fresh grant clears the earlier error and reads the calendar right away.
+        const staffId = session.user.id;
+        await savePrimarySyncState(staffId, { error: null, syncToken: null });
+        after(() => refreshPrimaryEvents(staffId, { force: true }).catch(() => undefined));
       }
       return consentRedirect(origin, stored.returnTo, null);
     }

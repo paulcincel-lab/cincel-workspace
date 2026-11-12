@@ -172,6 +172,8 @@ function codeText(code: string, context: ActionErrorContext): string {
       return "Google Calendar no respondió. Guardé el cambio en Cincel.";
     case "NOT_ORGANIZER":
       return "Solo quien organizó el evento puede modificarlo o cancelarlo.";
+    case "CONFLICT":
+      return "La reunión cambió en Google Calendar. Vuelve a intentarlo.";
     case "RANGE_TOO_LONG":
       return "El rango es demasiado largo.";
     case "ALREADY_ON":

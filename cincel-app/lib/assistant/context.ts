@@ -5,10 +5,13 @@
  * `fetchStaffDetailAction`) and dropped when the viewer can't see it. Only
  * resolved ids reach the thread, the tools and the system prompt.
  */
+import { getMeetingDetail } from "@/lib/actions/page-data/calendario-actions";
 import { fetchProjectAction } from "@/lib/actions/projects-actions";
 import { fetchStaffDetailAction } from "@/lib/actions/staff-actions";
 import { fetchTaskAction } from "@/lib/actions/tasks-actions";
+import type { AssistantCalendarContext } from "@/lib/types/calendario";
 import type { AssistantContext } from "@/lib/types/redesign";
+import { AssistantCalendarContextSchema } from "@/lib/validation/calendario";
 
 export type ResolvedAssistantContext = {
   /** The context with only the ids the viewer can see. */
@@ -16,6 +19,8 @@ export type ResolvedAssistantContext = {
   project: { id: string; name: string } | null;
   task: { id: string; title: string; projectId: string; projectName: string } | null;
   person: { id: string; name: string } | null;
+  /** The Calendario page context: validated, with the selected item resolved to its label when the viewer can see it. */
+  calendar?: { context: AssistantCalendarContext; selectedItem: { id: string; label: string } | null } | null;
   /** Project the `project` input of tools defaults to: the page's project, else the task's. */
   defaultProject: { id: string; name: string } | null;
 };
@@ -43,12 +48,34 @@ function safeRoute(value: unknown): string {
   return route.startsWith("/") && !route.startsWith("//") ? route : "";
 }
 
+/** `t:<uuid>` / `e:<uuid>` → `{ id, label }`, or null when it doesn't exist or the viewer can't see it. */
+async function resolveSelectedItem(itemId: string): Promise<{ id: string; label: string } | null> {
+  const id = itemId.slice(2).toLowerCase();
+  if (!UUID.test(id)) return null;
+  if (itemId.startsWith("t:")) {
+    const task = await visible(() => fetchTaskAction(id));
+    return task ? { id: itemId, label: task.title } : null;
+  }
+  const meeting = await visible(() => getMeetingDetail(id));
+  return meeting ? { id: itemId, label: meeting.item.title } : null;
+}
+
+async function resolveCalendar(raw: unknown): Promise<ResolvedAssistantContext["calendar"]> {
+  const parsed = AssistantCalendarContextSchema.safeParse(raw);
+  if (!parsed.success || parsed.data.to < parsed.data.from) return null;
+  const selectedItem = parsed.data.selectedItemId ? await resolveSelectedItem(parsed.data.selectedItemId) : null;
+  const { selectedItemId: _dropped, ...rest } = parsed.data;
+  const context: AssistantCalendarContext = { ...rest, ...(selectedItem ? { selectedItemId: selectedItem.id } : {}) };
+  return { context, selectedItem };
+}
+
 export async function resolveAssistantContext(raw: Partial<AssistantContext> | null | undefined): Promise<ResolvedAssistantContext> {
   const projectId = candidateId(raw?.projectId);
   const taskId = candidateId(raw?.taskId);
   const personId = candidateId(raw?.personId);
 
-  const [projectRow, taskRow, personRow] = await Promise.all([
+  const [calendar, projectRow, taskRow, personRow] = await Promise.all([
+    raw?.calendar ? resolveCalendar(raw.calendar) : Promise.resolve(null),
     projectId ? visible(() => fetchProjectAction(projectId)) : Promise.resolve(null),
     taskId ? visible(() => fetchTaskAction(taskId)) : Promise.resolve(null),
     personId ? visible(() => fetchStaffDetailAction(personId)) : Promise.resolve(null),
@@ -66,7 +93,8 @@ export async function resolveAssistantContext(raw: Partial<AssistantContext> | n
   if (project) context.projectId = project.id;
   if (task) context.taskId = task.id;
   if (person) context.personId = person.id;
+  if (calendar) context.calendar = calendar.context;
 
   const defaultProject = project ?? (task ? { id: task.projectId, name: task.projectName } : null);
-  return { context, project, task, person, defaultProject };
+  return { context, project, task, person, calendar, defaultProject };
 }

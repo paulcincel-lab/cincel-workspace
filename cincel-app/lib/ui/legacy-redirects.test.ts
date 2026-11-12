@@ -8,7 +8,6 @@ describe("legacyRedirectTarget (FE §2.2)", () => {
     ["/dashboard", "/inicio"],
     ["/tablero", "/tareas?estilo=visual"],
     ["/mis-tareas", "/tareas?estilo=analitico&responsable=yo"],
-    ["/calendario", "/tareas"],
     ["/actividades/general", "/tareas?estilo=analitico"],
     ["/actividades/presale", "/tareas?estilo=analitico&tramo=presale"],
     ["/actividades/diseno", "/tareas?estilo=analitico&tramo=diseno"],
@@ -116,17 +115,20 @@ describe("/tareas?vista= (the old view switch)", () => {
   it.each([
     ["vista=tablero", "/tareas?estilo=visual"],
     ["vista=lista", "/tareas?estilo=analitico"],
-    ["vista=calendario", "/tareas"],
+    ["vista=calendario", "/calendario"],
+    ["vista=calendario&fecha=2026-11-12", "/calendario?fecha=2026-11-12"],
+    ["vista=calendario&cal=month", "/calendario?vista=mes"],
+    ["vista=calendario&cal=day", "/calendario?vista=dia"],
   ])("maps %s to %s", (search, to) => {
     expect(legacyRedirectTarget("/tareas", new URLSearchParams(search))).toBe(to);
   });
 
-  it("keeps the filters and the task, in their order, and drops the Calendario params", () => {
+  it("keeps the filters and the task, in their order, and drops the old Calendario params", () => {
     expect(legacyRedirectTarget("/tareas", { vista: "lista", tramo: "diseno", q: "piso", tarea: "t1" })).toBe(
       "/tareas?estilo=analitico&tramo=diseno&q=piso&tarea=t1",
     );
     expect(legacyRedirectTarget("/tareas", { vista: "calendario", cal: "semana", fecha: "2026-11-06", responsable: "yo" })).toBe(
-      "/tareas?responsable=yo",
+      "/calendario?fecha=2026-11-06&vista=semana&responsable=yo",
     );
   });
 
@@ -140,7 +142,8 @@ describe("/tareas?vista= (the old view switch)", () => {
     expect(legacyRedirectTarget("/tareas", { estilo: "visual", tramo: "diseno" })).toBeNull();
   });
 
-  it("drops the Calendario params from /calendario", () => {
-    expect(legacyRedirectTarget("/calendario", { fecha: "2026-11-07", cal: "dia", tramo: "diseno" })).toBe("/tareas?tramo=diseno");
+  it("no longer redirects /calendario: it is its own page", () => {
+    expect(legacyRedirectTarget("/calendario", { fecha: "2026-11-07", vista: "dia" })).toBeNull();
+    expect(legacyRedirectTarget("/calendario")).toBeNull();
   });
 });

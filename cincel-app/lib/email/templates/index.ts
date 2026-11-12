@@ -6,6 +6,7 @@ export {
   type EnlaceAccesoParams,
 } from "./enlace-acceso";
 export { invitacionEmail, type InvitacionParams } from "./invitacion";
+export { invitacionReunionEmail, type InvitacionReunionParams } from "./invitacion-reunion";
 export { escapeHtml, type MailContent } from "./layout";
 export { recordatorioEmail, type RecordatorioParams } from "./recordatorio";
 export { solicitudAprobacionEmail, type SolicitudAprobacionParams } from "./solicitud-aprobacion";

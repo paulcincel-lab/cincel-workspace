@@ -289,7 +289,7 @@ describe("Sidebar", () => {
 });
 
 describe("Sidebar per canvas", () => {
-  const CANVAS_ITEMS = ["inicio", "tareas", "proyectos", "personas", "mi-espacio", "biblioteca", "asistente"];
+  const CANVAS_ITEMS = ["inicio", "tareas", "calendario", "proyectos", "personas", "mi-espacio", "biblioteca", "asistente"];
 
   it("orders the items as the canvas", async () => {
     // The registry's item files read the session only inside `resolve`; the order is static.
@@ -300,7 +300,7 @@ describe("Sidebar per canvas", () => {
     expect(sorted.filter((source) => source.section === "items").map((source) => source.key)).toEqual(CANVAS_ITEMS);
     expect(sorted.filter((source) => source.section === "footer").map((source) => source.key)).toEqual(["ajustes"]);
 
-    renderSidebar();
+    renderSidebar({ nav: { ...FULL_NAV, items: CANVAS_ITEMS.map((key) => navItem(key as Parameters<typeof navItem>[0])) } });
     const hrefs = within(mainNav())
       .getAllByRole("link")
       .slice(0, CANVAS_ITEMS.length)

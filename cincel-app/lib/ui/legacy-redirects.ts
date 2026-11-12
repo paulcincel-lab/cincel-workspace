@@ -7,8 +7,8 @@
  * (`/tareas/[id]`, `/mi-espacio/notas/[id]`) are not part of this table.
  *
  * `/tareas?vista=` (the old Tablero / Lista / Calendario switch) redirects
- * to its Estilo: Tablero is Visual, Lista is Analítico and Calendario is the
- * page without the param. The Calendario-only params (`cal`, `fecha`) go too.
+ * to its Estilo: Tablero is Visual and Lista is Analítico. Calendario is its
+ * own page, `/calendario`, keeping `fecha` and mapping `cal` to `vista`.
  */
 
 /** What a Next.js page receives as `searchParams`, or a ready `URLSearchParams`. */
@@ -32,7 +32,6 @@ const STATIC_TARGETS: Readonly<Record<string, string>> = {
   "/dashboard": "/inicio",
   "/tablero": "/tareas?estilo=visual",
   "/mis-tareas": "/tareas?estilo=analitico&responsable=yo",
-  "/calendario": "/tareas",
   "/actividades/general": "/tareas?estilo=analitico",
   "/equipo": "/personas",
   "/directorio": "/personas/clientes",
@@ -55,10 +54,36 @@ const VISTA_ESTILOS: Readonly<Record<string, string | null>> = {
 /** `/tareas` params of the removed view switch and Calendario view, dropped on the way. */
 const TAREAS_OLD_PARAMS: ReadonlySet<string> = new Set(["vista", "cal", "fecha"]);
 
+/** The old `?cal=` values and the `/calendario` `vista` each one opens. */
+const CAL_VISTAS: Readonly<Record<string, string>> = {
+  month: "mes",
+  mes: "mes",
+  week: "semana",
+  semana: "semana",
+  day: "dia",
+  dia: "dia",
+  día: "dia",
+};
+
+/** `/tareas?vista=calendario` → `/calendario`, keeping `fecha`, mapping `cal` and keeping the other params. */
+function calendarioTarget(entries: [string, string][]): string {
+  const query = new URLSearchParams();
+  const fecha = entries.find(([key]) => key === "fecha")?.[1];
+  const vista = CAL_VISTAS[entries.find(([key]) => key === "cal")?.[1] ?? ""];
+  if (fecha) query.append("fecha", fecha);
+  if (vista) query.append("vista", vista);
+  for (const [key, value] of entries) {
+    if (!TAREAS_OLD_PARAMS.has(key)) query.append(key, value);
+  }
+  const serialized = query.toString();
+  return serialized ? `/calendario?${serialized}` : "/calendario";
+}
+
 /** `/tareas?vista=…` → the same page in its Estilo, or null when there is no `vista` param. */
 function tareasVistaTarget(entries: [string, string][]): string | null {
   const vista = entries.find(([key]) => key === "vista")?.[1];
   if (vista === undefined) return null;
+  if (vista === "calendario") return calendarioTarget(entries);
   const query = new URLSearchParams();
   const estilo = VISTA_ESTILOS[vista] ?? null;
   if (estilo && !entries.some(([key]) => key === "estilo")) query.append("estilo", estilo);

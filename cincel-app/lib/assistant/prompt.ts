@@ -153,20 +153,52 @@ function identitySection(user: AuthenticatedUser | null, names: ReadonlySet<stri
   } Al crear o reasignar trabajo, la bitácora registra automáticamente que la solicitud viene de esta persona; no la nombres como responsable salvo que lo pida.`;
 }
 
+const VISTA_LABEL = { dia: "día", semana: "semana", mes: "mes" } as const;
+
+function calendarFilters(context: NonNullable<ResolvedAssistantContext["calendar"]>["context"]): string {
+  const { mostrar, quien, proyectos, ocultarCompletadas } = context.filters;
+  const parts = [
+    mostrar === "tareas" ? "solo tareas" : mostrar === "reuniones" ? "solo reuniones" : "tareas y reuniones",
+    quien === "todos" ? "de todo el equipo" : "solo lo mío",
+  ];
+  if (proyectos.length > 0) parts.push(`${proyectos.length === 1 ? "1 proyecto" : `${proyectos.length} proyectos`} (${proyectos.join(", ")})`);
+  if (ocultarCompletadas) parts.push("sin completadas");
+  return parts.join(", ");
+}
+
+/** The Calendario lines (BE §11.6): present only when the page sent a valid `calendar` context. */
+function calendarSection(resolved: ResolvedAssistantContext): string {
+  if (!resolved.calendar) return "";
+  const { context, selectedItem } = resolved.calendar;
+  const lines = [
+    `Estás en el Calendario: ${VISTA_LABEL[context.view]} del ${context.from} al ${context.to}, ${calendarFilters(context)}. "Esta semana" y "este día" se refieren a ese rango.`,
+    "Nunca cambias datos directamente: usa las herramientas de propuesta y espera a que la persona aplique.",
+  ];
+  if (context.selectedDate) lines.push(`Día seleccionado: ${context.selectedDate}.`);
+  if (selectedItem) lines.push(`Elemento seleccionado: ${selectedItem.label} (id ${selectedItem.id}).`);
+  if (context.openProposalId) {
+    lines.push(
+      `Si hay una propuesta abierta (${context.openProposalId}), las correcciones de la persona la reemplazan con una nueva propuesta.`,
+    );
+  }
+  return `\n\n${lines.join("\n")}`;
+}
+
 /** The "Contexto" section: only server-resolved names and ids (BE §8.10). */
 function contextSection(resolved: ResolvedAssistantContext | null | undefined): string {
   if (!resolved) return "";
   const lines: string[] = [];
+  const calendar = calendarSection(resolved);
   if (resolved.project) lines.push(`- Proyecto: ${resolved.project.name} (id ${resolved.project.id})`);
   if (resolved.task) {
     lines.push(`- Tarea: ${resolved.task.title} (id ${resolved.task.id}), del proyecto ${resolved.task.projectName}`);
   }
   if (resolved.person) lines.push(`- Persona: ${resolved.person.name} (id ${resolved.person.id})`);
-  if (lines.length === 0) return "";
+  if (lines.length === 0) return calendar;
   const defaultLine = resolved.defaultProject
     ? `\nSi el usuario no menciona otro proyecto, las herramientas con un campo "project" usan ${resolved.defaultProject.name}.`
     : "";
-  return `\n\nContexto (la página que el usuario tiene abierta):\n${lines.join("\n")}${defaultLine}`;
+  return `\n\nContexto (la página que el usuario tiene abierta):\n${lines.join("\n")}${defaultLine}${calendar}`;
 }
 
 export type BuildSystemPromptOptions = {

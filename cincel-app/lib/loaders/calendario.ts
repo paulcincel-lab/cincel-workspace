@@ -1,14 +1,17 @@
 import "server-only";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { PER_DAY_LIMIT } from "@/lib/calendario/items";
 import {
-  EMPTY_CALENDARIO_LIST,
-  emptyCalendarioRange,
   emptyDaySummary,
   emptyMinutes,
   emptyPlanWeek,
   emptyWeekSummary,
 } from "@/lib/calendario/empty";
+import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
+import * as calendarEventsRepository from "@/lib/repositories/calendar-events-repository";
+import * as calendarioRepository from "@/lib/repositories/calendario-repository";
 import { stubDefault } from "@/lib/stubs";
 import type {
   CalendarioListInput,
@@ -31,14 +34,44 @@ import type {
  * throw; the owning issues replace the bodies.
  */
 
-/** Items of the visible range plus per-day aggregates computed in SQL. */
+function requireCalendar(user: AuthenticatedUser): void {
+  if (!resolveCalendarCapabilities(user).canViewCalendar) throw new Error("FORBIDDEN");
+}
+
+/**
+ * Items of the visible range plus per-day aggregates computed in SQL: three reads
+ * (day aggregates, items with their support people, KPIs), never the full task list.
+ * `quien = todos` is forced to `yo` without `canViewTeamCalendar` (inside the repository).
+ * Meetings, hours and the Google state join in their own issues: `events` counts 0 and
+ * `hours` / `workday` / `loadLabel` are null until then.
+ */
 export async function loadCalendarioRange(user: AuthenticatedUser, input: CalendarioRangeInput): Promise<CalendarioRange> {
-  return stubDefault(emptyCalendarioRange(input), user);
+  requireCalendar(user);
+  const today = todayInAppTimeZone();
+  const perDayLimit = PER_DAY_LIMIT[input.view];
+  const [days, found, kpis] = await Promise.all([
+    calendarioRepository.dayAggregates(user, input, today),
+    calendarioRepository.rangeItems(user, input, perDayLimit, today),
+    calendarioRepository.rangeKpis(user, input, today),
+  ]);
+  const shown = new Map<string, number>();
+  for (const item of found.items) shown.set(item.date, (shown.get(item.date) ?? 0) + 1);
+  return {
+    from: input.from,
+    to: input.to,
+    today,
+    days: days.map((d) => ({ ...d, shown: shown.get(d.date) ?? 0 })),
+    items: found.items,
+    kpis,
+    truncated: found.truncated,
+    google: { connected: false, eventsGrant: false, syncedAt: null, error: null },
+  };
 }
 
 /** Keyset page of the Analítico list. */
 export async function loadCalendarioList(user: AuthenticatedUser, input: CalendarioListInput): Promise<CalendarioListPage> {
-  return stubDefault(EMPTY_CALENDARIO_LIST, user, input);
+  requireCalendar(user);
+  return calendarioRepository.listItemsPage(user, input);
 }
 
 export async function loadDaySummary(user: AuthenticatedUser, input: { date: string }): Promise<DaySummary> {
@@ -54,7 +87,8 @@ export async function loadDayLoad(user: AuthenticatedUser, input: { from: string
 }
 
 export async function loadMeetingDetail(user: AuthenticatedUser, eventId: string): Promise<MeetingDetail | null> {
-  return stubDefault(null, user, eventId);
+  requireCalendar(user);
+  return calendarEventsRepository.getMeetingDetail(user, eventId);
 }
 
 export async function loadMeetingPrep(user: AuthenticatedUser, eventId: string): Promise<MeetingPrep | null> {

@@ -23,6 +23,8 @@ export type EsencialStatus =
       tone?: "default" | "destructive" | "warning" | "success" | "muted";
       /** Render as a soft pill (tinted fill, 2 px 8 px, full radius) instead of plain text. */
       chip?: boolean;
+      /** Monospace label (times and dates). */
+      mono?: boolean;
     }
   | null;
 export type EsencialItemRowProps = {
@@ -85,6 +87,7 @@ function RowStatus({ status }: { status: EsencialStatus }) {
         <span
           className={cn(
             TEXT_TONE_CLASS[status.tone ?? "default"],
+            status.mono && "font-mono",
             status.chip && cn("rounded-full px-2 py-0.5", CHIP_TONE_CLASS[status.tone ?? "default"]),
           )}
         >

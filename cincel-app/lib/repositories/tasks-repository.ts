@@ -312,7 +312,7 @@ function todaySql(today?: string): SQL {
 }
 
 /** A task's due date (`taskDueDate`): commitment, then delivery. */
-function taskDueSql(): SQL {
+export function taskDueSql(): SQL {
   return sql`coalesce(${tasks.commitmentDate}, ${tasks.deliveryDate})`;
 }
 
@@ -320,7 +320,7 @@ function taskDueSql(): SQL {
  * Open: not completado and not in a live custom status that closes. A
  * subquery, so it holds whatever the statement joins.
  */
-function openTaskSql(): SQL {
+export function openTaskSql(): SQL {
   return sql`(${tasks.status} <> 'completado' and not exists (select 1 from core.task_statuses ts_open where ts_open.id = ${tasks.customStatusId} and ts_open.deleted_at is null and ts_open.closes))`;
 }
 
@@ -342,7 +342,7 @@ function mostrarCondition(mostrar: TaskFilters["mostrar"], today?: string): SQL 
  * child that matches (the parent then shows as the child's context). The
  * parent keeps the scope filters (live, archived, kind, project, tramo).
  */
-function whereFilters(f: TaskFilters, viewer: ViewerScope) {
+export function whereFilters(f: TaskFilters, viewer: ViewerScope) {
   if (!f.topLevelOnly) return rowFilters(f, viewer);
   return and(
     topLevelTaskSql(),

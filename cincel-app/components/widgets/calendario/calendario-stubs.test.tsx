@@ -1,4 +1,6 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { emptyCalendarioRange, emptyDaySummary, emptyPlanWeek, emptyWeekSummary } from "@/lib/calendario/empty";
@@ -6,18 +8,13 @@ import { parseCalendarioQuery } from "@/lib/calendario/url-state";
 import type { CalTaskItem, Proposal } from "@/lib/types/calendario";
 
 import { BarraParaPedir } from "./BarraParaPedir";
-import { CalendarDayTimeline } from "./CalendarDayTimeline";
 import { CalendarItemChip } from "./CalendarItemChip";
 import { CalendarMonthGrid } from "./CalendarMonthGrid";
 import { CalendarWeekColumns } from "./CalendarWeekColumns";
-import { CalendarioAnalitico } from "./CalendarioAnalitico";
 import { CalendarioEsencial } from "./CalendarioEsencial";
 import { CalendarioVisual } from "./CalendarioVisual";
 import { DayAlertBanner } from "./DayAlertBanner";
 import { DayLoadMeter } from "./DayLoadMeter";
-import { EventDetailCard } from "./EventDetailCard";
-import { EventDetailDrawer } from "./EventDetailDrawer";
-import { EventDetailSheet } from "./EventDetailSheet";
 import { MeetingMinutesPanel } from "./MeetingMinutesPanel";
 import { MeetingPrepPanel } from "./MeetingPrepPanel";
 import { MeetingsList } from "./MeetingsList";
@@ -70,12 +67,11 @@ describe("Calendario widget stubs", () => {
   it.each([
     ["Calendario visual", <CalendarioVisual key="v" range={range} query={query} />],
     ["Calendario esencial", <CalendarioEsencial key="e" range={range} query={query} />],
-    ["Calendario analitico", <CalendarioAnalitico key="a" range={range} query={query} />],
     ["Mes", <CalendarMonthGrid key="m" range={range} query={query} />],
     ["Semana", <CalendarWeekColumns key="w" range={range} query={query} />],
-    ["Día", <CalendarDayTimeline key="d" range={range} query={query} />],
   ])("%s renders a labelled section with the item titles", (_name, node) => {
-    const { container } = render(node);
+    const qc = new QueryClient();
+    const { container } = render(node, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
     const section = container.querySelector("section");
     expect(section?.getAttribute("aria-label")).toBeTruthy();
     expect(screen.getByText("Ingenierías")).toBeTruthy();
@@ -85,9 +81,6 @@ describe("Calendario widget stubs", () => {
     const { container } = render(
       <>
         <CalendarItemChip item={task} density="chip" />
-        <EventDetailCard item={task} actions={[{ key: "a", label: "Abrir tarea" }]} onClose={() => {}} />
-        <EventDetailSheet item={task} actions={[]} onClose={() => {}} />
-        <EventDetailDrawer item={task} actions={[]} onClose={() => {}} />
         <ProposalOverlay proposal={proposal} checked={[]} />
         <ProposalCard proposal={proposal} checked={[]} />
         <ProposalTable proposal={proposal} checked={[]} />

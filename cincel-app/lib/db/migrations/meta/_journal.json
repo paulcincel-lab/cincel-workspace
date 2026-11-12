@@ -253,6 +253,13 @@
       "when": 1794433452348,
       "tag": "0035_calendario_contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794441422451,
+      "tag": "0036_zippy_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

@@ -12,7 +12,7 @@ import {
 
 export type PageHeaderProps = {
   title: string;
-  description?: string;
+  description?: ReactNode;
   /** Redesign FE §4.2: the trail above the title; the last item (or any without `href`) is plain text. */
   breadcrumb?: { label: string; href?: string }[];
   /** Right side; wraps under 768 px. */

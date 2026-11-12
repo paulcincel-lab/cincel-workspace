@@ -225,6 +225,34 @@ export function plain(rows: number[]) {
   });
 });
 
+describe("Calendario full task reads (rule 11)", () => {
+  const text = `import { listTasks } from "@/lib/repositories/tasks-repository";
+export async function loadCalendarioRange() {
+  return listTasks({}, viewer);
+}
+`;
+  it("flags a planted listTasks( in the loader, the repository and the components", () => {
+    const flagged = ["3 Calendario full task read → listTasks("];
+    expect(patterns("lib/loaders/calendario.ts", text)).toEqual(flagged);
+    expect(patterns("lib/repositories/calendario-repository.ts", text)).toEqual(flagged);
+    expect(patterns("components/calendario/CalendarioMes.tsx", text)).toEqual(flagged);
+  });
+
+  it("flags the other full reads", () => {
+    const body = "async function f() {\n  await fetchTasksAction();\n  await fetchCalendarAction();\n  await listMyTasks(id, {}, v);\n}\n";
+    expect(patterns("lib/loaders/calendario.ts", body)).toEqual([
+      "2 Calendario full task read → fetchTasksAction(",
+      "3 Calendario full task read → fetchCalendarAction(",
+      "4 Calendario full task read → listMyTasks(",
+    ]);
+  });
+
+  it("leaves other files and the paged reads alone", () => {
+    expect(patterns("lib/loaders/tareas.ts", text)).toEqual([]);
+    expect(patterns("lib/loaders/calendario.ts", "async function f() { await listTasksPage({}, v, {}); }\n")).toEqual([]);
+  });
+});
+
 describe("CLI", () => {
   const dir = mkdtempSync(join(tmpdir(), "data-patterns-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));

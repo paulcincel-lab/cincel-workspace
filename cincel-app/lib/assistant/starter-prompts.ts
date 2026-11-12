@@ -54,6 +54,18 @@ export const ASSISTANT_TOOL_GROUPS: readonly AssistantToolGroup[] = [
     ],
   },
   {
+    key: "calendario",
+    label: "Calendario y planeación",
+    description: "Resumir, planear y proponer cambios de fechas; nada cambia hasta que lo apliques.",
+    prompts: [
+      { label: "Resume mi día", description: "Reuniones, vencimientos y riesgos de hoy", prompt: "Resume mi día de hoy", tools: ["summarize_day"] },
+      { label: "Planea mi semana", description: "Propone fechas para las tareas pendientes", prompt: "Planea mi semana", tools: ["plan_week"] },
+      { label: "Repartir lo vencido", description: "Mueve lo vencido a días con menos carga", prompt: "Mueve todo lo vencido a días con menos carga", tools: ["find_overloads", "move_tasks"] },
+      { label: "Hueco de 2 horas", description: "Un horario libre esta semana", prompt: "Busca un hueco de 2 horas para ", tools: ["find_free_slots"] },
+      { label: "Qué vence antes", description: "Tareas y reuniones antes de una entrega", prompt: "¿Qué vence antes de la entrega del ", tools: ["calendar_range"] },
+    ],
+  },
+  {
     key: "notificaciones",
     label: "Notificaciones y recordatorios",
     description: "Bandeja de Mi espacio y avisos al equipo.",

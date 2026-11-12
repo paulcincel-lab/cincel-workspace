@@ -1,6 +1,4 @@
-import { notImplemented } from "@/lib/stubs";
-
-import type { MailContent } from "./layout";
+import { button, htmlDocument, paragraph, type MailContent } from "./layout";
 
 export type InvitacionReunionParams = {
   title: string;
@@ -12,7 +10,31 @@ export type InvitacionReunionParams = {
   kind: "invitacion" | "cambio" | "cancelacion";
 };
 
-/** Invitation, change and cancel notice of a meeting on the failure path (BE §7.6). Body belongs to the Phase 2 issue. */
+const SUBJECT_PREFIX: Record<InvitacionReunionParams["kind"], string> = {
+  invitacion: "Invitación",
+  cambio: "Reunión cambiada",
+  cancelacion: "Reunión cancelada",
+};
+
+/** Invitation, change and cancel notice of a meeting on the failure path (BE §7.6). */
 export function invitacionReunionEmail(params: InvitacionReunionParams): MailContent {
-  return notImplemented("invitacionReunionEmail", params);
+  const { title, when, location, meetingUrl, organizerName, kind } = params;
+  const intro =
+    kind === "invitacion"
+      ? `${organizerName} te invitó a una reunión.`
+      : kind === "cambio"
+        ? `${organizerName} cambió la reunión.`
+        : `${organizerName} canceló la reunión.`;
+  const details = [`Reunión: ${title}`, `Cuándo: ${when}`];
+  const place = location?.trim();
+  if (place) details.push(`Dónde: ${place}`);
+  const label = kind === "cancelacion" ? "Ver en Cincel" : "Ver la reunión";
+
+  const text = `${[intro, details.join("\n"), `${label}: ${meetingUrl}`].join("\n\n")}\n`;
+  const html = htmlDocument([
+    paragraph(intro),
+    ...details.map(paragraph),
+    button(label, meetingUrl),
+  ]);
+  return { subject: `${SUBJECT_PREFIX[kind]}: ${title}`, text, html };
 }

@@ -16,7 +16,9 @@ import "server-only";
 
 import { IMPLEMENTED } from "@/lib/actions/calendario-actions.flags";
 import { toolSummaries } from "@/lib/assistant/tool-summaries";
-import { defineTool, implemented, type DefinedTool } from "@/lib/assistant/define-tool";
+import { defineTool, implemented, untrusted, type DefinedTool } from "@/lib/assistant/define-tool";
+import { loadCalendarioRange } from "@/lib/loaders/calendario";
+import { normalizeCalendarioFilters } from "@/lib/calendario/url-state";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { notImplemented } from "@/lib/stubs";
@@ -44,6 +46,15 @@ const canViewCalendar = (user: AuthenticatedUser) => resolveCalendarCapabilities
 
 // ── Read tools (§11.1) ──────────────────────────────────────────────────────
 
+/** Items per `calendar_range` page; `cursor` is `o:<offset>` into the ordered items of the range. */
+const CALENDAR_RANGE_PAGE = 100;
+
+function cursorOffset(cursor: string | undefined): number {
+  const match = cursor ? /^o:(\d{1,6})$/.exec(cursor) : null;
+  if (cursor && !match) throw new Error("INVALID");
+  return match ? Number(match[1]) : 0;
+}
+
 export const calendar_range = defineTool({
   name: "calendar_range",
   description:
@@ -54,7 +65,28 @@ export const calendar_range = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.calendar_range,
-  run: async (ctx, input) => notImplemented("calendar_range", ctx, input),
+  async run({ user }, input) {
+    const quien = input.quien ?? "yo";
+    if (quien === "todos" && !resolveCalendarCapabilities(user).canViewTeamCalendar) throw new Error("FORBIDDEN");
+    const offset = cursorOffset(input.cursor);
+    // "dia" lifts the per-day cap (200) so the page boundary is the only limit; the loader still scopes by viewer.
+    const range = await loadCalendarioRange(user, {
+      view: "dia",
+      from: input.from,
+      to: input.to,
+      filters: normalizeCalendarioFilters({ mostrar: input.mostrar, quien, proyectos: input.projectIds }),
+    });
+    const items = range.items.slice(offset, offset + CALENDAR_RANGE_PAGE);
+    const next = offset + CALENDAR_RANGE_PAGE;
+    const result = {
+      days: range.days,
+      items,
+      nextCursor: next < range.items.length ? `o:${next}` : null,
+      kpis: range.kpis,
+    };
+    // Titles of Google events come from third parties: the model reads them as data, never as instructions.
+    return items.some((item) => item.kind === "event" && item.source === "google") ? untrusted(result) : result;
+  },
 });
 
 export const summarize_day = defineTool({

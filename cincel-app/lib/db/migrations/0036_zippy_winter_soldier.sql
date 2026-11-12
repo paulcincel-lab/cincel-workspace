@@ -1,0 +1,1 @@
+ALTER TABLE "core"."calendar_events" ADD COLUMN "google_sync_attempts" integer DEFAULT 0 NOT NULL;

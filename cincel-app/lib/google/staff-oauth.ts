@@ -43,12 +43,14 @@ export const STAFF_OAUTH_EXTRA_SCOPES = {
   drive: DRIVE_READONLY_SCOPE,
   calendar: CALENDAR_SCOPE,
   gmail: `${GMAIL_READONLY_SCOPE} ${GMAIL_COMPOSE_SCOPE}`,
+  /** Primary calendar events (read, write with Meet) and free/busy (Calendario BE §7.1). */
+  calendar_events: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy",
 } as const;
 
 export type StaffOauthScope = keyof typeof STAFF_OAUTH_EXTRA_SCOPES;
 
 export function parseStaffOauthScope(value: unknown): StaffOauthScope | null {
-  return value === "drive" || value === "calendar" || value === "gmail" ? value : null;
+  return value === "drive" || value === "calendar" || value === "gmail" || value === "calendar_events" ? value : null;
 }
 
 /** The Google scopes an incremental grant asks for. */
