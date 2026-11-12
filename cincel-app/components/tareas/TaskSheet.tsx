@@ -22,6 +22,7 @@ import {
   useAddTaskCommentMutation,
   useAssignTaskMutation,
   useTaskStatusMutation,
+  useEstimatedHoursMutation,
   useUpdateTaskMutation,
 } from "@/components/tareas/task-sheet-mutations";
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
@@ -45,7 +46,8 @@ import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { isDueDateLate, parseStatusValue, statusSelectItems, statusSelectValue } from "@/lib/tasks/status-options";
 import type { StaffRef, TaskPatch, TaskPriority, TaskRef } from "@/lib/types/core";
 
-import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
+import { TaskHoursField } from "./TaskHoursField";
+import { HOURS_FIELD_LABEL, SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 
 export type TaskSheetProps = { taskId: string; onClose(): void };
 
@@ -352,13 +354,14 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const target = useMemo(() => ({ id: taskId, projectId: task?.projectId ?? "" }), [taskId, task?.projectId]);
   const mutationOptions = useMemo(() => ({ onError: setError }), []);
   const update = useUpdateTaskMutation(target, mutationOptions);
+  const hours = useEstimatedHoursMutation(target, mutationOptions);
   const status = useTaskStatusMutation(target, statuses, mutationOptions);
   const assign = useAssignTaskMutation(target, mutationOptions);
   const attach = useAddTaskAttachmentMutation(target, mutationOptions);
   // The composer shows its own error.
   const comment = useAddTaskCommentMutation(target, { onError: () => undefined });
 
-  const busy = update.isPending || status.isPending || assign.isPending || attach.isPending;
+  const busy = update.isPending || hours.isPending || status.isPending || assign.isPending || attach.isPending;
 
   // A fresh draft of title and descripción for each task opened.
   if (task && draft?.taskId !== task.id) {
@@ -471,6 +474,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
     commitment: `tarea-${task.id}-compromiso`,
     late: `tarea-${task.id}-vencida`,
     review: `tarea-${task.id}-revision`,
+    hours: `tarea-${task.id}-horas`,
     files: `tarea-${task.id}-adjuntos`,
     activity: `tarea-${task.id}-actividad`,
   };
@@ -679,6 +683,23 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
               value={task.reviewDate ?? ""}
               disabled={!canEdit || busy}
               onChange={(event) => void patch({ reviewDate: event.target.value || null })}
+            />
+          </dd>
+
+          <dt>
+            <label htmlFor={ids.hours} className="text-muted-foreground">
+              {HOURS_FIELD_LABEL}
+            </label>
+          </dt>
+          <dd>
+            <TaskHoursField
+              id={ids.hours}
+              task={task}
+              disabled={!canEdit || busy}
+              onSave={(value) => {
+                setError(null);
+                hours.mutate(value);
+              }}
             />
           </dd>
 

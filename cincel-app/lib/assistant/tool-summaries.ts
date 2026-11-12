@@ -9,6 +9,8 @@
  */
 
 import { extractTaskTitles } from "@/lib/assistant/notes-to-tasks";
+import { proposalRow } from "@/lib/calendario/proposal-view";
+import type { Proposal } from "@/lib/types/calendario";
 
 export type ToolSummary = (input: unknown) => string;
 
@@ -969,6 +971,7 @@ const PREVIEW_COPY: Record<string, PreviewCopy> = {
   cancel_event: { verb: "cancelar", first: "Cancelo", imperative: "Cancela", one: "evento", many: "eventos", feminine: false },
   create_client: { verb: "dar de alta", first: "Doy de alta", imperative: "Da de alta", one: "cliente", many: "clientes", feminine: false },
   onboard_client: { verb: "arrancar", first: "Arranco", imperative: "Arranca", one: "cliente", many: "clientes", feminine: false },
+  apply_proposal: { verb: "aplicar", first: "Aplico", imperative: "Aplica", one: "cambio", many: "cambios", feminine: false },
   discard_project: { verb: "eliminar", first: "Elimino", imperative: "Elimina", one: "proyecto", many: "proyectos", feminine: false },
 };
 
@@ -1037,6 +1040,16 @@ export const toolPreviews: Partial<Record<string, ToolPreview>> = {
     date: previewDate(patchOf(input), "start"),
   }),
   cancel_event: () => ({ op: "−", title: "Evento" }),
+  move_tasks: (input) => {
+    const moves = field(input, "moves");
+    const ids = field(input, "taskIds");
+    const count = Array.isArray(moves) ? moves.length : Array.isArray(ids) ? ids.length : 0;
+    return {
+      op: "~",
+      title: count === 1 ? "1 tarea" : count > 1 ? `${count} tareas` : "Tareas",
+      date: previewDate(input, "toDate") ?? (Array.isArray(moves) && moves.length === 1 ? previewDate(moves[0], "toDate") : undefined),
+    };
+  },
   create_client: (input) => ({ op: "+", title: text(input, "name") || "Cliente nuevo" }),
   onboard_client: (input) => ({
     op: "+",
@@ -1045,7 +1058,23 @@ export const toolPreviews: Partial<Record<string, ToolPreview>> = {
     person: optional(text(input, "manager")),
   }),
   discard_project: (input) => ({ op: "−", title: text(input, "projectName") || "Proyecto" }),
+  // The call only carries the proposal id; the card swaps in the proposal's rows
+  // (`proposalPreviewRows`, from `qk.calendario.proposal(id)`) once they load.
+  apply_proposal: () => ({ op: "~", title: "Cambios de la propuesta" }),
 };
+
+/** One row per change of a calendar proposal (the rows of the Analítico proposal table), keyed by `changeId`. */
+export function proposalPreviewRows(proposal: Proposal): { changeId: string; row: ToolPreviewRow }[] {
+  return proposal.changes.map((change) => {
+    const view = proposalRow(change);
+    const op: ToolPreviewRow["op"] =
+      change.type === "event_create" || change.type === "task_create" ? "+" : change.type === "event_cancel" ? "−" : "~";
+    return {
+      changeId: change.changeId,
+      row: { op, title: view.title, date: view.before ? `${view.before} → ${view.after}` : view.after },
+    };
+  });
+}
 
 /** The preview row of one call, or null when the tool has none or the input doesn't fit it. */
 export function previewToolCall(toolName: string, input: unknown): ToolPreviewRow | null {

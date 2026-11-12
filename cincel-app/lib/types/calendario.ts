@@ -329,4 +329,13 @@ export type PlanWeekData = {
 };
 
 // ── Query-layer shapes ──────────────────────────────────────────────────────
-export type DetailAction = { key: string; label: string; primary?: boolean; href?: string };
+export type DetailAction = {
+  key: string;
+  label: string;
+  primary?: boolean;
+  href?: string;
+  onSelect?(): void;
+  /** "Cambiar fecha": the date picker of the Esencial sheet hands the picked day here. */
+  onPickDate?(date: string): void;
+  disabled?: boolean;
+};

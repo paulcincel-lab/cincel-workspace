@@ -11,6 +11,7 @@ const REASON_LABEL: Record<string, string> = {
   exchange_failed: "No se pudo completar la conexión con Google.",
   unauthorized: "Tu sesión expiró, vuelve a iniciar sesión.",
   retry: "No se pudo completar la conexión con Google. Intenta de nuevo.",
+  access_denied: "Tu administrador todavía no habilita Google Calendar para Cincel.",
   scope_missing: "No diste el permiso que pedimos en Google. Intenta de nuevo y marca la casilla del permiso.",
 };
 

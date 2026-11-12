@@ -27,6 +27,8 @@ export type TableSelectionProps<Row> = {
   onSelectionChange?(ids: ReadonlySet<string>): void;
   /** The row's name for its checkbox and actions menu labels ("Seleccionar «…»"). */
   getRowLabel?(row: Row): string;
+  /** Rows that can't be selected get no checkbox (default: every row). */
+  isRowSelectable?(row: Row): boolean;
 };
 
 /** A trailing `⋯` actions column (#1041). Without `rowActions` nothing changes. */

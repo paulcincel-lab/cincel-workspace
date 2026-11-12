@@ -8,6 +8,7 @@ import type { NavItemSource } from "@/lib/ui/nav";
 import { inicioNavItem } from "./inicio";
 import { miEspacioNavItem } from "./mi-espacio";
 import { tareasNavItem } from "./tareas";
+import { calendarioNavItem } from "./calendario";
 import { proyectosNavItem } from "./proyectos";
 import { personasNavItem } from "./personas";
 import { bibliotecaNavItem } from "./biblioteca";
@@ -18,6 +19,7 @@ export const NAV_ITEM_SOURCES: readonly NavItemSource[] = [
   inicioNavItem,
   miEspacioNavItem,
   tareasNavItem,
+  calendarioNavItem,
   proyectosNavItem,
   personasNavItem,
   bibliotecaNavItem,

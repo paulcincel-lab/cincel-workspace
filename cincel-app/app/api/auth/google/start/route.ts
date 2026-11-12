@@ -13,7 +13,7 @@ import { parseStaffOauthScope, startStaffOauth, staffOauthConfig } from "@/lib/g
  * with AUTH_GOOGLE_ENABLED. Rate limited to 20 per 10 minutes per IP
  * (`X-Real-IP`, §A.10). `return_to` is validated by `safeReturnTo()`.
  *
- * With `?scope=drive|calendar|gmail` (or its alias `?grant=`, redesign BE
+ * With `?scope=drive|calendar|calendar_events|gmail` (or its alias `?grant=`, redesign BE
  * §11.1) it is the incremental consent of §A.6.2 for a signed-in staff
  * member: `prompt=consent`, `login_hint=<their email>`. Without a session it
  * sends the browser to `/login`.

@@ -59,6 +59,8 @@ export const calendarEvents = core.table(
     googleHtmlLink: text("google_html_link"),
     /** Last write-through error: NO_GRANT, ACCESS_DENIED, UNAVAILABLE, RATE_LIMITED, REAUTH, GONE, NOT_ORGANIZER. */
     googleSyncError: text("google_sync_error"),
+    /** Resync tries after an UNAVAILABLE / RATE_LIMITED write (BE §7.3: max 3); reset on success. */
+    googleSyncAttempts: integer("google_sync_attempts").notNull().default(0),
     /** How the attendees were invited at creation (BE §7.6, D13); never changes afterwards. */
     invitesVia: text("invites_via"),
     syncedAt: timestamp("synced_at", { withTimezone: true }),

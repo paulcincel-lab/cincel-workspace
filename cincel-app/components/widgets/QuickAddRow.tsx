@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { CalendarDays, Check, Loader2, Plus, Sparkles, User } from "lucide-react";
+import { CalendarDays, Check, Clock, Loader2, Plus, Sparkles, User } from "lucide-react";
 
 import { activeWorkflowsInOrder, resolveWorkflowId, suggestedFirst } from "@/components/tareas/new-task-form";
 import { newTaskWorkflowsKey, useQuickAddUndo } from "@/components/tareas/quick-add-create";
@@ -17,6 +17,7 @@ import { STALE, qk } from "@/lib/query/keys";
 import { runAction } from "@/lib/query/mutation";
 import {
   formatQuickAddDate,
+  formatQuickAddHours,
   nextWeekday,
   parseQuickAdd,
   personHandle,
@@ -64,6 +65,8 @@ export type QuickAddDraft = {
   dueDate: string | null;
   priority: TaskPriority;
   status?: string;
+  /** Planned hours from a `~2h` token. */
+  estimatedHours?: number;
   /** Set from `context.parentTaskId`: create a subtask of this task. */
   parentTaskId?: string;
 };
@@ -271,6 +274,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
     dueDate: parsed.dueDate ?? null,
     priority: parsed.priority ?? "media",
     ...(context.status !== undefined ? { status: context.status } : {}),
+    ...(parsed.estimatedHours !== undefined ? { estimatedHours: parsed.estimatedHours } : {}),
     ...(context.parentTaskId ? { parentTaskId: context.parentTaskId } : {}),
   };
 
@@ -425,6 +429,12 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
         <Badge variant="outline" className={chipClass}>
           <CalendarDays aria-hidden="true" />
           Vence {formatQuickAddDate(draft.dueDate, { weekday: variant === "card" })}
+        </Badge>
+      ) : null}
+      {draft.estimatedHours !== undefined ? (
+        <Badge variant="outline" className={chipClass}>
+          <Clock aria-hidden="true" />
+          {formatQuickAddHours(draft.estimatedHours)}
         </Badge>
       ) : null}
       <Badge variant={priority.variant} className={chipClass}>

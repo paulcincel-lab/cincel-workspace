@@ -165,6 +165,7 @@ describe("mobileTitleFor", () => {
     expect(mobileTitleFor("/proyectos/12/tareas")).toBe("Proyectos");
     expect(mobileTitleFor("/ajustes/perfil")).toBe("Ajustes");
     expect(mobileTitleFor("/mi-espacio")).toBe("Mi espacio");
+    expect(mobileTitleFor("/calendario")).toBe("Calendario");
   });
 
   it("falls back to Cincel", () => {

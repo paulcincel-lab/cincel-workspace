@@ -37,7 +37,6 @@ const CASES: LegacyCase[] = [
   { name: "/dashboard", query: { tab: "kpis" }, on: "/inicio?tab=kpis" },
   { name: "/tablero", query: { proyecto: "p1" }, on: "/tareas?estilo=visual&proyecto=p1" },
   { name: "/mis-tareas", on: "/tareas?estilo=analitico&responsable=yo" },
-  { name: "/calendario", query: { fecha: "2026-11-07" }, on: "/tareas" },
   { name: "/actividades/general", on: "/tareas?estilo=analitico" },
   {
     name: "/actividades/presale",
@@ -51,7 +50,9 @@ const CASES: LegacyCase[] = [
   // The old Tareas view switch: Tablero is Visual, Lista Analítico, Calendario the page without the param.
   { name: "/tareas?vista=tablero", query: { vista: "tablero", tramo: "diseno" }, on: "/tareas?estilo=visual&tramo=diseno" },
   { name: "/tareas?vista=lista", query: { vista: "lista", responsable: "yo" }, on: "/tareas?estilo=analitico&responsable=yo" },
-  { name: "/tareas?vista=calendario", query: { vista: "calendario", cal: "semana", fecha: "2026-11-07" }, on: "/tareas" },
+  { name: "/tareas?vista=calendario", query: { vista: "calendario", cal: "semana", fecha: "2026-11-07" }, on: "/calendario?fecha=2026-11-07&vista=semana" },
+  { name: "/tareas?vista=calendario (month)", query: { vista: "calendario", cal: "month" }, on: "/calendario?vista=mes" },
+  { name: "/tareas?vista=calendario (only fecha)", query: { vista: "calendario", fecha: "2026-11-12" }, on: "/calendario?fecha=2026-11-12" },
   { name: "/equipo", on: "/personas" },
   { name: "/directorio", query: { q: "ana" }, on: "/personas/clientes?q=ana" },
   { name: "/clientes", on: "/personas/clientes" },

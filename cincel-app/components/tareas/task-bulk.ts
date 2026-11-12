@@ -14,15 +14,16 @@ import type { TaskBulkPatch, TaskBulkResult, TaskListItem, WorkflowPhaseRef } fr
 
 import { taskDueDate } from "./tablero-table";
 import { dueDateField, type TaskCellTask } from "./task-cell-edits";
+import { hoursFieldText, hoursOfCellValue } from "./task-hours";
 import { BULK_SKIPPED_TOAST, BULK_UPDATED_TOAST } from "./task-table-copy";
 
 /** What the bar reads of a selected task (a `TaskListItem` or a `TaskListRow`). */
 export type TaskBulkTask = TaskCellTask & Pick<TaskListItem, "support">;
 
 /** The fields of the bar, in its order. */
-export type TaskBulkField = "estatus" | "responsable" | "apoyo" | "fase" | "vence";
+export type TaskBulkField = "estatus" | "responsable" | "apoyo" | "fase" | "vence" | "horas";
 
-export const TASK_BULK_FIELDS: readonly TaskBulkField[] = ["estatus", "responsable", "apoyo", "fase", "vence"];
+export const TASK_BULK_FIELDS: readonly TaskBulkField[] = ["estatus", "responsable", "apoyo", "fase", "vence", "horas"];
 
 /** A task's current value of a field, as the editors read it. */
 export function bulkValueOf(task: TaskBulkTask, field: TaskBulkField): CellValue {
@@ -37,6 +38,8 @@ export function bulkValueOf(task: TaskBulkTask, field: TaskBulkField): CellValue
       return task.phaseId;
     case "vence":
       return taskDueDate(task);
+    case "horas":
+      return task.estimatedHours === null || task.estimatedHours === undefined ? null : hoursFieldText(task.estimatedHours);
   }
 }
 
@@ -68,6 +71,8 @@ export function bulkPatchOf(field: TaskBulkField, value: CellValue): TaskBulkPat
       return { phaseId: typeof value === "string" ? value : null };
     case "vence":
       return { dueDate: typeof value === "string" ? value : null };
+    case "horas":
+      return { estimatedHours: hoursOfCellValue(value) };
   }
 }
 

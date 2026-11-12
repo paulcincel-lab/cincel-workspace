@@ -48,6 +48,9 @@ vi.mock("@/lib/actions/tasks-actions", async (importOriginal) => ({
   ...actions,
 }));
 
+const hoursActions = vi.hoisted(() => ({ setTaskEstimatedHoursAction: vi.fn() }));
+vi.mock("@/lib/actions/calendario-actions", () => hoursActions);
+
 vi.mock("./use-tareas-page", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./use-tareas-page")>()),
   useTareasPageReady: () => true,
@@ -71,7 +74,9 @@ vi.mock("@/components/widgets/CellEditor", () => ({
         ? edit.options(props.row)
         : edit.kind === "text"
           ? [{ value: "Planos finales", label: "Guardar texto" }]
-          : [{ value: "2026-11-12", label: "12 nov" }];
+          : edit.kind === "number"
+            ? [{ value: "2.5", label: "Guardar horas" }]
+            : [{ value: "2026-11-12", label: "12 nov" }];
     return createPortal(
       <div role="dialog" aria-label={`Editor ${props.label ?? ""}`}>
         {props.canEdit === true ? (
@@ -178,6 +183,7 @@ beforeEach(() => {
   nav.search = "";
   resetTareasUi();
   for (const fn of Object.values(actions)) fn.mockReset();
+  hoursActions.setTaskEstimatedHoursAction.mockReset();
 });
 
 afterEach(() => {
@@ -197,6 +203,20 @@ describe("TareasAnalitico editable cells", () => {
     for (const column of ["tarea", "tramo", "fase", "responsable", "estatus", "vence", "prioridad"]) {
       expect(cell("t3", column).dataset.cellState).toBe("editable");
     }
+  });
+
+  it("Horas is hidden until Mostrar horas is on, then edits through the hours action", async () => {
+    signIn("Administrador");
+    hoursActions.setTaskEstimatedHoursAction.mockResolvedValue(detail({ id: "t3", estimatedHours: 2.5 }));
+    renderAnalitico();
+    expect(document.querySelector('[data-cell-column="horas"]')).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "Mostrar horas" }));
+    expect(cell("t3", "horas").dataset.cellState).toBe("editable");
+    expect(cell("t3", "horas").textContent).toBe("—");
+    fireEvent.click(cell("t3", "horas"));
+    fireEvent.click(await screen.findByRole("button", { name: "Guardar horas" }));
+    await waitFor(() => expect(hoursActions.setTaskEstimatedHoursAction).toHaveBeenCalledWith("t3", 2.5));
+    await waitFor(() => expect(cell("t3", "horas").textContent).toBe("2.5 h"));
   });
 
   it("admin moves a task to another tramo: the row regroups and the Fase editor opens next", async () => {

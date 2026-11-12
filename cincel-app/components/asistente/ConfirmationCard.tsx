@@ -5,6 +5,7 @@ import { CheckIcon, CircleAlertIcon, ShieldQuestion, XIcon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/shadcn/alert";
 import { Button } from "@/components/ui/shadcn/button";
+import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import {
   previewConfirmLabel,
   previewDraft,
@@ -41,6 +42,22 @@ export type ConfirmationCardProps = {
   onRespond(approved: boolean, reason?: string): void;
   /** "Editar": the card is denied with reason "editado" and its rows go to the composer as text. */
   onEdit?(draft: string): void;
+  /**
+   * `apply_proposal`: one checkbox per row ("Incluir {título}"); the confirm button counts the
+   * checked rows. `rows` replace the group preview (one per change, keyed by `changeIds`).
+   */
+  selectable?: {
+    rows: readonly ToolPreviewRow[];
+    changeIds: readonly string[];
+    checked: readonly string[];
+    onToggle(changeId: string): void;
+    /** A subset: the card is denied with `EDITED_REASON` and the caller re-issues with these ids (D8). */
+    onApplySubset(changeIds: string[]): void;
+  };
+  /** Replaces the result line while a re-issued apply runs or after it. */
+  outcome?: { status: "working" | "done" | "error"; text: string };
+  /** "Deshacer" next to the done line while the undo token is valid. */
+  undo?: { onUndo(): void; state: "idle" | "working" | "done"; doneText?: string };
 };
 
 /** Labels (FE §3.9, §13). */
@@ -54,6 +71,10 @@ export const CONFIRMATION_LABELS = {
   running: "Confirmado. Ejecutando…",
   waiting: "Esperando tu confirmación",
   noChange: "nada cambia hasta que confirmes",
+  undo: "Deshacer",
+  undoing: "Deshaciendo…",
+  includeRow: (title: string) => `Incluir ${title}`,
+  applyN: (n: number) => `Aplicar ${n.toLocaleString("es-MX")} ${n === 1 ? "cambio" : "cambios"}`,
 } as const;
 
 /** Reason sent with the denial when the user chose "Editar". */
@@ -107,7 +128,7 @@ function sharedProject(steps: readonly ToolStep[]): string | null {
  * ("Hecho", "Cancelado", "3 de 4 hechas" or the error) replaces them and
  * takes the focus after the answer.
  */
-export function ConfirmationCard({ part, group: groupProp, onRespond, onEdit }: ConfirmationCardProps) {
+export function ConfirmationCard({ part, group: groupProp, onRespond, onEdit, selectable, outcome, undo }: ConfirmationCardProps) {
   const titleId = useId();
   const resultRef = useRef<HTMLDivElement>(null);
   // Locks after the first click so the approvals are sent once while the chat
@@ -122,13 +143,18 @@ export function ConfirmationCard({ part, group: groupProp, onRespond, onEdit }: 
   if (!group || group.steps.length === 0) return null;
 
   const n = group.steps.length;
-  const rows = group.preview.length === n ? group.preview : [];
+  const rows = selectable ? selectable.rows : group.preview.length === n ? group.preview : [];
   const hasPreview = rows.length > 0;
   const phase = phaseOf(group.steps);
 
   function respond(approved: boolean, reason?: string) {
     if (answer !== null || phase !== "pending") return;
     setAnswer(approved ? "confirmed" : "cancelled");
+    if (approved && selectable && selectable.checked.length < selectable.changeIds.length) {
+      onRespond(false, EDITED_REASON);
+      selectable.onApplySubset(selectable.changeIds.filter((id) => selectable.checked.includes(id)));
+      return;
+    }
     if (reason === undefined) onRespond(approved);
     else onRespond(approved, reason);
   }
@@ -139,7 +165,7 @@ export function ConfirmationCard({ part, group: groupProp, onRespond, onEdit }: 
     onEdit(previewDraft(group.toolName, rows));
   }
 
-  const title = hasPreview ? previewTitle(group.toolName, n) : CONFIRMATION_LABELS.title;
+  const title = hasPreview ? previewTitle(group.toolName, rows.length) : CONFIRMATION_LABELS.title;
   const subline = hasPreview
     ? [sharedProject(group.steps), previewSharedDate(group.toolName, rows), CONFIRMATION_LABELS.noChange]
         .filter(Boolean)
@@ -183,7 +209,9 @@ export function ConfirmationCard({ part, group: groupProp, onRespond, onEdit }: 
         </div>
       </div>
 
-      {hasPreview ? <PreviewRows rows={rows} steps={group.steps} /> : null}
+      {hasPreview ? (
+        <PreviewRows rows={rows} steps={group.steps} selectable={pending && answer === null ? selectable : undefined} />
+      ) : null}
 
       {pending ? (
         <div className="flex flex-wrap gap-2">
@@ -191,9 +219,13 @@ export function ConfirmationCard({ part, group: groupProp, onRespond, onEdit }: 
             type="button"
             className="h-9 rounded-[10px] text-[13.5px] font-semibold"
             onClick={() => respond(true)}
-            disabled={answer !== null}
+            disabled={answer !== null || (selectable !== undefined && selectable.checked.length === 0)}
           >
-            {hasPreview ? previewConfirmLabel(rows) : CONFIRMATION_LABELS.confirm}
+            {selectable
+              ? CONFIRMATION_LABELS.applyN(selectable.checked.length)
+              : hasPreview
+                ? previewConfirmLabel(rows)
+                : CONFIRMATION_LABELS.confirm}
           </Button>
           {onEdit && hasPreview ? (
             <Button
@@ -231,27 +263,43 @@ export function ConfirmationCard({ part, group: groupProp, onRespond, onEdit }: 
 
       {showResult ? (
         <div ref={resultRef} tabIndex={-1} data-confirmation-result="" className="outline-none">
-          <ConfirmationResult phase={phase} answer={answer} steps={group.steps} rows={rows} />
+          <ConfirmationResult phase={phase} answer={answer} steps={group.steps} rows={rows} outcome={outcome} undo={undo} />
         </div>
       ) : null}
     </div>
   );
 }
 
-function PreviewRows({ rows, steps }: { rows: readonly ToolPreviewRow[]; steps: readonly ToolStep[] }) {
+function PreviewRows({
+  rows,
+  steps,
+  selectable,
+}: {
+  rows: readonly ToolPreviewRow[];
+  steps: readonly ToolStep[];
+  selectable?: ConfirmationCardProps["selectable"];
+}) {
   return (
     <ul className="overflow-hidden rounded-[10px] border border-border">
       {rows.map((row, index) => {
-        const failed = steps[index]?.state === "error";
+        const failed = !selectable && steps[index]?.state === "error";
+        const changeId = selectable?.changeIds[index];
         const tone = ROW_CLASS[row.op];
         return (
           <li
-            key={steps[index]?.toolCallId ?? index}
+            key={changeId ?? steps[index]?.toolCallId ?? index}
             className={cn(
               "flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-2 text-[13px] last:border-b-0",
               failed ? "bg-tint-destructive" : tone.row,
             )}
           >
+            {selectable && changeId ? (
+              <Checkbox
+                aria-label={CONFIRMATION_LABELS.includeRow(row.title)}
+                checked={selectable.checked.includes(changeId)}
+                onCheckedChange={() => selectable.onToggle(changeId)}
+              />
+            ) : null}
             <span aria-hidden="true" className={cn("font-mono font-semibold", failed ? "text-destructive-ink" : tone.op)}>
               {row.op}
             </span>
@@ -276,12 +324,34 @@ function ConfirmationResult({
   answer,
   steps,
   rows,
+  outcome,
+  undo,
 }: {
   phase: Phase;
   answer: Answer;
   steps: readonly ToolStep[];
   rows: readonly ToolPreviewRow[];
+  outcome?: ConfirmationCardProps["outcome"];
+  undo?: ConfirmationCardProps["undo"];
 }) {
+  if (outcome) {
+    if (outcome.status === "working") {
+      return (
+        <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          {outcome.text}
+        </p>
+      );
+    }
+    if (outcome.status === "error") {
+      return (
+        <Alert variant="destructive">
+          <CircleAlertIcon aria-hidden="true" />
+          <AlertDescription>{outcome.text}</AlertDescription>
+        </Alert>
+      );
+    }
+    return <DoneLine text={outcome.text} undo={undo} />;
+  }
   if (phase === "running" || (phase === "pending" && answer === "confirmed")) {
     return (
       <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -309,14 +379,7 @@ function ConfirmationResult({
     );
   }
   if (denied === n) return <CancelledLine />;
-  if (done === n) {
-    return (
-      <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <CheckIcon aria-hidden="true" className="size-4" />
-        {CONFIRMATION_LABELS.done}
-      </p>
-    );
-  }
+  if (done === n) return <DoneLine text={CONFIRMATION_LABELS.done} undo={undo} />;
   return (
     <div className="flex flex-col gap-1">
       <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -345,5 +408,28 @@ function CancelledLine() {
       <XIcon aria-hidden="true" className="size-4" />
       {CONFIRMATION_LABELS.cancelled}
     </p>
+  );
+}
+
+function DoneLine({ text, undo }: { text: string; undo?: ConfirmationCardProps["undo"] }) {
+  const undone = undo?.state === "done";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <CheckIcon aria-hidden="true" className="size-4" />
+        {undone ? (undo?.doneText ?? text) : text}
+      </p>
+      {undo && !undone ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-[10px] text-[13px]"
+          onClick={undo.onUndo}
+          disabled={undo.state === "working"}
+        >
+          {undo.state === "working" ? CONFIRMATION_LABELS.undoing : CONFIRMATION_LABELS.undo}
+        </Button>
+      ) : null}
+    </div>
   );
 }

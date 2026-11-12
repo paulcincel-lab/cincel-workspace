@@ -11,12 +11,11 @@
  *   jornada of Control de horario, approved vacations) plus the caller's own
  *   Google events when Calendar is granted. Another person's Google calendar
  *   is never read (owner-only data, BE §9.1).
- * - The four event writes go to the caller's primary Google calendar with
- *   attendees, which needs the `calendar.events` grant (Annex C3, out of
- *   scope). While the staff OAuth flow cannot grant it they are registered
- *   disabled: `available()` is false, so the model is never offered them, and
- *   `list_events` tells the model to answer "Aún no puedo crear eventos en tu
- *   calendario" and offer a reminder or a task instead.
+ * - `create_event`, `update_event` and `cancel_event` only create a proposal
+ *   (Calendario BE §11.2, ADR 0007): nothing changes until the person applies
+ *   it, and they work without the Google grant. `schedule_site_visit` still
+ *   writes to the caller's primary Google calendar (it needs the
+ *   `calendar.events` grant and is registered disabled without it).
  *
  * Audit (BE §9.9): a Google event is the caller's own data, so event writes
  * write `history_events` only on the shared entities they touch: the project
@@ -38,7 +37,7 @@ import { fetchTimeTrackingSettingsAction } from "@/lib/actions/time-tracking-act
 import { IMPLEMENTED as TIME_TRACKING } from "@/lib/actions/time-tracking-actions.flags";
 import { IMPLEMENTED as VACATIONS } from "@/lib/actions/vacations-actions.flags";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
-import { listViewerTasks } from "@/lib/assistant/reads";
+import { listViewerProjects, listViewerTasks } from "@/lib/assistant/reads";
 import {
   addDaysToDate,
   eachDate,
@@ -48,20 +47,15 @@ import {
   zonedTimeToUtc,
 } from "@/lib/assistant/agenda/free-slots";
 import {
-  busyIntervalsOf,
   calendarEventsGrantAvailable,
   CalendarScopeMissingError,
   deletePrimaryEvent,
-  getPrimaryEvent,
   insertPrimaryEvent,
-  listOwnGoogleEvents,
-  patchPrimaryEvent,
   type GoogleCalendarEvent,
-  type GoogleEventWrite,
 } from "@/lib/assistant/agenda/google-calendar";
 import { defineTool, type DefinedTool } from "@/lib/assistant/define-tool";
 import { byNameIlike, resolveProject, type Resolved } from "@/lib/assistant/resolvers";
-import { summarizeCreateEvent, summarizeScheduleSiteVisit, toolSummaries } from "@/lib/assistant/tool-summaries";
+import { summarizeScheduleSiteVisit, toolSummaries } from "@/lib/assistant/tool-summaries";
 import { recordViaAsistente } from "@/lib/assistant/via-asistente";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { getAppOrigin } from "@/lib/auth/safe-return-to";
@@ -72,6 +66,22 @@ import { canSeeAdminData } from "@/lib/tramos/compat";
 import type { ProjectListItem, TaskFilters, TaskListItem } from "@/lib/types/core";
 import type { AgendaItem } from "@/lib/types/widgets";
 import { approvedAbsences } from "@/lib/vacations/approved-absences";
+import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { freeBusy } from "@/lib/google/calendar-events-sync";
+import { createEvent, getEventItem, setGoogleSyncState } from "@/lib/repositories/calendar-events-repository";
+import { busyWindowsOf, listEventItemsForTools } from "@/lib/repositories/calendario-events-range";
+import type { CalEventItem } from "@/lib/types/calendario";
+import { defaultMeetingEnd } from "@/lib/calendario/propose-context";
+import {
+  defaultAttendees,
+  googleConnected,
+  meetingIdOf,
+  proposalResult,
+  proposeCancelEvent,
+  proposeCreateEvent,
+  proposeUpdateEvent,
+} from "@/lib/calendario/propose";
+import type { MeetingDraft, MeetingPatch } from "@/lib/types/calendario";
 
 // ── Constants and copy ──────────────────────────────────────────────────────
 
@@ -131,7 +141,7 @@ const DateTimeSchema = z
 const NameSchema = z.string().trim().min(1).max(160);
 const PeopleSchema = z.array(NameSchema).max(20);
 const ProjectNameSchema = z.string().trim().min(1).max(200).describe("Nombre del proyecto");
-const EventIdSchema = z.string().trim().min(1).max(1024).describe("Id del evento de Google Calendar");
+const EventIdSchema = z.string().trim().min(1).max(1024).describe("Id de la reunión (el que devuelve list_events)");
 
 export const ListEventsSchema = z.object({
   from: DateSchema,
@@ -151,10 +161,13 @@ export const FindFreeSlotsSchema = z.object({
 export const CreateEventSchema = z.object({
   title: z.string().trim().min(1).max(200),
   start: DateTimeSchema,
-  end: DateTimeSchema,
-  attendees: PeopleSchema.describe("Nombres de personas del equipo o correos"),
+  end: DateTimeSchema.optional().describe("Fin; sin él la reunión dura 60 minutos"),
+  attendees: PeopleSchema.default([]).describe("Nombres de personas del equipo o correos; vacío usa los invitados por defecto del proyecto"),
   project: ProjectNameSchema.optional(),
+  projectId: z.uuid().optional().describe("Id del proyecto, si ya se conoce"),
   location: z.string().trim().max(300).optional(),
+  meet: z.boolean().optional().describe("Enlace de Meet (por defecto sí, si Google está conectado)"),
+  inviteProjectTeam: z.boolean().optional().describe("Además de los invitados dados, invitar al equipo del proyecto"),
 });
 
 export const UpdateEventSchema = z.object({
@@ -285,6 +298,12 @@ function projectUrl(project: { id: string }): string {
   return origin ? `${origin}${path}` : path;
 }
 
+function taskUrl(taskId: string): string {
+  const path = `/tareas?tarea=${taskId}`;
+  const origin = getAppOrigin();
+  return origin ? `${origin}${path}` : path;
+}
+
 const TASK_DATE_FIELDS = [
   { key: "commitmentDate", suffix: "c", label: "Compromiso" },
   { key: "reviewDate", suffix: "r", label: "Revisión" },
@@ -333,6 +352,25 @@ export function googleAgendaItems(events: GoogleCalendarEvent[]): AgendaItem[] {
   });
 }
 
+/** Meetings of `calendar_events` as agenda items (id prefixed with "e-"), linked to the Calendario. */
+export function eventAgendaItems(events: CalEventItem[]): AgendaItem[] {
+  return events.map((event) => {
+    const item: AgendaItem = {
+      id: `e-${event.eventId}`,
+      title: event.title,
+      start: event.start,
+      end: event.end,
+      allDay: event.allDay,
+      attendees: event.attendees.map((a) => a.name).filter(Boolean),
+      href: `/calendario?vista=dia&fecha=${event.date}&evento=${event.id}`,
+    };
+    if (event.project) item.project = event.project.name;
+    if (event.tramo?.key) item.tramo = event.tramo.key as AgendaItem["tramo"];
+    if (event.meetUrl) item.meetUrl = event.meetUrl;
+    return item;
+  });
+}
+
 /** Admin tasks only for `canSeeAdminData` (BE §9.7); the reads already scope, this keeps it so. */
 function visibleTasks(user: AuthenticatedUser, tasks: TaskListItem[]): TaskListItem[] {
   return canSeeAdminData(user) ? tasks : tasks.filter((t) => t.kind !== "admin");
@@ -373,13 +411,6 @@ const rangeError = (maxDays: number) => ({
   error: `El rango debe ir de la fecha inicial a la final y abarcar como máximo ${maxDays} días.`,
 });
 
-async function ensureOrganizer(staffId: string, eventId: string) {
-  const event = await getPrimaryEvent(staffId, eventId);
-  if (!event) return { ok: false as const, error: EVENT_GONE_COPY };
-  if (event.organizer?.self !== true) return { ok: false as const, error: ORGANIZER_ONLY_COPY };
-  return { ok: true as const, event };
-}
-
 function eventResult(event: GoogleCalendarEvent) {
   return {
     eventId: event.id,
@@ -391,15 +422,13 @@ function eventResult(event: GoogleCalendarEvent) {
   };
 }
 
-/** A `g-` prefixed agenda item id or a bare Google event id → the Google id. */
-const googleEventId = (id: string) => id.replace(/^g-/, "");
 
 // ── list_events ─────────────────────────────────────────────────────────────
 
 export const list_events = defineTool({
   name: "list_events",
   description:
-    "Agenda de un rango de fechas: fechas de compromiso, revisión y entrega de las tareas (de todos, de ciertas personas o de un proyecto) y, si el usuario conectó Google Calendar, sus propios eventos. " +
+    "Agenda de un rango de fechas: fechas de compromiso, revisión y entrega de las tareas (de todos, de ciertas personas o de un proyecto) y las reuniones del calendario de Cincel (las que organiza o a las que asiste el usuario y sus eventos de Google ya sincronizados; las de otras personas solo si puede ver el calendario del equipo). " +
     `Si te piden crear, mover o cancelar un evento y no tienes una herramienta para hacerlo, responde «${CALENDAR_WRITES_DISABLED_COPY}» y ofrece create_reminder o create_task.`,
   schema: ListEventsSchema,
   capability: everyone,
@@ -434,15 +463,18 @@ export const list_events = defineTool({
         : await fetchCalendarAction(input.from, input.to, filters);
       const items = taskAgendaItems(visibleTasks(user, dedupeById(tasks)), input.from, input.to);
 
-      // Only the caller's own Google events, and only when the question is about them.
-      const includeGoogle = !project && (people.length === 0 || people.some((p) => p.self));
-      let google: { connected: boolean; included: boolean; error?: string } = { connected: false, included: false };
-      if (includeGoogle) {
-        const { timeMin, timeMax } = rangeInstants(input.from, input.to);
-        const own = await listOwnGoogleEvents(user.member.id, timeMin, timeMax);
-        items.push(...googleAgendaItems(own.events));
-        google = { connected: own.connected, included: own.connected, ...(own.error ? { error: own.error } : {}) };
-      }
+      // Meetings come from calendar_events, the same rows the Calendario shows (never live Google).
+      const canViewTeam = resolveCalendarCapabilities(user).canViewTeamCalendar;
+      const meetings = await listEventItemsForTools(
+        user,
+        { from: input.from, to: input.to },
+        { canViewTeam, project: project?.id ?? null, staffIds: people.map((p) => p.id).filter(Boolean) },
+      );
+      items.push(...eventAgendaItems(meetings));
+      const google = {
+        included: meetings.some((m) => m.source === "google"),
+        syncedAt: meetings.map((m) => m.syncedAt).filter((v): v is string => !!v).sort().at(-1) ?? null,
+      };
 
       const sorted = sortItems(items);
       return {
@@ -468,7 +500,7 @@ export const list_events = defineTool({
 export const find_free_slots = defineTool({
   name: "find_free_slots",
   description:
-    "Horarios libres en común para una o varias personas en un rango de fechas: la jornada laboral de Control de horario en los días laborables, sin los días con vacaciones aprobadas y sin los eventos ocupados del calendario de Google del propio usuario (el calendario de los demás no es visible).",
+    "Horarios libres en común para una o varias personas en un rango de fechas: la jornada laboral de Control de horario en los días laborables, sin los días con vacaciones aprobadas y sin las reuniones del calendario de Cincel ni los eventos ocupados del propio usuario; la ocupación de los demás se consulta en Google (libre/ocupado) cuando hay permiso y, si no, solo con sus reuniones de Cincel.",
   schema: FindFreeSlotsSchema,
   capability: everyone,
   available: () => TIME_TRACKING.fetchTimeTrackingSettingsAction && VACATIONS.fetchTeamAbsencesAction,
@@ -487,18 +519,35 @@ export const find_free_slots = defineTool({
       const absences = staffIds.length ? await approvedAbsences(db, { from: input.from, to: input.to, staffIds }) : [];
 
       const notes: string[] = [];
-      let busy: { start: string; end: string }[] = [];
-      if (people.some((p) => p.self)) {
-        const { timeMin, timeMax } = rangeInstants(input.from, input.to);
-        const own = await listOwnGoogleEvents(user.member.id, timeMin, timeMax);
-        busy = busyIntervalsOf(own.events);
-        if (!own.connected) notes.push("No conectaste Google Calendar: tus eventos no se descontaron.");
-        if (own.error) notes.push(own.error);
-      }
-      if (people.some((p) => !p.self)) {
-        notes.push(
-          "La disponibilidad de los demás se basa en su jornada y sus vacaciones aprobadas; su calendario de Google no es visible.",
-        );
+      const { timeMin, timeMax } = rangeInstants(input.from, input.to);
+      const includesSelf = people.some((p) => p.self);
+      // Cincel meetings of everyone named, plus the caller's own cached Google events.
+      const busy: { start: string; end: string }[] = await busyWindowsOf(user.member.id, staffIds, { timeMin, timeMax }, {
+        includeOwnGoogle: includesSelf,
+      });
+
+      // Other people: free/busy from Google whenever the caller has the grant; else Cincel data only.
+      const others = people.filter((p) => !p.self);
+      if (others.length > 0) {
+        const withEmail = others.filter((p) => p.email);
+        let unknown = others.length - withEmail.length;
+        if (withEmail.length > 0) {
+          try {
+            const fb = await freeBusy(user.member.id, withEmail.map((p) => p.email as string), timeMin, timeMax);
+            const unseen = new Set(fb.unknown.map((e) => e.toLowerCase()));
+            for (const p of withEmail) {
+              const email = (p.email as string).toLowerCase();
+              if (unseen.has(email)) {
+                unknown += 1;
+                continue;
+              }
+              busy.push(...(fb.busy[p.email as string] ?? fb.busy[email] ?? []));
+            }
+          } catch {
+            unknown += withEmail.length;
+          }
+        }
+        if (unknown > 0) notes.push(`No pude ver la agenda de ${unknown} persona(s).`);
       }
 
       const workingHoursOnly = input.workingHoursOnly ?? true;
@@ -545,136 +594,167 @@ export const find_free_slots = defineTool({
   },
 });
 
-// ── create_event (registered disabled) ──────────────────────────────────────
+// ── create_event / update_event / cancel_event (proposals) ──────────────────
+//
+// These three no longer write: each creates a proposal (ADR 0007) that the
+// person applies or cancels, so they do not depend on the Google grant (a
+// Cincel-only meeting works) and need no approval card of their own.
+
+/** Meeting attendees from resolved people: staff keep their id, outside guests only an email. */
+function draftAttendees(people: AgendaPerson[], organizerId: string): MeetingDraft["attendees"] {
+  const out: MeetingDraft["attendees"] = [];
+  for (const person of people) {
+    if (person.self || person.id === organizerId || !person.email) continue;
+    out.push(person.id ? { staffId: person.id, email: person.email, name: person.name } : { email: person.email, name: person.email });
+  }
+  return out;
+}
+
+function mergeAttendees(...lists: MeetingDraft["attendees"][]): MeetingDraft["attendees"] {
+  const seen = new Set<string>();
+  const out: MeetingDraft["attendees"] = [];
+  for (const list of lists) {
+    for (const attendee of list) {
+      const key = attendee.email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(attendee);
+    }
+  }
+  return out;
+}
+
+function notFound(message: string) {
+  return { ok: false as const, error: "NOT_FOUND", message };
+}
 
 export const create_event = defineTool({
   name: "create_event",
   description:
-    "Crea un evento en el calendario principal de Google del usuario e invita a las personas (les llega la invitación por correo). Confirma título, fecha, hora e invitados antes.",
+    "Propone una reunión nueva en el calendario (no la crea hasta que la persona aplique la propuesta). Dura 60 minutos si no se indica el fin. Con un proyecto y sin invitados, invita a su responsable, su coordinación y al cliente si tiene correo; con Google conectado lleva enlace de Meet. Las horas sin zona son de Ciudad de México.",
   schema: CreateEventSchema,
   capability: everyone,
-  available: eventWritesAvailable,
-  confirm: true,
-  write: true,
+  available: () => true,
+  confirm: false,
+  write: false,
   summarize: toolSummaries.create_event,
-  async run({ user }, input) {
-    if (!calendarEventsGrantAvailable()) return writesDisabled();
+  async run(ctx, input) {
+    const { user } = ctx;
     try {
       const start = toInstant(input.start);
-      const end = toInstant(input.end);
-      if (end <= start) return { ok: false as const, error: END_BEFORE_START_COPY };
+      const end = input.end ? toInstant(input.end) : defaultMeetingEnd(start);
+      if (end <= start) return { ok: false as const, error: "INVALID", message: END_BEFORE_START_COPY };
 
-      let project: ProjectListItem | null = null;
-      if (input.project) {
+      let project: Pick<ProjectListItem, "id" | "name" | "manager" | "coordinator" | "clientId"> | null = null;
+      if (input.projectId) {
+        const found = (await listViewerProjects()).find((p) => p.id === input.projectId);
+        if (!found) return notFound("No encontré ese proyecto o no tienes acceso a él.");
+        project = found;
+      } else if (input.project) {
         const resolved = await resolveProject(input.project);
         if (!resolved.ok) return unresolved(resolved);
         project = resolved.value;
       }
+
       const resolved = await resolvePeople(user, input.attendees, { allowEmails: true });
-      if (!resolved.ok) return resolved;
-      const emails = attendeeEmails(resolved.people);
-      if (!emails.ok) return { ok: false as const, error: emails.error };
+      if (!resolved.ok) return { ok: false as const, error: "INVALID", message: resolved.error };
+      const missing = resolved.people.find((p) => !p.self && !p.email);
+      if (missing) return { ok: false as const, error: "INVALID", message: `${missing.name} no tiene correo registrado.` };
+      const named = draftAttendees(resolved.people, user.member.id);
+      const defaults =
+        project && (input.inviteProjectTeam || named.length === 0)
+          ? (await defaultAttendees(user, project)).attendees
+          : [];
+      const attendees = mergeAttendees(named, defaults);
 
-      const body: GoogleEventWrite = {
-        summary: input.title,
-        start: googleTime(start),
-        end: googleTime(end),
-        attendees: emails.emails.map((email) => ({ email })),
+      const meet = (input.meet ?? true) && (await googleConnected(user.member.id));
+      const draft: MeetingDraft = {
+        title: input.title,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        projectId: project?.id ?? null,
+        location: input.location ?? null,
+        meet,
+        attendees,
+        ...(project ? { description: `Proyecto ${project.name}: ${projectUrl(project)}` } : {}),
       };
-      if (input.location) body.location = input.location;
-      if (project) body.description = `Proyecto ${project.name}: ${projectUrl(project)}`;
-
-      const event = await insertPrimaryEvent(user.member.id, body);
-      if (project) {
-        await recordViaAsistente({
-          entity: "project",
-          entityId: project.id,
-          actorId: user.member.id,
-          summary: summarizeCreateEvent(input),
-        });
-      }
-      return { ok: true as const, ...eventResult(event), project: project ? { id: project.id, name: project.name } : null };
+      const proposal = await proposeCreateEvent({ user, threadId: ctx.threadId }, draft, {
+        names: attendees.filter((a) => !a.contactId).map((a) => a.name),
+        withClient: attendees.some((a) => a.contactId),
+      });
+      return proposalResult(proposal);
     } catch (err) {
       return failure(err);
     }
   },
 });
 
-// ── update_event (registered disabled) ──────────────────────────────────────
+/** The meeting the caller organizes, or the failure to return. */
+async function organizedMeeting(user: AuthenticatedUser, eventId: string) {
+  const id = meetingIdOf(eventId);
+  const item = id ? await getEventItem(user, id) : null;
+  if (!item) return { ok: false as const, failed: notFound(EVENT_GONE_COPY) };
+  if (item.organizer?.id !== user.member.id) {
+    return { ok: false as const, failed: { ok: false as const, error: "NOT_ORGANIZER", message: ORGANIZER_ONLY_COPY } };
+  }
+  return { ok: true as const, item };
+}
 
 export const update_event = defineTool({
   name: "update_event",
   description:
-    "Cambia título, horario, lugar o invitados de un evento que el usuario organizó en su calendario de Google (los invitados reciben el aviso). Usa el id que devolvió list_events o create_event.",
+    "Propone cambiar título, horario, lugar o invitados de una reunión que el usuario organiza (no la cambia hasta que la persona aplique la propuesta). Usa el id que devolvió list_events.",
   schema: UpdateEventSchema,
   capability: everyone,
-  available: eventWritesAvailable,
-  confirm: true,
-  write: true,
+  available: () => true,
+  confirm: false,
+  write: false,
   summarize: toolSummaries.update_event,
-  async run({ user }, input) {
-    if (!calendarEventsGrantAvailable()) return writesDisabled();
+  async run(ctx, input) {
+    const { user } = ctx;
     try {
-      const eventId = googleEventId(input.eventId);
-      const owned = await ensureOrganizer(user.member.id, eventId);
-      if (!owned.ok) return owned;
+      const owned = await organizedMeeting(user, input.eventId);
+      if (!owned.ok) return owned.failed;
 
-      const patch: GoogleEventWrite = {};
-      if (input.patch.title) patch.summary = input.patch.title;
+      const patch: MeetingPatch = {};
+      if (input.patch.title) patch.title = input.patch.title;
       if (input.patch.location !== undefined) patch.location = input.patch.location;
-      const start = input.patch.start ? toInstant(input.patch.start) : null;
-      const end = input.patch.end ? toInstant(input.patch.end) : null;
-      const nextStart = start ?? (owned.event.start?.dateTime ? new Date(owned.event.start.dateTime) : null);
-      const nextEnd = end ?? (owned.event.end?.dateTime ? new Date(owned.event.end.dateTime) : null);
-      if (nextStart && nextEnd && nextEnd <= nextStart) return { ok: false as const, error: END_BEFORE_START_COPY };
-      if (start) patch.start = googleTime(start);
-      if (end) patch.end = googleTime(end);
+      if (input.patch.start) patch.start = toInstant(input.patch.start).toISOString();
+      if (input.patch.end) patch.end = toInstant(input.patch.end).toISOString();
+      const nextStart = Date.parse(patch.start ?? owned.item.start);
+      // A new start alone moves the meeting: the length stays.
+      const length = Date.parse(owned.item.end) - Date.parse(owned.item.start);
+      const nextEnd = patch.end ? Date.parse(patch.end) : patch.start ? nextStart + length : Date.parse(owned.item.end);
+      if (nextEnd <= nextStart) return { ok: false as const, error: "INVALID", message: END_BEFORE_START_COPY };
       if (input.patch.attendees) {
         const resolved = await resolvePeople(user, input.patch.attendees, { allowEmails: true });
-        if (!resolved.ok) return resolved;
-        const emails = attendeeEmails(resolved.people);
-        if (!emails.ok) return { ok: false as const, error: emails.error };
-        patch.attendees = emails.emails.map((email) => ({ email }));
+        if (!resolved.ok) return { ok: false as const, error: "INVALID", message: resolved.error };
+        const missing = resolved.people.find((p) => !p.self && !p.email);
+        if (missing) return { ok: false as const, error: "INVALID", message: `${missing.name} no tiene correo registrado.` };
+        patch.attendees = draftAttendees(resolved.people, user.member.id);
       }
-
-      const event = await patchPrimaryEvent(user.member.id, eventId, patch);
-      return { ok: true as const, ...eventResult(event) };
+      return proposalResult(await proposeUpdateEvent({ user, threadId: ctx.threadId }, owned.item, patch));
     } catch (err) {
       return failure(err);
     }
   },
 });
 
-// ── cancel_event (registered disabled) ──────────────────────────────────────
-
 export const cancel_event = defineTool({
   name: "cancel_event",
   description:
-    "Cancela un evento que el usuario organizó en su calendario de Google y avisa a todos los invitados, opcionalmente con un mensaje.",
+    "Propone cancelar una reunión que el usuario organiza y avisar a los invitados (no la cancela hasta que la persona aplique la propuesta).",
   schema: CancelEventSchema,
   capability: everyone,
-  available: eventWritesAvailable,
-  confirm: true,
-  write: true,
+  available: () => true,
+  confirm: false,
+  write: false,
   summarize: toolSummaries.cancel_event,
-  async run({ user }, input) {
-    if (!calendarEventsGrantAvailable()) return writesDisabled();
+  async run(ctx, input) {
     try {
-      const eventId = googleEventId(input.eventId);
-      const owned = await ensureOrganizer(user.member.id, eventId);
-      if (!owned.ok) return owned;
-      if (input.message) {
-        // The message travels in the description of the cancellation notice.
-        const previous = owned.event.description?.trim();
-        await patchPrimaryEvent(
-          user.member.id,
-          eventId,
-          { description: previous ? `${input.message}\n\n${previous}` : input.message },
-          "none",
-        );
-      }
-      await deletePrimaryEvent(user.member.id, eventId);
-      return { ok: true as const, eventId, title: owned.event.summary ?? null, cancelled: true };
+      const owned = await organizedMeeting(ctx.user, input.eventId);
+      if (!owned.ok) return owned.failed;
+      return proposalResult(await proposeCancelEvent({ user: ctx.user, threadId: ctx.threadId }, owned.item));
     } catch (err) {
       return failure(err);
     }
@@ -768,6 +848,30 @@ export const schedule_site_visit = defineTool({
         unwrapActionResult(await createSubtaskAction(task.id, { title: item }));
       }
 
+      // The Cincel meeting that shows on the Calendario, pointing at the Google event and the task.
+      let meeting: { eventId: string; href: string } | null = null;
+      let meetingError: string | null = null;
+      try {
+        const row = await createEvent(
+          user,
+          {
+            title: `Visita de obra: ${project.name}`,
+            start: start.toISOString(),
+            end: end.toISOString(),
+            projectId: project.id,
+            location: null,
+            meet: false,
+            attendees: people.map((p) => ({ staffId: p.id, email: p.email ?? "", name: p.name })).filter((p) => p.email),
+            description: `Tarea: ${taskUrl(task.id)}`,
+          },
+          { invitesVia: "google" },
+        );
+        await setGoogleSyncState(row.eventId, { googleEventId: event.id, htmlLink: event.htmlLink ?? null, error: null });
+        meeting = { eventId: row.eventId, href: `/calendario?vista=dia&fecha=${localDate}&evento=${row.id}` };
+      } catch (err) {
+        meetingError = actionErrorText(err);
+      }
+
       const summary = summarizeScheduleSiteVisit(input);
       await recordViaAsistente({ entity: "task", entityId: task.id, actorId: user.member.id, summary });
       await recordViaAsistente({ entity: "project", entityId: project.id, actorId: user.member.id, summary });
@@ -776,6 +880,9 @@ export const schedule_site_visit = defineTool({
         ok: true as const,
         ...eventResult(event),
         task: { id: task.id, title: task.title, href: `/tareas?tarea=${task.id}`, checklist: checklist.items },
+        meeting,
+        ...(meetingError ? { meetingError } : {}),
+        href: meeting?.href ?? `/calendario?vista=dia&fecha=${localDate}`,
         project: { id: project.id, name: project.name },
       };
     } catch (err) {

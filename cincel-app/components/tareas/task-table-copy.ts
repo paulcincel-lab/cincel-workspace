@@ -37,3 +37,13 @@ export const TASK_DELETED_TOAST = "Tarea eliminada";
 export const TASK_RESTORED_TOAST = "Tarea restaurada.";
 /** How long the delete toast offers Deshacer, in ms (same as a cell save). */
 export const TASK_DELETE_UNDO_MS = 5000;
+
+// #1084 Horas estimadas
+export const HOURS_FIELD_LABEL = "Horas estimadas";
+export const HOURS_COLUMN_LABEL = "Horas";
+export const BULK_HOURS_LABEL = "Horas estimadas";
+export const HOURS_RANGE_ERROR = "Escribe un valor entre 0.5 y 80 horas.";
+/** Hint under the sheet field while the task has no hours and no template applies. */
+export const HOURS_DEFAULT_HINT = "Sin estimar: el calendario cuenta 1 h.";
+/** Label of the switch that shows the Horas column in Tareas · Analítico. */
+export const SHOW_HOURS_COLUMN_LABEL = "Mostrar horas";

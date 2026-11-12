@@ -50,10 +50,12 @@ export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnab
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const tarea = searchParams?.get("tarea") ?? null;
-  const context = useMemo(
-    () => assistantContextFromRoute(pathname, { get: (name) => (name === "tarea" ? tarea : null) }),
-    [pathname, tarea],
-  );
+  // On /calendario the whole query (vista, fecha, filters, evento, propuesta) is the page context.
+  const calendarSearch = pathname === "/calendario" ? (searchParams?.toString() ?? "") : "";
+  const context = useMemo(() => {
+    const params = new URLSearchParams(calendarSearch);
+    return assistantContextFromRoute(pathname, { get: (name) => (name === "tarea" ? tarea : params.get(name)) });
+  }, [pathname, tarea, calendarSearch]);
 
   const active = enabled && !hidden && !isAssistantPage(pathname);
 

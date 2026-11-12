@@ -6,7 +6,9 @@
 import type { SettingsSectionEntry } from "@/lib/shell/settings-sections";
 
 import { generalEnlacesSection } from "./enlaces";
+import { generalJornadaSection } from "./jornada";
 
 export const GENERAL_SECTIONS: readonly SettingsSectionEntry[] = [
   generalEnlacesSection,
+  generalJornadaSection,
 ];

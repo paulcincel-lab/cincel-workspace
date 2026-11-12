@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { archivoRecibidoEmail, enlaceAccesoEmail, invitacionEmail } from "./index";
+import { archivoRecibidoEmail, enlaceAccesoEmail, invitacionEmail, invitacionReunionEmail } from "./index";
 
 describe("invitacionEmail", () => {
   const mail = invitacionEmail({
@@ -63,5 +63,40 @@ describe("archivoRecibidoEmail", () => {
     );
     expect(mail.html).toContain('href="https://drive.google.com/drive/folders/abc"');
     expect(mail.html).toContain("planos.pdf");
+  });
+});
+
+describe("invitacionReunionEmail", () => {
+  const base = {
+    title: "Revisión de planos",
+    when: "12 de noviembre de 2026, 10:00",
+    location: "Oficina Cincel · Sala 2",
+    meetingUrl: "https://app.example.test/calendario?evento=e%3A1",
+    organizerName: "Ana Pérez",
+  };
+
+  it("invites with date, place and the link, without an attachment", () => {
+    const mail = invitacionReunionEmail({ ...base, kind: "invitacion" });
+    expect(mail.subject).toBe("Invitación: Revisión de planos");
+    for (const part of [mail.text, mail.html]) {
+      expect(part).toContain("Ana Pérez te invitó a una reunión.");
+      expect(part).toContain("12 de noviembre de 2026, 10:00");
+      expect(part).toContain("Oficina Cincel · Sala 2");
+    }
+    expect(mail.html).toContain(`href="${base.meetingUrl}"`);
+    expect(mail.text).toContain(base.meetingUrl);
+  });
+
+  it("words the change and the cancel notice", () => {
+    expect(invitacionReunionEmail({ ...base, kind: "cambio" }).subject).toBe("Reunión cambiada: Revisión de planos");
+    const cancel = invitacionReunionEmail({ ...base, kind: "cancelacion" });
+    expect(cancel.subject).toBe("Reunión cancelada: Revisión de planos");
+    expect(cancel.text).toContain("Ana Pérez canceló la reunión.");
+  });
+
+  it("skips the place when there is none and escapes the HTML", () => {
+    const mail = invitacionReunionEmail({ ...base, title: "<i>x</i>", location: null, kind: "invitacion" });
+    expect(mail.text).not.toContain("Dónde:");
+    expect(mail.html).toContain("&lt;i&gt;x&lt;/i&gt;");
   });
 });

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { findStaffByCalendarFeedToken } from "@/lib/repositories/calendar-feed-repository";
+import { listFeedMeetings } from "@/lib/repositories/calendario-events-range";
 import { listMyTasks } from "@/lib/repositories/tasks-repository";
 import { staffViewerScope } from "@/lib/repositories/viewer-scope-repository";
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
@@ -28,7 +29,10 @@ export async function GET(
 
   // Admin tasks only in an administrator's own feed (project flow BE §8.8).
   const tasks = await listMyTasks(staff.id, { archived: false }, await staffViewerScope(staff.id));
+  // Confirmed Cincel meetings of the person (organizer or attendee), from 90 days back; cached Google events stay out.
+  const meetings = await listFeedMeetings(staff.id, new Date(Date.now() - 90 * 86_400_000));
   const ics = buildIcs(buildCalendarEvents(tasks), {
+    meetings,
     baseUrl: request.nextUrl.origin,
     calendarName: `Cincel — ${staff.name}`,
   });

@@ -44,6 +44,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   addTaskDependencyAction: vi.fn(),
   removeTaskDependencyAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/calendario-actions", () => ({ setTaskEstimatedHoursAction: vi.fn() }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowAction: vi.fn(async () => null) }));
 vi.mock("@/lib/actions/tramo-start-actions", () => ({ previewStartTramoAction: vi.fn() }));
 vi.mock("@/lib/actions/import-actions", () => ({ getImportDataAction: vi.fn().mockResolvedValue(null) }));

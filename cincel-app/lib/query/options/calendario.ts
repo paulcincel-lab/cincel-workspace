@@ -1,5 +1,6 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions, type QueryKey } from "@tanstack/react-query";
 
+import { fetchWorkdayHoursAction } from "@/lib/actions/calendario-settings-actions";
 import {
   getCalendarioDaySummary,
   getCalendarioList,
@@ -12,6 +13,8 @@ import {
   getPlanWeek,
   getProposal,
 } from "@/lib/actions/page-data/calendario-actions";
+import { fetchCalendarioAssistantHintsAction } from "@/lib/actions/calendario-assistant-actions";
+import type { CalendarioAssistantHints } from "@/lib/assistant/calendar-hints";
 import { normalizeCalendarioFilters } from "@/lib/calendario/url-state";
 import { STALE, qk } from "@/lib/query/keys";
 import type {
@@ -141,4 +144,22 @@ export function calendarioInvalidations(kind: CalendarioInvalidationKind, projec
     case "minutes":
       return [qk.calendario.all, qk.inicio(), ...(projectId ? [qk.proyectos.history(projectId)] : [])];
   }
+}
+
+/** Next delivery, a teammate and a project for the asistente's Calendario suggestions (BE §11.5). */
+export function calendarioAssistantHintsOptions() {
+  return queryOptions<CalendarioAssistantHints>({
+    queryKey: qk.calendario.assistantHints(),
+    queryFn: () => fetchCalendarioAssistantHintsAction(),
+    staleTime: STALE.screen,
+  });
+}
+
+/** The org workday in hours (Ajustes › General); under `qk.calendario.all`, so a save refreshes the meters too. */
+export function workdayHoursOptions() {
+  return queryOptions<number>({
+    queryKey: qk.calendario.workday(),
+    queryFn: () => fetchWorkdayHoursAction(),
+    staleTime: STALE.ajustes,
+  });
 }

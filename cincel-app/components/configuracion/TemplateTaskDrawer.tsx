@@ -18,6 +18,8 @@ export interface TemplateDraft {
   commitmentOffsetDays: string;
   reviewOffsetDays: string;
   deliveryOffsetDays: string;
+  /** Hours the task is planned to take; empty = 1 h (Calendario load). */
+  defaultEstimatedHours: string;
   active: boolean;
 }
 
@@ -29,6 +31,7 @@ export const emptyTemplateDraft: TemplateDraft = {
   commitmentOffsetDays: "",
   reviewOffsetDays: "",
   deliveryOffsetDays: "",
+  defaultEstimatedHours: "",
   active: true,
 };
 
@@ -165,6 +168,26 @@ export function TemplateTaskDrawer({
           <p className="-mt-2 text-xs text-muted-foreground">
             Días relativos al inicio del tramo, usados al crear las tareas del proyecto.
           </p>
+
+          <div>
+            <label htmlFor="template-hours" className="mb-2 block text-sm font-medium text-foreground">Horas estimadas</label>
+            <Input
+              id="template-hours"
+              type="number"
+              inputMode="decimal"
+              min={0.5}
+              max={80}
+              step={0.5}
+              value={draft.defaultEstimatedHours}
+              onChange={(event) => onChangeDraft((current) => ({ ...current, defaultEstimatedHours: event.target.value }))}
+              placeholder="1"
+              aria-describedby="template-hours-help"
+              className="sm:max-w-40"
+            />
+            <p id="template-hours-help" className="mt-1 text-xs text-muted-foreground">
+              Vacío cuenta como 1 h. Se copia a la tarea cuando inicia el tramo.
+            </p>
+          </div>
 
           <div>
             <label className="mb-2 block text-sm font-medium text-foreground">Notas</label>

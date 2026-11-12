@@ -35,6 +35,10 @@
  *   or `qk.proyectos.tab(…, "tareas")` used as anything but an entry of a key
  *   list (invalidations). The Resumen reads `qk.proyectos.resumenSummary(id)`
  *   and pages its rows through `qk.tareas.list`
+ * - (Calendario, rule 11) a full task read in the Calendario loader, repository
+ *   or components (`lib/loaders/calendario.ts`, `lib/repositories/calendario-repository.ts`,
+ *   `components/calendario/**`): `listTasks(`, `fetchTasksAction(`,
+ *   `fetchCalendarAction(`, `listMyTasks(`. The range loads its own range only
  *
  * A reported line ending in `// data-patterns: auth` is allowed (auth flows only);
  * a sort ending in `// data-patterns: server-order` is allowed: it keeps the
@@ -65,6 +69,9 @@ const STORE_MODULE = /^@\/lib\/stores\//;
 /** The Proyecto · Resumen files (#1051): they read the task numbers, never the project's task list. */
 const RESUMEN_FILE = /^(components\/widgets\/Resumen\w*Layout\.tsx|components\/proyectos\/ProjectSummary\.tsx|app\/\(staff\)\/proyectos\/\[id\]\/page\.tsx)$/;
 const RESUMEN_FULL_READS = new Set(["listTaskRows", "loadProyectoTareas", "getProyectoTareasData", "proyectoTareasOptions"]);
+/** Calendario files (rule 11): they read one range through the range loader, never the full task list. */
+const CALENDARIO_FILE = /^(lib\/loaders\/calendario\.ts|lib\/repositories\/calendario-repository\.ts|components\/calendario\/.+)$/;
+const CALENDARIO_FULL_READS = new Set(["listTasks", "fetchTasksAction", "fetchCalendarAction", "listMyTasks"]);
 const STORE_DIR = "lib/stores";
 const STORE_EXPORT = /export const (use[A-Z]\w*)(?:\s*:[^=]+)?\s*=\s*(?:create|createDashboardStore)\b/g;
 
@@ -293,6 +300,11 @@ export function checkSource(file, text) {
         ) {
           report(node, 'Resumen full task read → qk.proyectos.tab(…, "tareas")');
         }
+      }
+
+      // A full task read in the Calendario (rule 11).
+      if (CALENDARIO_FILE.test(rel) && name && CALENDARIO_FULL_READS.has(name)) {
+        report(node, `Calendario full task read → ${name}(`);
       }
 
       // useXStore() without a selector

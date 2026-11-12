@@ -13,7 +13,8 @@ import { actionErrorCode, actionErrorText } from "@/lib/errors";
 import { NOT_IMPLEMENTED } from "@/lib/stubs";
 import type { AssistantContext } from "@/lib/types/redesign";
 
-export type ToolRunContext = { user: AuthenticatedUser; context: AssistantContext; threadId: string };
+/** `threadId` is null when a button on the page runs the tool (no chat thread). */
+export type ToolRunContext = { user: AuthenticatedUser; context: AssistantContext; threadId: string | null };
 
 export type ToolAvailabilityContext = {
   user: AuthenticatedUser;

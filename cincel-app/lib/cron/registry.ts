@@ -5,13 +5,16 @@
  */
 import type { OwnerDb } from "@/lib/repositories/owner-scoped";
 
-/** The five canonical job names (BE §21). */
+/** The canonical job names (redesign BE §21, Calendario BE §7). */
 export const CRON_JOB_NAMES = [
   "notifications-deliver",
   "daily-digest",
   "reminders-fire",
   "gmail-sync",
   "auto-close-jornadas",
+  "calendar-events-refresh",
+  "calendar-meetings-resync",
+  "proposals-expire",
 ] as const;
 export type CronJobName = (typeof CRON_JOB_NAMES)[number];
 

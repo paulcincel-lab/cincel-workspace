@@ -37,6 +37,7 @@ const PAGE_TITLES: readonly { path: string; title: string }[] = [
   { path: "/inicio", title: "Inicio" },
   { path: "/mi-espacio", title: "Mi espacio" },
   { path: "/tareas", title: "Tareas" },
+  { path: "/calendario", title: "Calendario" },
   { path: "/proyectos", title: "Proyectos" },
   { path: "/personas", title: "Personas" },
   { path: "/biblioteca", title: "Biblioteca" },

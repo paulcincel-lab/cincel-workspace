@@ -343,4 +343,29 @@ describe.skipIf(!url)("startTramo / undoStartTramo / onTaskClosingChanged (test 
       }
     });
   });
+
+  it("copies the template's default hours onto the new tasks and leaves them alone afterwards", async () => {
+    await db
+      .update(workflowTaskTemplates)
+      .set({ defaultEstimatedHours: 4 })
+      .where(and(eq(workflowTaskTemplates.workflowId, wf.first), eq(workflowTaskTemplates.title, "A1")));
+    try {
+      const projectId = await newProject();
+      await start({ projectId, phaseIds: [phases.a] });
+      const created = await liveTasks(projectId);
+      expect(created.find((t) => t.title === "A1")?.estimatedHours).toBe(4);
+      expect(created.find((t) => t.title === "A2")?.estimatedHours).toBeNull();
+
+      await db
+        .update(workflowTaskTemplates)
+        .set({ defaultEstimatedHours: 6 })
+        .where(and(eq(workflowTaskTemplates.workflowId, wf.first), eq(workflowTaskTemplates.title, "A1")));
+      expect((await liveTasks(projectId)).find((t) => t.title === "A1")?.estimatedHours).toBe(4);
+    } finally {
+      await db
+        .update(workflowTaskTemplates)
+        .set({ defaultEstimatedHours: null })
+        .where(and(eq(workflowTaskTemplates.workflowId, wf.first), eq(workflowTaskTemplates.title, "A1")));
+    }
+  });
 });

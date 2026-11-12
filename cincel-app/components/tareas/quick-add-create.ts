@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import type { QuickAddCreated, QuickAddDraft } from "@/components/widgets/QuickAddRow";
+import { setTaskEstimatedHoursAction } from "@/lib/actions/calendario-actions";
 import { createSubtaskAction, createUserTaskAction, deleteTaskAction, setTaskCustomStatusAction, setTaskStatusAction } from "@/lib/actions/tasks-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { STALE, qk } from "@/lib/query/keys";
@@ -50,7 +51,7 @@ export function newTaskInvalidations(projectId: string, created?: { taskId: stri
   return keys;
 }
 
-export type CreateTaskVars = { input: UserTaskInput; statusKey?: string; subtasks: SubtaskInput[] };
+export type CreateTaskVars = { input: UserTaskInput; statusKey?: string; subtasks: SubtaskInput[]; /** Planned hours (`~2h` in quick-add), saved after the create. */ estimatedHours?: number };
 export type CreateTaskResult = { task: TaskDetail; partialError: unknown };
 
 /**
@@ -59,7 +60,7 @@ export type CreateTaskResult = { task: TaskDetail; partialError: unknown };
  * the task exists a failed status move or subtarea is reported, not retried,
  * so a second "Crear tarea" can't duplicate the task.
  */
-export async function createTaskWithExtras({ input, statusKey, subtasks }: CreateTaskVars): Promise<CreateTaskResult> {
+export async function createTaskWithExtras({ input, statusKey, subtasks, estimatedHours }: CreateTaskVars): Promise<CreateTaskResult> {
   const task = await runAction(createUserTaskAction, input);
   let partialError: unknown = null;
   const target = initialStatusTarget(statusKey, task);
@@ -69,6 +70,13 @@ export async function createTaskWithExtras({ input, statusKey, subtasks }: Creat
       else await runAction(() => setTaskStatusAction(task.id, target.status), undefined);
     } catch (err) {
       partialError = err;
+    }
+  }
+  if (estimatedHours !== undefined) {
+    try {
+      await runAction(() => setTaskEstimatedHoursAction(task.id, estimatedHours), undefined);
+    } catch (err) {
+      partialError ??= err;
     }
   }
   for (const subtask of subtasks) {
@@ -103,6 +111,7 @@ export function quickAddTaskVars(draft: QuickAddDraft, workflows: readonly Workf
   return {
     input: toUserTaskInput(resolved, fases),
     ...(draft.status ? { statusKey: draft.status } : {}),
+    ...(draft.estimatedHours !== undefined ? { estimatedHours: draft.estimatedHours } : {}),
     subtasks: [],
   };
 }
@@ -152,7 +161,16 @@ export function useQuickAddCreate(): {
       if (draft.parentTaskId) {
         const parentId = draft.parentTaskId;
         const task = await runAction((v: SubtaskInput) => createSubtaskAction(parentId, v), quickAddSubtaskInput(draft));
-        return { task, partialError: null };
+        let partialError: unknown = null;
+        if (draft.estimatedHours !== undefined) {
+          const hours = draft.estimatedHours;
+          try {
+            await runAction(() => setTaskEstimatedHoursAction(task.id, hours), undefined);
+          } catch (err) {
+            partialError = err;
+          }
+        }
+        return { task, partialError };
       }
       const rows = await qc.ensureQueryData({
         queryKey: newTaskWorkflowsKey(),
@@ -162,12 +180,14 @@ export function useQuickAddCreate(): {
       return createTaskWithExtras(quickAddTaskVars(draft, activeWorkflowsInOrder(rows)));
     },
     {
-      invalidate: (draft, data) =>
-        !data || !draft.projectId
-          ? []
-          : draft.parentTaskId
-            ? quickAddSubtaskInvalidations(draft.parentTaskId, draft.projectId)
-            : newTaskInvalidations(draft.projectId, { taskId: data.task.id, withSubtasks: false }),
+      invalidate: (draft, data) => {
+        if (!data || !draft.projectId) return [];
+        const keys = draft.parentTaskId
+          ? quickAddSubtaskInvalidations(draft.parentTaskId, draft.projectId)
+          : newTaskInvalidations(draft.projectId, { taskId: data.task.id, withSubtasks: false });
+        // Planned hours move the calendar's day meters.
+        return draft.estimatedHours !== undefined ? [...keys, qk.calendario.all] : keys;
+      },
       partialFailure: (data) => (data.partialError ? mutationErrorText(data.partialError) : null),
     },
   );

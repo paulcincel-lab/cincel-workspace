@@ -3,16 +3,19 @@
 import { useQueryClient, type FetchQueryOptions } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 
+import { defaultRangeInput } from "@/lib/calendario/url-state";
+import { calendarioRangeOptions } from "@/lib/query/options/calendario";
 import { inicioPageOptions } from "@/lib/query/options/inicio";
 import { tareasPageKeyInputOf, tareasPageOptions } from "@/lib/query/options/tareas";
 import { useAppearanceStoreApiOrNull } from "@/lib/stores/appearance-store";
 import { DEFAULT_TAREAS_QUERY } from "@/lib/tareas/query";
+import { localDate } from "@/lib/time-tracking/local-time";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { NavItemKey } from "@/lib/ui/nav";
 
 /**
  * Hover / focus prefetch of the main pages' data (plan §4.5, decision D5):
- * only Inicio, Tareas and Mi espacio, one page-data query per hover through
+ * Inicio, Tareas, Mi espacio and Calendario (Calendario FE §2.2, Decision F2), one page-data query per hover through
  * that page's page-data action, debounced `NAV_PREFETCH_DEBOUNCE_MS` so a
  * pointer passing over the sidebar calls nothing. `prefetchQuery` skips a
  * query that is still fresh. `next/link` keeps prefetching the RSC shell.
@@ -31,6 +34,8 @@ export const NAV_PREFETCH: Partial<Record<NavItemKey, (style?: PresentationStyle
   inicio: () => inicioPageOptions(),
   // The default view `/tareas` opens with (no filters), in the style the page will resolve.
   tareas: (style = "visual") => tareasPageOptions(tareasPageKeyInputOf(DEFAULT_TAREAS_QUERY, style)),
+  // The range `/calendario` opens with (the style's default vista around today, no filters).
+  calendario: (style = "visual") => calendarioRangeOptions(defaultRangeInput(style, localDate(new Date()))),
 };
 
 export type NavPrefetchHandlers = {

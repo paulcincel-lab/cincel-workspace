@@ -38,6 +38,10 @@ exports[`qk > builds every key shape 1`] = `
   "calendario.all": [
     "calendario",
   ],
+  "calendario.assistantHints": [
+    "calendario",
+    "assistant-hints",
+  ],
   "calendario.day": [
     "calendario",
     "day",
@@ -130,6 +134,10 @@ exports[`qk > builds every key shape 1`] = `
     "calendario",
     "week",
     "2026-11-09",
+  ],
+  "calendario.workday": [
+    "calendario",
+    "workday",
   ],
   "catalog.assignableStaff": [
     "catalog",
@@ -757,8 +765,10 @@ exports[`qk > covers every key of the factory 1`] = `
   "calendario.prep",
   "calendario.minutes",
   "calendario.planWeek",
+  "calendario.assistantHints",
   "calendario.proposals",
   "calendario.proposal",
+  "calendario.workday",
   "portal.projects",
   "portal.project",
   "portal.files",

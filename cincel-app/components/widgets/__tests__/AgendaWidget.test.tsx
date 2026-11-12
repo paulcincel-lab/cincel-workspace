@@ -16,6 +16,8 @@ import { StyleProvider } from "@/components/shell/StyleProvider";
 import {
   AGENDA_CUTTO_LABEL,
   AGENDA_EMPTY_TEXT,
+  AGENDA_MEET_LABEL,
+  AGENDA_ONLY_CINCEL_LABEL,
   AgendaWidget,
   agendaHeat,
   agendaRange,
@@ -228,6 +230,27 @@ describe("AgendaWidget · every style", () => {
       expect(links[0].getAttribute("target")).toBe("_blank");
       expect(links[0].getAttribute("rel")).toContain("noopener");
       expect(links[0].getAttribute("aria-label")).toBe(`${AGENDA_CUTTO_LABEL}: Revisión de planos`);
+      unmount();
+    }
+  });
+
+  it("renders the Meet link (first), the Cutto link and the Cincel-only origin per Estilo", () => {
+    const day = agendaFixture.anchorDate;
+    const items = [
+      { id: "m-meet", title: "Reunión con Meet", start: `${day}T09:00:00`, meetUrl: "https://meet.example.com/abc", href: "/calendario?evento=e:m-meet" },
+      { id: "m-both", title: "Reunión con ambos", start: `${day}T10:00:00`, meetUrl: "https://meet.example.com/def", meetingUrl: "https://cutto.example.com/r/1" },
+      { id: "m-local", title: "Reunión local", start: `${day}T11:00:00`, onlyInCincel: true, meetUrl: "https://meet.example.com/x" },
+    ];
+    for (const style of STYLES) {
+      const { unmount } = renderWidget(style, { items });
+      const meet = screen.getAllByRole("link", { name: new RegExp(AGENDA_MEET_LABEL) });
+      expect(meet).toHaveLength(2);
+      expect(meet[0].getAttribute("href")).toBe("https://meet.example.com/abc");
+      expect(meet[0].getAttribute("target")).toBe("_blank");
+      expect(meet[0].getAttribute("rel")).toBe("noopener noreferrer");
+      expect(screen.getAllByRole("link", { name: new RegExp(AGENDA_CUTTO_LABEL) })).toHaveLength(1);
+      expect(screen.getAllByText(AGENDA_ONLY_CINCEL_LABEL)).toHaveLength(1);
+      expect(screen.getByRole("link", { name: "Reunión con Meet" }).getAttribute("href")).toBe("/calendario?evento=e:m-meet");
       unmount();
     }
   });

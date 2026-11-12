@@ -19,10 +19,35 @@ export type CalendarioToolbarProps = {
   onNext(): void;
   onToday(): void;
   todayDisabled?: boolean;
+  /** Hover / focus of Anterior (-1) or Siguiente (1): the page prefetches that range. */
+  onPrefetch?(direction: -1 | 1): void;
+  /** Pointer or focus left Anterior / Siguiente. */
+  onPrefetchCancel?(): void;
+  /** "Actualizar" (Google refresh with `force`); shown only when connected. */
+  onRefresh?(): void;
+  refreshing?: boolean;
 };
 
-/** Vista selector, Anterior / Hoy / Siguiente and the range label (FE §3). Behaviour belongs to Phase 1. */
-export function CalendarioToolbar({ vista, rangeLabel, onVista, onPrevious, onNext, onToday, todayDisabled }: CalendarioToolbarProps) {
+/** Vista selector, Anterior / Hoy / Siguiente and the range label (FE §3). */
+export function CalendarioToolbar({
+  vista,
+  rangeLabel,
+  onVista,
+  onPrevious,
+  onNext,
+  onToday,
+  todayDisabled,
+  onPrefetch,
+  onPrefetchCancel,
+  onRefresh,
+  refreshing,
+}: CalendarioToolbarProps) {
+  const hover = (direction: -1 | 1) => ({
+    onMouseEnter: () => onPrefetch?.(direction),
+    onFocus: () => onPrefetch?.(direction),
+    onMouseLeave: () => onPrefetchCancel?.(),
+    onBlur: () => onPrefetchCancel?.(),
+  });
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2" data-slot="calendario-toolbar">
       <div role="group" aria-label="Vista" className="flex gap-1">
@@ -32,16 +57,21 @@ export function CalendarioToolbar({ vista, rangeLabel, onVista, onPrevious, onNe
           </Button>
         ))}
       </div>
-      <Button variant="outline" size="sm" aria-label="Anterior" onClick={onPrevious}>
+      <Button variant="outline" size="sm" aria-label="Anterior" onClick={onPrevious} {...hover(-1)}>
         <ChevronLeft aria-hidden />
       </Button>
       <Button variant="outline" size="sm" onClick={onToday} disabled={todayDisabled}>
         Hoy
       </Button>
-      <Button variant="outline" size="sm" aria-label="Siguiente" onClick={onNext}>
+      <Button variant="outline" size="sm" aria-label="Siguiente" onClick={onNext} {...hover(1)}>
         <ChevronRight aria-hidden />
       </Button>
-      <span className="text-sm text-muted-foreground">{rangeLabel}</span>
+      <span aria-live="polite" className="text-sm text-muted-foreground">{rangeLabel}</span>
+      {onRefresh ? (
+        <Button variant="ghost" size="sm" className="ml-auto" onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? "Actualizando…" : "Actualizar"}
+        </Button>
+      ) : null}
     </div>
   );
 }

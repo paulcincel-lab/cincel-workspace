@@ -101,6 +101,8 @@ export type ToolStep = {
   rows: number | null;
   durationMs: number | null;
   output?: unknown;
+  /** The raw call input (the approval cards read ids from it). */
+  input?: unknown;
   errorText?: string;
   approvalId?: string;
   /** "Ver en Tareas →". */
@@ -450,6 +452,11 @@ type Entry = {
 const TASKS_NOUN: [string, string] = ["encontrada", "encontradas"];
 const toTareas = () => "/tareas";
 const toCalendario = () => "/calendario";
+/** The day view of the date the tool was given (`/calendario?vista=dia&fecha=`); the plain page when it has none. */
+function toCalendarioDay(date: string): string {
+  const day = /^\d{4}-\d{2}-\d{2}/.exec(date)?.[0];
+  return day ? `/calendario?vista=dia&fecha=${day}` : "/calendario";
+}
 
 function urlOf(output: unknown): string | null {
   const url = str(unwrapOutput(output), "url");
@@ -609,12 +616,12 @@ const ENTRIES: Record<string, Entry> = {
   rebalance_workload: { icon: Shuffle, tone: 4, running: "Repartiendo la carga…", short: "Reparto de carga", href: () => "/personas" },
 
   // Agenda
-  list_events: { icon: CalendarDays, tone: 3, running: "Revisando la agenda…", short: "Agenda", label: () => "Revisó la agenda" },
-  find_free_slots: { icon: CalendarClock, tone: 3, running: "Buscando horarios libres…", short: "Horarios libres", label: () => "Buscó horarios libres" },
-  create_event: { icon: CalendarPlus, tone: 3, running: "Creando el evento…", short: "Evento nuevo" },
-  update_event: { icon: CalendarRange, tone: 3, running: "Cambiando el evento…", short: "Cambio de evento" },
-  cancel_event: { icon: CalendarX, tone: "warning", running: "Cancelando el evento…", short: "Evento cancelado" },
-  schedule_site_visit: { icon: MapPin, tone: 3, running: "Agendando la visita de obra…", short: "Visita de obra" },
+  list_events: { icon: CalendarDays, tone: 3, running: "Revisando la agenda…", short: "Agenda", label: () => "Revisó la agenda", href: toCalendario },
+  find_free_slots: { icon: CalendarClock, tone: 3, running: "Buscando horarios libres…", short: "Horarios libres", label: () => "Buscó horarios libres", href: toCalendario },
+  create_event: { icon: CalendarPlus, tone: 3, running: "Preparando la reunión…", short: "Reunión propuesta", href: toCalendario },
+  update_event: { icon: CalendarRange, tone: 3, running: "Preparando el cambio de la reunión…", short: "Cambio de reunión propuesto", href: toCalendario },
+  cancel_event: { icon: CalendarX, tone: "warning", running: "Preparando la cancelación…", short: "Cancelación propuesta", href: toCalendario },
+  schedule_site_visit: { icon: MapPin, tone: 3, running: "Agendando la visita de obra…", short: "Visita de obra", href: (input) => toCalendarioDay(str(input, "date")) },
 
   // Calendario y planeación
   calendar_range: { icon: CalendarDays, tone: 3, running: "Revisando el calendario…", short: "Calendario", label: () => "Revisó el calendario", href: toCalendario },
@@ -829,6 +836,7 @@ export function toToolStep(part: ToolPartLike, meta?: AssistantMessageMeta): Too
     rows: state === "done" ? safely(() => (def?.rows ?? rowsOf)(output), null) : null,
     durationMs: typeof duration === "number" && Number.isFinite(duration) ? duration : null,
     ...(output !== undefined ? { output } : {}),
+    ...(part.input !== undefined ? { input: part.input } : {}),
     ...(errorText ? { errorText } : {}),
     ...(part.approval?.id ? { approvalId: part.approval.id } : {}),
     ...(href ? { href } : {}),

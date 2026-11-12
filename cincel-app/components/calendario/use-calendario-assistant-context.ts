@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useCalendarioQuery } from "@/components/calendario/use-calendario-page";
 import { rangeOf } from "@/lib/calendario/range";
+import { openAssistant } from "@/lib/stores/assistant-ui-store";
 import { useCalendarioUi } from "@/lib/stores/calendario-ui-store";
 import type { AssistantCalendarContext } from "@/lib/types/calendario";
 
@@ -26,4 +27,24 @@ export function useCalendarioAssistantContext(): AssistantCalendarContext {
       ...((proposal?.id ?? query.propuesta) ? { openProposalId: (proposal?.id ?? query.propuesta)! } : {}),
     };
   }, [query, selectedDate, selectedItemId, proposal]);
+}
+
+/**
+ * Opens the asistente panel from the Calendario with the current range and
+ * filters as context (FE §10): a day column's "Asistente" button passes
+ * `selectedDate`, the detail passes `selectedItemId`.
+ */
+export function useOpenCalendarioAssistant(): (opts?: { selectedDate?: string; selectedItemId?: string; prompt?: string }) => void {
+  const context = useCalendarioAssistantContext();
+  return useCallback(
+    (opts = {}) => {
+      const calendar = {
+        ...context,
+        ...(opts.selectedDate ? { selectedDate: opts.selectedDate } : {}),
+        ...(opts.selectedItemId ? { selectedItemId: opts.selectedItemId } : {}),
+      };
+      openAssistant({ context: { route: "/calendario", calendar }, ...(opts.prompt ? { prompt: opts.prompt } : {}) });
+    },
+    [context],
+  );
 }

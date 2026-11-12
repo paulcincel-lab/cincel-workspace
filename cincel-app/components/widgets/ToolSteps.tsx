@@ -6,6 +6,7 @@ import type { UIMessage } from "ai";
 import { Check, ChevronDown, Wrench } from "lucide-react";
 
 import { ConfirmationCard } from "@/components/asistente/ConfirmationCard";
+import { ProposalConfirmation } from "@/components/asistente/ProposalConfirmation";
 import { previewTitle } from "@/lib/assistant/tool-summaries";
 import {
   formatStepDuration,
@@ -480,8 +481,9 @@ function ApprovalGroup({
     return variant === "compact" ? <CompactGroup steps={group.steps} mode={mode} /> : <StepList steps={group.steps} results />;
   }
   const ids = group.steps.map((step) => step.approvalId).filter((id): id is string => !!id);
+  const Card = group.toolName === "apply_proposal" ? ProposalConfirmation : ConfirmationCard;
   return (
-    <ConfirmationCard
+    <Card
       group={group}
       onRespond={(approved, reason) => onApprove(ids, approved, reason)}
       onEdit={variant === "compact" ? undefined : onEdit}

@@ -62,6 +62,10 @@ export type GoogleCalendarSyncStatus = {
   enabled: boolean;
   lastSyncedAt: string | null;
   lastError: string | null;
+  /** The `calendar_events` grant (meetings and availability) and its cache: Ajustes › Integraciones, FE §6.3. */
+  eventsGrant?: boolean;
+  eventsSyncedAt?: string | null;
+  eventsError?: string | null;
 };
 
 /** Automatic syncs (opening Calendario) run at most this often; "Sincronizar ahora" ignores it. */
@@ -79,9 +83,10 @@ export async function fetchGoogleCalendarSyncStatusAction(): Promise<GoogleCalen
   const user = await requireCalendarUser();
   // Calendar access is granted through Google sign-in consent, so it needs sign-in on.
   const oauthAvailable = isGoogleAuthEnabled() && staffOauthConfig() !== null;
-  const [account, sync] = await Promise.all([
+  const [account, sync, primary] = await Promise.all([
     oauthAvailable ? getStaffTokenAccount(user.member.id) : null,
     syncRepository.getCalendarSync(user.member.id),
+    syncRepository.getPrimarySync(user.member.id),
   ]);
   return {
     oauthAvailable,
@@ -91,6 +96,9 @@ export async function fetchGoogleCalendarSyncStatusAction(): Promise<GoogleCalen
     enabled: Boolean(sync?.enabled),
     lastSyncedAt: sync?.lastSyncedAt?.toISOString() ?? null,
     lastError: sync?.lastError ?? null,
+    eventsGrant: hasGrantedScope(account?.scope, "calendar_events"),
+    eventsSyncedAt: primary?.syncedAt?.toISOString() ?? null,
+    eventsError: primary?.error ?? null,
   };
 }
 

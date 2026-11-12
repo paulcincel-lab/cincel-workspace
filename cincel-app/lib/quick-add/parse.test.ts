@@ -153,3 +153,32 @@ describe("parseQuickAdd", () => {
     expect(parsed.tokens).toMatchObject([{ kind: "date", status: "unknown", raw: "32/1" }]);
   });
 });
+
+describe("parseQuickAdd estimated hours (~2h, ~30m)", () => {
+  it.each([
+    ["Revisar planos ~2h", "Revisar planos", 2],
+    ["~30m Llamar a proveedor", "Llamar a proveedor", 0.5],
+    ["Medir sala ~1.5h viernes", "Medir sala", 1.5],
+    ["Medir sala ~1,5h", "Medir sala", 1.5],
+    ["Cotizar ~45min", "Cotizar", 0.75],
+  ])("%s", (input, title, hours) => {
+    const parsed = parseQuickAdd(input, CTX);
+    expect(parsed.title).toBe(title);
+    expect(parsed.estimatedHours).toBe(hours);
+    expect(parsed.tokens.find((t) => t.kind === "hours")?.status).toBe("resolved");
+  });
+
+  it("keeps an out-of-range or malformed token in the title", () => {
+    for (const input of ["Tarea ~0h", "Tarea ~81h", "Tarea ~abc", "Tarea ~2"]) {
+      const parsed = parseQuickAdd(input, CTX);
+      expect(parsed.estimatedHours).toBeUndefined();
+      expect(parsed.title).toBe(input);
+    }
+  });
+
+  it("combines with the other tokens", () => {
+    const parsed = parseQuickAdd("Planos @ana #diseno mañana !alta ~3h", CTX);
+    expect(parsed).toMatchObject({ title: "Planos", assigneeId: "p-ana", tramoId: "diseno", priority: "alta", estimatedHours: 3 });
+    expect(parsed.dueDate).toBe("2026-11-10");
+  });
+});

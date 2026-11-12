@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * Cron job registry (redesign BE §8.0.4, §13, §21): importing the jobs folder
- * registers exactly the five canonical jobs; the jobs without a window
+ * registers exactly the canonical jobs; the jobs without a window
  * (reminders, Gmail, jornadas, delivery) are due on every tick; the digest
  * keeps its 07:30 window.
  */
@@ -26,9 +26,9 @@ const ctx = (): CronJobContext => ({
 });
 
 describe("cron registry", () => {
-  it("registers exactly the five canonical job names", () => {
+  it("registers exactly the canonical job names", () => {
     const names = registeredJobs().map((job) => job.name);
-    expect(names).toHaveLength(5);
+    expect(names).toHaveLength(CRON_JOB_NAMES.length);
     expect([...names].sort()).toEqual([...CRON_JOB_NAMES].sort());
     expect(new Set(names).size).toBe(names.length);
   });
@@ -40,6 +40,19 @@ describe("cron registry", () => {
       .map((f) => f.replace(/\.ts$/, ""))
       .sort();
     expect(files).toEqual([...CRON_JOB_NAMES].sort());
+  });
+
+  it("the calendar jobs run once per 30 and 15 minute slot", () => {
+    const refresh = registeredJobs().find((j) => j.name === "calendar-events-refresh");
+    const resync = registeredJobs().find((j) => j.name === "calendar-meetings-resync");
+    const a = refresh?.due(new Date("2026-11-09T14:00:00Z"), TZ);
+    const b = refresh?.due(new Date("2026-11-09T14:29:00Z"), TZ);
+    const c = refresh?.due(new Date("2026-11-09T14:30:00Z"), TZ);
+    expect(a?.windowKey).toBe(b?.windowKey);
+    expect(c?.windowKey).not.toBe(a?.windowKey);
+    expect(resync?.due(new Date("2026-11-09T14:00:00Z"), TZ).windowKey).not.toBe(
+      resync?.due(new Date("2026-11-09T14:15:00Z"), TZ).windowKey,
+    );
   });
 
   it.each(["reminders-fire", "gmail-sync", "auto-close-jornadas"] as const)(

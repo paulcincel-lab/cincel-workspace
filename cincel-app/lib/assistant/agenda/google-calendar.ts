@@ -13,9 +13,8 @@ import * as syncRepository from "@/lib/repositories/google-calendar-sync-reposit
  *   itself; plus the primary calendar once the `calendar_events` grant exists.
  * - Writes (event create / patch / delete on the primary calendar with
  *   attendees): need the `calendar_events` incremental grant
- *   (`calendar.events`). That grant is not offered by the sign-in consent
- *   yet, so `calendarEventsGrantAvailable()` is false and the write tools are
- *   never offered to the model.
+ *   (`calendar.events`), asked with `?scope=calendar_events`; without it the
+ *   write tools are never offered to the model.
  */
 
 /** Key of the incremental grant the event writes need (`?scope=calendar_events`). */
@@ -26,7 +25,7 @@ const API = "https://www.googleapis.com/calendar/v3";
 const PRIMARY = "primary";
 const MAX_EVENTS = 250;
 
-/** Whether the staff OAuth flow can grant `calendar.events` (Annex C3, out of scope today). */
+/** Whether the staff OAuth flow can grant `calendar.events` (`calendar_events` key of `STAFF_OAUTH_EXTRA_SCOPES`). */
 export function calendarEventsGrantAvailable(scopes: Readonly<Record<string, string>> = STAFF_OAUTH_EXTRA_SCOPES): boolean {
   return Object.prototype.hasOwnProperty.call(scopes, CALENDAR_EVENTS_GRANT);
 }
@@ -43,8 +42,11 @@ export type GoogleCalendarEvent = {
   start?: GoogleEventTime;
   end?: GoogleEventTime;
   transparency?: string;
-  attendees?: { email?: string; displayName?: string; responseStatus?: string; self?: boolean }[];
+  attendees?: { email?: string; displayName?: string; responseStatus?: string; self?: boolean; organizer?: boolean; optional?: boolean }[];
   organizer?: { email?: string; self?: boolean };
+  etag?: string;
+  hangoutLink?: string;
+  conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
 };
 
 export type GoogleEventWrite = {
@@ -54,6 +56,12 @@ export type GoogleEventWrite = {
   start?: GoogleEventTime;
   end?: GoogleEventTime;
   attendees?: { email: string }[];
+  /** `conferenceData.createRequest` asks Google for a Meet link (sent with `conferenceDataVersion=1`). */
+  conferenceData?: {
+    createRequest: { requestId: string; conferenceSolutionKey: { type: "hangoutsMeet" } };
+  };
+  /** Who Google notifies; defaults to `all`. Never part of the event body. */
+  sendUpdates?: "all" | "none";
 };
 
 /** The caller has not granted the scope a call needs. */
@@ -64,11 +72,11 @@ export class CalendarScopeMissingError extends Error {
   }
 }
 
-async function call<T>(
+export async function calendarCall<T>(
   token: string,
   method: string,
   path: string,
-  options: { query?: Record<string, string>; body?: unknown } = {},
+  options: { query?: Record<string, string>; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<T> {
   const query = options.query ? `?${new URLSearchParams(options.query).toString()}` : "";
   const response = await fetch(`${API}${path}${query}`, {
@@ -76,6 +84,7 @@ async function call<T>(
     headers: {
       Authorization: `Bearer ${token}`,
       ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...options.headers,
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     cache: "no-store",
@@ -95,7 +104,7 @@ async function call<T>(
 }
 
 async function listCalendarEvents(token: string, calendarId: string, timeMin: string, timeMax: string) {
-  const data = await call<{ items?: GoogleCalendarEvent[] }>(token, "GET", `/calendars/${encodeURIComponent(calendarId)}/events`, {
+  const data = await calendarCall<{ items?: GoogleCalendarEvent[] }>(token, "GET", `/calendars/${encodeURIComponent(calendarId)}/events`, {
     query: {
       timeMin,
       timeMax,
@@ -179,12 +188,19 @@ export function busyIntervalsOf(events: GoogleCalendarEvent[]): { start: string;
     .map((e) => ({ start: e.start!.dateTime!, end: e.end!.dateTime! }));
 }
 
-/** Inserts on the caller's primary calendar and emails the attendees. */
+/** Splits the write-only controls from the event body Google receives. */
+function writeParts(event: GoogleEventWrite): { body: Omit<GoogleEventWrite, "sendUpdates">; sendUpdates: "all" | "none" } {
+  const { sendUpdates, ...body } = event;
+  return { body, sendUpdates: sendUpdates ?? "all" };
+}
+
+/** Inserts on the caller's primary calendar; emails the attendees unless `sendUpdates` is `none`. */
 export async function insertPrimaryEvent(staffId: string, event: GoogleEventWrite): Promise<GoogleCalendarEvent> {
   const token = await requireEventsToken(staffId);
-  return call<GoogleCalendarEvent>(token, "POST", `/calendars/${PRIMARY}/events`, {
-    query: { sendUpdates: "all" },
-    body: event,
+  const { body, sendUpdates } = writeParts(event);
+  return calendarCall<GoogleCalendarEvent>(token, "POST", `/calendars/${PRIMARY}/events`, {
+    query: { sendUpdates, ...(body.conferenceData ? { conferenceDataVersion: "1" } : {}) },
+    body,
   });
 }
 
@@ -192,7 +208,7 @@ export async function insertPrimaryEvent(staffId: string, event: GoogleEventWrit
 export async function getPrimaryEvent(staffId: string, eventId: string): Promise<GoogleCalendarEvent | null> {
   const token = await requireEventsToken(staffId);
   try {
-    const event = await call<GoogleCalendarEvent>(token, "GET", `/calendars/${PRIMARY}/events/${encodeURIComponent(eventId)}`);
+    const event = await calendarCall<GoogleCalendarEvent>(token, "GET", `/calendars/${PRIMARY}/events/${encodeURIComponent(eventId)}`);
     return event.status === "cancelled" ? null : event;
   } catch (error) {
     if (isGone(error)) return null;
@@ -205,20 +221,23 @@ export async function patchPrimaryEvent(
   eventId: string,
   patch: GoogleEventWrite,
   sendUpdates: "all" | "none" = "all",
+  opts: { ifMatch?: string } = {},
 ): Promise<GoogleCalendarEvent> {
   const token = await requireEventsToken(staffId);
-  return call<GoogleCalendarEvent>(token, "PATCH", `/calendars/${PRIMARY}/events/${encodeURIComponent(eventId)}`, {
-    query: { sendUpdates },
-    body: patch,
+  const { body, sendUpdates: fromPatch } = writeParts(patch);
+  return calendarCall<GoogleCalendarEvent>(token, "PATCH", `/calendars/${PRIMARY}/events/${encodeURIComponent(eventId)}`, {
+    query: { sendUpdates: patch.sendUpdates ? fromPatch : sendUpdates, ...(body.conferenceData ? { conferenceDataVersion: "1" } : {}) },
+    body,
+    headers: opts.ifMatch ? { "If-Match": opts.ifMatch } : undefined,
   });
 }
 
-/** Cancels for every attendee (`sendUpdates=all`); an already-deleted event counts as deleted. */
-export async function deletePrimaryEvent(staffId: string, eventId: string): Promise<void> {
+/** Cancels for every attendee (`sendUpdates=all`, `none` for a meeting invited by Cincel); an already-deleted event counts as deleted. */
+export async function deletePrimaryEvent(staffId: string, eventId: string, sendUpdates: "all" | "none" = "all"): Promise<void> {
   const token = await requireEventsToken(staffId);
   try {
-    await call(token, "DELETE", `/calendars/${PRIMARY}/events/${encodeURIComponent(eventId)}`, {
-      query: { sendUpdates: "all" },
+    await calendarCall(token, "DELETE", `/calendars/${PRIMARY}/events/${encodeURIComponent(eventId)}`, {
+      query: { sendUpdates },
     });
   } catch (error) {
     if (!isGone(error)) throw error;

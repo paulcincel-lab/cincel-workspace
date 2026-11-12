@@ -31,6 +31,7 @@ import type {
 } from "@/lib/types/core";
 
 import { PRIORITY_LABEL, taskDueDate } from "./tablero-table";
+import { hoursFieldText, hoursOfCellValue } from "./task-hours";
 
 /** The task columns that edit in place. */
 export type TaskCellField =
@@ -43,7 +44,8 @@ export type TaskCellField =
   | "vence"
   | "compromiso"
   | "revision"
-  | "espacio";
+  | "espacio"
+  | "horas";
 
 /** What a task cell reads: a `TaskListItem` or a `TaskListRow`. */
 export type TaskCellTask = Pick<
@@ -68,6 +70,7 @@ export type TaskCellTask = Pick<
   | "reviewDate"
   | "deliveryDate"
   | "parentTaskId"
+  | "estimatedHours"
 >;
 
 /** The lists the editors offer. */
@@ -93,6 +96,7 @@ export type TaskCellAction =
   | { kind: "status"; status: TaskListItem["status"] }
   | { kind: "customStatus"; id: string }
   | { kind: "assign"; managerId: string | null }
+  | { kind: "hours"; hours: number | null }
   | { kind: "none" };
 
 const PRIORITIES: TaskPriority[] = ["alta", "media", "baja"];
@@ -129,6 +133,8 @@ export function taskCellValue(task: TaskCellTask, field: TaskCellField): string 
       return day(task.reviewDate);
     case "espacio":
       return task.spaceId;
+    case "horas":
+      return task.estimatedHours === null || task.estimatedHours === undefined ? null : hoursFieldText(task.estimatedHours);
   }
 }
 
@@ -239,6 +245,8 @@ export function taskWithChange<T extends TaskCellTask>(
       return { ...task, commitmentDate: value };
     case "revision":
       return { ...task, reviewDate: value };
+    case "horas":
+      return { ...task, estimatedHours: hoursOfCellValue(value) };
     case "espacio": {
       const space = value ? catalogs.spacesOf(task.projectId).find((s) => s.id === value) : undefined;
       return { ...task, spaceId: value, space: space ? { id: space.id, name: space.name } : null };
@@ -274,6 +282,8 @@ export function taskCellAction(task: TaskCellTask, field: TaskCellField, value: 
       return { kind: "update", patch: { reviewDate: value } };
     case "espacio":
       return { kind: "update", patch: { spaceId: value } };
+    case "horas":
+      return { kind: "hours", hours: hoursOfCellValue(value) };
   }
 }
 

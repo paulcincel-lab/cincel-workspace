@@ -100,3 +100,53 @@ export function ResumenEsencialSkeleton(): ReactNode {
     </div>
   );
 }
+
+/**
+ * The /calendario skeleton per Estilo (Calendario FE §12): Visual a 6 × 7 grid
+ * of cells, Esencial three cards, Analítico four KPI blocks and a table.
+ * `Skeleton` pulses only without reduced motion.
+ */
+export function CalendarioSkeleton({ variant = "visual" }: { variant?: "visual" | "esencial" | "analitico" }): ReactNode {
+  const blocks = (n: number) => Array.from({ length: n }, (_, i) => i);
+  return (
+    <div role="status" aria-busy="true" aria-live="polite" data-slot="calendario-skeleton" data-variant={variant} className="flex flex-col gap-4">
+      <span className="sr-only">Cargando…</span>
+      <div aria-hidden="true" className="flex flex-col gap-4 [&_[data-slot=skeleton]]:motion-reduce:animate-none">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </div>
+          <Skeleton className="h-9 w-36" />
+        </div>
+        <Skeleton className="h-8 w-80 max-w-full" />
+        {variant === "visual" ? (
+          <div className="grid grid-cols-7 gap-1">
+            {blocks(42).map((i) => (
+              <Skeleton key={i} data-skeleton="cell" className="h-20 rounded-md" />
+            ))}
+          </div>
+        ) : null}
+        {variant === "esencial" ? (
+          <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3">
+            {blocks(3).map((i) => (
+              <Skeleton key={i} data-skeleton="card" className="h-[140px] rounded-[14px]" />
+            ))}
+          </div>
+        ) : null}
+        {variant === "analitico" ? (
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {blocks(4).map((i) => (
+                <Skeleton key={i} data-skeleton="kpi" className="h-[84px] rounded-lg" />
+              ))}
+            </div>
+            {blocks(8).map((i) => (
+              <Skeleton key={i} data-skeleton="row" className="h-9" />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
