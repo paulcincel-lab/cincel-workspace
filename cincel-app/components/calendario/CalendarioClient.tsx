@@ -12,6 +12,7 @@ import { barraExamples, recentProjectName } from "./barra-examples";
 import { CalendarioChrome } from "./CalendarioChrome";
 import { GoogleConnectBanner } from "./GoogleConnectBanner";
 import { NewMeetingHost } from "./NewMeetingDialog";
+import { PlanWeekSection } from "./PlanWeekSection";
 import { useCalendarioAssistantContext } from "./use-calendario-assistant-context";
 import { useCalendarioQuery, useCalendarioRange } from "./use-calendario-page";
 import { useCompleteCalendarioTask } from "./use-complete-calendario-task";
@@ -54,6 +55,7 @@ export function CalendarioClient() {
         esencial={() => <CalendarioEsencial range={current} query={query} onComplete={completeTask} />}
         analitico={() => <CalendarioAnalitico range={current} query={query} />}
       />
+      <PlanWeekSection query={query} />
     </CalendarioChrome>
   );
 }

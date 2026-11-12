@@ -3,7 +3,7 @@ import "server-only";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { canSeeAdminData, resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { PER_DAY_LIMIT } from "@/lib/calendario/items";
-import { emptyPlanWeek } from "@/lib/calendario/empty";
+import { loadPlanWeekData } from "@/lib/calendario/plan-week-data";
 import { buildDaySummary, buildWeekSummary } from "@/lib/calendario/risk";
 import { applyLoadToDays } from "@/lib/calendario/load";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
@@ -249,7 +249,7 @@ export async function loadMeetingMinutes(user: AuthenticatedUser, eventId: strin
 }
 
 export async function loadPlanWeek(user: AuthenticatedUser, input: { weekStart: string; staffIds?: string[] }): Promise<PlanWeekData> {
-  return stubDefault(emptyPlanWeek(input.weekStart), user);
+  return loadPlanWeekData(user, input);
 }
 
 export async function loadProposal(user: AuthenticatedUser, id: string): Promise<Proposal | null> {

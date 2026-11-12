@@ -15,8 +15,8 @@ export function effectiveHours(t: { estimatedHours: number | null; templateHours
   hours: number;
   source: "task" | "template" | "default";
 } {
-  if (t.estimatedHours !== null && t.estimatedHours !== undefined) return { hours: t.estimatedHours, source: "task" };
-  if (t.templateHours !== null && t.templateHours !== undefined) return { hours: t.templateHours, source: "template" };
+  if (t.estimatedHours !== null && t.estimatedHours > 0) return { hours: t.estimatedHours, source: "task" };
+  if (t.templateHours !== null && t.templateHours > 0) return { hours: t.templateHours, source: "template" };
   return { hours: DEFAULT_TASK_HOURS, source: "default" };
 }
 

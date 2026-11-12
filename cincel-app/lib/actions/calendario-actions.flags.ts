@@ -9,7 +9,7 @@ export const IMPLEMENTED = {
   getMeetingDetail: true,
   getMeetingPrep: true,
   getMeetingMinutes: true,
-  getPlanWeek: false,
+  getPlanWeek: true,
   getProposal: true,
   // Writes
   createMeetingAction: true,

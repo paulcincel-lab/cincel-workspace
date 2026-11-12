@@ -24,6 +24,7 @@ import { proposeFromText } from "@/lib/calendario/propose-from-text";
 import { proposalResult, proposeMoveTasks } from "@/lib/calendario/propose";
 import { normalizeCalendarioFilters } from "@/lib/calendario/url-state";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { runPlanWeekTool } from "@/lib/calendario/plan-week-tool";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
 import { loadCalendarioRange, loadDayLoad, loadDaySummary, loadMeetingPrep, loadWeekSummary } from "@/lib/loaders/calendario";
@@ -257,7 +258,7 @@ export const plan_week = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.plan_week,
-  run: async (ctx, input) => notImplemented("plan_week", ctx, input),
+  run: async (ctx, input) => runPlanWeekTool(ctx, input),
 });
 
 export const extract_minutes = defineTool({
