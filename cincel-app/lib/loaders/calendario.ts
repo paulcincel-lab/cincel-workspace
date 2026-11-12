@@ -16,7 +16,6 @@ import { INICIO_TIME_ZONE } from "@/lib/inicio/header";
 import { loadSummaryData } from "@/lib/repositories/calendario-summary-repository";
 import { addDays, mondayOf } from "@/lib/time-tracking/local-time";
 import { getProposal } from "@/lib/repositories/proposals-repository";
-import { stubDefault } from "@/lib/stubs";
 import { addDaysIso, buildAgenda, daysBetween, DELIVERY_WINDOW_DAYS, planDelta, prepSummary } from "@/lib/calendario/meeting-prep";
 import { canPhrase, phrasingLimiter, rephraseSummary } from "@/lib/calendario/prep-phrasing";
 import { ORG_TIME_ZONE, localParts } from "@/lib/my-space/zoned-time";

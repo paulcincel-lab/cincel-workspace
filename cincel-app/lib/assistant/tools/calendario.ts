@@ -29,7 +29,6 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
 import { loadCalendarioRange, loadDayLoad, loadDaySummary, loadMeetingPrep, loadWeekSummary } from "@/lib/loaders/calendario";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
-import { notImplemented } from "@/lib/stubs";
 import { mondayOf } from "@/lib/time-tracking/local-time";
 import type { Proposal } from "@/lib/types/calendario";
 import {
