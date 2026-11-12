@@ -27,6 +27,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 import { CalendarItemChip } from "./CalendarItemChip";
+import { DayCellExtras } from "./DayCellExtras";
 import {
   EMPTY_RANGE,
   EMPTY_DAY_NEW_TASK,
@@ -216,6 +217,7 @@ export function CalendarMonthGrid({
                       }
                     />
                   ))}
+                  <DayCellExtras day={dayByDate.get(cell.key)} compact />
                   {more > 0 ? (
                     <button
                       type="button"

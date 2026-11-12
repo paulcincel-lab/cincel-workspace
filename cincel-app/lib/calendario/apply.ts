@@ -12,6 +12,7 @@ import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { createRateLimiter } from "@/lib/auth/rate-limit";
 import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import { applyToast, undoToast } from "@/lib/calendario/copy";
+import { notifyPlanWeekOwners } from "@/lib/calendario/plan-week-proposal";
 import {
   SKIP_CHANGED,
   SKIP_FAILED,
@@ -26,7 +27,7 @@ import { db } from "@/lib/db/client";
 import { calendarEventAttendees, calendarEvents, meetingDecisions, meetingMinutes } from "@/lib/db/schema";
 import { actionErrorCode } from "@/lib/errors";
 import { getEventItem } from "@/lib/repositories/calendar-events-repository";
-import { recordComment } from "@/lib/repositories/history-repository";
+import { retractDecision } from "@/lib/repositories/meeting-minutes-repository";
 import {
   findRecordByUndoToken,
   getProposalRecord,
@@ -267,6 +268,10 @@ export async function applyProposal(user: AuthenticatedUser, proposalId: string,
       appliedAt: now,
     });
     if (!saved) throw new Error("STALE");
+    if (proposal.kind === "planear_semana") {
+      // Other owners hear once about their planned tasks; a failed notice never undoes the apply.
+      await notifyPlanWeekOwners(user, proposal, applied.map((a) => a.changeId)).catch(() => undefined);
+    }
     return { ...toastBase, proposalId, undoToken: token, undoExpiresAt: undoExpiresAt.toISOString(), toast };
   } finally {
     applying.delete(proposalId);
@@ -330,10 +335,8 @@ export async function undoProposal(user: AuthenticatedUser, undoToken: string): 
         } else if (undo.type === "task_create") {
           unwrapActionResult(await deleteTaskAction(item.entityId));
         } else if (undo.type === "decision") {
-          await db.delete(meetingDecisions).where(eq(meetingDecisions.id, item.entityId));
-          if (undo.projectId) {
-            await recordComment({ entity: "project", entityId: undo.projectId, actorId: user.member.id, comment: `Decisión retirada: ${undo.text}` });
-          }
+          // Removes the row and writes "Decisión retirada" in the project history, in one transaction.
+          await retractDecision(item.entityId, user.member.id);
         }
         restored.push(item.changeId);
       } catch (error) {

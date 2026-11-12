@@ -325,6 +325,23 @@ describe("Inbox tabs and counts", () => {
     expect(ids).toEqual(["row-n:n1", "row-g:t1", "row-n:n2", "row-n:n3", "row-g:t2"]);
   });
 
+  it("shows the three reunion rows (invitation, change, cancel) with the Reunión label and linking to the meeting", () => {
+    const rows = [
+      notification({ id: "r1", kind: "reunion", title: "Ana te invitó a «Visita de sitio» · jue 12 nov, 10:00", url: "/calendario?evento=e:ev1" }),
+      notification({ id: "r2", kind: "reunion", title: "Cambió la hora de «Revisión»", url: "/calendario?evento=e:ev2" }),
+      notification({ id: "r3", kind: "reunion", title: "Se canceló «Junta de obra»", url: "/calendario?evento=e:ev3" }),
+    ];
+    renderInbox({ notifications: { items: rows, nextCursor: null, unreadCount: 3 } });
+    for (const [id, title] of [
+      ["ev1", /Ana te invitó a «Visita de sitio»/],
+      ["ev2", /Cambió la hora de «Revisión»/],
+      ["ev3", /Se canceló «Junta de obra»/],
+    ] as const) {
+      expect(screen.getByRole("link", { name: title }).getAttribute("href")).toBe(`/calendario?evento=e:${id}`);
+    }
+    expect(screen.getAllByText("Reunión").length).toBeGreaterThanOrEqual(3);
+  });
+
   it("Menciones (from ?bandeja=menciones) lists only mention notifications", () => {
     renderInbox({ tab: "menciones" });
     expect(screen.getByText("Luis te mencionó en Cocina")).toBeTruthy();

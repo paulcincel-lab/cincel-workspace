@@ -47,6 +47,10 @@ exports[`qk > builds every key shape 1`] = `
     "day",
     "2026-11-11",
   ],
+  "calendario.dayRange": [
+    "calendario",
+    "day-range",
+  ],
   "calendario.list": [
     "calendario",
     "list",
@@ -769,6 +773,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "calendario.proposals",
   "calendario.proposal",
   "calendario.workday",
+  "calendario.dayRange",
   "portal.projects",
   "portal.project",
   "portal.files",

@@ -1,5 +1,3 @@
-export type CalendarView = "month" | "week" | "day";
-
 export type CalendarEventType =
   | "Compromiso"
   | "Proxima revision"
@@ -32,29 +30,4 @@ export type CalendarEvent = {
   location?: string | null;
   /** Only when a Cutto URL is stored on the event (`AgendaItem.meetingUrl`). */
   meetingUrl?: string | null;
-};
-
-export type CalendarFilters = {
-  project: string;
-  responsible: string;
-  type: string;
-  /** Tramo label, or "Todos". */
-  tramo: string;
-  /** Fase label of the selected tramo, or "Todas". Ignored while tramo is "Todos". */
-  phase: string;
-};
-
-export type CalendarFilterOptions = {
-  projects: string[];
-  responsibles: string[];
-  types: string[];
-  /** "Todos" first, then tramo labels. */
-  tramos: string[];
-  /** Per tramo label: "Todas" first, then that tramo's fase labels. */
-  phasesByTramo: Record<string, string[]>;
-};
-
-export type CalendarTypeSummaryRow = {
-  type: CalendarEventType;
-  total: number;
 };

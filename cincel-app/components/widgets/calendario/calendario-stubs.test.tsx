@@ -1,12 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { emptyCalendarioRange, emptyDaySummary, emptyPlanWeek, emptyWeekSummary } from "@/lib/calendario/empty";
 import { createTestQueryClient } from "@/lib/query/test-utils";
 import { parseCalendarioQuery } from "@/lib/calendario/url-state";
 import type { CalTaskItem, Proposal } from "@/lib/types/calendario";
+
+vi.mock("@/components/calendario/use-calendario-assistant-context", () => ({ useOpenCalendarioAssistant: () => vi.fn(), useCalendarioAssistantContext: () => ({ view: "semana", from: "2026-11-09", to: "2026-11-15" }) }));
 
 import { BarraParaPedir } from "./BarraParaPedir";
 import { CalendarItemChip } from "./CalendarItemChip";

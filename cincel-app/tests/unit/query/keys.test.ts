@@ -123,6 +123,7 @@ function shapes() {
     "calendario.proposals": qk.calendario.proposals(),
     "calendario.proposal": qk.calendario.proposal("p1"),
     "calendario.workday": qk.calendario.workday(),
+    "calendario.dayRange": qk.calendario.dayRange(),
     "portal.projects": qk.portal.projects(),
     "portal.project": qk.portal.project("p1", "resumen"),
     "portal.files": qk.portal.files("p1", null),

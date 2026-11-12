@@ -158,3 +158,7 @@ Every item has a recommended default, so work can start now.
 | F12 | Where Planear mi semana lives | #1090, #1079 | **Decided:** a collapsible section of the Semana view; left for later if it is much trouble |
 
 `docs/phases/milestones.json` is not updated: like the Estilos milestones (#74–#84), these milestones have no per-phase labels in the repo.
+
+## What shipped
+
+Phases 0-8 are merged (the page, meetings, proposals, summaries, load warnings, meeting prep and minutes, Planear mi semana, settings and the outside-the-calendar screens). The finish pass wired the per-Estilo event detail, the proposal overlay and day meters into Mes, Semana and Día, the Antes / Después tabs, the Resumen, the Reuniones list and the day hours setting; meetings now join the Analítico list; undo retracts minutes decisions and applying a `planear_semana` proposal notifies the other owners. The e2e suite (#1091) is run separately in the browser, not in CI.

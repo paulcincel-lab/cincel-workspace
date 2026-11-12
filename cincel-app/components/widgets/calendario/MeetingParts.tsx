@@ -17,15 +17,19 @@ import {
 } from "@/components/calendario/meeting-format";
 import { MeetingGoogleNote } from "@/components/calendario/MeetingGoogleNote";
 import { NewMeetingDialog } from "@/components/calendario/NewMeetingDialog";
+import { useMeetingPrep } from "@/components/calendario/use-meeting-prep";
 import { useCalendarioQuery, useCalendarioRange } from "@/components/calendario/use-calendario-page";
 import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/shadcn/tabs";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { ConfirmDeleteDialog } from "@/components/widgets/ConfirmDeleteDialog";
 import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { MeetingMinutesPanel } from "./MeetingMinutesPanel";
+import { MeetingPrepPanel } from "./MeetingPrepPanel";
 import { cancelMeetingAction } from "@/lib/actions/calendario-actions";
 import { useActionMutation } from "@/lib/query/mutation";
-import { calendarioInvalidations, meetingDetailOptions } from "@/lib/query/options/calendario";
+import { calendarioInvalidations, meetingDetailOptions, meetingMinutesOptions } from "@/lib/query/options/calendario";
 import { openAssistant } from "@/lib/stores/assistant-ui-store";
 import { tramoColorVar } from "@/lib/tramos/tramo-color";
 import type { CalEventItem, CalTramoRef, MeetingDetail } from "@/lib/types/calendario";
@@ -134,6 +138,7 @@ function MeetingDetailBody({
   const readOnly = isReadOnlyMeeting(item);
   const [nowMs] = useState(() => Date.now());
   const a = useMeetingActions(onClose);
+  const [tab, setTab] = useState<"detalle" | "antes" | "despues">("detalle");
   const related = detail?.relatedOverdue ?? [];
   const noteParts = [item.meetUrl ? C.meetReady : null, related.length > 0 ? C.relatedCount(related.length) : null].filter(Boolean);
   const fromGoogle = item.source === "google" || (item.syncedAt !== null && !item.syncError);
@@ -159,7 +164,7 @@ function MeetingDetailBody({
   ) : null;
 
   const prepare = (
-    <Button variant="outline" onClick={() => openAssistant({ prompt: `Prepara la reunión «${item.title}» del ${shortDate(item.date)}` })}>
+    <Button variant="outline" onClick={() => setTab("antes")}>
       {C.prepare}
     </Button>
   );
@@ -232,7 +237,7 @@ function MeetingDetailBody({
           {item.googleHtmlLink ? <ExternalButton href={item.googleHtmlLink}>{C.openInGoogle}</ExternalButton> : null}
           {!readOnly ? (
             <>
-              <Button variant="outline" disabled>
+              <Button variant="outline" onClick={() => setTab("despues")}>
                 {C.createMinutes}
               </Button>
               <Button variant="outline" onClick={() => openAssistant({ prompt: `Resume lo pendiente de la reunión «${item.title}»` })}>
@@ -291,7 +296,24 @@ function MeetingDetailBody({
 
   return (
     <>
-      {content}
+      {readOnly ? (
+        content
+      ) : (
+        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+          <TabsList>
+            <TabsTrigger value="detalle">{C.tabDetail}</TabsTrigger>
+            <TabsTrigger value="antes">{C.tabBefore}</TabsTrigger>
+            <TabsTrigger value="despues">{C.tabAfter}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="detalle">{content}</TabsContent>
+          <TabsContent value="antes">
+            {tab === "antes" ? <PrepTab item={item} variant={variant} /> : null}
+          </TabsContent>
+          <TabsContent value="despues">
+            {tab === "despues" ? <MinutesTab item={item} /> : null}
+          </TabsContent>
+        </Tabs>
+      )}
       <NewMeetingDialog open={a.editing} onOpenChange={a.setEditing} event={item} />
       <ConfirmDeleteDialog
         open={a.confirming}
@@ -310,6 +332,32 @@ function MeetingDetailBody({
         }
       />
     </>
+  );
+}
+
+function PrepTab({ item, variant }: { item: CalEventItem; variant: Variant }) {
+  const { prep, loading, send } = useMeetingPrep(item.eventId);
+  return (
+    <MeetingPrepPanel
+      prep={prep}
+      eventId={item.eventId}
+      variant={variant}
+      loading={loading}
+      recipients={item.attendees.map((p) => ({ name: p.name }))}
+      onSend={send}
+    />
+  );
+}
+
+function MinutesTab({ item }: { item: CalEventItem }) {
+  const { data } = useQuery(meetingMinutesOptions(item.eventId));
+  return (
+    <MeetingMinutesPanel
+      minutes={data ?? null}
+      eventId={item.eventId}
+      projectId={item.project?.id ?? null}
+      projectName={item.project?.name ?? null}
+    />
   );
 }
 

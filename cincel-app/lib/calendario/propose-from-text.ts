@@ -11,8 +11,8 @@ import { generateText, stepCountIs, type ToolSet } from "ai";
 import type { ToolFailure, ToolRunContext } from "@/lib/assistant/define-tool";
 import { getLanguageModel } from "@/lib/assistant/provider";
 import { createRateLimiter } from "@/lib/auth/rate-limit";
-import { buildProposePrompt, todayIn } from "@/lib/calendario/propose-context";
-import { failure, loadPromptTasks } from "@/lib/calendario/propose";
+import { buildProposePrompt, parseOverdueMove, todayIn } from "@/lib/calendario/propose-context";
+import { failure, loadOverdueTaskIds, loadPromptTasks, proposeMoveTasks } from "@/lib/calendario/propose";
 import { getProposal } from "@/lib/repositories/proposals-repository";
 import { TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/settings";
 import type { Proposal } from "@/lib/types/calendario";
@@ -41,6 +41,14 @@ export async function proposeFromText(
 ): Promise<{ ok: true; proposal: Proposal } | ToolFailure> {
   const limit = proposeRateLimiter.hit(ctx.user.member.id);
   if (!limit.allowed) return failure("RATE_LIMITED");
+
+  // "Pasa lo vencido al jueves": no model needed, and the model could not see tasks that are not the caller's.
+  const overdueTo = parseOverdueMove(input.text, todayIn(now, TIME_TRACKING_TIME_ZONE));
+  if (overdueTo) {
+    const taskIds = await loadOverdueTaskIds(ctx.user, todayIn(now, TIME_TRACKING_TIME_ZONE), input);
+    if (taskIds.length === 0) return failure("NOT_FOUND", "No encontré tareas vencidas para pasar.");
+    return proposeMoveTasks({ user: ctx.user, threadId: ctx.threadId ?? null }, { taskIds, toDate: overdueTo });
+  }
 
   // Loaded here: the registry imports the tools that import this module.
   const { findDefinedTool } = await import("@/lib/assistant/tools/index");

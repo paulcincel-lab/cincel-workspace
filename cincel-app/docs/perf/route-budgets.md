@@ -9,9 +9,11 @@ Issue 922. The staff app has to feel instant on the dev deployment. This page li
 | Sidebar navigation between main pages (warm) | under 500 ms | Inicio, Tareas, Proyectos, Personas, Mi espacio, Ajustes |
 | TTFB of `/inicio` | under 300 ms | cold load, signed in |
 | LCP of `/inicio` | under 1.5 s | cold load, signed in, 1440 × 900 |
+| `/calendario` month payload | at most 150 KB | range items capped at 3 per day in Mes, 12 in Semana, 200 in Día; no notes or descriptions |
+| `/calendario` range loader | at most 4 repository reads (days, items and KPIs in one parallel group, plus the viewer's own load); each read is one or two SQL statements; p95 250 ms on the 5 000-task seed | measured by an operator; the unit guard checks the payload and the read count |
 | First-load JS per route | reported, and the largest routes go down | every main page |
 
-`scripts/perf/measure-routes.mjs` checks the first three and exits 1 when one is missed.
+`tests/guards/calendario-perf.guard.test.ts` checks the `/calendario` payload budget, the item shape and the loader's reads with no database. `scripts/perf/measure-routes.mjs` checks the first three and exits 1 when one is missed.
 
 ## What the code does
 

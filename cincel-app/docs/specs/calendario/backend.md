@@ -11,7 +11,7 @@ Paths are relative to `cincel-app/`. Docs and identifiers are English; every str
 | Area | Today | Where |
 |---|---|---|
 | Calendar page | None. #1028 (a6aa574) removed the Tareas Calendario view; `/calendario` redirects to `/tareas` | `lib/ui/legacy-redirects.ts:35`, `proxy.ts:72` |
-| Event helpers | `buildCalendarEvents` (up to 3 events per task: commitment, review, delivery, plus an inferred meeting / site visit), `groupEventsByDate`, `buildTypeSummary`, `startOfWeek`, `addDays` | `lib/calendar/calendar-service.ts`, types in `lib/types/calendar.ts` |
+| Event helpers | `buildCalendarEvents` (up to 3 events per task: commitment, review, delivery, plus an inferred meeting / site visit), `startOfWeek`, `addDays` | `lib/calendar/calendar-service.ts`, types in `lib/types/calendar.ts` |
 | ICS feed | `GET /api/calendario/feed/<token>.ics`, token is the credential, `listMyTasks` → `buildCalendarEvents` → `buildIcs`, `private, max-age=300` | `app/api/calendario/feed/[file]/route.ts`, `lib/calendar/ics.ts`, `lib/repositories/calendar-feed-repository.ts` |
 | Task range read | `fetchCalendarAction(from, to, filters)` → `tasksRepository.listCalendar` = `listTasks({...filters, dateFrom, dateTo})`: full rows, no aggregates, no paging | `lib/actions/tasks-actions.ts:63`, `lib/repositories/tasks-repository.ts:2286` |
 | Google push | Tasks → a dedicated "Cincel" calendar the app creates (scope `calendar.app.created`), manual sync button | `lib/google/calendar-sync-service.ts`, `calendar-sync.ts`, `calendar-api.ts`; tables `google_calendar_syncs`, `google_calendar_events` (`lib/db/schema/auth.ts`) |

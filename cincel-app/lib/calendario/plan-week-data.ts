@@ -11,6 +11,7 @@ import { isAgendaLead } from "@/lib/assistant/tools/agenda";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { canSeeAdminData, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { DEFAULT_WORKDAY_HOURS, effectiveHours, workdayHours } from "@/lib/calendario/load";
+import { getWorkdayHoursSetting } from "@/lib/calendario/workday-setting";
 import {
   orderBacklog,
   planWeek,
@@ -32,7 +33,6 @@ import {
 } from "@/lib/db/schema";
 import { displayName } from "@/lib/people/aggregates";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
-import { getAppSetting } from "@/lib/repositories/app-settings-repository";
 import { dayLoadRows } from "@/lib/repositories/calendario-repository";
 import { addDays, mondayOf, weekDates } from "@/lib/time-tracking/local-time";
 import type { DayLoad, PlanWeekData } from "@/lib/types/calendario";
@@ -78,9 +78,8 @@ async function loadLanes(user: AuthenticatedUser, staffIds: string[] | undefined
 }
 
 async function workdaysOf(staffIds: string[]): Promise<Map<string, number>> {
-  const raw = await getAppSetting("calendario.workday_hours");
-  const parsed = raw === null ? NaN : Number(raw);
-  const orgDefault = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WORKDAY_HOURS;
+  // Same org default as the load meters (#1095 setting), so board and meters agree.
+  const orgDefault = await getWorkdayHoursSetting();
   const rows = await db
     .select({ staffId: staffPositions.staffId, capacity: positions.weeklyCapacityHours })
     .from(staffPositions)

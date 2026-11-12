@@ -10,7 +10,10 @@ const user = { member: { id: "staff-1", name: "Ana", role: "Arquitecto", area: "
 const rows: { organizerId: string | null }[] = [];
 
 vi.mock("@/lib/auth/session", () => ({ requireCapabilityUser: vi.fn(async () => user) }));
-vi.mock("@/lib/auth/permissions", () => ({ resolveCalendarCapabilities: vi.fn(() => ({ canViewCalendar: true })) }));
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
+  resolveCalendarCapabilities: vi.fn(() => ({ canViewCalendar: true })),
+}));
 vi.mock("@/lib/db/client", () => ({
   db: { select: () => ({ from: () => ({ where: () => ({ limit: async () => rows }) }) }) },
 }));

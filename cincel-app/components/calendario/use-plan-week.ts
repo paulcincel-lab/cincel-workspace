@@ -17,6 +17,9 @@ import { calendarioInvalidations, planWeekOptions, proposalOptions } from "@/lib
 import { useCalendarioUi } from "@/lib/stores/calendario-ui-store";
 import type { PlanWeekData, Proposal } from "@/lib/types/calendario";
 
+/** Shown when "✦ Planear mi semana" finds no task to place. */
+export const PLAN_NOTHING_TO_PLAN = "No hay tareas pendientes por planear esta semana.";
+
 /**
  * Planear mi semana (FE §7.7): the plan data of the visible week and the
  * proposal flow. A drop, "Mover a…" and the keyboard all call `move`, a
@@ -58,7 +61,17 @@ export function usePlanWeek(weekStart: string): {
 
   const proposing = useActionMutation(
     (vars: { name: "plan_week" | "move_tasks"; input: unknown }) => runProposingToolAction(vars.name, vars.input),
-    { setData: (_qc, p) => seed(p), errorContext: "calendario" },
+    {
+      setData: (_qc, p) => {
+        // Nothing to place and nothing deferred: say so instead of opening an empty proposal.
+        if (p.kind === "planear_semana" && p.changes.length === 0 && p.deferred.length === 0) {
+          toast(PLAN_NOTHING_TO_PLAN);
+          return;
+        }
+        seed(p);
+      },
+      errorContext: "calendario",
+    },
   );
 
   const applying = useActionMutation((vars: { id: string; changeIds: string[] }) => applyProposalAction(vars.id, vars.changeIds), {

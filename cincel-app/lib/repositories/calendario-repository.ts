@@ -267,9 +267,9 @@ async function taskKpisOf(scope: ReturnType<typeof taskScope>, today: string, kp
   };
 }
 
-type ListKey = { d: string; t: string; i: string };
+type ListKey = { d: string; t: string; i: string; /** "e" meeting, "t" task (default). */ k?: "e" | "t"; /** Meeting start, for the order inside a day. */ s?: string };
 
-/** Opaque cursor: base64url JSON of the last `(date, title, id)` key. */
+/** Opaque cursor: base64url JSON of the last `(date, kind, start, title, id)` key. */
 export function encodeListCursor(key: ListKey): string {
   return Buffer.from(JSON.stringify(key), "utf8").toString("base64url");
 }
@@ -278,7 +278,7 @@ export function decodeListCursor(cursor: string): ListKey {
   try {
     const v = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Partial<ListKey>;
     if (typeof v.d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.d) && typeof v.t === "string" && typeof v.i === "string") {
-      return { d: v.d, t: v.t, i: v.i };
+      return { d: v.d, t: v.t, i: v.i, ...(v.k === "e" ? { k: "e" as const, s: typeof v.s === "string" ? v.s : "" } : {}) };
     }
   } catch {
     // falls through
@@ -286,20 +286,64 @@ export function decodeListCursor(cursor: string): ListKey {
   throw new Error("INVALID: cursor");
 }
 
-/** Keyset page of items in `(date, kindOrder, start, title, id)` order (tasks only until meetings join). */
+/** Order of a day in the list: meetings (by start) first, then tasks (by title); ties by id. */
+function compareListKeys(a: ListKey, b: ListKey): number {
+  if (a.d !== b.d) return a.d < b.d ? -1 : 1;
+  const ak = a.k === "e" ? 0 : 1;
+  const bk = b.k === "e" ? 0 : 1;
+  if (ak !== bk) return ak - bk;
+  if (ak === 0 && (a.s ?? "") !== (b.s ?? "")) return (a.s ?? "") < (b.s ?? "") ? -1 : 1;
+  if (a.t !== b.t) return a.t < b.t ? -1 : 1;
+  return a.i < b.i ? -1 : a.i > b.i ? 1 : 0;
+}
+
+function keyOfItem(item: CalItem): ListKey {
+  return item.kind === "event"
+    ? { d: item.date, t: item.title, i: item.eventId, k: "e", s: item.start }
+    : { d: item.date, t: item.title, i: item.taskId };
+}
+
+/**
+ * Keyset page of items in `(date, kind, start | title, id)` order: each day lists its meetings by start,
+ * then its tasks by title. Meetings of the range are read once (a range holds few) and merged with the
+ * tasks page in memory; the cursor carries the last key of either kind.
+ */
 export async function listItemsPage(user: AuthenticatedUser, input: CalendarioListInput): Promise<CalendarioListPage> {
   const scope = taskScope(user, input.from, input.to, input.filters);
-  if (scope.none) return { rows: [], nextCursor: null, total: 0 };
   const today = todayInAppTimeZone();
   const limit = Math.min(Math.max(input.limit ?? LIST_PAGE_DEFAULT, 1), LIST_PAGE_MAX);
   const dir = input.orderDir === "desc" ? "desc" : "asc";
-  const due = taskDueSql();
+  const sign = dir === "asc" ? 1 : -1;
   const key = input.cursor ? decodeListCursor(input.cursor) : null;
-  const after = key
-    ? dir === "asc"
-      ? sql`(${due}, ${tasks.title}, ${tasks.id}) > (${key.d}::date, ${key.t}, ${key.i}::uuid)`
-      : sql`(${due}, ${tasks.title}, ${tasks.id}) < (${key.d}::date, ${key.t}, ${key.i}::uuid)`
-    : undefined;
+
+  const eventsPromise = eventItemsInRange(user, input, input.filters, eventScope(user));
+  const taskPagePromise = scope.none ? Promise.resolve(null) : listTaskRows(scope, key, dir, limit);
+  const [events, taskPage] = await Promise.all([eventsPromise, taskPagePromise]);
+
+  const taskItems = taskPage ? await toItems(taskPage.rows, today, scope.canEdit) : [];
+  const eventItems = events.items.filter((e) => !key || compareListKeys(keyOfItem(e), key) * sign > 0);
+  const merged = [...taskItems, ...eventItems].sort((a, b) => compareListKeys(keyOfItem(a), keyOfItem(b)) * sign);
+  const rows = merged.slice(0, limit);
+  const last = rows[rows.length - 1];
+  return {
+    rows,
+    nextCursor: merged.length > limit && last ? encodeListCursor(keyOfItem(last)) : null,
+    total: (taskPage?.total ?? 0) + events.items.length,
+  };
+}
+
+/** `limit + 1` task rows after the cursor (a meeting cursor keeps the tasks of its own day) and the task total. */
+async function listTaskRows(scope: Scope, key: ListKey | null, dir: "asc" | "desc", limit: number) {
+  const due = taskDueSql();
+  let after: SQL | undefined;
+  if (key?.k === "e") {
+    after = dir === "asc" ? sql`${due} >= ${key.d}::date` : sql`${due} < ${key.d}::date`;
+  } else if (key) {
+    after =
+      dir === "asc"
+        ? sql`(${due}, ${tasks.title}, ${tasks.id}) > (${key.d}::date, ${key.t}, ${key.i}::uuid)`
+        : sql`(${due}, ${tasks.title}, ${tasks.id}) < (${key.d}::date, ${key.t}, ${key.i}::uuid)`;
+  }
   const order = dir === "asc" ? [asc(due), asc(tasks.title), asc(tasks.id)] : [desc(due), desc(tasks.title), desc(tasks.id)];
   const [rows, totals] = await Promise.all([
     db
@@ -320,14 +364,7 @@ export async function listItemsPage(user: AuthenticatedUser, input: CalendarioLi
       .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(scope.where),
   ]);
-  const page = rows.slice(0, limit);
-  const items = await toItems(page, today, scope.canEdit);
-  const last = items[items.length - 1];
-  return {
-    rows: items,
-    nextCursor: rows.length > limit && last?.kind === "task" ? encodeListCursor({ d: last.date, t: last.title, i: last.taskId }) : null,
-    total: Number(totals[0]?.total ?? 0),
-  };
+  return { rows, total: Number(totals[0]?.total ?? 0) };
 }
 
 /**

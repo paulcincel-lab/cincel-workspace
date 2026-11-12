@@ -17,7 +17,7 @@ import {
 } from "@/lib/assistant/agenda/google-calendar";
 import type { ToolFailure } from "@/lib/assistant/define-tool";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
+import { resolveActivitiesCapabilities, resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { viewerScopeOf } from "@/lib/auth/viewer-scope";
 import {
   clockOf,
@@ -364,6 +364,29 @@ export async function proposeCancelEvent(source: ProposalSource, item: CalEventI
 }
 
 // ── Prompt data for propose_from_text ───────────────────────────────────────
+
+/**
+ * Open tasks dated before `today` that "lo vencido" means: the caller's own; when they have none and
+ * may see the team calendar, the overdue tasks inside the visible range (what the page shows them).
+ */
+export async function loadOverdueTaskIds(user: AuthenticatedUser, today: string, range: { from: string; to: string }): Promise<string[]> {
+  const due = sql<string>`coalesce(${tasks.commitmentDate}, ${tasks.deliveryDate})`;
+  const open = [isNull(tasks.deletedAt), eq(tasks.archived, false), ne(tasks.status, "completado"), sql`${due} < ${today}::date`];
+  const own = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.managerId, user.member.id), ...open))
+    .orderBy(asc(due))
+    .limit(PROMPT_TASK_LIMIT);
+  if (own.length > 0 || !resolveCalendarCapabilities(user).canViewTeamCalendar) return own.map((r) => r.id);
+  const visible = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(...open, sql`${due} between ${range.from}::date and ${range.to}::date`))
+    .orderBy(asc(due))
+    .limit(PROMPT_TASK_LIMIT);
+  return visible.map((r) => r.id);
+}
 
 /** The caller's own open tasks dated on or before `to`, oldest first: what "lo vencido" can mean. */
 export async function loadPromptTasks(user: AuthenticatedUser, to: string): Promise<PromptTask[]> {

@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/shadcn/textarea";
 import { createMeetingAction, updateMeetingAction } from "@/lib/actions/calendario-actions";
 import { useActionMutation } from "@/lib/query/mutation";
 import { catalogOptions } from "@/lib/query/options/catalog";
+import { proyectoFichaOptions } from "@/lib/query/options/proyectos";
 import { calendarioInvalidations } from "@/lib/query/options/calendario";
 import type { CalEventItem, MeetingDraft } from "@/lib/types/calendario";
 
@@ -66,6 +67,9 @@ export function NewMeetingDialog({ open, onOpenChange, event, defaults }: NewMee
 
   const [form, setForm] = useState<MeetingForm>(() => emptyMeetingForm(query.fecha, defaults));
   const [errors, setErrors] = useState<MeetingFormErrors>({});
+  // Team of the chosen project (members, manager and coordinator) for "Agregar al equipo del proyecto".
+  const projectId = form.projectId;
+  const fichaQuery = useQuery({ ...proyectoFichaOptions(projectId ?? ""), enabled: open && Boolean(projectId) });
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -123,7 +127,10 @@ export function NewMeetingDialog({ open, onOpenChange, event, defaults }: NewMee
     create.mutate(draft, {
       onSuccess: (item) => {
         const people = item.attendeeCount || draft.attendees.length;
-        if (item.invitesVia === "cincel" || opts.onlyCincel || !hasGrant) {
+        if (draft.attendees.length === 0) {
+          // Nobody to invite: never claim an invitation went out.
+          toast.success(C.createdAlone, { description: reasonOf(item.syncError) ?? undefined });
+        } else if (item.invitesVia === "cincel" || opts.onlyCincel || !hasGrant) {
           toast.success(C.createdCincel, { description: reasonOf(item.syncError) ?? undefined });
         } else {
           toast.success(C.createdGoogle(people));
@@ -152,6 +159,21 @@ export function NewMeetingDialog({ open, onOpenChange, event, defaults }: NewMee
     const person = staff.data?.find((s) => s.id === id);
     if (!person || form.attendees.some((a) => a.staffId === id)) return;
     update({ attendees: [...form.attendees, { staffId: id, email: "", name: person.name }] });
+  }
+
+  const teamPeople = (() => {
+    const project = fichaQuery.data?.project;
+    if (!project) return [];
+    const byId = new Map<string, string>();
+    for (const person of [project.manager, project.coordinator, ...project.members.filter((m) => m.active)]) {
+      if (person) byId.set(person.id, person.name);
+    }
+    return [...byId].map(([staffId, name]) => ({ staffId, name }));
+  })();
+  const missingTeam = teamPeople.filter((p) => !form.attendees.some((a) => a.staffId === p.staffId));
+
+  function addTeam() {
+    update({ attendees: [...form.attendees, ...missingTeam.map((p) => ({ staffId: p.staffId, email: "", name: p.name }))] });
   }
 
   function connect() {
@@ -257,6 +279,11 @@ export function NewMeetingDialog({ open, onOpenChange, event, defaults }: NewMee
                 ))}
               </SelectContent>
             </Select>
+            {missingTeam.length > 0 ? (
+              <Button type="button" variant="outline" size="sm" className="self-start" onClick={addTeam}>
+                {C.addTeam}
+              </Button>
+            ) : null}
             <div className="flex gap-2">
               <Input
                 type="email"
