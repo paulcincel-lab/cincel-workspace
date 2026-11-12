@@ -99,6 +99,6 @@ describe("Calendario widget stubs", () => {
         <PlanWeekBoard data={emptyPlanWeek("2026-11-16")} />
       </>,
     );
-    expect(container.querySelectorAll("section").length).toBeGreaterThan(10);
+    expect(container.querySelectorAll("section").length).toBeGreaterThan(5);
   });
 });

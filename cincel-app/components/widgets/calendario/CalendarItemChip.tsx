@@ -6,7 +6,8 @@ import { RowActionsMenu } from "@/components/widgets/RowActionsMenu";
 import type { BoardCardDragProps } from "@/components/tablero/useBoardDrag";
 import { cn } from "@/lib/utils";
 import { tramoColorClass, tramoColorVar } from "@/lib/tramos/tramo-color";
-import type { CalItem, CalTramoRef } from "@/lib/types/calendario";
+import { attendeesLabel, timeOf } from "@/components/calendario/meeting-format";
+import type { CalEventItem, CalItem, CalTramoRef } from "@/lib/types/calendario";
 
 import { COMPLETED_TAG, MOVE_TO_OTHER_DAY, OVERDUE_TAG } from "./grid-copy";
 import { MoveDayDialog } from "./MoveDayDialog";
@@ -33,6 +34,21 @@ function tramoInput(tramo: CalTramoRef | null) {
 /** "10:30" of an ISO time with offset. */
 export function timeLabel(iso: string): string {
   return iso.slice(11, 16);
+}
+
+/** Place, time range and attendees of a meeting in the card and block densities. */
+function MeetingExtras({ item, density }: { item: CalEventItem; density: "card" | "block" }) {
+  const place = item.location ?? (item.meetUrl ? "Meet" : null);
+  const range = density === "block" ? (item.allDay ? "Todo el día" : `${timeOf(item.start)} – ${timeOf(item.end)}`) : null;
+  const attendees = density === "card" && item.attendees.length > 0 ? attendeesLabel(item) : null;
+  if (!range && !place && !attendees) return null;
+  return (
+    <span className="ml-1 flex min-w-0 flex-col text-xs text-muted-foreground">
+      {range ? <span className="font-mono">{range}</span> : null}
+      {place ? <span className="truncate">{place}</span> : null}
+      {attendees ? <span className="truncate">{attendees}</span> : null}
+    </span>
+  );
 }
 
 /**
@@ -101,6 +117,7 @@ export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMove
       >
         {item.kind === "event" && !item.allDay ? <span className="shrink-0 font-mono text-muted-foreground">{timeLabel(item.start)}</span> : null}
         <span className={cn("truncate", completed && "line-through")}>{item.title}</span>
+        {item.kind === "event" && density !== "chip" ? <MeetingExtras item={item} density={density} /> : null}
       </button>
       {movable && isTask ? (
         <>

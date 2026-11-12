@@ -15,6 +15,9 @@ import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
 import { INICIO_TIME_ZONE } from "@/lib/inicio/header";
 import { loadSummaryData } from "@/lib/repositories/calendario-summary-repository";
 import { addDays, mondayOf } from "@/lib/time-tracking/local-time";
+import { hasGrantedScope } from "@/lib/google/staff-oauth";
+import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
+import { getStaffTokenAccount } from "@/lib/repositories/google-oauth-repository";
 import { getProposal } from "@/lib/repositories/proposals-repository";
 import { addDaysIso, buildAgenda, daysBetween, DELIVERY_WINDOW_DAYS, planDelta, prepSummary } from "@/lib/calendario/meeting-prep";
 import { canPhrase, phrasingLimiter, rephraseSummary } from "@/lib/calendario/prep-phrasing";
@@ -52,6 +55,20 @@ function requireCalendar(user: AuthenticatedUser): void {
   if (!resolveCalendarCapabilities(user).canViewCalendar) throw new Error("FORBIDDEN");
 }
 
+/** The `calendar_events` grant and the cache state of the viewer, read from Postgres (never Google). */
+async function loadGoogleInfo(user: AuthenticatedUser): Promise<CalendarioRange["google"]> {
+  const [account, primary] = await Promise.all([
+    getStaffTokenAccount(user.member.id),
+    syncRepository.getPrimarySync(user.member.id),
+  ]);
+  return {
+    connected: Boolean(account),
+    eventsGrant: hasGrantedScope(account?.scope, "calendar_events"),
+    syncedAt: primary?.syncedAt?.toISOString() ?? null,
+    error: primary?.error ?? null,
+  };
+}
+
 /**
  * Items of the visible range plus per-day aggregates computed in SQL: three reads
  * (day aggregates, items with their support people, KPIs), never the full task list.
@@ -78,7 +95,7 @@ export async function loadCalendarioRange(user: AuthenticatedUser, input: Calend
     items: found.items,
     kpis,
     truncated: found.truncated,
-    google: { connected: false, eventsGrant: false, syncedAt: null, error: null },
+    google: await loadGoogleInfo(user),
   };
   if (input.filters.quien !== "yo") return range;
   // Own planned hours against the workday for each day (BE §9).

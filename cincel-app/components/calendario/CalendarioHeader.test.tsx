@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, render as baseRender, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -13,6 +15,7 @@ vi.mock("@/components/calendario/CalendarFeedDialog", () => ({
 vi.mock("@/lib/actions/calendario-actions.flags", () => ({ IMPLEMENTED: { createMeetingAction: false } }));
 vi.mock("@/components/shell/EstiloSwitch", () => ({ EstiloSwitch: () => null }));
 
+import { createTestQueryClient } from "@/lib/query/test-utils";
 import { resetNewTaskUi, useNewTaskUi } from "@/lib/stores/new-task-store";
 import type { CalKpis, CalendarioQuery } from "@/lib/types/calendario";
 import { DEFAULT_CALENDARIO_FILTERS } from "@/lib/calendario/url-state";
@@ -30,6 +33,11 @@ const QUERY: CalendarioQuery = {
   nueva: null,
 };
 const KPIS: CalKpis = { tasks: 9, meetings: 4, meetingHours: 5, overdue: 3, overduePct: 10, unassigned: 0 };
+
+/** The header mounts the new-meeting dialog, which reads the range query. */
+function render(ui: ReactElement) {
+  return baseRender(<QueryClientProvider client={createTestQueryClient()}>{ui}</QueryClientProvider>);
+}
 
 beforeEach(resetNewTaskUi);
 afterEach(cleanup);

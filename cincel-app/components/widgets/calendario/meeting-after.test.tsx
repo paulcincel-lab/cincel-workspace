@@ -7,6 +7,7 @@ const actions = vi.hoisted(() => ({
   saveMeetingNotesAction: vi.fn(),
   runProposingToolAction: vi.fn(),
   applyProposalAction: vi.fn(),
+  cancelProposalAction: vi.fn(),
   undoProposalAction: vi.fn(),
   sendMinutesAction: vi.fn(),
 }));

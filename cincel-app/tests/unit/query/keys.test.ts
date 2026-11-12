@@ -119,6 +119,7 @@ function shapes() {
     "calendario.prep": qk.calendario.prep("e1"),
     "calendario.minutes": qk.calendario.minutes("e1"),
     "calendario.planWeek": qk.calendario.planWeek({ weekStart: "2026-11-16", staffIds: ["s1"] }),
+    "calendario.assistantHints": qk.calendario.assistantHints(),
     "calendario.proposals": qk.calendario.proposals(),
     "calendario.proposal": qk.calendario.proposal("p1"),
     "calendario.workday": qk.calendario.workday(),
