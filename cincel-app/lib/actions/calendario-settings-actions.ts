@@ -24,3 +24,13 @@ export async function saveWorkdayHoursAction(hours: number): Promise<ActionResul
     return { hours: parsed };
   });
 }
+
+/**
+ * Hours the Día timeline shows (FE §4.1, BE §5): `calendario.day_start` / `calendario.day_end`, else the
+ * jornada of Control de horario, else 08:00-19:00. Any staff session may read it.
+ */
+export async function fetchCalendarioDayRangeAction(): Promise<{ start: string; end: string }> {
+  await requireCapabilityUser();
+  const { getDayRange } = await import("@/lib/calendario/day-range");
+  return getDayRange();
+}

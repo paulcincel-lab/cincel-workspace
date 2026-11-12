@@ -12,6 +12,7 @@ import { useCalendarioUi } from "@/lib/stores/calendario-ui-store";
 import type { AssistantCalendarContext, Proposal } from "@/lib/types/calendario";
 
 import { ProposalCard } from "./ProposalCard";
+import { ProposalTable } from "./ProposalTable";
 
 export type BarraParaPedirProps = {
   context: AssistantCalendarContext;
@@ -45,7 +46,7 @@ function BarraBody({ context, examples, onProposal, variant }: BarraParaPedirPro
   const toggleChange = useCalendarioUi((s) => s.toggleChange);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const { proposal, checked } = useProposal();
+  const { proposal, checked, stale } = useProposal();
   const flow = useBarraProposal(context, { onProposal, onError: setError });
 
   const submit = (text: string) => {
@@ -124,15 +125,33 @@ function BarraBody({ context, examples, onProposal, variant }: BarraParaPedirPro
         </p>
       ) : null}
       {proposal ? (
-        <ProposalCard
-          proposal={proposal}
-          checked={checked}
-          variant={variant}
-          onToggle={toggleChange}
-          onApply={() => flow.apply(proposal.id, checked)}
-          onCancel={() => flow.cancel(proposal.id)}
-          onEdit={edit}
-        />
+        variant === "analitico" ? (
+          <ProposalTable
+            proposal={proposal}
+            checked={checked}
+            variant={variant}
+            onToggle={toggleChange}
+            onApply={() => flow.apply(proposal.id, checked)}
+            onCancel={() => flow.cancel(proposal.id)}
+            onEdit={edit}
+            stale={stale}
+            onRetry={edit}
+            pending={flow.applying}
+          />
+        ) : (
+          <ProposalCard
+            proposal={proposal}
+            checked={checked}
+            variant={variant}
+            onToggle={toggleChange}
+            onApply={() => flow.apply(proposal.id, checked)}
+            onCancel={() => flow.cancel(proposal.id)}
+            onEdit={edit}
+            stale={stale}
+            onRetry={edit}
+            pending={flow.applying}
+          />
+        )
       ) : null}
     </section>
   );

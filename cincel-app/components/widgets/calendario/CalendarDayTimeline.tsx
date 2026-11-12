@@ -1,5 +1,8 @@
 "use client";
 
+import { formatHours } from "@/lib/calendario/alerts";
+import { DayCellExtras } from "./DayCellExtras";
+import { OverlapTag } from "./DayLoadMeter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
@@ -50,6 +53,9 @@ export function CalendarDayTimeline({
   return (
     <section aria-label="Día" data-slot="calendar-day-timeline" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0">
+        <div className="mb-2 flex flex-col gap-1">
+          <DayCellExtras day={range.days.find((d) => d.date === date)} />
+        </div>
         {pinned.length > 0 ? (
           <ul className="mb-2 flex flex-col gap-1" aria-label="Antes de la jornada">
             {pinned.map(({ item, label }) => (
@@ -81,7 +87,7 @@ export function CalendarDayTimeline({
                   width: `${100 / block.lanes}%`,
                 }}
               >
-                <EventButton item={block.item} label={eventTime(block.item, timeZone)} onOpen={onOpen} block />
+                <EventButton item={block.item} label={eventTime(block.item, timeZone)} onOpen={onOpen} block overlapping={block.lanes > 1} />
               </li>
             ))}
           </ul>
@@ -110,7 +116,7 @@ export function CalendarDayTimeline({
   );
 }
 
-function EventButton({ item, label, onOpen, block = false }: { item: CalEventItem; label: string; onOpen?: (id: string) => void; block?: boolean }) {
+function EventButton({ item, label, onOpen, block = false, overlapping = false }: { item: CalEventItem; label: string; onOpen?: (id: string) => void; block?: boolean; overlapping?: boolean }) {
   return (
     <button
       type="button"
@@ -119,6 +125,7 @@ function EventButton({ item, label, onOpen, block = false }: { item: CalEventIte
     >
       <span className="w-full truncate font-semibold">{item.title}</span>
       <span className="font-mono text-muted-foreground">{label}</span>
+      {overlapping ? <OverlapTag /> : null}
     </button>
   );
 }
@@ -152,7 +159,10 @@ function DayTasksColumn({ tasks, date, onOpen }: { tasks: CalTaskItem[]; date: s
                 <span className={`truncate ${task.completed ? "text-muted-foreground line-through" : task.overdue ? "text-destructive" : ""}`}>
                   {task.title}
                 </span>
-                {task.tramo ? <span className="shrink-0 text-xs text-muted-foreground">{task.tramo.name}</span> : null}
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  {task.hoursSource === "task" ? <span className="font-mono">{formatHours(task.hours)} h</span> : null}
+                  {task.tramo ? <span>{task.tramo.name}</span> : null}
+                </span>
               </button>
             </li>
           ))}

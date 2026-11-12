@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 import { weekBounds } from "@/lib/calendario/move";
 
 import { CalendarItemChip } from "./CalendarItemChip";
+import { DayAssistantButton } from "./DayAssistantButton";
+import { DayCellExtras } from "./DayCellExtras";
 import {
   ASK_ASSISTANT_LABEL,
   ASSISTANT_LABEL,
@@ -198,20 +200,22 @@ export function CalendarWeekColumns({
                       {MORE_LABEL(more)}
                     </button>
                   ) : null}
-                  <div className="mt-auto pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full border-dashed"
-                      aria-label={ASK_ASSISTANT_LABEL(date)}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        ask(date);
-                      }}
-                    >
-                      {ASSISTANT_LABEL}
-                    </Button>
+                  <DayCellExtras day={day} />
+                  <div className="mt-auto pt-2" onClick={(event) => event.stopPropagation()}>
+                    {onAsk ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-dashed"
+                        aria-label={ASK_ASSISTANT_LABEL(date)}
+                        onClick={() => onAsk(date)}
+                      >
+                        {ASSISTANT_LABEL}
+                      </Button>
+                    ) : (
+                      <DayAssistantButton date={date} />
+                    )}
                   </div>
                 </div>
               );

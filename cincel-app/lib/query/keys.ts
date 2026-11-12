@@ -230,6 +230,7 @@ export const qk = {
     proposals: () => ["calendario", "proposals"] as const,
     proposal: (id: string) => ["calendario", "proposals", id] as const,
     workday: () => ["calendario", "workday"] as const,
+    dayRange: () => ["calendario", "day-range"] as const,
   },
   portal: {
     projects: () => ["portal", "projects"] as const,

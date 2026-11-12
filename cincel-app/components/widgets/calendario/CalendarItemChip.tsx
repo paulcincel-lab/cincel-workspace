@@ -6,11 +6,14 @@ import { RowActionsMenu } from "@/components/widgets/RowActionsMenu";
 import type { BoardCardDragProps } from "@/components/tablero/useBoardDrag";
 import { cn } from "@/lib/utils";
 import { tramoColorClass, tramoColorVar } from "@/lib/tramos/tramo-color";
+import { formatHours } from "@/lib/calendario/alerts";
 import { attendeesLabel, timeOf } from "@/components/calendario/meeting-format";
 import type { CalEventItem, CalItem, CalTramoRef } from "@/lib/types/calendario";
 
 import { COMPLETED_TAG, MOVE_TO_OTHER_DAY, OVERDUE_TAG } from "./grid-copy";
 import { MoveDayDialog } from "./MoveDayDialog";
+import { useCalendarioOverlay } from "./overlay-context";
+import { PROPOSAL_ORIGINAL_CLASS, PROPOSAL_ORIGINAL_DESCRIPTION } from "./ProposalOverlay";
 
 
 export type CalendarItemChipProps = {
@@ -58,6 +61,9 @@ function MeetingExtras({ item, density }: { item: CalEventItem; density: "card" 
  */
 export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMoveDay, onPickDay, dragging }: CalendarItemChipProps) {
   const [picking, setPicking] = useState(false);
+  const overlay = useCalendarioOverlay();
+  // The open proposal moves this item: greyed and struck, announced by text.
+  const original = overlay.originals.has(item.id);
   const isTask = item.kind === "task";
   const overdue = isTask && item.overdue;
   const completed = isTask && item.completed;
@@ -87,7 +93,8 @@ export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMove
       data-slot="calendar-item-chip"
       data-density={density}
       data-kind={item.kind}
-      data-proposal={proposal}
+      data-proposal={proposal ?? (original ? "ghost" : undefined)}
+      aria-description={original ? PROPOSAL_ORIGINAL_DESCRIPTION : undefined}
       className={cn(
         "group/row relative flex min-w-0 items-center gap-1 rounded-md text-xs",
         item.kind === "event" ? "border border-l-[3px] border-border bg-card" : "bg-muted",
@@ -98,6 +105,7 @@ export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMove
         completed && "opacity-50",
         proposal === "new" && "border border-dashed border-primary",
         proposal === "ghost" && "border border-dashed border-border opacity-60",
+        original && PROPOSAL_ORIGINAL_CLASS,
         drag?.draggable && "cursor-grab active:cursor-grabbing",
         dragging && "opacity-50",
       )}
@@ -117,6 +125,9 @@ export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMove
       >
         {item.kind === "event" && !item.allDay ? <span className="shrink-0 font-mono text-muted-foreground">{timeLabel(item.start)}</span> : null}
         <span className={cn("truncate", completed && "line-through")}>{item.title}</span>
+        {isTask && item.hoursSource === "task" && density !== "chip" ? (
+          <span className="ml-auto shrink-0 font-mono text-muted-foreground">{formatHours(item.hours)} h</span>
+        ) : null}
         {item.kind === "event" && density !== "chip" ? <MeetingExtras item={item} density={density} /> : null}
       </button>
       {movable && isTask ? (

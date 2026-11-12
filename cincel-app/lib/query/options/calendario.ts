@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions, type QueryKey } from "@tanstack/react-query";
 
-import { fetchWorkdayHoursAction } from "@/lib/actions/calendario-settings-actions";
+import { fetchCalendarioDayRangeAction, fetchWorkdayHoursAction } from "@/lib/actions/calendario-settings-actions";
 import {
   getCalendarioDaySummary,
   getCalendarioList,
@@ -160,6 +160,15 @@ export function workdayHoursOptions() {
   return queryOptions<number>({
     queryKey: qk.calendario.workday(),
     queryFn: () => fetchWorkdayHoursAction(),
+    staleTime: STALE.ajustes,
+  });
+}
+
+/** Hours of the Día timeline (`calendario.day_start` / `day_end`, else the jornada, else 08:00-19:00). */
+export function calendarioDayRangeOptions() {
+  return queryOptions<{ start: string; end: string }>({
+    queryKey: qk.calendario.dayRange(),
+    queryFn: () => fetchCalendarioDayRangeAction(),
     staleTime: STALE.ajustes,
   });
 }
