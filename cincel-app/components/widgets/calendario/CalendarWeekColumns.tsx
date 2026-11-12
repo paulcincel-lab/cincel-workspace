@@ -14,8 +14,6 @@ import {
   monthLabel,
 } from "@/lib/calendario/move";
 import { addDays, weekDates } from "@/lib/time-tracking/local-time";
-import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
-import { useCalendarioUi } from "@/lib/stores/calendario-ui-store";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import type {
   CalItem,
@@ -67,8 +65,6 @@ export function CalendarWeekColumns({
     openDay: navOpenDay,
   } = useGridNav(range, query);
   const openNewTask = useNewTaskUi((s) => s.openNewTask);
-  const setSelectedDate = useCalendarioUi((s) => s.setSelectedDate);
-  const openAssistant = useAssistantUi((s) => s.openAssistant);
   const dayByDate = useMemo(
     () => new Map(range.days.map((d) => [d.date, d])),
     [range.days],
@@ -79,12 +75,6 @@ export function CalendarWeekColumns({
     [query.fecha],
   );
 
-  const ask =
-    onAsk ??
-    ((date: string) => {
-      setSelectedDate(date);
-      openAssistant();
-    });
   const empty = range.items.length === 0;
 
   return (
