@@ -156,7 +156,13 @@ async function updateStaffActionImpl(
   return row;
 }
 
-export async function setStaffActiveAction(id: string, active: boolean): Promise<Staff> {
+export async function setStaffActiveAction(
+  ...args: Parameters<typeof setStaffActiveActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setStaffActiveActionImpl>>>> {
+  return toActionResult(() => setStaffActiveActionImpl(...args));
+}
+
+async function setStaffActiveActionImpl(id: string, active: boolean): Promise<Staff> {
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canToggleCollaboratorActive) {
     throw new Error("FORBIDDEN: staff toggle active");
@@ -165,7 +171,13 @@ export async function setStaffActiveAction(id: string, active: boolean): Promise
   return row;
 }
 
-export async function deleteStaffAction(id: string): Promise<void> {
+export async function deleteStaffAction(
+  ...args: Parameters<typeof deleteStaffActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof deleteStaffActionImpl>>>> {
+  return toActionResult(() => deleteStaffActionImpl(...args));
+}
+
+async function deleteStaffActionImpl(id: string): Promise<void> {
   const user = await requireCapabilityUser();
   if (!resolveTeamCapabilities(user).canDeleteCollaborator) {
     throw new Error("FORBIDDEN: staff delete");
@@ -221,7 +233,13 @@ async function setStaffCredentialActionImpl(
  * Manual team order (#452) — part of the company structure, so only those
  * who manage puestos (Administrador / Dirección) can change it.
  */
-export async function reorderStaffAction(orderedIds: string[]): Promise<void> {
+export async function reorderStaffAction(
+  ...args: Parameters<typeof reorderStaffActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderStaffActionImpl>>>> {
+  return toActionResult(() => reorderStaffActionImpl(...args));
+}
+
+async function reorderStaffActionImpl(orderedIds: string[]): Promise<void> {
   const user = await requireCapabilityUser();
   if (!resolvePositionsCapabilities(user).canManagePositions) {
     throw new Error("FORBIDDEN: staff reorder");

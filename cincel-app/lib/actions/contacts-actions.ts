@@ -97,6 +97,12 @@ export async function deleteContactAction(id: string): Promise<ActionResult<void
 }
 
 export async function setContactPeopleAction(
+  ...args: Parameters<typeof setContactPeopleActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setContactPeopleActionImpl>>>> {
+  return toActionResult(() => setContactPeopleActionImpl(...args));
+}
+
+async function setContactPeopleActionImpl(
   contactId: string,
   people: ContactPersonInput[]
 ): Promise<void> {
@@ -107,7 +113,13 @@ export async function setContactPeopleAction(
   await contactsRepository.setContactPeople(contactId, people);
 }
 
-export async function setContactTagsAction(contactId: string, tags: ContactTag[]): Promise<void> {
+export async function setContactTagsAction(
+  ...args: Parameters<typeof setContactTagsActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setContactTagsActionImpl>>>> {
+  return toActionResult(() => setContactTagsActionImpl(...args));
+}
+
+async function setContactTagsActionImpl(contactId: string, tags: ContactTag[]): Promise<void> {
   const user = await requireCapabilityUser();
   if (!resolveClientsCapabilities(user).canEditClient) {
     throw new Error("FORBIDDEN: contact edit");

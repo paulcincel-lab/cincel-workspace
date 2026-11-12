@@ -21,8 +21,8 @@ export type MeetingPrepPanelProps = {
   recipients?: MeetingPrepRecipient[];
   /** Sends the agenda as edited (`send_agenda`). Resolves true when sent. */
   onSend?(items: string[]): Promise<boolean>;
-  /** Asks for a new phrasing of the summary (`meeting_prep { phrasing: true }`). Resolves the new text. */
-  onRewrite?(): Promise<string | null>;
+  /** Asks for a new phrasing of the summary (`meeting_prep { phrasing: true }`). Resolves the new text or an error to show inline. */
+  onRewrite?(): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
   loading?: boolean;
 };
 
@@ -121,6 +121,9 @@ export function MeetingPrepPanel({ prep, eventId, variant = "visual", recipients
   const [summary, setSummary] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
+  const [rewriteError, setRewriteError] = useState<string | null>(null);
+  const [previous, setPrevious] = useState<string | null>(null);
 
   // Agenda edits live until sent or the detail closes (not persisted); a different meeting or fresh prep resets them.
   const agendaKey = prep ? `${prep.eventId}\u0000${prep.agenda.join("\u0000")}` : "";
@@ -136,6 +139,8 @@ export function MeetingPrepPanel({ prep, eventId, variant = "visual", recipients
   if (seenSummary !== prepSummary) {
     setSeenSummary(prepSummary);
     setSummary(prepSummary);
+    setPrevious(null);
+    setRewriteError(null);
   }
 
   if (loading) {
@@ -179,14 +184,29 @@ export function MeetingPrepPanel({ prep, eventId, variant = "visual", recipients
     }
   };
   const rewrite = async () => {
-    if (!onRewrite) return;
-    setBusy(true);
+    if (!onRewrite || rewriting) return;
+    setRewriting(true);
+    setRewriteError(null);
     try {
-      const text = await onRewrite();
-      if (text) setSummary(text);
+      const result = await onRewrite();
+      if (result.ok) {
+        if (result.text.trim() !== "" && result.text !== summary) {
+          setPrevious(summary);
+          setSummary(result.text);
+        }
+      } else {
+        setRewriteError(result.error);
+      }
+    } catch {
+      setRewriteError("No pude reescribir el resumen.");
     } finally {
-      setBusy(false);
+      setRewriting(false);
     }
+  };
+  const undoRewrite = () => {
+    if (previous === null) return;
+    setSummary(previous);
+    setPrevious(null);
   };
   const send = async () => {
     if (!onSend) return;
@@ -213,10 +233,20 @@ export function MeetingPrepPanel({ prep, eventId, variant = "visual", recipients
           {summary}
         </p>
         {onRewrite ? (
-          <div>
-            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void rewrite()}>
-              ✦ Reescribir
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" disabled={rewriting} onClick={() => void rewrite()}>
+              {rewriting ? "Reescribiendo…" : "✦ Reescribir"}
             </Button>
+            {previous !== null && !rewriting ? (
+              <Button type="button" variant="ghost" size="sm" onClick={undoRewrite}>
+                Deshacer
+              </Button>
+            ) : null}
+            {rewriteError ? (
+              <p role="alert" className="text-sm text-destructive-ink">
+                {rewriteError}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

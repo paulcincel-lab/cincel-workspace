@@ -16,6 +16,7 @@ import * as syncRepository from "@/lib/repositories/google-calendar-sync-reposit
 import { sendMinutes } from "@/lib/calendario/minutes-service";
 import * as meetingMinutesRepository from "@/lib/repositories/meeting-minutes-repository";
 import { sendAgenda } from "@/lib/calendario/agenda-mail";
+import { loadMeetingPrep } from "@/lib/loaders/calendario";
 import { scopeTaskDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import type {
@@ -232,6 +233,17 @@ export async function sendAgendaAction(eventId: string, items: string[]): Promis
     const user = await requireCapabilityUser();
     if (!resolveCalendarCapabilities(user).canViewCalendar) throw new Error("FORBIDDEN");
     return sendAgenda(user, eventId, items);
+  });
+}
+
+/** The ✦ Reescribir of the prep (BE §10.2, D6): the rephrased summary, rate-limited inside the loader; the template when no model is reachable. */
+export async function rewritePrepSummaryAction(eventId: string): Promise<ActionResult<{ summary: string }>> {
+  return toActionResult(async () => {
+    const id = parseInput(UuidSchema, eventId);
+    const user = await meetingUser();
+    const prep = await loadMeetingPrep(user, id, { phrasing: true });
+    if (!prep) throw new Error("NOT_FOUND");
+    return { summary: prep.summary };
   });
 }
 

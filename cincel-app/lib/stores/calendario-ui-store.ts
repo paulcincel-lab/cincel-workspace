@@ -37,6 +37,9 @@ export type CalendarioUiState = {
   /** "Ahora no" on the connect banner; lasts the session (FE §6.3). */
   googleBannerDismissed: boolean;
   dismissGoogleBanner(): void;
+  /** Optional "Horas" column of the Analítico table (FE §4.3); the viewer's choice is kept in the browser. */
+  showHours: boolean;
+  setShowHours(v: boolean): void;
   reset(): void;
 };
 
@@ -51,6 +54,7 @@ type CalendarioUiData = Pick<
   | "planDrops"
   | "dragging"
   | "googleBannerDismissed"
+  | "showHours"
 >;
 
 export const CALENDARIO_UI_INITIAL: CalendarioUiData = {
@@ -63,6 +67,7 @@ export const CALENDARIO_UI_INITIAL: CalendarioUiData = {
   planDrops: [],
   dragging: null,
   googleBannerDismissed: false,
+  showHours: false,
 };
 
 export const useCalendarioUi: UseBoundStore<StoreApi<CalendarioUiState>> = create<CalendarioUiState>((set) => ({
@@ -90,6 +95,7 @@ export const useCalendarioUi: UseBoundStore<StoreApi<CalendarioUiState>> = creat
   clearPlanDrops: () => set({ planDrops: [] }),
   setDragging: (dragging) => set({ dragging }),
   dismissGoogleBanner: () => set({ googleBannerDismissed: true }),
+  setShowHours: (showHours) => set({ showHours }),
   reset: () => set(CALENDARIO_UI_INITIAL),
 }));
 

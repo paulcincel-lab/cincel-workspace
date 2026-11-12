@@ -348,7 +348,14 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 
   const importData = useImportData("task", task?.id);
   const catalogs = useTaskSheetCatalogs(task);
-  const { statuses, tramos, staff, phases } = catalogs;
+  const { statuses, tramos, staff, phases, spaces } = catalogs;
+  const taskManager = task?.manager;
+  const historyNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const list of [staff, phases, spaces, tramos, statuses]) for (const o of list) names.set(o.id, o.name);
+    if (taskManager) names.set(taskManager.id, taskManager.name);
+    return names;
+  }, [staff, phases, spaces, tramos, statuses, taskManager]);
 
   // Hooks run before the task loads; the mutations only fire once it has.
   const target = useMemo(() => ({ id: taskId, projectId: task?.projectId ?? "" }), [taskId, task?.projectId]);
@@ -778,6 +785,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
           </h3>
           <HistoryEventList
             events={sortedHistory}
+            names={historyNames}
             empty={<p className="text-sm text-muted-foreground">Todavía no hay actividad en esta tarea.</p>}
           />
           <CommentComposer
