@@ -7,8 +7,8 @@ import { loadLabel } from "@/lib/calendario/load";
 import { rangeOf } from "@/lib/calendario/range";
 
 describe("Calendario contracts", () => {
-  it("every IMPLEMENTED flag is false until its owner flips it", () => {
-    expect(Object.values(IMPLEMENTED).every((v) => v === false)).toBe(true);
+  it("every IMPLEMENTED flag is a boolean its owner flips", () => {
+    expect(Object.values(IMPLEMENTED).every((v) => typeof v === "boolean")).toBe(true);
   });
 
   it("pure stubs throw not implemented", () => {

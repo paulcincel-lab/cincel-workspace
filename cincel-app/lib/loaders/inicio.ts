@@ -58,6 +58,7 @@ import { dailySeries, kpiFromDaily } from "@/lib/metrics/series";
 import { toAgendaItems, toAttentionItems, toDistribution, toPersonDatum, toProgressItems } from "@/lib/metrics/widgets";
 import { remindersForDay } from "@/lib/my-space/reminders-for-day";
 import { getFirstLoginState, type FirstLoginState } from "@/lib/onboarding/first-login-server";
+import { eventItemsInRange } from "@/lib/repositories/calendario-events-range";
 import * as inicioRepository from "@/lib/repositories/inicio-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
@@ -359,7 +360,13 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
     showTeam && openShiftIds ? openShiftsOf(openShiftIds, new Set(staffInScope), staffById, tramoByStaff) : null;
 
   // ── Visual and Analítico: today's agenda of the scope; Analítico: open tasks per tramo and responsable, the caller's sections ──
-  const todayAgenda = todayAgendaItems(openTasks, today);
+  const { items: todayMeetings } = await eventItemsInRange(
+    user,
+    { from: today, to: today },
+    { mostrar: "reuniones", quien: "yo", proyectos: [], tramo: null, responsable: null },
+    { canViewTeam: false },
+  );
+  const todayAgenda = todayAgendaItems(openTasks, today, todayMeetings);
   const tasksByTramoAssignee = tramoAssigneeRows(openTasks, today, tz);
   const inicioSections = { showTeamWorkload: sections.showTeamWorkload, showProjectRisk: sections.showProjectRisk };
 

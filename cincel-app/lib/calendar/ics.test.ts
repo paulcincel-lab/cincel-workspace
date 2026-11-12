@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildIcs, escapeIcsText, foldIcsLine } from "./ics";
+import { buildIcs, escapeIcsText, foldIcsLine, type IcsMeeting } from "./ics";
 import type { CalendarEvent } from "@/lib/types/calendar";
 
 const event: CalendarEvent = {
@@ -90,3 +90,42 @@ describe("buildIcs", () => {
     expect(ics).not.toContain("BEGIN:VEVENT");
   });
 });
+
+describe("buildIcs with meetings", () => {
+  const meeting: IcsMeeting = {
+    id: "9f1c0d2e-0000-4000-8000-000000000001",
+    title: "Revisión de obra, planta baja",
+    description: "Llevar planos",
+    startsAt: new Date("2026-11-12T16:00:00Z"),
+    endsAt: new Date("2026-11-12T17:30:00Z"),
+    location: "Obra Lomas",
+    meetUrl: "https://meet.example/abc-defg-hij",
+    projectName: "Casa Lomas",
+  };
+  const withMeetings = (meetings: (typeof meeting)[]) =>
+    buildIcs([event], { baseUrl: "https://app.example", calendarName: "Cincel — Ana", now: NOW, meetings });
+  const unfold = (ics: string) => ics.replace(/\r\n /g, "");
+
+  it("adds a timed VEVENT per meeting next to the task dates", () => {
+    const ics = unfold(withMeetings([meeting]));
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2);
+    expect(ics).toContain("UID:9f1c0d2e-0000-4000-8000-000000000001@cincel\r\n");
+    expect(ics).toContain("DTSTART:20261112T160000Z");
+    expect(ics).toContain("DTEND:20261112T173000Z");
+    expect(ics).toContain("SUMMARY:Revisión de obra\\, planta baja");
+    expect(ics).toContain("LOCATION:Obra Lomas");
+    expect(ics).toContain("URL:https://meet.example/abc-defg-hij");
+    expect(ics).toContain("DESCRIPTION:Proyecto: Casa Lomas\\nLlevar planos");
+  });
+
+  it("links to the meeting in the calendar when there is no Meet link", () => {
+    const ics = unfold(withMeetings([{ ...meeting, meetUrl: null, location: null }]));
+    expect(ics).toContain("URL:https://app.example/calendario?vista=dia&fecha=2026-11-12&evento=e:9f1c0d2e-0000-4000-8000-000000000001");
+    expect(ics).not.toContain("LOCATION:");
+  });
+
+  it("keeps the feed of tasks unchanged without meetings", () => {
+    expect(withMeetings([])).toBe(build([event]));
+  });
+});
+

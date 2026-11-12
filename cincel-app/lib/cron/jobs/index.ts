@@ -5,3 +5,4 @@ import "./notifications-deliver";
 import "./daily-digest";
 import "./gmail-sync";
 import "./auto-close-jornadas";
+import "./proposals-expire";

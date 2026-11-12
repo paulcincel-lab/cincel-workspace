@@ -1,5 +1,6 @@
 "use client";
 
+import { MEETING_COPY } from "@/components/calendario/meeting-copy";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -36,7 +37,9 @@ import { cn } from "@/lib/utils";
  *
  * Only items inside the visible range (the anchor day, its Monday-first week
  * or its month) are rendered, so every style shows the same numbers.
- * `meetingUrl` renders an "Abrir en Cutto" link only when the item has one.
+ * `meetUrl` renders "Unirse a Meet" and `meetingUrl` "Abrir en Cutto" (Meet
+ * first, both when both exist); a meeting `onlyInCincel` shows that origin
+ * without links.
  *
  * Widget-level states: `emptyText` / `emptyState` when no item falls in the
  * range; `loading` renders the `LoadingSkeleton` variant of the style.
@@ -63,6 +66,8 @@ export type AgendaWidgetProps = {
 export const AGENDA_EMPTY_TEXT = "Sin eventos en este periodo";
 export const AGENDA_ALL_DAY_LABEL = "Todo el día";
 export const AGENDA_CUTTO_LABEL = "Abrir en Cutto";
+export const AGENDA_MEET_LABEL = MEETING_COPY.joinMeet;
+export const AGENDA_ONLY_CINCEL_LABEL = "Solo en Cincel";
 
 /** Visual week time grid: 8:00–19:00, 48 px per hour. */
 export const AGENDA_HOUR_START = 8;
@@ -416,18 +421,34 @@ function Title({ item, className }: { item: AgendaItem; className?: string }) {
 }
 
 function CuttoLink({ item, className }: { item: AgendaItem; className?: string }) {
-  if (!item.meetingUrl) return null;
+  if (item.onlyInCincel) {
+    return (
+      <span data-slot="agenda-origin" className={cn("text-muted-foreground", className)}>
+        {AGENDA_ONLY_CINCEL_LABEL}
+      </span>
+    );
+  }
+  const links = [
+    item.meetUrl ? { slot: "agenda-meet-link", href: item.meetUrl, label: AGENDA_MEET_LABEL } : null,
+    item.meetingUrl ? { slot: "agenda-meeting-link", href: item.meetingUrl, label: AGENDA_CUTTO_LABEL } : null,
+  ].filter((l): l is { slot: string; href: string; label: string } => l !== null);
+  if (links.length === 0) return null;
   return (
-    <a
-      href={item.meetingUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      data-slot="agenda-meeting-link"
-      aria-label={`${AGENDA_CUTTO_LABEL}: ${item.title}`}
-      className={cn("underline underline-offset-4", FOCUS, className)}
-    >
-      {AGENDA_CUTTO_LABEL}
-    </a>
+    <>
+      {links.map((l) => (
+        <a
+          key={l.slot}
+          href={l.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-slot={l.slot}
+          aria-label={`${l.label}: ${item.title}`}
+          className={cn("underline underline-offset-4", FOCUS, className)}
+        >
+          {l.label}
+        </a>
+      ))}
+    </>
   );
 }
 

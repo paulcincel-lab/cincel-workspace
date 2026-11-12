@@ -108,6 +108,10 @@ export type AgendaItem = {
   href?: string;
   /** Only when a Cutto URL is stored on the event (none until Cutto Q1). */
   meetingUrl?: string;
+  /** Google Meet link of a meeting (`calendar_events.meet_url`). */
+  meetUrl?: string;
+  /** Meeting on the failure path: only in Cincel, shown without actions. */
+  onlyInCincel?: boolean;
 };
 
 export type Availability = "libre" | "ocupado" | "saturado" | "vacaciones";

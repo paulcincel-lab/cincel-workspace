@@ -1,6 +1,8 @@
 "use server";
 
 import { toActionResult } from "@/lib/actions/action-result";
+import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { requireCapabilityUser } from "@/lib/auth/session";
 import { notImplementedAction } from "@/lib/stubs";
 import type {
   ApplyProposalResult,
@@ -12,6 +14,11 @@ import type {
 } from "@/lib/types/calendario";
 import type { TaskDetail } from "@/lib/types/core";
 import type { ActionResult } from "@/lib/types/schedule";
+import { ApplyProposalToolSchema, ProposeFromTextToolSchema, UndoProposalToolSchema } from "@/lib/validation/calendario";
+import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
+
+/** The proposing tools a button on the page may run (BE §12). */
+const RUNNABLE_TOOLS = ["propose_redistribution", "resolve_overlap", "plan_week", "extract_minutes", "move_tasks"] as const;
 
 /**
  * Calendario writes (BE §8.1, §8.3, §12): the direct UI paths. Every function
@@ -61,26 +68,77 @@ export async function proposeFromTextAction(input: {
   to: string;
   selectedDate?: string;
 }): Promise<ActionResult<Proposal>> {
-  return toActionResult(async () => notImplementedAction("proposeFromTextAction", input));
+  return toActionResult(async () => {
+    const parsed = parseInput(ProposeFromTextToolSchema, input);
+    const user = await proposalUser();
+    // Loaded on demand: the tools registry imports modules that import this one.
+    const { proposeFromText } = await import("@/lib/calendario/propose-from-text");
+    const made = await proposeFromText({ user, context: { route: "/calendario" }, threadId: null }, parsed);
+    if (!made.ok) throw new Error(made.error);
+    return made.proposal;
+  });
 }
 
 export async function runProposingToolAction(
   name: "propose_redistribution" | "resolve_overlap" | "plan_week" | "extract_minutes" | "move_tasks",
   input: unknown,
 ): Promise<ActionResult<Proposal>> {
-  return toActionResult(async () => notImplementedAction("runProposingToolAction", name, input));
+  return toActionResult(async () => {
+    const user = await proposalUser();
+    const { findDefinedTool } = await import("@/lib/assistant/tools/index");
+    const tool = (RUNNABLE_TOOLS as readonly string[]).includes(name) ? findDefinedTool(name) : undefined;
+    if (!tool) throw new Error("NOT_FOUND");
+    if (!tool.definition.capability(user)) throw new Error("FORBIDDEN");
+    const parsed = parseInput(tool.definition.schema, input);
+    const out = (await tool.definition.run({ user, context: { route: "/calendario" }, threadId: null }, parsed)) as {
+      ok?: boolean;
+      proposalId?: string;
+      error?: string;
+    };
+    if (out.ok !== true || !out.proposalId) throw new Error(out.error ?? "INVALID");
+    const { getProposal } = await import("@/lib/repositories/proposals-repository");
+    const proposal = await getProposal(user, out.proposalId);
+    if (!proposal) throw new Error("NOT_FOUND");
+    return proposal;
+  });
 }
 
+/** Staff session with `canViewCalendar`; the owner check of a proposal runs again inside apply, cancel and undo. */
+async function proposalUser() {
+  const user = await requireCapabilityUser();
+  if (!resolveCalendarCapabilities(user).canViewCalendar) throw new Error("FORBIDDEN");
+  return user;
+}
+
+/** Applies a proposal or only the checked changes. Owner only. */
 export async function applyProposalAction(id: string, changeIds?: string[]): Promise<ActionResult<ApplyProposalResult>> {
-  return toActionResult(async () => notImplementedAction("applyProposalAction", id, changeIds));
+  return toActionResult(async () => {
+    const input = parseInput(ApplyProposalToolSchema, { proposalId: id, changeIds });
+    const user = await proposalUser();
+    // Loaded on demand: apply.ts calls the meeting actions of this module.
+    const { applyProposal } = await import("@/lib/calendario/apply");
+    return applyProposal(user, input.proposalId, input.changeIds);
+  });
 }
 
+/** Owner only: an open proposal becomes `cancelada`. */
 export async function cancelProposalAction(id: string): Promise<ActionResult<{ id: string }>> {
-  return toActionResult(async () => notImplementedAction("cancelProposalAction", id));
+  return toActionResult(async () => {
+    const proposalId = parseInput(UuidSchema, id);
+    const user = await proposalUser();
+    const { cancelProposal } = await import("@/lib/repositories/proposals-repository");
+    return cancelProposal(user, proposalId);
+  });
 }
 
+/** Undoes an applied proposal within 15 minutes. Owner only. */
 export async function undoProposalAction(undoToken: string): Promise<ActionResult<UndoProposalResult>> {
-  return toActionResult(async () => notImplementedAction("undoProposalAction", undoToken));
+  return toActionResult(async () => {
+    const input = parseInput(UndoProposalToolSchema, { undoToken });
+    const user = await proposalUser();
+    const { undoProposal } = await import("@/lib/calendario/apply");
+    return undoProposal(user, input.undoToken);
+  });
 }
 
 export async function sendAgendaAction(eventId: string, items: string[]): Promise<ActionResult<{ sent: number }>> {

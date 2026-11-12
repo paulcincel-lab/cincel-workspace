@@ -28,8 +28,22 @@ const mocks = vi.hoisted(() => ({
   patchPrimaryEvent: vi.fn(),
   deletePrimaryEvent: vi.fn(),
   recordComment: vi.fn(),
+  listEventItemsForTools: vi.fn(),
+  busyWindowsOf: vi.fn(),
+  freeBusy: vi.fn(),
+  createEvent: vi.fn(),
+  setGoogleSyncState: vi.fn(),
 }));
 
+vi.mock("@/lib/repositories/calendario-events-range", () => ({
+  listEventItemsForTools: mocks.listEventItemsForTools,
+  busyWindowsOf: mocks.busyWindowsOf,
+}));
+vi.mock("@/lib/google/calendar-events-sync", () => ({ freeBusy: mocks.freeBusy }));
+vi.mock("@/lib/repositories/calendar-events-repository", () => ({
+  createEvent: mocks.createEvent,
+  setGoogleSyncState: mocks.setGoogleSyncState,
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   fetchCalendarAction: mocks.fetchCalendarAction,
@@ -80,7 +94,6 @@ import {
   CALENDAR_WRITES_DISABLED_COPY,
   DEFAULT_SITE_VISIT_CHECKLIST,
   isAgendaLead,
-  toInstant,
   tools,
 } from "@/lib/assistant/tools/agenda";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
@@ -89,7 +102,9 @@ import { DEFAULT_TIME_TRACKING_SETTINGS } from "@/lib/time-tracking/settings";
 import type { AssistantContext } from "@/lib/types/redesign";
 
 const TOOL_NAMES = ["list_events", "find_free_slots", "create_event", "update_event", "cancel_event", "schedule_site_visit"];
-const WRITE_TOOLS = ["create_event", "update_event", "cancel_event", "schedule_site_visit"];
+const WRITE_TOOLS = ["schedule_site_visit"];
+/** Proposal tools: they write only a proposal row (BE §11.2). */
+const PROPOSING_TOOLS = ["create_event", "update_event", "cancel_event"];
 const READ_TOOLS = ["list_events", "find_free_slots"];
 
 const STAFF_A = "11111111-1111-4111-8111-111111111111";
@@ -220,6 +235,11 @@ beforeEach(() => {
   mocks.fetchTimeTrackingSettingsAction.mockResolvedValue({ ...DEFAULT_TIME_TRACKING_SETTINGS, enabled: true });
   mocks.approvedAbsences.mockResolvedValue([]);
   mocks.listOwnGoogleEvents.mockResolvedValue({ connected: false, events: [] });
+  mocks.listEventItemsForTools.mockResolvedValue([]);
+  mocks.busyWindowsOf.mockResolvedValue([]);
+  mocks.freeBusy.mockResolvedValue({ busy: {}, unknown: [] });
+  mocks.createEvent.mockResolvedValue({ eventId: "meet-1", id: "e:meet-1" });
+  mocks.setGoogleSyncState.mockResolvedValue(undefined);
   mocks.recordComment.mockResolvedValue({});
 });
 
@@ -251,12 +271,12 @@ describe("agenda tool registry", () => {
 });
 
 describe("approval rules", () => {
-  it("declares confirm and write on the four event writes only", () => {
+  it("declares confirm and write on schedule_site_visit only; the event tools only propose", () => {
     for (const name of WRITE_TOOLS) {
       expect(byName(name).definition.confirm).toBe(true);
       expect(byName(name).definition.write).toBe(true);
     }
-    for (const name of READ_TOOLS) {
+    for (const name of [...READ_TOOLS, ...PROPOSING_TOOLS]) {
       expect(byName(name).definition.confirm).toBe(false);
       expect(byName(name).definition.write).toBe(false);
     }
@@ -269,8 +289,8 @@ describe("approval rules", () => {
     }
   });
 
-  it("never asks for approval on the read tools", async () => {
-    for (const name of READ_TOOLS) {
+  it("never asks for approval on the read and proposing tools", async () => {
+    for (const name of [...READ_TOOLS, ...PROPOSING_TOOLS]) {
       expect(await needsApproval(name, SAMPLE_INPUT[name], CLEAN_TURN)).toBe(false);
       expect(await needsApproval(name, SAMPLE_INPUT[name], UNTRUSTED_TURN)).toBe(false);
     }
@@ -294,7 +314,8 @@ describe("availability and capability", () => {
     expect(byName("find_free_slots").definition.available(ctx)).toBe(false);
   });
 
-  it("never offers the four event writes without the calendar.events grant", () => {
+  it("offers the proposing event tools without the Google grant; schedule_site_visit still needs it", () => {
+    for (const name of PROPOSING_TOOLS) expect(byName(name).definition.available(ctx)).toBe(true);
     for (const name of WRITE_TOOLS) expect(byName(name).definition.available(ctx)).toBe(false);
     grant.calendarEvents = true;
     for (const name of WRITE_TOOLS) expect(byName(name).definition.available(ctx)).toBe(true);
@@ -311,7 +332,7 @@ describe("availability and capability", () => {
     expect(isAgendaLead(user("Colaborador"))).toBe(false);
   });
 
-  it("lets everyone create, update and cancel their own events once granted", () => {
+  it("lets everyone propose creating, updating and cancelling their own events", () => {
     for (const name of ["create_event", "update_event", "cancel_event"]) {
       expect(byName(name).definition.capability(user("Colaborador"))).toBe(true);
     }
@@ -323,28 +344,59 @@ function byByAccess(cap: (u: AuthenticatedUser) => boolean, access: SystemAccess
 }
 
 describe("list_events", () => {
-  it("lists task dates in range as all-day items, plus the caller's own Google events", async () => {
+  function meeting(overrides: Record<string, unknown> = {}) {
+    return {
+      kind: "event",
+      id: "e:evt-1",
+      eventId: "evt-1",
+      source: "cincel",
+      title: "Revisión de obra",
+      date: "2030-01-07",
+      start: "2030-01-07T10:00:00-06:00",
+      end: "2030-01-07T11:00:00-06:00",
+      allDay: false,
+      project: { id: PROJECT_ID, name: "Casa Roble" },
+      tramo: { id: WORKFLOW_ID, key: "construccion", name: "Construcción", colorSlot: 3 },
+      location: null,
+      meetUrl: "https://meet.example/abc",
+      attendees: [{ name: "Luis Gómez", staffId: STAFF_B, response: "acepta" }],
+      attendeeCount: 1,
+      organizer: { id: STAFF_A, name: "Ana Pérez" },
+      googleHtmlLink: null,
+      syncedAt: null,
+      syncError: null,
+      minutes: "ninguna",
+      canEdit: true,
+      ...overrides,
+    };
+  }
+
+  it("lists task dates in range as all-day items, plus the meetings of calendar_events", async () => {
     mocks.fetchCalendarAction.mockResolvedValue([task()]);
-    mocks.listOwnGoogleEvents.mockResolvedValue({
-      connected: true,
-      events: [
-        {
-          id: "g1",
-          summary: "Dentista",
-          start: { dateTime: "2030-01-07T17:00:00-06:00" },
-          end: { dateTime: "2030-01-07T18:00:00-06:00" },
-        },
-      ],
-    });
+    mocks.listEventItemsForTools.mockResolvedValue([
+      meeting({ id: "e:g1", eventId: "g1", source: "google", title: "Dentista", project: null, tramo: null, meetUrl: null, attendees: [], syncedAt: "2030-01-06T12:00:00.000Z" }),
+      meeting(),
+    ]);
     const result = await run("list_events", SAMPLE_INPUT.list_events);
     expect(result.ok).toBe(true);
-    const items = result.items as { id: string; title: string; allDay: boolean; start: string }[];
-    expect(items.map((i) => i.title)).toEqual(["Dentista", "Compromiso: Colado de losa"]);
+    const items = result.items as { id: string; title: string; allDay: boolean; start: string; href?: string; meetUrl?: string }[];
+    expect(items.map((i) => i.title)).toEqual(["Dentista", "Revisión de obra", "Compromiso: Colado de losa"]);
     expect(items.find((i) => i.title === "Compromiso: Colado de losa")).toMatchObject({ allDay: true, start: "2030-01-08" });
-    expect(items.find((i) => i.id === "g-g1")).toMatchObject({ allDay: false });
+    expect(items.find((i) => i.id === "e-evt-1")).toMatchObject({
+      allDay: false,
+      meetUrl: "https://meet.example/abc",
+      href: "/calendario?vista=dia&fecha=2030-01-07&evento=e:evt-1",
+    });
     // The delivery date is outside the range.
     expect(items.some((i) => i.title.startsWith("Entrega"))).toBe(false);
-    expect(result.google).toMatchObject({ connected: true, included: true });
+    expect(result.google).toEqual({ included: true, syncedAt: "2030-01-06T12:00:00.000Z" });
+    // Never live Google.
+    expect(mocks.listOwnGoogleEvents).not.toHaveBeenCalled();
+    expect(mocks.listEventItemsForTools).toHaveBeenCalledWith(
+      expect.anything(),
+      { from: "2030-01-07", to: "2030-01-11" },
+      { canViewTeam: true, project: null, staffIds: [] },
+    );
   });
 
   it("drops admin tasks without canSeeAdminData", async () => {
@@ -355,20 +407,29 @@ describe("list_events", () => {
     expect((asAdmin.items as { title: string }[]).some((i) => i.title.includes("nómina"))).toBe(true);
   });
 
-  it("filters by people and project and never reads Google for someone else", async () => {
+  it("filters by people and project and asks the meetings source for the same scope", async () => {
     mocks.fetchCalendarAction.mockResolvedValue([task()]);
     await run("list_events", { ...(SAMPLE_INPUT.list_events as object), people: ["Luis"] });
     expect(mocks.fetchCalendarAction).toHaveBeenCalledWith("2030-01-07", "2030-01-11", {
       archived: false,
       involvesStaffId: STAFF_B,
     });
-    expect(mocks.listOwnGoogleEvents).not.toHaveBeenCalled();
+    expect(mocks.listEventItemsForTools).toHaveBeenLastCalledWith(
+      expect.anything(),
+      { from: "2030-01-07", to: "2030-01-11" },
+      { canViewTeam: true, project: null, staffIds: [STAFF_B] },
+    );
 
     await run("list_events", { ...(SAMPLE_INPUT.list_events as object), project: "Roble" });
     expect(mocks.fetchCalendarAction).toHaveBeenLastCalledWith("2030-01-07", "2030-01-11", {
       archived: false,
       projectId: PROJECT_ID,
     });
+    expect(mocks.listEventItemsForTools).toHaveBeenLastCalledWith(
+      expect.anything(),
+      { from: "2030-01-07", to: "2030-01-11" },
+      { canViewTeam: true, project: PROJECT_ID, staffIds: [] },
+    );
     expect(mocks.listOwnGoogleEvents).not.toHaveBeenCalled();
   });
 
@@ -380,14 +441,18 @@ describe("list_events", () => {
 });
 
 describe("find_free_slots", () => {
-  it("intersects the jornada with approved absences and the caller's busy time", async () => {
+  it("intersects the jornada with approved absences and the busy time from calendar_events", async () => {
     mocks.approvedAbsences.mockResolvedValue([{ staffId: STAFF_B, from: "2030-01-08", to: "2030-01-08", kind: "vacaciones" }]);
-    mocks.listOwnGoogleEvents.mockResolvedValue({
-      connected: true,
-      events: [{ id: "busy", start: { dateTime: "2030-01-07T10:00:00-06:00" }, end: { dateTime: "2030-01-07T12:00:00-06:00" } }],
-    });
+    mocks.busyWindowsOf.mockResolvedValue([{ start: "2030-01-07T16:00:00.000Z", end: "2030-01-07T18:00:00.000Z" }]);
     const result = await run("find_free_slots", SAMPLE_INPUT.find_free_slots);
     expect(result.ok).toBe(true);
+    expect(mocks.listOwnGoogleEvents).not.toHaveBeenCalled();
+    expect(mocks.busyWindowsOf).toHaveBeenCalledWith(
+      STAFF_A,
+      [STAFF_A, STAFF_B],
+      expect.objectContaining({ timeMin: expect.any(String), timeMax: expect.any(String) }),
+      { includeOwnGoogle: true },
+    );
     expect(mocks.approvedAbsences).toHaveBeenCalledWith(
       { marker: "db" },
       { from: "2030-01-07", to: "2030-01-08", staffIds: [STAFF_A, STAFF_B] },
@@ -399,6 +464,33 @@ describe("find_free_slots", () => {
     // Only dates, never the absence kind.
     expect(result.absentDays).toEqual([{ date: "2030-01-08", people: ["Luis Gómez"] }]);
     expect((result.absentDays as object[])[0]).not.toHaveProperty("kind");
+    expect(result.notes).toEqual([]);
+  });
+
+  it("adds the free/busy of other people when the caller has the grant", async () => {
+    mocks.approvedAbsences.mockResolvedValue([{ staffId: STAFF_B, from: "2030-01-08", to: "2030-01-08", kind: "vacaciones" }]);
+    mocks.freeBusy.mockResolvedValue({
+      busy: { "luis@cincel.mx": [{ start: "2030-01-07T16:00:00.000Z", end: "2030-01-07T18:00:00.000Z" }] },
+      unknown: [],
+    });
+    const result = await run("find_free_slots", SAMPLE_INPUT.find_free_slots);
+    expect(mocks.freeBusy).toHaveBeenCalledWith(STAFF_A, ["luis@cincel.mx"], expect.any(String), expect.any(String));
+    expect(result.slots).toEqual([
+      expect.objectContaining({ date: "2030-01-07", from: "09:00", to: "10:00" }),
+      expect.objectContaining({ date: "2030-01-07", from: "12:00", to: "18:00" }),
+    ]);
+    expect(result.notes).toEqual([]);
+  });
+
+  it("falls back to Cincel data and says how many agendas it could not see", async () => {
+    mocks.freeBusy.mockRejectedValue(new Error("SCOPE_MISSING: calendar.events"));
+    const result = await run("find_free_slots", SAMPLE_INPUT.find_free_slots);
+    expect(result.ok).toBe(true);
+    expect(result.notes).toEqual(["No pude ver la agenda de 1 persona(s)."]);
+
+    mocks.freeBusy.mockResolvedValue({ busy: {}, unknown: ["luis@cincel.mx"] });
+    const unknown = await run("find_free_slots", SAMPLE_INPUT.find_free_slots);
+    expect(unknown.notes).toEqual(["No pude ver la agenda de 1 persona(s)."]);
   });
 });
 
@@ -418,57 +510,6 @@ describe("event writes", () => {
   describe("with the calendar.events grant", () => {
     beforeEach(() => {
       grant.calendarEvents = true;
-    });
-
-    it("create_event invites by email and logs the linked project vía asistente", async () => {
-      mocks.insertPrimaryEvent.mockResolvedValue({ id: "new1", summary: "Junta de obra", htmlLink: "https://calendar/new1" });
-      const result = await run("create_event", SAMPLE_INPUT.create_event);
-      expect(result.ok).toBe(true);
-      expect(mocks.insertPrimaryEvent).toHaveBeenCalledWith(
-        STAFF_A,
-        expect.objectContaining({
-          summary: "Junta de obra",
-          start: { dateTime: toInstant("2030-01-07T10:00").toISOString(), timeZone: "America/Mexico_City" },
-          attendees: [{ email: "luis@cincel.mx" }],
-        }),
-      );
-      expect(mocks.recordComment).toHaveBeenCalledWith({
-        entity: "project",
-        entityId: PROJECT_ID,
-        actorId: STAFF_A,
-        comment: `${summarizeToolCall("create_event", SAMPLE_INPUT.create_event)} (vía asistente)`,
-      });
-    });
-
-    it("create_event without a project writes nothing to history_events", async () => {
-      mocks.insertPrimaryEvent.mockResolvedValue({ id: "new2" });
-      const { project: _project, ...input } = SAMPLE_INPUT.create_event as Record<string, unknown>;
-      void _project;
-      await run("create_event", input);
-      expect(mocks.recordComment).not.toHaveBeenCalled();
-    });
-
-    it("create_event refuses a team member without email", async () => {
-      const result = await run("create_event", { ...(SAMPLE_INPUT.create_event as object), attendees: ["Marta"] });
-      expect(result.ok).toBe(false);
-      expect(mocks.insertPrimaryEvent).not.toHaveBeenCalled();
-    });
-
-    it("update_event and cancel_event only touch events the caller organizes", async () => {
-      mocks.getPrimaryEvent.mockResolvedValue({ id: "evt1", organizer: { email: "otro@cincel.mx", self: false } });
-      expect((await run("update_event", SAMPLE_INPUT.update_event)).ok).toBe(false);
-      expect((await run("cancel_event", SAMPLE_INPUT.cancel_event)).ok).toBe(false);
-      expect(mocks.patchPrimaryEvent).not.toHaveBeenCalled();
-      expect(mocks.deletePrimaryEvent).not.toHaveBeenCalled();
-    });
-
-    it("cancel_event deletes with notice and writes nothing to history_events", async () => {
-      mocks.getPrimaryEvent.mockResolvedValue({ id: "evt1", summary: "Junta", organizer: { self: true } });
-      const result = await run("cancel_event", { eventId: "g-evt1", message: "Se pospone" });
-      expect(result).toMatchObject({ ok: true, cancelled: true });
-      expect(mocks.patchPrimaryEvent).toHaveBeenCalledWith(STAFF_A, "evt1", { description: "Se pospone" }, "none");
-      expect(mocks.deletePrimaryEvent).toHaveBeenCalledWith(STAFF_A, "evt1");
-      expect(mocks.recordComment).not.toHaveBeenCalled();
     });
 
     it("schedule_site_visit creates the event, the task with its checklist as subtasks and logs both vía asistente", async () => {
@@ -492,6 +533,24 @@ describe("event writes", () => {
       const comment = `${summarizeToolCall("schedule_site_visit", SAMPLE_INPUT.schedule_site_visit)} (vía asistente)`;
       expect(mocks.recordComment).toHaveBeenCalledWith({ entity: "task", entityId: TASK_ID, actorId: STAFF_A, comment });
       expect(mocks.recordComment).toHaveBeenCalledWith({ entity: "project", entityId: PROJECT_ID, actorId: STAFF_A, comment });
+      // The Cincel meeting that shows on the Calendario, tied to the Google event and the task.
+      expect(mocks.createEvent).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          title: "Visita de obra: Casa Roble",
+          projectId: PROJECT_ID,
+          meet: false,
+          description: expect.stringContaining(TASK_ID),
+        }),
+        { invitesVia: "google" },
+      );
+      expect(mocks.setGoogleSyncState).toHaveBeenCalledWith("meet-1", {
+        googleEventId: "visit1",
+        htmlLink: "https://calendar/visit1",
+        error: null,
+      });
+      expect(result.meeting).toEqual({ eventId: "meet-1", href: "/calendario?vista=dia&fecha=2030-01-09&evento=e:meet-1" });
+      expect(result.href).toBe("/calendario?vista=dia&fecha=2030-01-09&evento=e:meet-1");
     });
 
     it("schedule_site_visit copies the subtasks of a template task", async () => {

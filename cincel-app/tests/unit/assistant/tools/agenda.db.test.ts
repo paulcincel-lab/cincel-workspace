@@ -63,7 +63,6 @@ describe.skipIf(!url)("agenda tools audit (test DB)", async () => {
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
   const { tools } = await import("@/lib/assistant/tools/agenda");
-  const { summarizeToolCall } = await import("@/lib/assistant/tool-summaries");
 
   let actorId = "";
   let guestId = "";
@@ -128,36 +127,28 @@ describe.skipIf(!url)("agenda tools audit (test DB)", async () => {
     await db.delete(schema.staff).where(inArray(schema.staff.id, [actorId, guestId]));
   });
 
-  it("create_event linked to a project writes one comentario vía asistente by the caller", async () => {
-    fakes.insertPrimaryEvent.mockResolvedValue({ id: `evt-${run}`, summary: "Junta" });
-    const input = {
+  it("create_event only writes a proposal: nothing in history_events, nothing sent to Google", async () => {
+    const result = (await exec("create_event", {
       title: "Junta de obra",
       start: "2030-01-07T10:00",
       end: "2030-01-07T11:00",
       attendees: [`Agenda ${run} invitado`],
       project: `Agenda ${run} Casa`,
-    };
-    const result = await exec("create_event", input);
+    })) as { ok: boolean; kind?: string; changes?: { type: string }[] };
     expect(result.ok).toBe(true);
+    expect(result.kind).toBe("crear_reunion");
+    expect(result.changes?.map((c) => c.type)).toEqual(["event_create"]);
 
-    const rows = await historyOf([projectId]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      entity: "project",
-      entityId: projectId,
-      kind: "comentario",
-      actorId,
-      comment: `${summarizeToolCall("create_event", input)} (vía asistente)`,
-    });
+    expect(await historyOf([projectId])).toHaveLength(0);
+    expect(fakes.insertPrimaryEvent).not.toHaveBeenCalled();
   });
 
-  it("cancel_event (the caller's own Google event) writes nothing to history_events", async () => {
+  it("cancel_event on a meeting that is not there proposes nothing and writes nothing to history_events", async () => {
     const before = await db.select().from(schema.historyEvents).where(eq(schema.historyEvents.actorId, actorId));
-    fakes.getPrimaryEvent.mockResolvedValue({ id: `evt-${run}`, summary: "Junta", organizer: { self: true } });
-    fakes.deletePrimaryEvent.mockResolvedValue(undefined);
-    const result = await exec("cancel_event", { eventId: `evt-${run}` });
-    expect(result.ok).toBe(true);
+    const result = await exec("cancel_event", { eventId: randomUUID() });
+    expect(result.ok).toBe(false);
     const after = await db.select().from(schema.historyEvents).where(eq(schema.historyEvents.actorId, actorId));
     expect(after).toHaveLength(before.length);
+    expect(fakes.deletePrimaryEvent).not.toHaveBeenCalled();
   });
 });

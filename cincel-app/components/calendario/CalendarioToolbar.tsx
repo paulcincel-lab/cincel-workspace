@@ -19,10 +19,13 @@ export type CalendarioToolbarProps = {
   onNext(): void;
   onToday(): void;
   todayDisabled?: boolean;
+  /** "Actualizar" (Google refresh with `force`); shown only when connected. */
+  onRefresh?(): void;
+  refreshing?: boolean;
 };
 
 /** Vista selector, Anterior / Hoy / Siguiente and the range label (FE §3). Behaviour belongs to Phase 1. */
-export function CalendarioToolbar({ vista, rangeLabel, onVista, onPrevious, onNext, onToday, todayDisabled }: CalendarioToolbarProps) {
+export function CalendarioToolbar({ vista, rangeLabel, onVista, onPrevious, onNext, onToday, todayDisabled, onRefresh, refreshing }: CalendarioToolbarProps) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2" data-slot="calendario-toolbar">
       <div role="group" aria-label="Vista" className="flex gap-1">
@@ -42,6 +45,11 @@ export function CalendarioToolbar({ vista, rangeLabel, onVista, onPrevious, onNe
         <ChevronRight aria-hidden />
       </Button>
       <span className="text-sm text-muted-foreground">{rangeLabel}</span>
+      {onRefresh ? (
+        <Button variant="ghost" size="sm" className="ml-auto" onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? "Actualizando…" : "Actualizar"}
+        </Button>
+      ) : null}
     </div>
   );
 }

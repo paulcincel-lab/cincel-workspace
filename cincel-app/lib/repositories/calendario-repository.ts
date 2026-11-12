@@ -7,7 +7,16 @@ import "server-only";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { emptyCalendarioRange, EMPTY_CALENDARIO_LIST } from "@/lib/calendario/empty";
+import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { stubDefault } from "@/lib/stubs";
+import {
+  eventDayAggregates,
+  eventItemsInRange,
+  eventKpis,
+  mergeEventDays,
+  mergeEventItems,
+  mergeEventKpis,
+} from "@/lib/repositories/calendario-events-range";
 import type {
   CalDay,
   CalItem,
@@ -20,7 +29,13 @@ import type {
 
 /** One query: a row per day of the range (empty days return zeros). */
 export async function dayAggregates(user: AuthenticatedUser, input: CalendarioRangeInput, today: string): Promise<CalDay[]> {
-  return stubDefault(emptyCalendarioRange(input, today).days, user);
+  const days = stubDefault(emptyCalendarioRange(input, today).days, user);
+  const events = await eventDayAggregates(user, input, input.filters, eventScope(user));
+  return mergeEventDays(days, events, input.filters);
+}
+
+function eventScope(user: AuthenticatedUser) {
+  return { canViewTeam: resolveCalendarCapabilities(user).canViewTeamCalendar };
 }
 
 /** Task and event items of the range, at most `perDayLimit` per day. */
@@ -29,11 +44,14 @@ export async function rangeItems(
   input: CalendarioRangeInput,
   perDayLimit: number,
 ): Promise<{ items: CalItem[]; truncated: boolean }> {
-  return stubDefault({ items: [] as CalItem[], truncated: false }, user, input, perDayLimit);
+  const tasks = stubDefault({ items: [] as CalItem[], truncated: false }, user, input, perDayLimit);
+  const events = await eventItemsInRange(user, input, input.filters, eventScope(user), { perDayLimit });
+  return mergeEventItems(tasks, events, input.filters);
 }
 
 export async function rangeKpis(user: AuthenticatedUser, input: CalendarioRangeInput, today: string): Promise<CalKpis> {
-  return stubDefault(emptyCalendarioRange(input, today).kpis, user);
+  const kpis = stubDefault(emptyCalendarioRange(input, today).kpis, user);
+  return mergeEventKpis(kpis, await eventKpis(user, input, input.filters, eventScope(user)), input.filters);
 }
 
 /** Keyset page of items in `(date, kindOrder, start, title, id)` order. */

@@ -4,11 +4,17 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import {
   EMPTY_CALENDARIO_LIST,
   emptyCalendarioRange,
-  emptyDaySummary,
   emptyMinutes,
   emptyPlanWeek,
-  emptyWeekSummary,
 } from "@/lib/calendario/empty";
+import { buildDaySummary, buildWeekSummary } from "@/lib/calendario/risk";
+import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
+import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
+import { INICIO_TIME_ZONE } from "@/lib/inicio/header";
+import { loadSummaryData } from "@/lib/repositories/calendario-summary-repository";
+import { addDays, mondayOf } from "@/lib/time-tracking/local-time";
+import { getProposal } from "@/lib/repositories/proposals-repository";
 import { stubDefault } from "@/lib/stubs";
 import type {
   CalendarioListInput,
@@ -41,12 +47,55 @@ export async function loadCalendarioList(user: AuthenticatedUser, input: Calenda
   return stubDefault(EMPTY_CALENDARIO_LIST, user, input);
 }
 
-export async function loadDaySummary(user: AuthenticatedUser, input: { date: string }): Promise<DaySummary> {
-  return stubDefault(emptyDaySummary(input.date), user);
+function assertCanViewCalendar(user: AuthenticatedUser): void {
+  if (!resolveCalendarCapabilities(user).canViewCalendar) throw new Error("FORBIDDEN");
 }
 
-export async function loadWeekSummary(user: AuthenticatedUser, input: { from: string }): Promise<WeekSummary> {
-  return stubDefault(emptyWeekSummary(input.from), user);
+/** Hour of the day (0-23) in the organization time zone. */
+function orgHour(now: Date): number {
+  return Number.parseInt(cachedDateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: INICIO_TIME_ZONE }).format(now), 10) % 24;
+}
+
+/** Greeting, lead and the four tiles for one day (BE §10.1); the lead is a template, no model. */
+export async function loadDaySummary(user: AuthenticatedUser, input: { date: string }, now: Date = new Date()): Promise<DaySummary> {
+  assertCanViewCalendar(user);
+  const today = todayInAppTimeZone(now);
+  const data = await loadSummaryData(user, { from: input.date, to: input.date, today });
+  return buildDaySummary({
+    viewerId: user.member.id,
+    viewerName: user.member.name,
+    today,
+    from: input.date,
+    to: input.date,
+    hour: orgHour(now),
+    ...data,
+    overloaded: [],
+  });
+}
+
+export async function loadWeekSummary(user: AuthenticatedUser, input: { from: string }, now: Date = new Date()): Promise<WeekSummary> {
+  assertCanViewCalendar(user);
+  const today = todayInAppTimeZone(now);
+  const from = mondayOf(input.from);
+  const to = addDays(from, 6);
+  const [data, load] = await Promise.all([
+    loadSummaryData(user, { from, to, today }),
+    loadDayLoad(user, { from, to, staffIds: [user.member.id] }),
+  ]);
+  const overloaded = load
+    .filter((d) => d.staffId === user.member.id && d.label === "sobrecargado")
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((d) => ({ date: d.date, hours: d.hours, workday: d.workday }));
+  return buildWeekSummary({
+    viewerId: user.member.id,
+    viewerName: user.member.name,
+    today,
+    from,
+    to,
+    hour: orgHour(now),
+    ...data,
+    overloaded,
+  });
 }
 
 export async function loadDayLoad(user: AuthenticatedUser, input: { from: string; to: string; staffIds?: string[] }): Promise<DayLoad[]> {
@@ -70,5 +119,5 @@ export async function loadPlanWeek(user: AuthenticatedUser, input: { weekStart: 
 }
 
 export async function loadProposal(user: AuthenticatedUser, id: string): Promise<Proposal | null> {
-  return stubDefault(null, user, id);
+  return getProposal(user, id);
 }

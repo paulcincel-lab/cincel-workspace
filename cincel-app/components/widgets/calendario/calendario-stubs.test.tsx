@@ -1,7 +1,9 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { emptyCalendarioRange, emptyDaySummary, emptyPlanWeek, emptyWeekSummary } from "@/lib/calendario/empty";
+import { createTestQueryClient } from "@/lib/query/test-utils";
 import { parseCalendarioQuery } from "@/lib/calendario/url-state";
 import type { CalTaskItem, Proposal } from "@/lib/types/calendario";
 
@@ -91,10 +93,12 @@ describe("Calendario widget stubs", () => {
         <ProposalOverlay proposal={proposal} checked={[]} />
         <ProposalCard proposal={proposal} checked={[]} />
         <ProposalTable proposal={proposal} checked={[]} />
-        <BarraParaPedir
-          context={{ view: "semana", from: "2026-11-09", to: "2026-11-15", filters: { mostrar: "todo", quien: "yo", proyectos: [], ocultarCompletadas: false } }}
-          examples={["Pasa lo vencido al jueves"]}
-        />
+        <QueryClientProvider client={createTestQueryClient()}>
+          <BarraParaPedir
+            context={{ view: "semana", from: "2026-11-09", to: "2026-11-15", filters: { mostrar: "todo", quien: "yo", proyectos: [], ocultarCompletadas: false } }}
+            examples={["Pasa lo vencido al jueves"]}
+          />
+        </QueryClientProvider>
         <ResumenPanel summary={emptyDaySummary("2026-11-11")} />
         <ResumenPanel summary={emptyWeekSummary("2026-11-09")} />
         <DayLoadMeter hours={2} workday={6} label="bien" />

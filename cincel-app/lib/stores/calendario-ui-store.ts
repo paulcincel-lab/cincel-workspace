@@ -34,6 +34,9 @@ export type CalendarioUiState = {
   clearPlanDrops(): void;
   dragging: CalendarioDragState | null;
   setDragging(d: CalendarioDragState | null): void;
+  /** "Ahora no" on the connect banner; lasts the session (FE §6.3). */
+  googleBannerDismissed: boolean;
+  dismissGoogleBanner(): void;
   reset(): void;
 };
 
@@ -47,6 +50,7 @@ type CalendarioUiData = Pick<
   | "barDraft"
   | "planDrops"
   | "dragging"
+  | "googleBannerDismissed"
 >;
 
 export const CALENDARIO_UI_INITIAL: CalendarioUiData = {
@@ -58,6 +62,7 @@ export const CALENDARIO_UI_INITIAL: CalendarioUiData = {
   barDraft: "",
   planDrops: [],
   dragging: null,
+  googleBannerDismissed: false,
 };
 
 export const useCalendarioUi: UseBoundStore<StoreApi<CalendarioUiState>> = create<CalendarioUiState>((set) => ({
@@ -84,6 +89,7 @@ export const useCalendarioUi: UseBoundStore<StoreApi<CalendarioUiState>> = creat
   addPlanDrop: (id) => set((s) => (s.planDrops.includes(id) ? s : { planDrops: [...s.planDrops, id] })),
   clearPlanDrops: () => set({ planDrops: [] }),
   setDragging: (dragging) => set({ dragging }),
+  dismissGoogleBanner: () => set({ googleBannerDismissed: true }),
   reset: () => set(CALENDARIO_UI_INITIAL),
 }));
 

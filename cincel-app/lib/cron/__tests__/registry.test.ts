@@ -26,9 +26,9 @@ const ctx = (): CronJobContext => ({
 });
 
 describe("cron registry", () => {
-  it("registers exactly the five canonical job names", () => {
+  it("registers exactly the canonical job names", () => {
     const names = registeredJobs().map((job) => job.name);
-    expect(names).toHaveLength(5);
+    expect(names).toHaveLength(CRON_JOB_NAMES.length);
     expect([...names].sort()).toEqual([...CRON_JOB_NAMES].sort());
     expect(new Set(names).size).toBe(names.length);
   });
