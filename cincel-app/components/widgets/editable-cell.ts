@@ -28,7 +28,17 @@ export type CellEdit<Row> =
   | (Base<Row> & { kind: "select"; options(row: Row): CellOption[]; searchable?: boolean; clearable?: boolean })
   | (Base<Row> & { kind: "person"; options(row: Row): CellOption[]; clearable?: boolean })
   | (Base<Row> & { kind: "date"; quickPicks?: boolean; clearable?: boolean })
-  | (Base<Row> & { kind: "text"; required?: boolean });
+  | (Base<Row> & { kind: "text"; required?: boolean })
+  /** A decimal number (its value is the text of the number, e.g. "2.5"); out of `min`–`max` shows `rangeError`. */
+  | (Base<Row> & {
+      kind: "number";
+      min: number;
+      max: number;
+      step?: number;
+      clearable?: boolean;
+      placeholder?: string;
+      rangeError: string;
+    });
 
 export type CellEditKind = CellEdit<unknown>["kind"];
 

@@ -1,6 +1,6 @@
 /**
  * Smart quick-add parser (pure, client-safe): `@persona`, `#tramo`, dates,
- * `!prioridad` and `/` commands, written on the last line of a list, column
+ * `!prioridad`, `~2h` / `~30m` (horas estimadas) and `/` commands, written on the last line of a list, column
  * or card (`QuickAddRow`).
  *
  * Matching runs on a normalized form (NFD, no diacritics, es-MX lower case);
@@ -20,7 +20,7 @@ export type QuickAddParseContext = {
   meId: string | null;
 };
 export type QuickAddToken = {
-  kind: "person" | "tramo" | "date" | "priority";
+  kind: "person" | "tramo" | "date" | "priority" | "hours";
   start: number;
   end: number;
   raw: string;
@@ -35,6 +35,8 @@ export type ParsedQuickAdd = {
   tramoId?: string;
   dueDate?: string;
   priority?: TaskPriority;
+  /** Planned hours from a `~2h` / `~30m` token (0 < x <= 80). */
+  estimatedHours?: number;
   tokens: QuickAddToken[];
   slash: string | null;
 };
@@ -226,6 +228,16 @@ const PRIORITIES: readonly { value: TaskPriority; label: string }[] = [
   { value: "baja", label: "Baja" },
 ];
 
+/** Planned hours of a `~2h`, `~1.5h` or `~30m` word (normalized); undefined when it is not one or is out of 0–80. */
+function hoursOf(word: string): number | undefined {
+  const m = /^~(\d+(?:[.,]\d+)?)(h|hr|hrs|m|min)$/.exec(word);
+  if (!m) return undefined;
+  const amount = Number(m[1].replace(",", "."));
+  const hours = m[2].startsWith("h") ? amount : amount / 60;
+  const rounded = Math.round(hours * 100) / 100;
+  return rounded > 0 && rounded <= 80 ? rounded : undefined;
+}
+
 // ── Parser ──────────────────────────────────────────────────────────────────
 
 /**
@@ -300,6 +312,17 @@ export function parseQuickAdd(text: string, ctx: QuickAddParseContext): ParsedQu
       continue;
     }
 
+    if (sigil === "~") {
+      const hours = hoursOf(t.norm);
+      if (hours !== undefined) {
+        push(i, { kind: "hours", status: "resolved", value: String(hours), label: formatQuickAddHours(hours) });
+        out.estimatedHours = hours;
+      } else {
+        push(i, { kind: "hours", status: "unknown" });
+      }
+      continue;
+    }
+
     if (dateTaken) continue;
     const date = matchDate(raw, i, ctx.today);
     if (!date) continue;
@@ -331,4 +354,9 @@ export function formatQuickAddDate(iso: string, options: { weekday?: boolean } =
   const { m, d } = parseIso(iso);
   const base = `${d} ${MONTH_SHORT[m - 1]}`;
   return options.weekday ? `${WEEKDAY_SHORT[weekdayOf(iso)]} ${base}` : base;
+}
+
+/** "2 h", "1.5 h": the planned hours of a draft. */
+export function formatQuickAddHours(hours: number): string {
+  return `${new Intl.NumberFormat("es-MX", { maximumFractionDigits: 2 }).format(hours)} h`;
 }

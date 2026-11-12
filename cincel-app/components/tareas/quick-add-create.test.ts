@@ -11,7 +11,9 @@ const actions = vi.hoisted(() => ({
   setTaskCustomStatusAction: vi.fn(),
   deleteTaskAction: vi.fn(),
   fetchWorkflowsAction: vi.fn(),
+  setTaskEstimatedHoursAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/calendario-actions", () => ({ setTaskEstimatedHoursAction: actions.setTaskEstimatedHoursAction }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   createUserTaskAction: actions.createUserTaskAction,
   createSubtaskAction: actions.createSubtaskAction,
@@ -109,6 +111,26 @@ describe("useQuickAddCreate", () => {
     expect(actions.createUserTaskAction).toHaveBeenCalledWith(expect.objectContaining({ phaseId: "f-ante", managerId: "p-ana" }));
     expect(toasts.success).not.toHaveBeenCalled();
     expect(invalidatedKeys(invalidate)).toEqual(newTaskInvalidations("p-roble"));
+  });
+
+  it("a ~2h draft saves the estimated hours after the create and refreshes the calendar", async () => {
+    actions.createUserTaskAction.mockResolvedValue({ id: "t-1", title: "Revisar plafones", status: "pendiente", customStatus: null });
+    actions.setTaskEstimatedHoursAction.mockResolvedValue({ ok: true, data: {} });
+    const { result, invalidate } = setup();
+    await act(async () => {
+      await result.current.create({ ...DRAFT, estimatedHours: 2 });
+    });
+    expect(actions.setTaskEstimatedHoursAction).toHaveBeenCalledWith("t-1", 2);
+    expect(invalidatedKeys(invalidate)).toEqual([...newTaskInvalidations("p-roble"), qk.calendario.all]);
+  });
+
+  it("a draft without hours never calls the hours action", async () => {
+    actions.createUserTaskAction.mockResolvedValue({ id: "t-1", title: "Revisar plafones", status: "pendiente", customStatus: null });
+    const { result } = setup();
+    await act(async () => {
+      await result.current.create(DRAFT);
+    });
+    expect(actions.setTaskEstimatedHoursAction).not.toHaveBeenCalled();
   });
 
   it("undo deletes the task with the same invalidations", async () => {

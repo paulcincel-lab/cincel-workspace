@@ -82,6 +82,8 @@ function taskChangeText(row: ActivityEventRow, customStatusNames: ReadonlyMap<st
     case "reviewDate":
     case "deliveryDate":
       return `Cambió las fechas de ${t}`;
+    case "estimatedHours":
+      return `Cambió las horas estimadas de ${t}`;
     case "archived":
       return row.afterValue === "true" ? `Archivó ${t}` : `Desarchivó ${t}`;
     default:

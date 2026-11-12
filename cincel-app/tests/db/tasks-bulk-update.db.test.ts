@@ -203,4 +203,24 @@ describe.skipIf(!url)("bulkUpdateTasksAction (test DB)", async () => {
       .where(inArray(schema.taskSupport.taskId, [t.a, t.b]));
     expect(support.map((s) => s.staffId)).toEqual([otherId, otherId]);
   });
+
+  it("estimatedHours sets and clears the value, writes history and rejects values outside 0–80", async () => {
+    const set = await asViewer(admin(), () => bulkUpdateTasksAction([t.a, t.b], { estimatedHours: 2.5 }));
+    expect(set).toEqual({ ok: true, data: { updated: [t.a, t.b], skipped: [] } });
+    expect((await read(t.a)).estimatedHours).toBe(2.5);
+    const events = await db
+      .select()
+      .from(schema.historyEvents)
+      .where(inArray(schema.historyEvents.entityId, [t.a]));
+    expect(events.some((e) => e.field === "estimatedHours" && e.afterValue === "2.5")).toBe(true);
+
+    for (const bad of [0, -1, 81]) {
+      const result = await asViewer(admin(), () => bulkUpdateTasksAction([t.a], { estimatedHours: bad }));
+      expect(result.ok).toBe(false);
+    }
+    expect((await read(t.a)).estimatedHours).toBe(2.5);
+
+    await asViewer(admin(), () => bulkUpdateTasksAction([t.a, t.b], { estimatedHours: null }));
+    expect((await read(t.a)).estimatedHours).toBeNull();
+  });
 });

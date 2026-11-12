@@ -15,6 +15,7 @@ import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { actionErrorText } from "@/lib/errors";
 import { catalogTaskStatusesOptions } from "@/lib/query/options/catalog";
 import { taskPhasesOptions } from "@/lib/query/options/tareas";
+import { qk } from "@/lib/query/keys";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import type { StaffRef, TaskBulkPatch, TaskStatusOption, WorkflowPhaseRef } from "@/lib/types/core";
 
@@ -29,9 +30,12 @@ import {
   type TaskBulkField,
   type TaskBulkTask,
 } from "./task-bulk";
+import { HOURS_FALLBACK, HOURS_MAX, HOURS_MIN, HOURS_STEP, formatHours } from "./task-hours";
 import { taskCellOptions, type TaskCellCatalogs } from "./task-cell-edits";
 import {
   BULK_DUE_LABEL,
+  BULK_HOURS_LABEL,
+  HOURS_RANGE_ERROR,
   BULK_PHASE_LABEL,
   BULK_RESPONSIBLE_LABEL,
   BULK_STATUS_LABEL,
@@ -42,7 +46,7 @@ import type { DeleteTaskTarget, DeleteTasks } from "./use-delete-tasks";
 
 /**
  * The bulk bar of a task table (#1040): `BulkActionBar` with a picker per
- * field (Estatus, Responsable, Apoyo, Fase, Vence; the same `CellEditor` the
+ * field (Estatus, Responsable, Apoyo, Fase, Vence, Horas estimadas; the same `CellEditor` the
  * cells open) and Eliminar. A pick runs one `bulkUpdateTasksAction` for the
  * selected tasks; the toast says how many changed and how many were skipped
  * for permission, with Deshacer (the previous values, one call per value).
@@ -69,6 +73,7 @@ const LABEL: Record<TaskBulkField, string> = {
   apoyo: BULK_SUPPORT_LABEL,
   fase: BULK_PHASE_LABEL,
   vence: BULK_DUE_LABEL,
+  horas: BULK_HOURS_LABEL,
 };
 
 const NO_STATUSES: TaskStatusOption[] = [];
@@ -109,6 +114,7 @@ export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hid
     apoyo: caps.canChangeResponsible,
     fase: caps.canCreateActivity,
     vence: caps.canCreateActivity,
+    horas: caps.canCreateActivity,
   };
   const fields = TASK_BULK_FIELDS.filter((field) => allowed[field] && !hide?.includes(field));
 
@@ -150,6 +156,8 @@ export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hid
       }
       const changed = before.filter((t) => result.data.updated.includes(t.id));
       refresh(changed);
+      // Planned hours move the calendar's day meters.
+      if (field === "horas") void qc.invalidateQueries({ queryKey: qk.calendario.all });
       if (lastToast.current !== null) toast.dismiss(lastToast.current);
       const undo = undoPatches(before, field, result.data.updated);
       lastToast.current = toast(bulkResultToast(result.data), {
@@ -162,6 +170,7 @@ export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hid
                   void (async () => {
                     const results = await Promise.all(undo.map((u) => runPatch(u.ids, u.patch)));
                     refresh(changed);
+                    if (field === "horas") void qc.invalidateQueries({ queryKey: qk.calendario.all });
                     const failed = results.find((r) => !r.ok);
                     if (failed && !failed.ok) toast.error(actionErrorText(failed.error));
                     else toast(UNDONE_TOAST);
@@ -172,7 +181,7 @@ export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hid
           : {}),
       });
     },
-    [tasks, runPatch, refresh],
+    [tasks, runPatch, refresh, qc],
   );
 
   // ── Pickers: one `CellEditor` at a time, anchored to its button on the bar.
@@ -214,6 +223,18 @@ export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hid
         };
       case "vence":
         return { kind: "date", quickPicks: true, clearable: true, value: (rows) => value(rows) as string | null, commit: noCommit };
+      case "horas":
+        return {
+          kind: "number",
+          min: HOURS_MIN,
+          max: HOURS_MAX,
+          step: HOURS_STEP,
+          clearable: true,
+          placeholder: formatHours(HOURS_FALLBACK),
+          rangeError: HOURS_RANGE_ERROR,
+          value: (rows) => value(rows) as string | null,
+          commit: noCommit,
+        };
     }
   };
 

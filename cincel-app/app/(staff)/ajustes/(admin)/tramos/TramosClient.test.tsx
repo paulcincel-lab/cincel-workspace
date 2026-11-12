@@ -41,7 +41,7 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/workflows-actions", () => actions);
 
-import { autoStartHelpText, sortTemplatesByPhase, tramoKeyFor, TramosClient } from "./TramosClient";
+import { autoStartHelpText, sortTemplatesByPhase, toDraft, toInput, tramoKeyFor, TramosClient } from "./TramosClient";
 
 function phase(overrides: Partial<WorkflowPhase>): WorkflowPhase {
   return { id: "p", name: "Fase", sortOrder: 0, workflowId: "w-diseno", active: true, templateCount: 0, ...overrides };
@@ -439,5 +439,19 @@ describe("TramosClient", () => {
     expect(tramoKeyFor("Decoración", new Set())).toBe("decoracion");
     expect(tramoKeyFor("  Diseño de interiores ", new Set(["diseno-de-interiores"]))).toBe("diseno-de-interiores-2");
     expect(tramoKeyFor("¡!", new Set())).toBe("tramo");
+  });
+});
+
+describe("template hours (Horas estimadas)", () => {
+  it("round-trips the template hours through the draft", () => {
+    const draft = toDraft(template({ defaultEstimatedHours: 2.5 }));
+    expect(draft.defaultEstimatedHours).toBe("2.5");
+    expect(toInput(draft).defaultEstimatedHours).toBe(2.5);
+  });
+
+  it("leaves an empty field as null (counts as 1 h)", () => {
+    const draft = toDraft(template({ defaultEstimatedHours: null }));
+    expect(draft.defaultEstimatedHours).toBe("");
+    expect(toInput(draft).defaultEstimatedHours).toBeNull();
   });
 });

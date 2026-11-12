@@ -131,6 +131,10 @@ exports[`qk > builds every key shape 1`] = `
     "week",
     "2026-11-09",
   ],
+  "calendario.workday": [
+    "calendario",
+    "workday",
+  ],
   "catalog.assignableStaff": [
     "catalog",
     "assignable-staff",
@@ -759,6 +763,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "calendario.planWeek",
   "calendario.proposals",
   "calendario.proposal",
+  "calendario.workday",
   "portal.projects",
   "portal.project",
   "portal.files",

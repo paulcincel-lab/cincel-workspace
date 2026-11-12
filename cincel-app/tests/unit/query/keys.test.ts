@@ -121,6 +121,7 @@ function shapes() {
     "calendario.planWeek": qk.calendario.planWeek({ weekStart: "2026-11-16", staffIds: ["s1"] }),
     "calendario.proposals": qk.calendario.proposals(),
     "calendario.proposal": qk.calendario.proposal("p1"),
+    "calendario.workday": qk.calendario.workday(),
     "portal.projects": qk.portal.projects(),
     "portal.project": qk.portal.project("p1", "resumen"),
     "portal.files": qk.portal.files("p1", null),

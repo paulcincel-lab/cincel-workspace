@@ -13,6 +13,7 @@ import * as taskDependenciesRepository from "@/lib/repositories/task-dependencie
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import { scheduleTaskClosingHook } from "@/lib/tasks/closing-hook";
 import { notifyTaskAssigned, notifyTaskCommented, notifyTraceId } from "@/lib/tasks/task-notifications";
+import { EstimatedHoursSchema } from "@/lib/validation/calendario";
 import { AdminTaskFiltersSchema, AdminTaskInputSchema, parseInput } from "@/lib/validation/project-flow";
 import type {
   AdminTaskInput,
@@ -280,6 +281,8 @@ async function bulkUpdateTasksActionImpl(ids: string[], patch: TaskBulkPatch): P
   const user = await requireCapabilityUser();
   const viewer = viewerScopeOf(user);
   const caps = resolveActivitiesCapabilities(user);
+  // A value outside 0–80 fails the whole call, not task by task.
+  if ("estimatedHours" in patch) parseInput(EstimatedHoursSchema, patch.estimatedHours);
   const result: TaskBulkResult = { updated: [], skipped: [] };
   const closing: TaskDetail[] = [];
   const assigned: TaskDetail[] = [];

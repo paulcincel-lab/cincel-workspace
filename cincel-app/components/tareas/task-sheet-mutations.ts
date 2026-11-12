@@ -2,6 +2,7 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 
+import { setTaskEstimatedHoursAction } from "@/lib/actions/calendario-actions";
 import * as tasksActions from "@/lib/actions/tasks-actions";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
@@ -158,4 +159,17 @@ export function useAddTaskAttachmentMutation(task: TaskSheetTarget, options: Tas
       onFormError: options.onError,
     },
   );
+}
+
+/**
+ * `setTaskEstimatedHoursAction` (#1084): the detail from the result; every
+ * Tareas view, the project's Tareas tab and Inicio, and the calendar, whose
+ * day meters count the hours.
+ */
+export function useEstimatedHoursMutation(task: TaskSheetTarget, options: TaskSheetMutationOptions) {
+  return useActionMutation<number | null, TaskDetail>((hours) => setTaskEstimatedHoursAction(task.id, hours), {
+    setData: (qc, result) => setDetail(qc, result),
+    invalidate: () => [...taskUpdateInvalidations(task.projectId), qk.calendario.all],
+    onFormError: options.onError,
+  });
 }

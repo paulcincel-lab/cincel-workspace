@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { toActionResult } from "@/lib/actions/action-result";
 import { createRateLimiter } from "@/lib/auth/rate-limit";
-import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { resolveActivitiesCapabilities, resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { requireCapabilityUser } from "@/lib/auth/session";
 import { cancelMeeting, createMeeting, updateMeeting } from "@/lib/calendario/meetings";
 import { db } from "@/lib/db/client";
@@ -13,6 +13,11 @@ import { calendarEvents } from "@/lib/db/schema";
 import { actionCodeOf, refreshPrimaryEvents, writeMeetingToGoogle } from "@/lib/google/calendar-events-sync";
 import * as calendarEventsRepository from "@/lib/repositories/calendar-events-repository";
 import * as syncRepository from "@/lib/repositories/google-calendar-sync-repository";
+import { sendMinutes } from "@/lib/calendario/minutes-service";
+import * as meetingMinutesRepository from "@/lib/repositories/meeting-minutes-repository";
+import { sendAgenda } from "@/lib/calendario/agenda-mail";
+import { scopeTaskDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
+import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import { notImplementedAction } from "@/lib/stubs";
 import type {
   ApplyProposalResult,
@@ -27,7 +32,9 @@ import type { ActionResult } from "@/lib/types/schedule";
 import {
   ApplyProposalToolSchema,
   CancelMeetingOptsSchema,
+  EstimatedHoursSchema,
   MeetingDraftSchema,
+  MeetingNotesSchema,
   ProposeFromTextToolSchema,
   UndoProposalToolSchema,
   UpdateMeetingInputSchema,
@@ -130,7 +137,13 @@ export async function saveMeetingNotesAction(
   eventId: string,
   notes: string,
 ): Promise<ActionResult<{ minutesId: string; updatedAt: string }>> {
-  return toActionResult(async () => notImplementedAction("saveMeetingNotesAction", eventId, notes));
+  return toActionResult(async () => {
+    const id = parseInput(UuidSchema, eventId);
+    const text = parseInput(MeetingNotesSchema, notes);
+    const user = await requireCapabilityUser();
+    // Organizer and staff attendees only; the repository re-checks it against the event.
+    return meetingMinutesRepository.saveNotes(user, id, text);
+  });
 }
 
 /** The Barra para pedir; the same function as the `propose_from_text` tool. */
@@ -214,14 +227,33 @@ export async function undoProposalAction(undoToken: string): Promise<ActionResul
   });
 }
 
+/** Organizer and staff attendees only; re-checked inside `sendAgenda`. */
 export async function sendAgendaAction(eventId: string, items: string[]): Promise<ActionResult<{ sent: number }>> {
-  return toActionResult(async () => notImplementedAction("sendAgendaAction", eventId, items));
+  return toActionResult(async () => {
+    const user = await requireCapabilityUser();
+    if (!resolveCalendarCapabilities(user).canViewCalendar) throw new Error("FORBIDDEN");
+    return sendAgenda(user, eventId, items);
+  });
 }
 
 export async function sendMinutesAction(eventId: string): Promise<ActionResult<{ sent: number }>> {
-  return toActionResult(async () => notImplementedAction("sendMinutesAction", eventId));
+  return toActionResult(async () => {
+    const id = parseInput(UuidSchema, eventId);
+    const user = await requireCapabilityUser();
+    return sendMinutes(user, id);
+  });
 }
 
 export async function setTaskEstimatedHoursAction(taskId: string, hours: number | null): Promise<ActionResult<TaskDetail>> {
-  return toActionResult(async () => notImplementedAction("setTaskEstimatedHoursAction", taskId, hours));
+  return toActionResult(async () => {
+    const id = parseInput(UuidSchema, taskId);
+    const value = parseInput(EstimatedHoursSchema, hours);
+    // Same checks as editing the task's dates: it must be visible and the actor may edit tasks.
+    const user = await requireCapabilityUser();
+    const viewer = viewerScopeOf(user);
+    await tasksRepository.assertTaskVisible(id, viewer);
+    if (!resolveActivitiesCapabilities(user).canCreateActivity) throw new Error("FORBIDDEN: task edit");
+    const row = await tasksRepository.updateTask(id, { estimatedHours: value }, user.member.id);
+    return scopeTaskDto(row, viewer);
+  });
 }

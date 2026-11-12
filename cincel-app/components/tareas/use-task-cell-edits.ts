@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import type { CanEdit, CellEdit, PeopleCellEdit } from "@/components/widgets/editable-cell";
+import { setTaskEstimatedHoursAction } from "@/lib/actions/calendario-actions";
 import * as tasksActions from "@/lib/actions/tasks-actions";
 import { canSeeAdminData, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { qk, type TareasListFilters } from "@/lib/query/keys";
@@ -32,7 +33,8 @@ import type {
 } from "@/lib/types/core";
 import type { RecordColumn } from "@/lib/types/widgets";
 
-import { SUPPORT_IS_RESPONSIBLE } from "./task-table-copy";
+import { HOURS_RANGE_ERROR, SUPPORT_IS_RESPONSIBLE } from "./task-table-copy";
+import { HOURS_FALLBACK, HOURS_MAX, HOURS_MIN, HOURS_STEP, formatHours } from "./task-hours";
 import {
   TASK_SUPPORT_COLUMN,
   patchTaskListPages,
@@ -71,6 +73,7 @@ export const TASK_CELL_COLUMNS: Readonly<Record<string, TaskCellField>> = {
   compromiso: "compromiso",
   revision: "revision",
   espacio: "espacio",
+  horas: "horas",
 };
 
 /** How long after a tramo move the Fase editor opens (the row has moved to its new group by then). */
@@ -162,6 +165,8 @@ function runAction(taskId: string, action: Exclude<TaskCellAction, { kind: "none
       return tasksActions.setTaskCustomStatusAction(taskId, action.id);
     case "assign":
       return tasksActions.assignTaskAction(taskId, action.managerId);
+    case "hours":
+      return setTaskEstimatedHoursAction(taskId, action.hours);
   }
 }
 
@@ -172,7 +177,9 @@ function extraInvalidations(projectId: string, action: TaskCellAction): QueryKey
       ? taskAssignInvalidations()
       : action.kind === "update"
         ? taskUpdateInvalidations(projectId)
-        : taskStatusInvalidations(projectId);
+        : action.kind === "hours"
+          ? [...taskUpdateInvalidations(projectId), qk.calendario.all]
+          : taskStatusInvalidations(projectId);
   const own = new Set(TAREAS_CELL_KEYS.map((k) => JSON.stringify(k)));
   return keys.filter((k) => !own.has(JSON.stringify(k)));
 }
@@ -328,6 +335,19 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
         case "compromiso":
         case "revision":
           edit = { kind: "date", quickPicks: true, clearable: true, value, commit };
+          break;
+        case "horas":
+          edit = {
+            kind: "number",
+            min: HOURS_MIN,
+            max: HOURS_MAX,
+            step: HOURS_STEP,
+            clearable: true,
+            placeholder: formatHours(HOURS_FALLBACK),
+            rangeError: HOURS_RANGE_ERROR,
+            value,
+            commit,
+          };
           break;
         case "fase":
         case "espacio":

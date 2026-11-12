@@ -100,6 +100,7 @@ export function toTask(row: TaskRow): Task {
     commitmentDate: row.commitmentDate,
     reviewDate: row.reviewDate,
     deliveryDate: row.deliveryDate,
+    estimatedHours: row.estimatedHours ?? null,
     archived: row.archived,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -273,6 +274,7 @@ const TASK_TRACKED_FIELDS = [
   "commitmentDate",
   "reviewDate",
   "deliveryDate",
+  "estimatedHours",
   "archived",
 ] as const;
 

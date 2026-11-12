@@ -13,3 +13,4 @@ export { solicitudAprobacionEmail, type SolicitudAprobacionParams } from "./soli
 export { resumenDiarioEmail, type ResumenDiarioItem, type ResumenDiarioParams } from "./resumen-diario";
 export { vacacionesDecisionEmail, type VacacionesDecisionParams } from "./vacaciones-decision";
 export { vacacionesSolicitudEmail, type VacacionesSolicitudParams } from "./vacaciones-solicitud";
+export { minutaEmail, type MinutaParams } from "./minuta";
