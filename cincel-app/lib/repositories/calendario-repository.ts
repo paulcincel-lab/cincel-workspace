@@ -36,7 +36,6 @@ import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import { openTaskSql, taskDueSql, whereFilters } from "@/lib/repositories/tasks-repository";
 import { getTimeTrackingSettings, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/settings";
 import { approvedAbsences } from "@/lib/vacations/approved-absences";
-import { stubDefault } from "@/lib/stubs";
 import { addDays } from "@/lib/time-tracking/local-time";
 import {
   eventDayAggregates,

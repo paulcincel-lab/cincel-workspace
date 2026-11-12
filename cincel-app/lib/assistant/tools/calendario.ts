@@ -271,7 +271,7 @@ export const extract_minutes = defineTool({
   write: false,
   summarize: toolSummaries.extract_minutes,
   run: async (ctx, input) => {
-    const proposal = await extractMinutes(ctx.user, input, { threadId: ctx.threadId });
+    const proposal = await extractMinutes(ctx.user, input, { threadId: ctx.threadId ?? undefined });
     return {
       proposalId: proposal.id,
       kind: proposal.kind,

@@ -18,7 +18,6 @@ import * as meetingMinutesRepository from "@/lib/repositories/meeting-minutes-re
 import { sendAgenda } from "@/lib/calendario/agenda-mail";
 import { scopeTaskDto, viewerScopeOf } from "@/lib/auth/viewer-scope";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
-import { notImplementedAction } from "@/lib/stubs";
 import type {
   ApplyProposalResult,
   CalEventItem,

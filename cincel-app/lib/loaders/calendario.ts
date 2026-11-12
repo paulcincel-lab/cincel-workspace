@@ -1,17 +1,11 @@
 import "server-only";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
-import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { canSeeAdminData, resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import { PER_DAY_LIMIT } from "@/lib/calendario/items";
-import {
-  EMPTY_CALENDARIO_LIST,
-  emptyCalendarioRange,
-  emptyMinutes,
-  emptyPlanWeek,
-} from "@/lib/calendario/empty";
+import { emptyPlanWeek } from "@/lib/calendario/empty";
 import { buildDaySummary, buildWeekSummary } from "@/lib/calendario/risk";
 import { applyLoadToDays } from "@/lib/calendario/load";
-import { canSeeAdminData } from "@/lib/auth/permissions";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import * as calendarEventsRepository from "@/lib/repositories/calendar-events-repository";
 import * as calendarioRepository from "@/lib/repositories/calendario-repository";
