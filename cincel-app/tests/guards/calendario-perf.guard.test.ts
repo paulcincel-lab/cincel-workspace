@@ -23,7 +23,7 @@ function row(i: number): TaskItemRow {
     title: `Revisión de planos eléctricos de la cocina y baños, etapa ${i}`,
     commitmentDate: "2026-11-12",
     deliveryDate: null,
-    status: "en_progreso",
+    status: "en_proceso",
     priority: "media",
     customStatusName: null,
     customStatusCloses: null,

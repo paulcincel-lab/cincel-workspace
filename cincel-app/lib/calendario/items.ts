@@ -1,7 +1,7 @@
 /** Row → CalItem mapping (BE §5.2, §5.3). Pure and client-safe. Task mapping lives here; meetings map in `calendario-events-range.ts`. */
 import { BASE_STATUS_LABEL } from "@/lib/tasks/status-options";
 import { tramoColorSlot } from "@/lib/tramos/tramo-color";
-import type { CalEventItem, CalItem, CalPersonRef, CalTaskItem, CalTramoRef, CalendarioFilters } from "@/lib/types/calendario";
+import type { CalItem, CalPersonRef, CalTaskItem, CalTramoRef, CalendarioFilters } from "@/lib/types/calendario";
 import type { TaskPriority, TaskStatus } from "@/lib/types/core";
 
 /** Items per day the range loader returns, by vista (`mes` 3, `semana` 12, `dia` 200). */

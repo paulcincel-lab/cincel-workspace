@@ -35,7 +35,7 @@ const day = (date: string, hours: number, label: CalDay["loadLabel"]): CalDay =>
 
 const task: CalTaskItem = {
   kind: "task", id: "t:1", taskId: "1", title: "Ingenierías", date: "2026-11-09", dateField: "commitmentDate", project: null, tramo: null, phase: null,
-  status: "en_progreso", statusLabel: "En progreso", priority: "media", manager: null, support: [], overdue: false, completed: false, blocked: false,
+  status: "en_proceso", statusLabel: "En progreso", priority: "media", manager: null, support: [], overdue: false, completed: false, blocked: false,
   hours: 2, hoursSource: "task", parentTaskId: null, canEdit: true,
 } as CalTaskItem;
 
