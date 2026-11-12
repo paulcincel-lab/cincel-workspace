@@ -15,7 +15,7 @@ import { GoogleConnectBanner } from "./GoogleConnectBanner";
 import { NewMeetingHost } from "./NewMeetingDialog";
 import { PlanWeekSection } from "./PlanWeekSection";
 import { useCalendarioAssistantContext } from "./use-calendario-assistant-context";
-import { useCalendarioQuery, useCalendarioRange } from "./use-calendario-page";
+import { replaceCalendarioUrl, useCalendarioQuery, useCalendarioRange } from "./use-calendario-page";
 import { useCompleteCalendarioTask } from "./use-complete-calendario-task";
 import { useGoogleRefresh } from "./use-google-refresh";
 
@@ -35,6 +35,9 @@ export function CalendarioClient() {
   const assistantContext = useCalendarioAssistantContext();
   const google = useGoogleRefresh(range ? range.google : { connected: false, eventsGrant: false, syncedAt: null, error: null });
 
+  // Items of every view and Estilo open their detail through `?evento=` (FE §5).
+  const openItem = (id: string) => replaceCalendarioUrl({ ...query, evento: id });
+
   const aboveBody = (
     <>
       <NewMeetingHost />
@@ -52,9 +55,9 @@ export function CalendarioClient() {
       refreshing={google.refreshing}
     >
       <PageStyleLayout
-        visual={() => <CalendarioVisual range={current} query={query} />}
-        esencial={() => <CalendarioEsencial range={current} query={query} onComplete={completeTask} />}
-        analitico={() => <CalendarioAnalitico range={current} query={query} />}
+        visual={() => <CalendarioVisual range={current} query={query} onOpen={openItem} />}
+        esencial={() => <CalendarioEsencial range={current} query={query} onOpen={openItem} onComplete={completeTask} />}
+        analitico={() => <CalendarioAnalitico range={current} query={query} onOpen={openItem} />}
       />
       <PlanWeekSection query={query} />
       <EventDetailHost />

@@ -63,6 +63,7 @@ export const MEETING_DIALOG_COPY = {
   emailInvalid: "Escribe un correo válido.",
   removeAttendee: (name: string) => `Quitar a ${name}`,
   createdGoogle: (n: number) => `Reunión creada. Envié la invitación a ${n} ${n === 1 ? "persona" : "personas"}.`,
+  createdAlone: "Reunión creada.",
   createdCincel: "Reunión creada en Cincel. Envié la invitación por correo.",
   reasonUnavailable: "Google Calendar no respondió; la agregaré en cuanto responda.",
   reasonReauth: "Vuelve a conectar Google Calendar para agregarla.",

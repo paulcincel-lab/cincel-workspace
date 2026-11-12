@@ -123,7 +123,10 @@ export function NewMeetingDialog({ open, onOpenChange, event, defaults }: NewMee
     create.mutate(draft, {
       onSuccess: (item) => {
         const people = item.attendeeCount || draft.attendees.length;
-        if (item.invitesVia === "cincel" || opts.onlyCincel || !hasGrant) {
+        if (draft.attendees.length === 0) {
+          // Nobody to invite: never claim an invitation went out.
+          toast.success(C.createdAlone, { description: reasonOf(item.syncError) ?? undefined });
+        } else if (item.invitesVia === "cincel" || opts.onlyCincel || !hasGrant) {
           toast.success(C.createdCincel, { description: reasonOf(item.syncError) ?? undefined });
         } else {
           toast.success(C.createdGoogle(people));

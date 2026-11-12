@@ -54,6 +54,17 @@ export function resolveRelativeDate(phrase: string, today: string): string | nul
   return addDaysToDate(today, ahead);
 }
 
+/**
+ * "Pasa lo vencido al jueves" and its variants: the target date, or null when the text is not
+ * that request. Deterministic, so the Barra's own example never depends on the model.
+ */
+export function parseOverdueMove(text: string, today: string): string | null {
+  const match = /^(?:pasa|pasame|mueve|muevo|lleva|reprograma|cambia|manda)\s+(?:todo\s+)?(?:lo|las tareas|las actividades)\s+vencid[oa]s?\s+(?:para|a|al|hasta)\s+(.+?)[\s.!]*$/.exec(
+    fold(text),
+  );
+  return match ? resolveRelativeDate(match[1], today) : null;
+}
+
 /** Lines that fix "hoy", "mañana" and each weekday to a real date, so the model never computes them. */
 export function dateReferenceLines(today: string): string[] {
   const lines = [

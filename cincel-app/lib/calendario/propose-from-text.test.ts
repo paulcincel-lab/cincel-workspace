@@ -33,6 +33,11 @@ vi.mock("@/lib/assistant/tools/index", () => ({
 }));
 vi.mock("@/lib/calendario/propose", async (importActual) => ({
   ...(await importActual<typeof import("@/lib/calendario/propose")>()),
+  loadOverdueTaskIds: vi.fn(async () => ["t-1", "t-2"]),
+  proposeMoveTasks: vi.fn(async (_source: unknown, input: unknown) => {
+    state.executed.push({ name: "move_tasks", input });
+    return { ok: true, proposal: { id: "p-move", kind: "mover_tareas", title: "Propuesta" } };
+  }),
   loadPromptTasks: vi.fn(async () => [
     { id: "t-1", title: "Revisar planos", project: "Casa Roble", date: "2026-11-05" },
     { id: "t-2", title: "Cotizar cocina", project: null, date: "2026-11-09" },
@@ -110,13 +115,20 @@ describe("propose_from_text", () => {
     expect(system).toContain("vista de semana del 2026-11-09 al 2026-11-15");
   });
 
-  it("turns «Pasa lo vencido al jueves» into a move_tasks call over the person's overdue tasks", async () => {
-    const model = calling("move_tasks", { taskIds: ["t-1", "t-2"], toDate: "2026-11-12" });
+  it("turns «Pasa lo vencido al jueves» into a move_tasks proposal without calling the model", async () => {
+    const model = calling("move_tasks", {});
     state.model = model;
     const made = await proposeFromText(ctx, { ...BASE, text: "Pasa lo vencido al jueves" }, NOW);
 
-    expect(made.ok).toBe(true);
+    expect(made).toMatchObject({ ok: true, proposal: { id: "p-move" } });
     expect(state.executed).toEqual([{ name: "move_tasks", input: { taskIds: ["t-1", "t-2"], toDate: "2026-11-12" } }]);
+    expect(model.doGenerateCalls).toHaveLength(0);
+  });
+
+  it("still lists the person's tasks in the prompt for other move requests", async () => {
+    const model = calling("move_tasks", { taskIds: ["t-1"], toDate: "2026-11-12" });
+    state.model = model;
+    await proposeFromText(ctx, { ...BASE, text: "Cambia Revisar planos para el jueves" }, NOW);
     const system = systemOf(model);
     expect(system).toContain("t-1 · 2026-11-05 · Revisar planos · Casa Roble");
     expect(system).toContain("el jueves = 2026-11-12");
