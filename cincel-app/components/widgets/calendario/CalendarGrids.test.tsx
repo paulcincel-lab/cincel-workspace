@@ -14,6 +14,7 @@ const push = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/actions/tasks-actions", () => ({ bulkUpdateTasksAction: bulk }));
 vi.mock("sonner", () => ({ toast }));
 vi.mock("@/components/calendario/use-calendario-page", () => ({ pushCalendarioUrl: push, replaceCalendarioUrl: vi.fn() }));
+vi.mock("@/components/calendario/use-calendario-assistant-context", () => ({ useOpenCalendarioAssistant: () => vi.fn() }));
 
 import { CalendarMonthGrid } from "./CalendarMonthGrid";
 import { CalendarWeekColumns } from "./CalendarWeekColumns";
