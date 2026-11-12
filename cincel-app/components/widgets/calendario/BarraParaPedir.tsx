@@ -72,7 +72,7 @@ function BarraBody({ context, examples, onProposal, variant }: BarraParaPedirPro
   };
 
   return (
-    <section aria-label="Barra para pedir" data-slot="barra-para-pedir" data-variant={variant} className="mb-4 flex flex-col gap-2">
+    <section aria-label="Barra para pedir" data-slot="barra-para-pedir" data-variant={variant} className="mb-4 flex min-w-0 max-w-full flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
         <span aria-hidden className="text-primary">
           ✦
@@ -109,6 +109,7 @@ function BarraBody({ context, examples, onProposal, variant }: BarraParaPedirPro
             type="button"
             variant="outline"
             size="sm"
+            className="h-auto max-w-full min-h-8 py-1.5 text-left whitespace-normal"
             disabled={flow.pending}
             onClick={() => {
               setDraft(example);

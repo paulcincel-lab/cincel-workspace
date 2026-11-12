@@ -110,6 +110,26 @@ describe("BarraParaPedir", () => {
     await settle(client);
   });
 
+  it("keeps long chips wrapping inside the bar so there is no horizontal scroll at 390 px", () => {
+    renderBarra();
+    const chip = screen.getByRole("button", { name: "Pasa lo vencido al jueves" });
+    expect(chip.className).toContain("whitespace-normal");
+    expect(chip.className).toContain("max-w-full");
+    expect(screen.getByRole("region", { name: "Barra para pedir" }).className).toContain("min-w-0");
+  });
+
+  it("turns the pending spinner off under prefers-reduced-motion", async () => {
+    actions.proposeFromTextAction.mockReturnValue(new Promise(() => {}));
+    renderBarra();
+    const input = screen.getByLabelText("Pide algo para tu calendario");
+    fireEvent.change(input, { target: { value: "hola" } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+    const spinner = (await screen.findByText("Pensando…")).parentElement?.querySelector("svg");
+    expect(spinner?.getAttribute("class")).toContain("motion-reduce:animate-none");
+  });
+
   it("clears the draft with Escape", () => {
     renderBarra();
     const input = screen.getByLabelText("Pide algo para tu calendario") as HTMLInputElement;

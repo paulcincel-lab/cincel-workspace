@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { HistoryEvent } from "@/lib/types/core";
+import { historyEventText, type HistoryNames } from "@/lib/history/format";
 import { formatDateDMY } from "@/lib/utils/date";
 
 type Props = {
@@ -10,20 +11,12 @@ type Props = {
   empty: ReactNode;
   /** Draws a border around each entry. */
   bordered?: boolean;
+  /** Names of the ids the entries mention; an id without one shows "—". */
+  names?: HistoryNames;
 };
 
-/** One-line text for a bitácora entry: the comment, or the field change. */
-export function historyEventText(item: HistoryEvent): string {
-  if (item.kind === "comentario") return item.comment ?? "";
-  // A task's tramo move stores the tramo names (`updateTask`, #1022).
-  if (item.field === "tramo") return `Movió la tarea de ${item.beforeValue ?? "—"} a ${item.afterValue ?? "—"}`;
-  // The equipo de apoyo stores the names (`setTaskSupport`, #1038); "" is nobody.
-  if (item.field === "support") return `Cambió el equipo de apoyo: ${item.beforeValue || "—"} → ${item.afterValue || "—"}`;
-  return `Cambió ${item.field ?? "un campo"}: ${item.beforeValue ?? "—"} → ${item.afterValue ?? "—"}`;
-}
-
 /** Bitácora entries (date, author and text), shared by the task, contact and project bitácoras. */
-export function HistoryEventList({ events, empty, bordered = false }: Props) {
+export function HistoryEventList({ events, empty, bordered = false, names }: Props) {
   if (events.length === 0) return <>{empty}</>;
   return (
     <div className="space-y-2">
@@ -36,7 +29,7 @@ export function HistoryEventList({ events, empty, bordered = false }: Props) {
             <span>{formatDateDMY(item.eventAt.slice(0, 10))}</span>
             <span>{item.actor?.name ?? "Sistema"}</span>
           </div>
-          <p className="mt-2">{historyEventText(item)}</p>
+          <p className="mt-2">{historyEventText(item, names)}</p>
         </div>
       ))}
     </div>

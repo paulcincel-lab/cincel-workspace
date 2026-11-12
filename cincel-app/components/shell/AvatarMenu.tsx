@@ -145,8 +145,8 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
         >
           <Avatar data-photo={photoUrl ? "photo" : "initials"} className="size-[30px]">
             {photoUrl ? <AvatarImage src={photoUrl} alt="" /> : null}
-            {/* Initials on the primary tint, as in frames `Sidebar` and `MovilInicio`. */}
-            <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary dark:bg-primary/20">
+            {/* Initials on the primary tint (secondary-foreground/tint-primary is a checked contrast pair), as in frames `Sidebar` and `MovilInicio`. */}
+            <AvatarFallback className="bg-tint-primary text-xs font-semibold text-secondary-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>

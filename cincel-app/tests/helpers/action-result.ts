@@ -24,6 +24,12 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "setTaskCustomStatusAction",
     "addTaskDependencyAction",
     "removeTaskDependencyAction",
+    "archiveTaskAction",
+    "reorderProjectTasksAction",
+    "reorderTasksAction",
+    "addTaskLinkAction",
+    "removeTaskLinkAction",
+    "createAdminTaskAction",
   ],
   "projects-actions": [
     "createProjectAction",
@@ -40,6 +46,7 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "deleteProjectSpaceAction",
     "deleteProjectAction",
     "restoreProjectAction",
+    "archiveProjectAction",
   ],
   "staff-actions": [
     "createStaffAction",
@@ -47,6 +54,9 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "upsertStaffProfileAction",
     "setStaffCredentialAction",
     "setStaffPositionsAction",
+    "setStaffActiveAction",
+    "deleteStaffAction",
+    "reorderStaffAction",
   ],
   "time-tracking-actions": [
     "saveTimeTrackingSettingsAction",
@@ -64,7 +74,10 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "addChecklistItemAction",
     "toggleChecklistItemAction",
     "createReminderAction",
+    "reorderChecklistItemsAction",
+    "archiveChecklistAction",
   ],
+  "contacts-actions": ["setContactPeopleAction", "setContactTagsAction"],
   "notifications-actions": ["markNotificationsReadAction", "updateNotificationPreferencesAction"],
   "gmail-actions": [
     "markGmailThreadReadAction",

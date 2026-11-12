@@ -25,5 +25,6 @@ export const IMPLEMENTED = {
   undoProposalAction: true,
   sendAgendaAction: true,
   sendMinutesAction: true,
+  rewritePrepSummaryAction: true,
   setTaskEstimatedHoursAction: true,
 } as const;

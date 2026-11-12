@@ -174,7 +174,13 @@ export async function retryProjectFolderAction(projectId: string): Promise<Retry
   return { ok: true, status: "failed", error: result.error };
 }
 
-export async function archiveProjectAction(id: string, status: "completado" | "cancelado"): Promise<ProjectDetail> {
+export async function archiveProjectAction(
+  ...args: Parameters<typeof archiveProjectActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof archiveProjectActionImpl>>>> {
+  return toActionResult(() => archiveProjectActionImpl(...args));
+}
+
+async function archiveProjectActionImpl(id: string, status: "completado" | "cancelado"): Promise<ProjectDetail> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canArchiveProject) {
     throw new Error("FORBIDDEN: project archive");

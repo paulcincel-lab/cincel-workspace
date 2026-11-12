@@ -119,8 +119,9 @@ export function ResumenPanel({ summary, variant = "visual", onAction, onPlanWeek
 
   if (collapsed) {
     return (
-      <section aria-label="Resumen" data-slot="calendario-resumen" data-collapsed="true">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setCollapsed(false)}>
+      <section aria-label="Resumen" data-slot="calendario-resumen" data-collapsed="true" className="flex min-w-0 items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-sm font-medium text-foreground">{summary.greeting}</p>
+        <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => setCollapsed(false)}>
           Mostrar resumen
         </Button>
       </section>

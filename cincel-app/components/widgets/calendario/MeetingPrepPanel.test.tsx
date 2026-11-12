@@ -48,6 +48,30 @@ describe.each(["visual", "esencial", "analitico"] as const)("MeetingPrepPanel %s
   });
 });
 
+describe("MeetingPrepPanel rewrite", () => {
+  it("replaces the summary, disables while running and undoes", async () => {
+    let resolve!: (v: { ok: true; text: string }) => void;
+    const onRewrite = vi.fn().mockReturnValue(new Promise((r) => (resolve = r)));
+    render(<MeetingPrepPanel prep={prep} eventId="e1" onRewrite={onRewrite} />);
+    fireEvent.click(screen.getByRole("button", { name: "✦ Reescribir" }));
+    expect((screen.getByRole("button", { name: "Reescribiendo…" }) as HTMLButtonElement).disabled).toBe(true);
+    resolve({ ok: true, text: "Texto nuevo." });
+    await waitFor(() => expect(screen.getByText(/Texto nuevo\./)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+    expect(screen.getByText(/Hay 2 tareas vencidas\./)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Deshacer" })).toBeNull();
+  });
+
+  it("shows the error inline and keeps the summary", async () => {
+    const onRewrite = vi.fn().mockResolvedValue({ ok: false, error: "Demasiados intentos." });
+    render(<MeetingPrepPanel prep={prep} eventId="e1" onRewrite={onRewrite} />);
+    fireEvent.click(screen.getByRole("button", { name: "✦ Reescribir" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Demasiados intentos."));
+    expect(screen.getByText(/Hay 2 tareas vencidas\./)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "✦ Reescribir" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
 describe("agendaToText", () => {
   it("numbers the items", () => {
     expect(agendaToText(["a", "b"])).toBe("1. a\n2. b");

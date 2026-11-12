@@ -47,3 +47,15 @@ describe("color math", () => {
     expect(chartTintCss(2, "dark")).toBe("color-mix(in oklab, var(--chart-2) 22%, var(--card))");
   });
 });
+
+describe("sidebar avatar initials (Ajustes › Apariencia axe)", () => {
+  it("keeps secondary-foreground on tint-primary above 4.5 in every theme, light and dark", () => {
+    for (const theme of THEME_IDS) {
+      for (const mode of ["light", "dark"] as const) {
+        const r = checkContrast(THEME_PRESETS[theme].tokens, mode).find((x) => x.pair === "secondary-foreground/tint-primary");
+        expect(r, `${theme} ${mode}`).toBeDefined();
+        expect(r!.ratio, `${theme} ${mode}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+});

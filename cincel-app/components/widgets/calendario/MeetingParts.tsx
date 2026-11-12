@@ -336,7 +336,7 @@ function MeetingDetailBody({
 }
 
 function PrepTab({ item, variant }: { item: CalEventItem; variant: Variant }) {
-  const { prep, loading, send } = useMeetingPrep(item.eventId);
+  const { prep, loading, send, rewrite } = useMeetingPrep(item.eventId);
   return (
     <MeetingPrepPanel
       prep={prep}
@@ -345,6 +345,7 @@ function PrepTab({ item, variant }: { item: CalEventItem; variant: Variant }) {
       loading={loading}
       recipients={item.attendees.map((p) => ({ name: p.name }))}
       onSend={send}
+      onRewrite={rewrite}
     />
   );
 }

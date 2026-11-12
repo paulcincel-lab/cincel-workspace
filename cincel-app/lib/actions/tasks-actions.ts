@@ -212,7 +212,13 @@ async function assignTaskActionImpl(id: string, managerId: string | null): Promi
   return scopeTaskDto(row, viewer);
 }
 
-export async function archiveTaskAction(id: string, archived: boolean): Promise<TaskDetail> {
+export async function archiveTaskAction(
+  ...args: Parameters<typeof archiveTaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof archiveTaskActionImpl>>>> {
+  return toActionResult(() => archiveTaskActionImpl(...args));
+}
+
+async function archiveTaskActionImpl(id: string, archived: boolean): Promise<TaskDetail> {
   const { user, viewer } = await requireTaskWriter(id);
   if (!resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: task archive");
@@ -373,7 +379,13 @@ async function setTaskSupportActionImpl(taskId: string, staffIds: string[]) {
   return support;
 }
 
-export async function reorderProjectTasksAction(projectId: string, orderedTaskIds: string[]): Promise<void> {
+export async function reorderProjectTasksAction(
+  ...args: Parameters<typeof reorderProjectTasksActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderProjectTasksActionImpl>>>> {
+  return toActionResult(() => reorderProjectTasksActionImpl(...args));
+}
+
+async function reorderProjectTasksActionImpl(projectId: string, orderedTaskIds: string[]): Promise<void> {
   const { user } = await requireTaskWriter(...orderedTaskIds);
   if (!resolveActivitiesCapabilities(user).canReorderPhases) {
     throw new Error("FORBIDDEN: tasks reorder");
@@ -381,7 +393,13 @@ export async function reorderProjectTasksAction(projectId: string, orderedTaskId
   await tasksRepository.reorderProjectTasks(projectId, orderedTaskIds);
 }
 
-export async function reorderTasksAction(orderedTaskIds: string[]): Promise<void> {
+export async function reorderTasksAction(
+  ...args: Parameters<typeof reorderTasksActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderTasksActionImpl>>>> {
+  return toActionResult(() => reorderTasksActionImpl(...args));
+}
+
+async function reorderTasksActionImpl(orderedTaskIds: string[]): Promise<void> {
   const { user } = await requireTaskWriter(...orderedTaskIds);
   if (!resolveActivitiesCapabilities(user).canReorderPhases) {
     throw new Error("FORBIDDEN: tasks reorder");
@@ -473,7 +491,13 @@ const LINK_ERROR_MESSAGES: Record<string, string> = {
 };
 
 /** Adds an internal or client Drive/web link to a task (#436). */
-export async function addTaskLinkAction(taskId: string, input: TaskLinkInput): Promise<TaskLink> {
+export async function addTaskLinkAction(
+  ...args: Parameters<typeof addTaskLinkActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof addTaskLinkActionImpl>>>> {
+  return toActionResult(() => addTaskLinkActionImpl(...args));
+}
+
+async function addTaskLinkActionImpl(taskId: string, input: TaskLinkInput): Promise<TaskLink> {
   const { user } = await requireTaskWriter(taskId);
   try {
     const row = await tasksRepository.addTaskLink(taskId, input, user.member.id);
@@ -484,7 +508,13 @@ export async function addTaskLinkAction(taskId: string, input: TaskLinkInput): P
   }
 }
 
-export async function removeTaskLinkAction(id: string): Promise<void> {
+export async function removeTaskLinkAction(
+  ...args: Parameters<typeof removeTaskLinkActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof removeTaskLinkActionImpl>>>> {
+  return toActionResult(() => removeTaskLinkActionImpl(...args));
+}
+
+async function removeTaskLinkActionImpl(id: string): Promise<void> {
   const linkTaskId = await tasksRepository.taskLinkTaskId(id);
   const { user } = await requireTaskWriter(...(linkTaskId ? [linkTaskId] : []));
   await tasksRepository.removeTaskLink(id, user.member.id);
@@ -549,7 +579,13 @@ export async function fetchAdminTasksAction(
 }
 
 /** `kind = 'admin'`. Errors: FORBIDDEN (non-admin), NOT_FOUND, ASSIGNEE_NOT_ADMIN. */
-export async function createAdminTaskAction(input: AdminTaskInput): Promise<TaskDetail> {
+export async function createAdminTaskAction(
+  ...args: Parameters<typeof createAdminTaskActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof createAdminTaskActionImpl>>>> {
+  return toActionResult(() => createAdminTaskActionImpl(...args));
+}
+
+async function createAdminTaskActionImpl(input: AdminTaskInput): Promise<TaskDetail> {
   const user = await requireCapabilityUser();
   if (!canSeeAdminData(user)) throw flowError("FORBIDDEN");
   const parsed = parseInput(AdminTaskInputSchema, input);

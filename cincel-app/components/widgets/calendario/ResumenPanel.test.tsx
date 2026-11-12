@@ -55,8 +55,11 @@ describe("ResumenPanel", () => {
     render(<ResumenPanel summary={day} />);
     fireEvent.click(screen.getByRole("button", { name: "Ocultar resumen" }));
     expect(useCalendarioUi.getState().resumenCollapsed).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar resumen" }));
     expect(screen.getByText("Buenos días, Oscar")).toBeTruthy();
+    expect(screen.queryByText(day.lead)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar resumen" }));
+    expect(useCalendarioUi.getState().resumenCollapsed).toBe(false);
+    expect(screen.getByText(day.lead)).toBeTruthy();
   });
 
   it("week: hides Planea mi semana without the handler, shows it with, and offers Reparte el jueves", () => {

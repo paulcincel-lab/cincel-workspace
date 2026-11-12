@@ -28,10 +28,12 @@ vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), dismi
 
 import { emptyDay } from "@/lib/calendario/empty";
 import { parseCalendarioQuery } from "@/lib/calendario/url-state";
+import { resetCalendarioUi } from "@/lib/stores/calendario-ui-store";
 import { renderWithQueryClient } from "@/lib/query/test-utils";
 import type { CalTaskItem, CalendarioRange } from "@/lib/types/calendario";
 
-import { CalendarioAnalitico } from "./CalendarioAnalitico";
+import type { CalItem } from "@/lib/types/calendario";
+import { CalendarioAnalitico, hoursOf } from "./CalendarioAnalitico";
 
 function task(id: string, date: string, title: string): CalTaskItem {
   return {
@@ -78,6 +80,8 @@ const query = parseCalendarioQuery("vista=semana&fecha=2026-11-11", { today: "20
 describe("CalendarioAnalitico", () => {
   beforeEach(() => {
     actions.getCalendarioList.mockReset();
+    resetCalendarioUi();
+    window.localStorage.clear();
   });
   afterEach(() => cleanup());
 
@@ -120,5 +124,26 @@ describe("CalendarioAnalitico", () => {
     renderWithQueryClient(<CalendarioAnalitico range={range} query={query} onOpen={onOpen} />);
     fireEvent.click(await screen.findByRole("button", { name: "Ingenierías" }));
     expect(onOpen).toHaveBeenCalledWith("t:1");
+  });
+
+  it("turns the optional Horas column on and off, shows the hours and remembers the choice", async () => {
+    actions.getCalendarioList.mockResolvedValue({ rows: [{ ...task("1", "2026-11-09", "Ingenierías"), hours: 2.5 }], nextCursor: null, total: 1 });
+    renderWithQueryClient(<CalendarioAnalitico range={range} query={query} />);
+    await screen.findByText("Ingenierías");
+    expect(screen.queryAllByText("HORAS")).toHaveLength(0);
+    const toggle = screen.getByRole("switch", { name: "Mostrar horas" });
+    fireEvent.click(toggle);
+    expect((await screen.findAllByText("HORAS")).length).toBeGreaterThan(0);
+    expect(screen.getByText("2.5 h")).toBeTruthy();
+    expect(window.localStorage.getItem("cincel:calendario:analitico:horas")).toBe("1");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.queryAllByText("HORAS")).toHaveLength(0));
+    expect(window.localStorage.getItem("cincel:calendario:analitico:horas")).toBe("0");
+  });
+
+  it("measures a meeting by its length and leaves an all-day one empty", () => {
+    const base = { kind: "event", allDay: false, start: "2026-11-11T10:00:00-06:00", end: "2026-11-11T11:30:00-06:00" } as unknown as CalItem;
+    expect(hoursOf(base)).toBe(1.5);
+    expect(hoursOf({ ...base, allDay: true } as CalItem)).toBeNull();
   });
 });

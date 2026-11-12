@@ -125,13 +125,25 @@ async function toggleChecklistItemActionImpl(itemId: string, done: boolean): Pro
 }
 
 /** `ids` = exactly the checklist's item ids. Errors: `NOT_FOUND`, `FORBIDDEN`, `INVALID`. */
-export async function reorderChecklistItemsAction(checklistId: string, ids: string[]): Promise<void> {
+export async function reorderChecklistItemsAction(
+  ...args: Parameters<typeof reorderChecklistItemsActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof reorderChecklistItemsActionImpl>>>> {
+  return toActionResult(() => reorderChecklistItemsActionImpl(...args));
+}
+
+async function reorderChecklistItemsActionImpl(checklistId: string, ids: string[]): Promise<void> {
   const user = await requireCapabilityUser();
   await notesChecklists.reorderChecklistItems(user, checklistId, ids);
 }
 
 /** Errors: `NOT_FOUND`, `FORBIDDEN`. */
-export async function archiveChecklistAction(id: string): Promise<void> {
+export async function archiveChecklistAction(
+  ...args: Parameters<typeof archiveChecklistActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof archiveChecklistActionImpl>>>> {
+  return toActionResult(() => archiveChecklistActionImpl(...args));
+}
+
+async function archiveChecklistActionImpl(id: string): Promise<void> {
   const user = await requireCapabilityUser();
   await notesChecklists.archiveChecklist(user, id);
 }
