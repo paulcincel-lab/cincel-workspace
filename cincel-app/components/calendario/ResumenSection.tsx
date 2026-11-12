@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { ResumenPanel } from "@/components/widgets/calendario/ResumenPanel";
-import { StyleView } from "@/components/widgets/StyleView";
+import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
 import { runProposingToolAction } from "@/lib/actions/calendario-actions";
 import { rangeOf } from "@/lib/calendario/range";
 import { useActionMutation } from "@/lib/query/mutation";
@@ -68,7 +68,7 @@ function DayResumen({ query }: { query: CalendarioQuery }) {
   const { data } = useQuery(calendarioDaySummaryOptions(query.fecha));
   const onAction = useSummaryActions(query);
   if (!data) return null;
-  return <StyleView visual={() => <ResumenPanel summary={data} variant="visual" onAction={onAction} />} esencial={() => <ResumenPanel summary={data} variant="esencial" onAction={onAction} />} analitico={() => <ResumenPanel summary={data} variant="analitico" onAction={onAction} />} />;
+  return <PageStyleLayout visual={() => <ResumenPanel summary={data} variant="visual" onAction={onAction} />} esencial={() => <ResumenPanel summary={data} variant="esencial" onAction={onAction} />} analitico={() => <ResumenPanel summary={data} variant="analitico" onAction={onAction} />} />;
 }
 
 function WeekResumen({ query }: { query: CalendarioQuery }) {
@@ -78,5 +78,5 @@ function WeekResumen({ query }: { query: CalendarioQuery }) {
   const onAction = useSummaryActions(query);
   if (!data) return null;
   const onPlanWeek = () => replaceCalendarioUrl({ ...query, modo: "planear" });
-  return <StyleView visual={() => <ResumenPanel summary={data} variant="visual" onAction={onAction} onPlanWeek={onPlanWeek} />} esencial={() => <ResumenPanel summary={data} variant="esencial" onAction={onAction} onPlanWeek={onPlanWeek} />} analitico={() => <ResumenPanel summary={data} variant="analitico" onAction={onAction} onPlanWeek={onPlanWeek} />} />;
+  return <PageStyleLayout visual={() => <ResumenPanel summary={data} variant="visual" onAction={onAction} onPlanWeek={onPlanWeek} />} esencial={() => <ResumenPanel summary={data} variant="esencial" onAction={onAction} onPlanWeek={onPlanWeek} />} analitico={() => <ResumenPanel summary={data} variant="analitico" onAction={onAction} onPlanWeek={onPlanWeek} />} />;
 }
