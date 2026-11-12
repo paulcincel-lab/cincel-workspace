@@ -6,9 +6,9 @@ import {
   emptyCalendarioRange,
   emptyDaySummary,
   emptyMinutes,
-  emptyPlanWeek,
   emptyWeekSummary,
 } from "@/lib/calendario/empty";
+import { loadPlanWeekData } from "@/lib/calendario/plan-week-data";
 import { stubDefault } from "@/lib/stubs";
 import type {
   CalendarioListInput,
@@ -66,7 +66,7 @@ export async function loadMeetingMinutes(user: AuthenticatedUser, eventId: strin
 }
 
 export async function loadPlanWeek(user: AuthenticatedUser, input: { weekStart: string; staffIds?: string[] }): Promise<PlanWeekData> {
-  return stubDefault(emptyPlanWeek(input.weekStart), user);
+  return loadPlanWeekData(user, input);
 }
 
 export async function loadProposal(user: AuthenticatedUser, id: string): Promise<Proposal | null> {

@@ -8,6 +8,7 @@ import { CalendarioVisual } from "@/components/widgets/calendario/CalendarioVisu
 import { emptyCalendarioRange } from "@/lib/calendario/empty";
 import { rangeOf } from "@/lib/calendario/range";
 
+import { PlanWeekSection } from "./PlanWeekSection";
 import { useCalendarioQuery, useCalendarioRange } from "./use-calendario-page";
 
 /**
@@ -29,6 +30,7 @@ export function CalendarioClient() {
         esencial={() => <CalendarioEsencial range={current} query={query} />}
         analitico={() => <CalendarioAnalitico range={current} query={query} />}
       />
+      <PlanWeekSection query={query} />
     </>
   );
 }

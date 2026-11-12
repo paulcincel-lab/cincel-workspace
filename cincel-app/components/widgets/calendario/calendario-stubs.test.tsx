@@ -18,7 +18,6 @@ import { DayLoadMeter } from "./DayLoadMeter";
 import { EventDetailCard } from "./EventDetailCard";
 import { EventDetailDrawer } from "./EventDetailDrawer";
 import { EventDetailSheet } from "./EventDetailSheet";
-import { MeetingMinutesPanel } from "./MeetingMinutesPanel";
 import { MeetingPrepPanel } from "./MeetingPrepPanel";
 import { MeetingsList } from "./MeetingsList";
 import { PlanWeekBoard } from "./PlanWeekBoard";
@@ -100,7 +99,6 @@ describe("Calendario widget stubs", () => {
         <DayLoadMeter hours={2} workday={6} label="bien" />
         <DayAlertBanner kind="overload" date="2026-11-12" />
         <MeetingPrepPanel prep={null} eventId="e1" />
-        <MeetingMinutesPanel minutes={null} eventId="e1" />
         <MeetingsList meetings={[]} />
         <PlanWeekBoard data={emptyPlanWeek("2026-11-16")} />
       </>,

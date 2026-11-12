@@ -16,12 +16,15 @@ export function effectiveHours(t: { estimatedHours: number | null; templateHours
   hours: number;
   source: "task" | "template" | "default";
 } {
-  return notImplemented("effectiveHours", t);
+  if (t.estimatedHours !== null && t.estimatedHours > 0) return { hours: t.estimatedHours, source: "task" };
+  if (t.templateHours !== null && t.templateHours > 0) return { hours: t.templateHours, source: "template" };
+  return { hours: DEFAULT_TASK_HOURS, source: "default" };
 }
 
 /** weekly / workDays, rounded to 0.5; else the org default. */
 export function workdayHours(p: { weeklyCapacityHours: number | null; workDays: number }, orgDefault: number): number {
-  return notImplemented("workdayHours", p, orgDefault);
+  if (p.weeklyCapacityHours === null || p.weeklyCapacityHours <= 0 || p.workDays <= 0) return orgDefault;
+  return Math.round((p.weeklyCapacityHours / p.workDays) * 2) / 2;
 }
 
 /** < 50 % libre, <= 85 % bien, <= 100 % casi lleno, > 100 % sobrecargado. */

@@ -8,7 +8,8 @@ import { rangeOf } from "@/lib/calendario/range";
 
 describe("Calendario contracts", () => {
   it("every IMPLEMENTED flag is false until its owner flips it", () => {
-    expect(Object.values(IMPLEMENTED).every((v) => v === false)).toBe(true);
+    const flipped = new Set<string>(["getPlanWeek"]);
+    expect(Object.entries(IMPLEMENTED).every(([name, v]) => v === flipped.has(name))).toBe(true);
   });
 
   it("pure stubs throw not implemented", () => {

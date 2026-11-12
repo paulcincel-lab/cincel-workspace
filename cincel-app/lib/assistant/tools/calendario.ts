@@ -18,6 +18,7 @@ import { IMPLEMENTED } from "@/lib/actions/calendario-actions.flags";
 import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import { defineTool, implemented, type DefinedTool } from "@/lib/assistant/define-tool";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
+import { runPlanWeekTool } from "@/lib/calendario/plan-week-tool";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { notImplemented } from "@/lib/stubs";
 import {
@@ -187,7 +188,7 @@ export const plan_week = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.plan_week,
-  run: async (ctx, input) => notImplemented("plan_week", ctx, input),
+  run: async (ctx, input) => runPlanWeekTool(ctx, input),
 });
 
 export const extract_minutes = defineTool({
