@@ -10,6 +10,7 @@ import { rangeOf } from "@/lib/calendario/range";
 
 import { barraExamples, recentProjectName } from "./barra-examples";
 import { CalendarioChrome } from "./CalendarioChrome";
+import { EventDetailHost } from "./EventDetailHost";
 import { GoogleConnectBanner } from "./GoogleConnectBanner";
 import { NewMeetingHost } from "./NewMeetingDialog";
 import { PlanWeekSection } from "./PlanWeekSection";
@@ -56,6 +57,7 @@ export function CalendarioClient() {
         analitico={() => <CalendarioAnalitico range={current} query={query} />}
       />
       <PlanWeekSection query={query} />
+      <EventDetailHost />
     </CalendarioChrome>
   );
 }
