@@ -102,7 +102,7 @@ describe("TaskBulkBar (#1040)", () => {
     const selection = selectionOf(["a", "b"]);
     renderBar(selection);
     expect(screen.getByRole("toolbar", { name: "2 seleccionadas" })).toBeTruthy();
-    for (const label of ["Estatus", "Responsable", "Apoyo", "Fase", "Vence", "Eliminar"]) {
+    for (const label of ["Estatus", "Responsable", "Apoyo", "Fase", "Vence", "Horas estimadas", "Eliminar"]) {
       expect(screen.getByRole("button", { name: label })).toBeTruthy();
     }
     fireEvent.click(screen.getByRole("button", { name: "Quitar selección" }));
@@ -115,6 +115,35 @@ describe("TaskBulkBar (#1040)", () => {
     expect(screen.queryByRole("button", { name: "Responsable" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Apoyo" })).toBeNull();
     expect(screen.getByRole("button", { name: "Estatus" })).toBeTruthy();
+  });
+
+  it("Horas estimadas saves the hours for every selected task and undoes to the previous ones", async () => {
+    TASKS.set("c", task("c", { estimatedHours: 3 }));
+    actions.bulkUpdateTasksAction.mockResolvedValue({ ok: true, data: { updated: ["a", "c"], skipped: [] } });
+    renderBar(selectionOf(["a", "c"]));
+    fireEvent.click(screen.getByRole("button", { name: "Horas estimadas" }));
+    const field = await screen.findByRole("spinbutton", { name: "Horas estimadas" });
+    fireEvent.change(field, { target: { value: "2.5" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await waitFor(() => expect(actions.bulkUpdateTasksAction).toHaveBeenCalledWith(["a", "c"], { estimatedHours: 2.5 }));
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    const [, options] = toast.mock.calls[0] as unknown as [string, { action: { onClick(): void } }];
+    await act(async () => options.action.onClick());
+    await waitFor(() => {
+      expect(actions.bulkUpdateTasksAction).toHaveBeenCalledWith(["a"], { estimatedHours: null });
+      expect(actions.bulkUpdateTasksAction).toHaveBeenCalledWith(["c"], { estimatedHours: 3 });
+    });
+    TASKS.delete("c");
+  });
+
+  it("Horas estimadas rejects a value out of range without saving", async () => {
+    renderBar(selectionOf(["a"]));
+    fireEvent.click(screen.getByRole("button", { name: "Horas estimadas" }));
+    const field = await screen.findByRole("spinbutton", { name: "Horas estimadas" });
+    fireEvent.change(field, { target: { value: "120" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toBe("Escribe un valor entre 0.5 y 80 horas.");
+    expect(actions.bulkUpdateTasksAction).not.toHaveBeenCalled();
   });
 
   it("a pick saves every selected task in one call; the toast reports the skipped ones and undoes", async () => {

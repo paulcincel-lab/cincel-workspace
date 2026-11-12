@@ -144,6 +144,8 @@ export function CellEditor<Row>(props: CellEditorProps<Row>): ReactNode {
           <ListBody {...body} edit={edit} initialQuery={initialQuery} />
         ) : edit.kind === "date" ? (
           <DateBody {...body} edit={edit} />
+        ) : edit.kind === "number" ? (
+          <NumberBody {...body} edit={edit} />
         ) : (
           <TextBody {...body} edit={edit} />
         )}
@@ -461,6 +463,63 @@ function DateBody<Row>({ edit, row, label, focusRef, finish }: BodyProps<Row> & 
         />
       </div>
       <Hint left="Enter guardar" right="Esc cerrar" />
+    </div>
+  );
+}
+
+/** A decimal field (Horas estimadas): Enter or Tab saves, out of range shows the edit's error, empty clears when `clearable`. */
+function NumberBody<Row>({ edit, row, label, focusRef, finish }: BodyProps<Row> & { edit: Extract<CellEdit<Row>, { kind: "number" }> }) {
+  const current = edit.value(row);
+  const [draft, setDraft] = useState(current ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const errorId = useId();
+
+  return (
+    <div className="flex flex-col">
+      <div className="p-2">
+        <Input
+          ref={(el) => {
+            focusRef.current = el;
+          }}
+          onFocus={(event) => event.currentTarget.select()}
+          type="number"
+          inputMode="decimal"
+          min={edit.min}
+          max={edit.max}
+          step={edit.step ?? 0.5}
+          placeholder={edit.placeholder}
+          aria-label={label ?? "Número"}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            if (error) setError(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== "Tab") return;
+            event.preventDefault();
+            const text = draft.trim().replace(",", ".");
+            if (!text) {
+              if (edit.clearable) finish(null, event.key === "Tab");
+              else finish(current, event.key === "Tab");
+              return;
+            }
+            const value = Number(text);
+            if (!Number.isFinite(value) || value < edit.min || value > edit.max) {
+              setError(edit.rangeError);
+              return;
+            }
+            finish(String(Math.round(value * 100) / 100), event.key === "Tab");
+          }}
+        />
+        {error ? (
+          <p id={errorId} role="alert" className="mt-1.5 text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <Hint left="Enter guardar" right="Esc cancelar" />
     </div>
   );
 }

@@ -228,6 +228,7 @@ export const qk = {
     planWeek: (i: { weekStart: string; staffIds: string[] }) => ["calendario", "plan-week", i] as const,
     proposals: () => ["calendario", "proposals"] as const,
     proposal: (id: string) => ["calendario", "proposals", id] as const,
+    workday: () => ["calendario", "workday"] as const,
   },
   portal: {
     projects: () => ["portal", "projects"] as const,

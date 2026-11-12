@@ -17,9 +17,14 @@ import "server-only";
 import { IMPLEMENTED } from "@/lib/actions/calendario-actions.flags";
 import { toolSummaries } from "@/lib/assistant/tool-summaries";
 import { defineTool, implemented, type DefinedTool } from "@/lib/assistant/define-tool";
+import { sendAgenda } from "@/lib/calendario/agenda-mail";
+import { proposeRedistributionFor, resolveOverlapFor } from "@/lib/calendario/propose-planning";
 import { resolveCalendarCapabilities } from "@/lib/auth/permissions";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
+import { loadDayLoad, loadMeetingPrep } from "@/lib/loaders/calendario";
+import { createTasksFromMinutes, extractMinutes, sendMinutes } from "@/lib/calendario/minutes-service";
 import { notImplemented } from "@/lib/stubs";
+import type { Proposal } from "@/lib/types/calendario";
 import {
   ApplyProposalToolSchema,
   CalendarRangeToolSchema,
@@ -39,6 +44,11 @@ import {
   SummarizeWeekToolSchema,
   UndoProposalToolSchema,
 } from "@/lib/validation/calendario";
+
+/** The shape every proposing tool returns (BE §11.2). */
+function proposalToolResult(p: Proposal) {
+  return { ok: true as const, proposalId: p.id, kind: p.kind, title: p.title, line: p.line, changes: p.changes, deferred: p.deferred };
+}
 
 const canViewCalendar = (user: AuthenticatedUser) => resolveCalendarCapabilities(user).canViewCalendar;
 
@@ -93,7 +103,7 @@ export const day_load = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.day_load,
-  run: async (ctx, input) => notImplemented("day_load", ctx, input),
+  run: async (ctx, input) => loadDayLoad(ctx.user, input),
 });
 
 export const find_overloads = defineTool({
@@ -106,7 +116,15 @@ export const find_overloads = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.find_overloads,
-  run: async (ctx, input) => notImplemented("find_overloads", ctx, input),
+  run: async (ctx, input) => {
+    const load = await loadDayLoad(ctx.user, input);
+    return {
+      overloads: load
+        .filter((d) => d.hours > d.workday)
+        .map((d) => ({ date: d.date, staffId: d.staffId, hours: d.hours, workday: d.workday })),
+      overlaps: load.flatMap((d) => d.overlaps.map((eventIds) => ({ date: d.date, eventIds }))),
+    };
+  },
 });
 
 export const meeting_prep = defineTool({
@@ -119,7 +137,11 @@ export const meeting_prep = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.meeting_prep,
-  run: async (ctx, input) => notImplemented("meeting_prep", ctx, input),
+  run: async (ctx, input) => {
+    const prep = await loadMeetingPrep(ctx.user, input.eventId, { phrasing: input.phrasing });
+    if (!prep) throw new Error("NOT_FOUND");
+    return prep;
+  },
 });
 
 // ── Proposing tools (§11.2): no data change ─────────────────────────────────
@@ -161,7 +183,10 @@ export const propose_redistribution = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.propose_redistribution,
-  run: async (ctx, input) => notImplemented("propose_redistribution", ctx, input),
+  run: async ({ user }, input) => {
+    const { proposal, loadAfter } = await proposeRedistributionFor(user, input);
+    return { ...proposalToolResult(proposal), loadAfter };
+  },
 });
 
 export const resolve_overlap = defineTool({
@@ -174,7 +199,10 @@ export const resolve_overlap = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.resolve_overlap,
-  run: async (ctx, input) => notImplemented("resolve_overlap", ctx, input),
+  run: async ({ user }, input) => {
+    const { proposal, unknownCalendars } = await resolveOverlapFor(user, input);
+    return { ...proposalToolResult(proposal), unknownCalendars };
+  },
 });
 
 export const plan_week = defineTool({
@@ -200,7 +228,17 @@ export const extract_minutes = defineTool({
   confirm: false,
   write: false,
   summarize: toolSummaries.extract_minutes,
-  run: async (ctx, input) => notImplemented("extract_minutes", ctx, input),
+  run: async (ctx, input) => {
+    const proposal = await extractMinutes(ctx.user, input, { threadId: ctx.threadId });
+    return {
+      proposalId: proposal.id,
+      kind: proposal.kind,
+      title: proposal.title,
+      line: proposal.line,
+      changes: proposal.changes,
+      deferred: proposal.deferred,
+    };
+  },
 });
 
 // ── Write tools (§11.3) ─────────────────────────────────────────────────────
@@ -241,7 +279,7 @@ export const create_tasks_from_minutes = defineTool({
   confirm: true,
   write: true,
   summarize: toolSummaries.create_tasks_from_minutes,
-  run: async (ctx, input) => notImplemented("create_tasks_from_minutes", ctx, input),
+  run: async (ctx, input) => createTasksFromMinutes(ctx.user, input),
 });
 
 export const send_agenda = defineTool({
@@ -254,7 +292,7 @@ export const send_agenda = defineTool({
   confirm: true,
   write: true,
   summarize: toolSummaries.send_agenda,
-  run: async (ctx, input) => notImplemented("send_agenda", ctx, input),
+  run: async (ctx, input) => sendAgenda(ctx.user, input.eventId, input.items),
 });
 
 export const send_minutes = defineTool({
@@ -267,7 +305,10 @@ export const send_minutes = defineTool({
   confirm: true,
   write: true,
   summarize: toolSummaries.send_minutes,
-  run: async (ctx, input) => notImplemented("send_minutes", ctx, input),
+  run: async (ctx, input) => {
+    const { sent } = await sendMinutes(ctx.user, input.eventId);
+    return { ok: true as const, sent, message: `Envié la minuta a ${sent} ${sent === 1 ? "persona" : "personas"}.` };
+  },
 });
 
 export const tools: DefinedTool[] = [

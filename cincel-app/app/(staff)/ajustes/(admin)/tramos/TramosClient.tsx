@@ -94,7 +94,7 @@ const NEW_TEMPLATE = "__new__";
 
 const PAGE_KEY = qk.ajustes.page("tramos");
 
-function toDraft(template: WorkflowTaskTemplate): TemplateDraft {
+export function toDraft(template: WorkflowTaskTemplate): TemplateDraft {
   const offset = (value: number | null) => (value === null ? "" : String(value));
   return {
     title: template.title,
@@ -104,11 +104,12 @@ function toDraft(template: WorkflowTaskTemplate): TemplateDraft {
     commitmentOffsetDays: offset(template.commitmentOffsetDays),
     reviewOffsetDays: offset(template.reviewOffsetDays),
     deliveryOffsetDays: offset(template.deliveryOffsetDays),
+    defaultEstimatedHours: offset(template.defaultEstimatedHours ?? null),
     active: template.active,
   };
 }
 
-function toInput(draft: TemplateDraft): WorkflowTaskTemplateInput {
+export function toInput(draft: TemplateDraft): WorkflowTaskTemplateInput {
   const toOffset = (value: string): number | null => {
     const trimmed = value.trim();
     if (!trimmed) return null;
@@ -124,6 +125,7 @@ function toInput(draft: TemplateDraft): WorkflowTaskTemplateInput {
     commitmentOffsetDays: toOffset(draft.commitmentOffsetDays),
     reviewOffsetDays: toOffset(draft.reviewOffsetDays),
     deliveryOffsetDays: toOffset(draft.deliveryOffsetDays),
+    defaultEstimatedHours: toOffset(draft.defaultEstimatedHours),
     active: draft.active,
   };
 }
@@ -362,6 +364,11 @@ export function TramosClient() {
     }
     if (!draft.phaseId) {
       setTemplateError("Elige una fase.");
+      return;
+    }
+    const hours = draft.defaultEstimatedHours.trim();
+    if (hours && !(Number(hours) > 0 && Number(hours) <= 80)) {
+      setTemplateError("Las horas estimadas van de 0.5 a 80.");
       return;
     }
     const phaseName = editingPhases.find((p) => p.id === draft.phaseId)?.name ?? "";

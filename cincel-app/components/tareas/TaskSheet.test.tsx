@@ -47,6 +47,7 @@ vi.mock("@/lib/actions/tasks-actions", () => ({
   addTaskDependencyAction: vi.fn(),
   removeTaskDependencyAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/calendario-actions", () => ({ setTaskEstimatedHoursAction: vi.fn() }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowAction: vi.fn(async () => null) }));
 vi.mock("@/lib/actions/tramo-start-actions", () => ({ previewStartTramoAction: vi.fn() }));
 vi.mock("@/lib/actions/import-actions", () => ({ getImportDataAction: vi.fn().mockResolvedValue(null) }));
@@ -74,6 +75,7 @@ import {
   setTaskStatusAction,
   updateTaskAction,
 } from "@/lib/actions/tasks-actions";
+import { setTaskEstimatedHoursAction } from "@/lib/actions/calendario-actions";
 import { qk } from "@/lib/query/keys";
 import { seedTaskSheet } from "@/lib/query/options/tareas";
 import type { TaskSheetData } from "@/lib/types/task-sheet";
@@ -277,6 +279,44 @@ describe("TaskSheet shallow navigation", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Proyecto ejecutivo" }));
     expect(pushState.mock.calls).toContainEqual([null, "", "/tareas?estilo=visual&tarea=t-0"]);
     expect(replaceState.mock.calls).toEqual([]);
+  });
+});
+
+describe("TaskSheet Horas estimadas (#1084)", () => {
+  it("shows the 1 h placeholder and its hint while the task has no hours", async () => {
+    render(<TaskSheet taskId="t-1" onClose={vi.fn()} />);
+    const field = (await screen.findByLabelText("Horas estimadas")) as HTMLInputElement;
+    expect(field.value).toBe("");
+    expect(field.placeholder).toBe("1 h");
+    expect(field.step).toBe("0.5");
+    expect(screen.getByText("Sin estimar: el calendario cuenta 1 h.")).toBeTruthy();
+  });
+
+  it("saves on Enter through the hours action and refreshes the calendar", async () => {
+    vi.mocked(setTaskEstimatedHoursAction).mockReset().mockResolvedValue({ ok: true, data: makeTask({ estimatedHours: 2.5 }) });
+    const client = seededClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    render(<TaskSheet taskId="t-1" onClose={vi.fn()} />, client);
+    const field = await screen.findByLabelText("Horas estimadas");
+    fireEvent.change(field, { target: { value: "2.5" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await waitFor(() => expect(setTaskEstimatedHoursAction).toHaveBeenCalledWith("t-1", 2.5));
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toContainEqual(qk.calendario.all));
+    await waitFor(() => expect((client.getQueryData(qk.tasks.detail("t-1")) as TaskDetail).estimatedHours).toBe(2.5));
+  });
+
+  it("an empty field clears the hours and an out-of-range one shows the error without saving", async () => {
+    vi.mocked(setTaskEstimatedHoursAction).mockReset().mockResolvedValue({ ok: true, data: makeTask({ estimatedHours: null }) });
+    render(<TaskSheet taskId="t-1" onClose={vi.fn()} />, seededClient(makeSheetData(makeTask({ estimatedHours: 3 }))));
+    const field = (await screen.findByLabelText("Horas estimadas")) as HTMLInputElement;
+    expect(field.value).toBe("3");
+    fireEvent.change(field, { target: { value: "99" } });
+    fireEvent.blur(field);
+    expect((await screen.findByRole("alert")).textContent).toBe("Escribe un valor entre 0.5 y 80 horas.");
+    expect(setTaskEstimatedHoursAction).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(setTaskEstimatedHoursAction).toHaveBeenCalledWith("t-1", null));
   });
 });
 

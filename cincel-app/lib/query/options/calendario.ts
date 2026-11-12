@@ -1,5 +1,6 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions, type QueryKey } from "@tanstack/react-query";
 
+import { fetchWorkdayHoursAction } from "@/lib/actions/calendario-settings-actions";
 import {
   getCalendarioDaySummary,
   getCalendarioList,
@@ -141,4 +142,13 @@ export function calendarioInvalidations(kind: CalendarioInvalidationKind, projec
     case "minutes":
       return [qk.calendario.all, qk.inicio(), ...(projectId ? [qk.proyectos.history(projectId)] : [])];
   }
+}
+
+/** The org workday in hours (Ajustes › General); under `qk.calendario.all`, so a save refreshes the meters too. */
+export function workdayHoursOptions() {
+  return queryOptions<number>({
+    queryKey: qk.calendario.workday(),
+    queryFn: () => fetchWorkdayHoursAction(),
+    staleTime: STALE.ajustes,
+  });
 }

@@ -27,7 +27,8 @@ import type { RecordColumn } from "@/lib/types/widgets";
 
 import { OVERDUE_SHARE_HEAT } from "./lista-table";
 import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
-import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
+import { formatHours } from "./task-hours";
+import { HOURS_COLUMN_LABEL, SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 import { PRIORITY_LABEL, daysLate, taskDueDate } from "./tablero-table";
 
 export const ANALITICO_DESCRIPTION = "Por proyecto y tramo, ordenada por retraso.";
@@ -48,6 +49,14 @@ export const ANALITICO_COLUMNS: RecordColumn[] = [
   { key: "subtareas", label: "Subtareas", align: "right", mono: true },
   { key: "diasRetraso", label: "Días de retraso", align: "right", mono: true },
 ];
+
+/** The optional Horas column (#1084), after Vence: hidden in Tareas · Analítico until "Mostrar horas" is on. */
+export const ANALITICO_HOURS_COLUMN: RecordColumn = { key: "horas", label: HOURS_COLUMN_LABEL, align: "right", mono: true };
+
+/** `ANALITICO_COLUMNS` with the Horas column after Vence. */
+export const ANALITICO_COLUMNS_WITH_HOURS: RecordColumn[] = ANALITICO_COLUMNS.flatMap((c) =>
+  c.key === "vence" ? [c, ANALITICO_HOURS_COLUMN] : [c],
+);
 
 /**
  * "Días de retraso" heat (decision default: warn ≥ 5, critical ≥ 10). The
@@ -227,6 +236,8 @@ export type AnaliticoRow = {
   prioridad: string;
   subtareas: string;
   diasRetraso: number;
+  /** "2 h", or "—" without hours (the optional Horas column, #1084). */
+  horas: string;
 };
 
 export function analiticoRow(row: TaskListRow, today: string): AnaliticoRow {
@@ -247,6 +258,7 @@ export function analiticoRow(row: TaskListRow, today: string): AnaliticoRow {
     prioridad: PRIORITY_LABEL[row.priority],
     subtareas: row.subtaskCount > 0 ? `${row.subtaskDone}/${row.subtaskCount}` : "—",
     diasRetraso: late,
+    horas: formatHours(row.estimatedHours),
   };
 }
 

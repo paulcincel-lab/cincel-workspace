@@ -107,6 +107,7 @@ async function missingTemplates(db: FlowExecutor, projectId: string, workflowId:
       commitmentOffsetDays: workflowTaskTemplates.commitmentOffsetDays,
       reviewOffsetDays: workflowTaskTemplates.reviewOffsetDays,
       deliveryOffsetDays: workflowTaskTemplates.deliveryOffsetDays,
+      defaultEstimatedHours: workflowTaskTemplates.defaultEstimatedHours,
     })
     .from(workflowTaskTemplates)
     .innerJoin(workflowPhases, eq(workflowPhases.id, workflowTaskTemplates.phaseId))
@@ -379,6 +380,8 @@ export async function startTramo(tx: FlowTx, params: StartTramoParams): Promise<
           commitmentDate: offsetDate(base, t.commitmentOffsetDays),
           reviewDate: offsetDate(base, t.reviewOffsetDays),
           deliveryDate: offsetDate(base, t.deliveryOffsetDays),
+          // Copied, so later template edits leave existing tasks alone (BE §3.5).
+          estimatedHours: t.defaultEstimatedHours,
         }))
       )
       // Second guard: tasks_project_template_uq (partial unique on live rows).

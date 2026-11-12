@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -17,6 +18,7 @@ import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Button } from "@/components/ui/shadcn/button";
+import { Switch } from "@/components/ui/shadcn/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { renderAnaliticoTaskCell } from "@/components/widgets/analitico-task-cell";
@@ -52,6 +54,7 @@ import { useQuickAddCreate } from "./quick-add-create";
 import {
   ANALITICO_ANCHORS_CAPTION,
   ANALITICO_COLUMNS,
+  ANALITICO_COLUMNS_WITH_HOURS,
   ANALITICO_DAYS_LATE_HEAT,
   ANALITICO_DESCRIPTION,
   ANALITICO_EMPTY_LATE_TITLE,
@@ -75,6 +78,7 @@ import { localIsoDate } from "./tablero-table";
 import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
 import { deleteTargetOf, useDeleteTasks } from "./use-delete-tasks";
 import { TaskBulkBar } from "./TaskBulkBar";
+import { SHOW_HOURS_COLUMN_LABEL } from "./task-table-copy";
 import { useTaskSelection } from "./use-task-selection";
 import { SUBTASKS_COLLAPSE_ALL, SUBTASKS_EXPAND_ALL, subtaskQuickAddCopy, subtasksAnnouncement, useSubtaskRows } from "./use-subtask-rows";
 import { useTareasFilters, useTareasPageReady, useTareasSort } from "./use-tareas-page";
@@ -455,7 +459,13 @@ export function TareasAnalitico({
 
   // ── Editable cells (#1025): every task column but Subtareas and Días de retraso.
   const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, tramos, staff });
-  const columns = useMemo(() => cells.withEdits(ANALITICO_COLUMNS), [cells]);
+  // Horas estimadas (#1084): an optional column, hidden here until the switch is on.
+  const [showHours, setShowHours] = useState(false);
+  const hoursSwitchId = useId();
+  const columns = useMemo(
+    () => cells.withEdits(showHours ? ANALITICO_COLUMNS_WITH_HOURS : ANALITICO_COLUMNS),
+    [cells, showHours],
+  );
 
 
   // ── Filters.
@@ -559,6 +569,12 @@ export function TareasAnalitico({
               triggerClassName="h-[34px] rounded-[8px]"
             />
             <HideCompletedSwitch checked={hiding} onCheckedChange={onHideCompleted} />
+            <div data-slot="show-hours" className="flex items-center gap-2">
+              <Switch id={hoursSwitchId} checked={showHours} onCheckedChange={(value) => setShowHours(Boolean(value))} />
+              <label htmlFor={hoursSwitchId} className="cursor-pointer text-[12.5px] whitespace-nowrap text-foreground">
+                {SHOW_HOURS_COLUMN_LABEL}
+              </label>
+            </div>
           </>
         }
         search={{ value: search, onChange: onSearch, placeholder: ANALITICO_SEARCH_LABEL, label: ANALITICO_SEARCH_LABEL }}

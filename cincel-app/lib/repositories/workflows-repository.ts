@@ -63,6 +63,7 @@ export function toTemplate(
     commitmentOffsetDays: row.commitmentOffsetDays,
     reviewOffsetDays: row.reviewOffsetDays,
     deliveryOffsetDays: row.deliveryOffsetDays,
+    defaultEstimatedHours: row.defaultEstimatedHours ?? null,
     sortOrder: row.sortOrder,
     active: row.active,
   };
@@ -316,6 +317,7 @@ function toTemplateValues(input: WorkflowTaskTemplateInput) {
     commitmentOffsetDays: input.commitmentOffsetDays ?? null,
     reviewOffsetDays: input.reviewOffsetDays ?? null,
     deliveryOffsetDays: input.deliveryOffsetDays ?? null,
+    defaultEstimatedHours: input.defaultEstimatedHours ?? null,
     sortOrder: input.sortOrder ?? 0,
     active: input.active ?? true,
   };
@@ -438,6 +440,8 @@ export async function updateTemplate(
         reviewOffsetDays: patch.reviewOffsetDays === undefined ? current.reviewOffsetDays : patch.reviewOffsetDays,
         deliveryOffsetDays:
           patch.deliveryOffsetDays === undefined ? current.deliveryOffsetDays : patch.deliveryOffsetDays,
+        defaultEstimatedHours:
+          patch.defaultEstimatedHours === undefined ? current.defaultEstimatedHours : patch.defaultEstimatedHours,
         sortOrder: patch.sortOrder ?? current.sortOrder,
         active: patch.active ?? current.active,
       });

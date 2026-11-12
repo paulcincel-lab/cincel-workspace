@@ -199,3 +199,21 @@ describe("patchTaskListPages", () => {
     expect(patchTaskListPages(without, { tramo: null, proyecto: null } as never, "t1", toPresale, { moved })).toBe(without);
   });
 });
+
+describe("Horas estimadas cell (#1084)", () => {
+  it("reads, previews and saves the hours through the hours action", () => {
+    expect(taskCellValue(task, "horas")).toBeNull();
+    const withHours = { ...task, estimatedHours: 2.5 };
+    expect(taskCellValue(withHours, "horas")).toBe("2.5");
+    expect(taskWithChange(task, "horas", "3", CATALOGS)).toMatchObject({ estimatedHours: 3 });
+    expect(taskWithChange(withHours, "horas", null, CATALOGS)).toMatchObject({ estimatedHours: null });
+    expect(taskCellAction(task, "horas", "3")).toEqual({ kind: "hours", hours: 3 });
+    expect(taskCellAction(task, "horas", null)).toEqual({ kind: "hours", hours: null });
+  });
+
+  it("is locked for a viewer that can't edit tasks", () => {
+    expect(taskCellLock(task, "horas", ADMIN)).toBe(true);
+    expect(taskCellLock(task, "horas", COLABORADOR)).toBe(true);
+    expect(taskCellLock(task, "horas", READER)).toBe(LOCK_REASON.taskWriter);
+  });
+});

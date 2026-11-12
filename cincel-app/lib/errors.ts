@@ -172,6 +172,14 @@ function codeText(code: string, context: ActionErrorContext): string {
       return "Google Calendar no respondió. Guardé el cambio en Cincel.";
     case "NOT_ORGANIZER":
       return "Solo quien organizó el evento puede modificarlo o cancelarlo.";
+    case "NO_SLOT":
+      return "No encontré un horario libre para todos en los próximos 5 días hábiles.";
+    case "NO_CHANGES":
+      return "No hay nada que mover: ese día ya cabe en la jornada o ninguna tarea tiene espacio en otro día.";
+    case "NO_ATTENDEES":
+      return "La reunión no tiene asistentes con correo.";
+    case "MAIL_FAILED":
+      return "No se pudo enviar el correo. Intenta de nuevo.";
     case "RANGE_TOO_LONG":
       return "El rango es demasiado largo.";
     case "ALREADY_ON":

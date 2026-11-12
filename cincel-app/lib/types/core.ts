@@ -247,6 +247,7 @@ export type WorkflowTaskTemplate = {
   commitmentOffsetDays: number | null;
   reviewOffsetDays: number | null;
   deliveryOffsetDays: number | null;
+  defaultEstimatedHours?: number | null;
   sortOrder: number;
   active: boolean;
 };
@@ -277,6 +278,8 @@ export type WorkflowTaskTemplateInput = {
   commitmentOffsetDays?: number | null;
   reviewOffsetDays?: number | null;
   deliveryOffsetDays?: number | null;
+  /** 0 < x <= 80, or null for none. */
+  defaultEstimatedHours?: number | null;
   sortOrder?: number;
   active?: boolean;
 };
@@ -436,6 +439,8 @@ export type Task = {
   commitmentDate: string | null;
   reviewDate: string | null;
   deliveryDate: string | null;
+  /** Planned hours (Calendario BE §3.5); null = none set, the template default or 1 h applies. */
+  estimatedHours?: number | null;
   archived: boolean;
   createdAt: string;
   updatedAt: string;

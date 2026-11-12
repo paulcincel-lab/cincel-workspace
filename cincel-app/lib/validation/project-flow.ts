@@ -53,6 +53,8 @@ export const WorkflowTaskTemplateInputSchema = z.object({
   commitmentOffsetDays: offsetDays,
   reviewOffsetDays: offsetDays,
   deliveryOffsetDays: offsetDays,
+  /** Default planned hours copied onto new tasks; 0 < x <= 80 or null (BE §3.5). */
+  defaultEstimatedHours: z.number().gt(0).max(80).nullable().optional(),
   sortOrder: z.number().int().min(0).optional(),
   active: z.boolean().optional(),
 });
