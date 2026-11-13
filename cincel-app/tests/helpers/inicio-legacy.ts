@@ -17,7 +17,7 @@ import {
   INICIO_KPI,
   INICIO_KPI_DAYS,
   averageAgeByKey,
-  byTramoOrder,
+  byEtapaOrder,
   completedInWeek,
   inMemoryCounter,
   inicioPortfolioRows,
@@ -28,16 +28,16 @@ import {
   myDayItems,
   nextReviewLine,
   projectActiveOn,
-  projectTramoGroup,
+  projectEtapaGroup,
   shiftIsoDate,
   statusResolver,
   taskDayState,
-  taskTramoGroup,
-  taskTramoKey,
-  taskTramoLabel,
-  tramoConcentrationLine,
-  tramoCountsLine,
-  tramoSplit,
+  taskEtapaGroup,
+  taskEtapaKey,
+  taskEtapaLabel,
+  etapaConcentrationLine,
+  etapaCountsLine,
+  etapaSplit,
 } from "@/lib/dashboard/inicio";
 import { TASK_TREND_TIME_ZONE, bucketTaskTrend, localIsoDate, taskTrendQueryWindow } from "@/lib/dashboard/task-trend";
 import { db } from "@/lib/db/client";
@@ -49,7 +49,7 @@ import * as projectsRepository from "@/lib/repositories/projects-repository";
 import * as staffRepository from "@/lib/repositories/staff-repository";
 import * as tasksRepository from "@/lib/repositories/tasks-repository";
 import { isTaskClosed } from "@/lib/tasks/status-options";
-import { canSeeAdminData, tramoColorVar } from "@/lib/tramos/compat";
+import { canSeeAdminData, etapaColorVar } from "@/lib/etapas/compat";
 import type { TaskKind } from "@/lib/types/core";
 import type { InicioData } from "@/lib/types/redesign";
 import type { KpiDatum } from "@/lib/types/widgets";
@@ -57,7 +57,7 @@ import type { KpiDatum } from "@/lib/types/widgets";
 /** The fields the pre-migration action returned (Inicio Visual, #989, added more). */
 export type LegacyInicioData = Pick<
   InicioData,
-  "kpis" | "tasksByTramo" | "weeklyPace" | "attention" | "myDay" | "projectsProgress" | "workload"
+  "kpis" | "tasksByEtapa" | "weeklyPace" | "attention" | "myDay" | "projectsProgress" | "workload"
 >;
 
 export async function legacyFetchInicio(user: AuthenticatedUser): Promise<LegacyInicioData> {
@@ -110,7 +110,7 @@ export async function legacyFetchInicio(user: AuthenticatedUser): Promise<Legacy
   const blockedToday = tasks.filter((t) => state.blocked(t, today));
   const reviewsToday = tasks.filter((t) => state.reviewDue(t, today));
   const activeProjects = scopedProjects.filter((p) => p.status === "activo");
-  const tramoOfTask = (t: (typeof tasks)[number]) => t.workflow?.key ?? null;
+  const etapaOfTask = (t: (typeof tasks)[number]) => t.workflow?.key ?? null;
 
   // ── KPIs ──
   const daily = (countOn: (day: string) => number) => dailySeries(inMemoryCounter(countOn), INICIO_KPI_DAYS, now, tz);
@@ -129,31 +129,31 @@ export async function legacyFetchInicio(user: AuthenticatedUser): Promise<Legacy
         href: INICIO_KPI.proyectosActivos.href,
         deltaWindow: "mes",
       }),
-      split: tramoSplit(activeProjects, (p) => p.currentWorkflow?.key ?? null),
-      caption: tramoCountsLine(activeProjects, projectTramoGroup, KPI_CONTEXT.noActiveProjects),
+      split: etapaSplit(activeProjects, (p) => p.currentWorkflow?.key ?? null),
+      caption: etapaCountsLine(activeProjects, projectEtapaGroup, KPI_CONTEXT.noActiveProjects),
     },
     {
       ...kpiFromDaily(INICIO_KPI.vencidas.key, INICIO_KPI.vencidas.label, overdueDaily, {
         goodWhen: "down",
         href: INICIO_KPI.vencidas.href,
       }),
-      split: tramoSplit(overdueToday, tramoOfTask),
-      caption: tramoConcentrationLine(overdueToday, taskTramoGroup, KPI_CONTEXT.noOverdue),
+      split: etapaSplit(overdueToday, etapaOfTask),
+      caption: etapaConcentrationLine(overdueToday, taskEtapaGroup, KPI_CONTEXT.noOverdue),
     },
     {
       ...kpiFromDaily(INICIO_KPI.bloqueadas.key, INICIO_KPI.bloqueadas.label, blockedDaily, {
         goodWhen: "down",
         href: INICIO_KPI.bloqueadas.href,
       }),
-      split: tramoSplit(blockedToday, tramoOfTask),
-      caption: tramoConcentrationLine(blockedToday, taskTramoGroup, KPI_CONTEXT.noBlocked),
+      split: etapaSplit(blockedToday, etapaOfTask),
+      caption: etapaConcentrationLine(blockedToday, taskEtapaGroup, KPI_CONTEXT.noBlocked),
     },
     {
       ...kpiFromDaily(INICIO_KPI.revisiones.key, INICIO_KPI.revisiones.label, reviewsDaily, {
         goodWhen: "up",
         href: INICIO_KPI.revisiones.href,
       }),
-      split: tramoSplit(reviewsToday, tramoOfTask),
+      split: etapaSplit(reviewsToday, etapaOfTask),
       caption: nextReviewLine(openTasks, today),
     },
     {
@@ -166,13 +166,13 @@ export async function legacyFetchInicio(user: AuthenticatedUser): Promise<Legacy
     },
   ];
 
-  // ── Tareas abiertas por tramo: value = open, secondary = overdue, extra = { diasProm } ──
-  const byTramo = [...openTasks].sort(byTramoOrder);
-  const ages = averageAgeByKey(byTramo, taskTramoKey, today, tz);
-  const tasksByTramo = toDistribution(byTramo, {
-    keyOf: taskTramoKey,
-    labelOf: taskTramoLabel,
-    colorVarOf: (t) => tramoColorVar(taskTramoKey(t)),
+  // ── Tareas abiertas por etapa: value = open, secondary = overdue, extra = { diasProm } ──
+  const byEtapa = [...openTasks].sort(byEtapaOrder);
+  const ages = averageAgeByKey(byEtapa, taskEtapaKey, today, tz);
+  const tasksByEtapa = toDistribution(byEtapa, {
+    keyOf: taskEtapaKey,
+    labelOf: taskEtapaLabel,
+    colorVarOf: (t) => etapaColorVar(taskEtapaKey(t)),
     secondaryOf: (t) => (state.overdue(t, today) ? 1 : 0),
   }).map((segment) => ({ ...segment, extra: { diasProm: ages.get(segment.key) ?? 0 } }));
 
@@ -201,7 +201,7 @@ export async function legacyFetchInicio(user: AuthenticatedUser): Promise<Legacy
   const staffById = new Map(staff.map((s) => [s.id, s]));
   const workload = inicioWorkloadRows(staff, tasks, today).map((row) => toPersonDatum(staffById.get(row.staffId)!, row));
 
-  return { kpis, tasksByTramo, weeklyPace, attention, myDay, projectsProgress, workload };
+  return { kpis, tasksByEtapa, weeklyPace, attention, myDay, projectsProgress, workload };
 }
 
 /** The "Avance de tareas" source limited to the caller's dashboard scope. */

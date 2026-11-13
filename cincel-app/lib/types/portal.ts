@@ -39,8 +39,8 @@ export type PortalScheduleSectionDTO = {
    */
   actualStart?: string | null;
   actualEnd?: string | null;
-  /** The tramo the section belongs to (`schedule_tasks.workflow_id` → `workflows.key`); while none is linked, phases group by planta. */
-  tramoKey?: string | null;
+  /** The etapa the section belongs to (`schedule_tasks.workflow_id` → `workflows.key`); while none is linked, phases group by planta. */
+  etapaKey?: string | null;
 };
 
 /** Null when the project has no schedule. */
@@ -49,16 +49,16 @@ export type PortalScheduleDTO = {
 } | null;
 
 /**
- * One tramo of the project as the client sees it (FE §3.11 `PhaseStepper`): the tramo catalog in order, with
+ * One etapa of the project as the client sees it (FE §3.11 `PhaseStepper`): the etapa catalog in order, with
  * the project's progress through it. Only the key, the name and the state; no ids, dates or staff.
  */
-export type PortalTramoDTO = {
+export type PortalEtapaDTO = {
   key: string;
   name: string;
   state: "completado" | "en_curso" | "por_iniciar";
-  /** 0–100: closed over all live tasks of the tramo in this project; completado 100, por_iniciar 0. */
+  /** 0–100: closed over all live tasks of the etapa in this project; completado 100, por_iniciar 0. */
   progressPct: number;
-  /** `YYYY-MM` from `project_stages.started_at`; null when the tramo hasn't started. */
+  /** `YYYY-MM` from `project_stages.started_at`; null when the etapa hasn't started. */
   startMonth: string | null;
 };
 

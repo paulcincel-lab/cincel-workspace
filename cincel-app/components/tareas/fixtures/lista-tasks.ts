@@ -8,7 +8,7 @@ export const LISTA_TODAY = "2026-11-07";
 
 export const PRESALE: WorkflowRef = { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 };
 export const DISENO: WorkflowRef = { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 };
-export const LISTA_TRAMOS: WorkflowRef[] = [PRESALE, DISENO];
+export const LISTA_ETAPAS: WorkflowRef[] = [PRESALE, DISENO];
 
 export function makeListaTask(overrides: Partial<TaskListItem> = {}): TaskListItem {
   return {

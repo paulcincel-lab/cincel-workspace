@@ -83,14 +83,14 @@ describe("buildCalendarEvents — etapa and fase", () => {
 
   it("carries the task's etapa and fase", () => {
     const [event] = buildCalendarEvents([makeTask({ kind: "workflow", workflow: diseno, phase: ejecutivo })]);
-    expect(event).toMatchObject({ tramo: "diseno", tramoLabel: "Diseño", phaseId: "f1", phaseLabel: "Ejecutivo" });
+    expect(event).toMatchObject({ etapa: "diseno", etapaLabel: "Diseño", phaseId: "f1", phaseLabel: "Ejecutivo" });
     expect(event.href).toBe("/actividades/diseno?project=Proyecto");
   });
 
   it("uses Sin etapa for tasks without one and Administración for admin tasks", () => {
     const [none] = buildCalendarEvents([makeTask()]);
-    expect(none).toMatchObject({ tramo: "sin-tramo", tramoLabel: "Sin etapa", phaseId: null, phaseLabel: "" });
+    expect(none).toMatchObject({ etapa: "sin-etapa", etapaLabel: "Sin etapa", phaseId: null, phaseLabel: "" });
     const [admin] = buildCalendarEvents([makeTask({ kind: "admin" })]);
-    expect(admin).toMatchObject({ tramo: "admin", tramoLabel: "Administración" });
+    expect(admin).toMatchObject({ etapa: "admin", etapaLabel: "Administración" });
   });
 });

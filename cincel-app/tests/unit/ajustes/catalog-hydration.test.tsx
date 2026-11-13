@@ -14,7 +14,7 @@ import type { Position, TaskStatusOption, WorkflowDetail } from "@/lib/types/cor
 const pageData = vi.hoisted(() => ({
   getAjustesEstatusPageData: vi.fn(),
   getAjustesPuestosPageData: vi.fn(),
-  getAjustesTramosPageData: vi.fn(),
+  getAjustesEtapasPageData: vi.fn(),
   getAjustesPermisosPageData: vi.fn(),
 }));
 const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
@@ -54,20 +54,20 @@ vi.mock("@/components/patterns/FormDialog", () => import("@/tests/unit/fixtures/
 import { EstatusSettings } from "@/components/ajustes/EstatusSettings";
 import { PermisosSettings } from "@/components/ajustes/PermisosSettings";
 import { PuestosClient } from "@/app/(staff)/ajustes/(admin)/puestos/PuestosClient";
-import { TramosClient } from "@/app/(staff)/ajustes/(admin)/etapas/TramosClient";
+import { EtapasClient } from "@/app/(staff)/ajustes/(admin)/etapas/EtapasClient";
 import { buildDefaultPermissionsState } from "@/lib/auth/permissionsState";
 import {
   ajustesEstatusOptions,
   ajustesPermisosOptions,
   ajustesPuestosOptions,
-  ajustesTramosOptions,
+  ajustesEtapasOptions,
   seedAjustesCatalogs,
 } from "@/lib/query/options/ajustes";
 import { prefetch } from "@/lib/query/server";
 
 const STATUS: TaskStatusOption = { id: "s1", name: "En revisión", closes: false, countsAsCompleted: false, sortOrder: 0 };
 
-const TRAMO: WorkflowDetail = {
+const ETAPA: WorkflowDetail = {
   id: "w1",
   key: "diseno",
   name: "Diseño",
@@ -79,7 +79,7 @@ const TRAMO: WorkflowDetail = {
   templates: [],
   readiness: null,
 };
-const INACTIVE_TRAMO: WorkflowDetail = { ...TRAMO, id: "w0", key: "viejo", name: "Viejo", active: false, sortOrder: 0 };
+const INACTIVE_ETAPA: WorkflowDetail = { ...ETAPA, id: "w0", key: "viejo", name: "Viejo", active: false, sortOrder: 0 };
 
 const PUESTO: Position = {
   id: "p1",
@@ -120,7 +120,7 @@ describe("Ajustes catalog hydration", () => {
   });
 
   it("puestos: renders the prefetched puestos and seeds catalog.workflows", async () => {
-    const data = { positions: [PUESTO], workflows: [TRAMO] };
+    const data = { positions: [PUESTO], workflows: [ETAPA] };
     const { client, state } = await hydrationRoundtrip(async (qc) => {
       await prefetch(qc, ajustesPuestosOptions(), async () => data);
       seedAjustesCatalogs(qc, { seg: "puestos", data });
@@ -136,15 +136,15 @@ describe("Ajustes catalog hydration", () => {
   });
 
   it("etapas: renders the prefetched etapas; the catalog seed keeps only active ones", async () => {
-    const data = { workflows: [INACTIVE_TRAMO, TRAMO], activeProjects: {}, phaseTaskCounts: {} };
+    const data = { workflows: [INACTIVE_ETAPA, ETAPA], activeProjects: {}, phaseTaskCounts: {} };
     const { client, state } = await hydrationRoundtrip(async (qc) => {
-      await prefetch(qc, ajustesTramosOptions(), async () => data);
-      seedAjustesCatalogs(qc, { seg: "tramos", data });
+      await prefetch(qc, ajustesEtapasOptions(), async () => data);
+      seedAjustesCatalogs(qc, { seg: "etapas", data });
     });
 
-    renderWithQueryClient(<TramosClient />, { client, hydrate: state });
+    renderWithQueryClient(<EtapasClient />, { client, hydrate: state });
 
-    // One row per tramo, in flow order.
+    // One row per etapa, in flow order.
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
     expect(rows[0].textContent?.startsWith("Viejo")).toBe(true);

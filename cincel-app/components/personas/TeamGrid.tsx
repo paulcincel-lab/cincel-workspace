@@ -52,7 +52,7 @@ export function TeamMemberActions({ person, email }: { person: PersonDatum; emai
 
 /**
  * Equipo cards (redesign FE §3.6, §4.7): an instance of `PeopleWidget`
- * (avatar, name → detail, puesto, tramo, "n proyectos", load). Hours appear
+ * (avatar, name → detail, puesto, etapa, "n proyectos", load). Hours appear
  * only when the server returned them. The availability legend filter
  * (`selectedKpi`) narrows the people over the data already loaded. The
  * style alone picks the layout (ADR 0004).

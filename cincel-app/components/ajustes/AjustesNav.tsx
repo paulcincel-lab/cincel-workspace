@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 export type AjustesNavKey =
   | "perfil" | "apariencia" | "notificaciones" | "integraciones"
-  | "general" | "tema" | "horario" | "tramos" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
+  | "general" | "tema" | "horario" | "etapas" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
 
 export type AjustesNavProps = {
   active: AjustesNavKey;
@@ -30,7 +30,7 @@ export type AjustesNavProps = {
   /**
    * Per-segment visibility from `resolveAjustesSegments` (the same rules as the
    * segment guards). When given it decides every Organización item; without
-   * it `isAdmin` shows all of them (Tramos / Puestos still only when Project
+   * it `isAdmin` shows all of them (Etapas / Puestos still only when Project
    * Flow's pages exist).
    */
   segments?: AjustesVisibleSegments;
@@ -49,7 +49,7 @@ const ORGANIZATION_ITEMS: ReadonlyArray<{ key: AjustesAdminSegment; label: strin
   { key: "general", label: "General" },
   { key: "tema", label: "Tema y estilo" },
   { key: "horario", label: "Control de horario" },
-  { key: "tramos", label: "Etapas y fases" },
+  { key: "etapas", label: "Etapas y fases" },
   { key: "puestos", label: "Puestos" },
   { key: "estatus", label: "Estatus" },
   { key: "permisos", label: "Permisos" },
@@ -63,22 +63,19 @@ const AJUSTES_NAV_KEYS: ReadonlySet<string> = new Set<string>([
   ...ORGANIZATION_ITEMS.map((item) => item.key),
 ]);
 
-/** Route segment of the nav keys whose URL differs from the key (the key keeps its old name until the identifiers rename). */
-const ROUTE_SEGMENT: Readonly<Partial<Record<AjustesNavKey, string>>> = { tramos: "etapas" };
-
 /** `/ajustes/<segment>` of a nav key. */
-const ajustesHref = (key: AjustesNavKey): string => `/ajustes/${ROUTE_SEGMENT[key] ?? key}`;
+const ajustesHref = (key: AjustesNavKey): string => `/ajustes/${key}`;
 
 /** The `AjustesNav` key of an `/ajustes/<segment>/…` path (Apariencia for `/ajustes`). */
 export function ajustesNavKeyFromPath(pathname: string | null | undefined): AjustesNavKey {
   const raw = (pathname ?? "").split("?")[0].split("/").filter(Boolean)[1];
-  // `etapas` is the route of the `tramos` key; `/ajustes/tramos` still resolves (it redirects permanently).
-  const segment = raw === "etapas" ? "tramos" : raw;
+  // Compatibility: `/ajustes/tramos` redirects permanently (next.config.ts) but still reads as the Etapas key.
+  const segment = raw === "tramos" ? "etapas" : raw;
   return segment && AJUSTES_NAV_KEYS.has(segment) ? (segment as AjustesNavKey) : "apariencia";
 }
 
 function isSegmentVisible(key: AjustesAdminSegment, isAdmin: boolean, segments?: AjustesVisibleSegments): boolean {
-  if ((key === "tramos" || key === "puestos") && !PROJECT_FLOW_SETTINGS_PAGES[key]) return false;
+  if ((key === "etapas" || key === "puestos") && !PROJECT_FLOW_SETTINGS_PAGES[key]) return false;
   return segments ? segments[key] === true : isAdmin;
 }
 

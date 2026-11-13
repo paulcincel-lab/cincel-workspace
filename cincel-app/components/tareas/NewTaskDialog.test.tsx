@@ -69,7 +69,7 @@ import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 
 import { NewTaskDialog, newTaskInvalidations, newTaskWorkflowsKey, type NewTaskDialogProps } from "./NewTaskDialog";
-import { applyTemplate, initialStatusTarget, tramoFases, tramoTemplateTitles } from "./new-task-form";
+import { applyTemplate, initialStatusTarget, etapaFases, etapaTemplateTitles } from "./new-task-form";
 import { newTaskDefaultsFromSearch, newTaskSearch } from "./use-new-task-param";
 
 /** A real mouse press on a base-ui Select option: pointerdown, then click. */
@@ -123,13 +123,13 @@ afterEach(() => {
 
 describe("new-task-form helpers", () => {
   it("lists only the etapa's active fases in catalog order", () => {
-    expect(tramoFases(DISENO).map((f) => f.name)).toEqual(["Anteproyecto", "Ejecutivo"]);
-    expect(tramoFases(null)).toEqual([]);
+    expect(etapaFases(DISENO).map((f) => f.name)).toEqual(["Anteproyecto", "Ejecutivo"]);
+    expect(etapaFases(null)).toEqual([]);
   });
 
   it("takes the active templates of the selected fase, in order", () => {
-    expect(tramoTemplateTitles(DISENO, "f-ante")).toEqual(["Levantamiento", "Medidas del sitio"]);
-    expect(tramoTemplateTitles(DISENO, null)).toEqual(["Levantamiento", "Medidas del sitio", "Planos de conjunto"]);
+    expect(etapaTemplateTitles(DISENO, "f-ante")).toEqual(["Levantamiento", "Medidas del sitio"]);
+    expect(etapaTemplateTitles(DISENO, null)).toEqual(["Levantamiento", "Medidas del sitio", "Planos de conjunto"]);
   });
 
   it("appends template titles once and drops empty rows", () => {
@@ -149,7 +149,7 @@ describe("new-task-form helpers", () => {
   it("reads the proyecto and etapa defaults from the URL", () => {
     expect(newTaskDefaultsFromSearch(new URLSearchParams("proyecto=p-1&etapa=diseno&nueva=1"))).toEqual({
       projectId: "p-1",
-      tramoKey: "diseno",
+      etapaKey: "diseno",
     });
     expect(newTaskDefaultsFromSearch(new URLSearchParams("estilo=analitico"))).toEqual({});
   });
@@ -161,7 +161,7 @@ describe("NewTaskDialog", () => {
     expect(actions.fetchCatalogProjectOptions).toHaveBeenCalledWith({});
     expect(actions.fetchWorkflowsAction).toHaveBeenCalled();
     expect(screen.getByRole("combobox", { name: "Proyecto" }).textContent).toContain("Casa Roble");
-    // The project's current tramo is the default.
+    // The project's current etapa is the default.
     expect(screen.getByRole("combobox", { name: "Etapa" }).textContent).toContain("Diseño");
     expect(actions.fetchCatalogAssignableStaff).toHaveBeenCalledWith({ workflowId: "w-diseno" });
     expect(client.getQueryData(qk.catalog.projectOptions())).toEqual(PROJECT_OPTIONS);
@@ -222,7 +222,7 @@ describe("NewTaskDialog", () => {
     await waitFor(() => expect(screen.queryByRole("combobox", { name: "Fase" })).toBeNull());
   });
 
-  it("follows the project's current etapa until a etapa is picked", async () => {
+  it("follows the project's current etapa until an etapa is picked", async () => {
     await renderDialog();
     await pick("Proyecto", "Torre Norte");
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Etapa" }).textContent).toContain("Presale"));
@@ -231,7 +231,7 @@ describe("NewTaskDialog", () => {
 
   it("prefills project, etapa, title and description from defaults", async () => {
     await renderDialog({
-      defaults: { projectId: "p-norte", tramoKey: "diseno", title: "Revisar planos", description: "Del correo" },
+      defaults: { projectId: "p-norte", etapaKey: "diseno", title: "Revisar planos", description: "Del correo" },
     });
     expect(screen.getByRole("combobox", { name: "Proyecto" }).textContent).toContain("Torre Norte");
     expect(screen.getByRole("combobox", { name: "Etapa" }).textContent).toContain("Diseño");
@@ -371,7 +371,7 @@ describe("NewTaskDialog", () => {
     expect(toasts.error).toHaveBeenCalledWith("No se pudo completar la acción. Intenta de nuevo.");
   });
 
-  it("saves no fase for a etapa without a catalog", async () => {
+  it("saves no fase for an etapa without a catalog", async () => {
     await renderDialog();
     await pick("Etapa", "Presale");
     fireEvent.change(titleInput(), { target: { value: "Primera visita" } });

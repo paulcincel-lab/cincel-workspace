@@ -42,12 +42,12 @@ function json<T>(value: unknown, fallback: T): T {
 
 type AttachmentJson = Omit<TaskAttachment, "uploadedBy"> & { uploadedById: string | null; uploadedByName: string | null };
 
-/** A task's detail plus the active fases of its tramo (the Fase select). */
+/** A task's detail plus the active fases of its etapa (the Fase select). */
 export type TaskSheetDetail = { task: TaskDetail; phases: WorkflowPhaseRef[] };
 
 /**
  * The task's `TaskDetail` (the shape `getTask` returns, archived tasks
- * included) and its tramo's active fases, in one statement. Null when the
+ * included) and its etapa's active fases, in one statement. Null when the
  * task or its project is missing or deleted. Unscoped: any kind, client name
  * included.
  */
@@ -183,7 +183,7 @@ export async function getTaskSheetDetail(id: string): Promise<TaskSheetDetail | 
 /**
  * Staff who can take a task, as `catalog.assignableStaff(workflowId)` holds
  * them (`loadCatalogAssignableStaff`): active, live, display name, the ones
- * whose puesto covers the tramo first, then by first name. One statement.
+ * whose puesto covers the etapa first, then by first name. One statement.
  */
 export async function listAssignableStaffOptions(workflowId: string | null): Promise<CatalogAssignableStaffOption[]> {
   const rows = await db
@@ -209,7 +209,7 @@ export async function listAssignableStaffOptions(workflowId: string | null): Pro
     firstName: r.name,
     suggested: Boolean(r.suggested),
   }));
-  // `listAssignableStaff` re-sorts only when there is a tramo.
+  // `listAssignableStaff` re-sorts only when there is an etapa.
   if (workflowId) {
     options.sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.firstName.localeCompare(b.firstName));
   }

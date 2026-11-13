@@ -20,11 +20,11 @@ import { CalendarioFilters } from "@/components/widgets/calendario/CalendarioFil
 import { CalendarioSkeleton } from "@/components/widgets/route-skeletons";
 import { hasActiveCalendarioFilters } from "@/lib/calendario/filters";
 import { rangeLabel } from "@/lib/calendario/labels";
-import { catalogProjectOptionsOptions, catalogTramosOptions } from "@/lib/query/options/catalog";
+import { catalogProjectOptionsOptions, catalogEtapasOptions } from "@/lib/query/options/catalog";
 import type { CalKpis, CalendarioQuery, CalendarioRange } from "@/lib/types/calendario";
 
 const NO_KPIS: CalKpis = { tasks: 0, meetings: 0, meetingHours: 0, overdue: 0, overduePct: 0, unassigned: 0 };
-const NO_TRAMOS: never[] = [];
+const NO_ETAPAS: never[] = [];
 
 type RangeStatus = ReturnType<typeof useCalendarioRange>;
 
@@ -56,7 +56,7 @@ export function CalendarioChrome({
   const nav = useCalendarioNavigation(query);
   const canViewTeam = useCanViewTeamCalendar();
   const projects = useQuery(catalogProjectOptionsOptions()).data;
-  const tramos = useQuery(catalogTramosOptions()).data ?? NO_TRAMOS;
+  const etapas = useQuery(catalogEtapasOptions()).data ?? NO_ETAPAS;
   const projectOptions = useMemo(() => (projects ?? []).map((p) => ({ id: p.id, name: p.name })), [projects]);
 
   const today = range?.today ?? defaults.today;
@@ -84,7 +84,7 @@ export function CalendarioChrome({
         vista={query.vista}
         canViewTeam={canViewTeam}
         projects={projectOptions}
-        tramos={tramos}
+        etapas={etapas}
         onChange={nav.patchFilters}
       />
       {aboveBody}

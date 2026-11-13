@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  listTramos: vi.fn(),
-  tramoColorVar: vi.fn(),
+  listEtapas: vi.fn(),
+  etapaColorVar: vi.fn(),
 }));
 
-vi.mock("@/lib/tramos/compat", () => ({ listTramos: mocks.listTramos, tramoColorVar: mocks.tramoColorVar }));
+vi.mock("@/lib/etapas/compat", () => ({ listEtapas: mocks.listEtapas, etapaColorVar: mocks.etapaColorVar }));
 // The registry files load server actions; these tests pass their own sources.
 vi.mock("@/lib/shell/nav-items", () => ({ NAV_ITEM_SOURCES: [] }));
 
-import { buildNavModel, NEUTRAL_TRAMO_COLOR, type NavItemKey, type NavItemSource } from "@/lib/ui/nav";
+import { buildNavModel, NEUTRAL_ETAPA_COLOR, type NavItemKey, type NavItemSource } from "@/lib/ui/nav";
 import { activeNavKey, NAV_ICONS, toClientNavModel, withNavIcons } from "@/lib/ui/nav-client";
 import { bottomTabsOf } from "../AppShellClient";
 
@@ -33,7 +33,7 @@ function source(
   };
 }
 
-const TRAMOS = [
+const ETAPAS = [
   { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
   { id: "w1", key: "presale", name: "Presale", sortOrder: 1 },
   { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 },
@@ -41,13 +41,13 @@ const TRAMOS = [
 
 afterEach(() => {
   vi.clearAllMocks();
-  mocks.listTramos.mockReset();
-  mocks.tramoColorVar.mockReset();
+  mocks.listEtapas.mockReset();
+  mocks.etapaColorVar.mockReset();
 });
 
 describe("buildNavModel", () => {
   it("collects the sources by order and splits items and footer", async () => {
-    mocks.listTramos.mockResolvedValue([]);
+    mocks.listEtapas.mockResolvedValue([]);
     const nav = await buildNavModel(ADMIN_SESSION, [
       source("ajustes", 10, { section: "footer" }),
       source("tareas", 30),
@@ -60,7 +60,7 @@ describe("buildNavModel", () => {
   });
 
   it("passes the session to every source", async () => {
-    mocks.listTramos.mockResolvedValue([]);
+    mocks.listEtapas.mockResolvedValue([]);
     const inicio = source("inicio", 10);
     await buildNavModel(STAFF_SESSION, [inicio]);
     expect(inicio.resolve).toHaveBeenCalledWith(STAFF_SESSION);
@@ -87,7 +87,7 @@ describe("buildNavModel", () => {
   });
 
   it("keeps positive badges and drops zero, negative and non-numeric ones", async () => {
-    mocks.listTramos.mockResolvedValue([]);
+    mocks.listEtapas.mockResolvedValue([]);
     const nav = await buildNavModel(ADMIN_SESSION, [
       source("mi-espacio", 55, { badge: 5 }),
       source("tareas", 30, { badge: 0 }),
@@ -108,15 +108,15 @@ describe("buildNavModel", () => {
     expect(nav.items[0].badge).toBe(1);
   });
 
-  it("lists the etapas from listTramos in order, linking /tareas?etapa=key", async () => {
-    mocks.listTramos.mockResolvedValue(TRAMOS);
-    mocks.tramoColorVar.mockImplementation((key: string) =>
+  it("lists the etapas from listEtapas in order, linking /tareas?etapa=key", async () => {
+    mocks.listEtapas.mockResolvedValue(ETAPAS);
+    mocks.etapaColorVar.mockImplementation((key: string) =>
       ({ presale: "var(--chart-1)", diseno: "var(--chart-2)", construccion: "var(--chart-3)" })[key],
     );
 
     const nav = await buildNavModel(ADMIN_SESSION, [source("tareas", 30)]);
 
-    expect(nav.tramos).toEqual([
+    expect(nav.etapas).toEqual([
       { key: "presale", name: "Presale", colorVar: "var(--chart-1)", href: "/tareas?etapa=presale" },
       { key: "diseno", name: "Diseño", colorVar: "var(--chart-2)", href: "/tareas?etapa=diseno" },
       { key: "construccion", name: "Construcción", colorVar: "var(--chart-3)", href: "/tareas?etapa=construccion" },
@@ -124,30 +124,30 @@ describe("buildNavModel", () => {
   });
 
   it("passes each etapa's sortOrder so Decoración takes its chart slot (frame `Sidebar`)", async () => {
-    mocks.listTramos.mockResolvedValue([{ id: "w4", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
-    mocks.tramoColorVar.mockImplementation((_key: string, sortOrder?: number) => `var(--chart-${sortOrder})`);
+    mocks.listEtapas.mockResolvedValue([{ id: "w4", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
+    mocks.etapaColorVar.mockImplementation((_key: string, sortOrder?: number) => `var(--chart-${sortOrder})`);
     const nav = await buildNavModel(ADMIN_SESSION, [source("tareas", 30)]);
-    expect(mocks.tramoColorVar).toHaveBeenCalledWith("decoracion", 4);
-    expect(nav.tramos[0].colorVar).toBe("var(--chart-4)");
+    expect(mocks.etapaColorVar).toHaveBeenCalledWith("decoracion", 4);
+    expect(nav.etapas[0].colorVar).toBe("var(--chart-4)");
   });
 
-  it("uses the neutral color when a etapa has no chart slot", async () => {
-    mocks.listTramos.mockResolvedValue([{ id: "w9", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
-    mocks.tramoColorVar.mockImplementation(() => {
+  it("uses the neutral color when an etapa has no chart slot", async () => {
+    mocks.listEtapas.mockResolvedValue([{ id: "w9", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
+    mocks.etapaColorVar.mockImplementation(() => {
       throw new Error("unknown");
     });
     const nav = await buildNavModel(ADMIN_SESSION, [source("tareas", 30)]);
-    expect(nav.tramos[0].colorVar).toBe(NEUTRAL_TRAMO_COLOR);
+    expect(nav.etapas[0].colorVar).toBe(NEUTRAL_ETAPA_COLOR);
   });
 
-  it("shows no etapas while listTramos fails or Tareas is hidden", async () => {
-    mocks.listTramos.mockRejectedValue(new Error("not available"));
-    expect((await buildNavModel(ADMIN_SESSION, [source("tareas", 30)])).tramos).toEqual([]);
+  it("shows no etapas while listEtapas fails or Tareas is hidden", async () => {
+    mocks.listEtapas.mockRejectedValue(new Error("not available"));
+    expect((await buildNavModel(ADMIN_SESSION, [source("tareas", 30)])).etapas).toEqual([]);
 
-    mocks.listTramos.mockResolvedValue(TRAMOS);
+    mocks.listEtapas.mockResolvedValue(ETAPAS);
     const hidden = await buildNavModel(ADMIN_SESSION, [source("tareas", 30, { hidden: true })]);
-    expect(hidden.tramos).toEqual([]);
-    expect(mocks.listTramos).toHaveBeenCalledTimes(1);
+    expect(hidden.etapas).toEqual([]);
+    expect(mocks.listEtapas).toHaveBeenCalledTimes(1);
   });
 
   it("returns an empty model while every source is a stub", async () => {
@@ -155,18 +155,18 @@ describe("buildNavModel", () => {
       source("inicio", 10, { hidden: true }),
       source("ajustes", 10, { section: "footer", hidden: true }),
     ]);
-    expect(nav).toEqual({ items: [], tramos: [], footer: [] });
+    expect(nav).toEqual({ items: [], etapas: [], footer: [] });
   });
 
   it("defaults to the registry", async () => {
     const nav = await buildNavModel(ADMIN_SESSION);
-    expect(nav).toEqual({ items: [], tramos: [], footer: [] });
+    expect(nav).toEqual({ items: [], etapas: [], footer: [] });
   });
 });
 
 describe("nav model per role", () => {
   it("gives admins and staff the same items except admin-only ones", async () => {
-    mocks.listTramos.mockResolvedValue([]);
+    mocks.listEtapas.mockResolvedValue([]);
     const sources = [source("inicio", 10), source("tareas", 30), source("ajustes", 90, { section: "footer", adminOnly: true })];
     const admin = await buildNavModel(ADMIN_SESSION, sources);
     const staff = await buildNavModel(STAFF_SESSION, sources);
@@ -185,7 +185,7 @@ describe("nav-client helpers", () => {
     const restored = withNavIcons(client);
     expect(restored.items.map((i) => i.icon)).toEqual(FULL_NAV.items.map((i) => NAV_ICONS[i.key]));
     expect(restored.items.map((i) => i.badge)).toEqual(FULL_NAV.items.map((i) => i.badge));
-    expect(restored.tramos).toEqual(FULL_NAV.tramos);
+    expect(restored.etapas).toEqual(FULL_NAV.etapas);
   });
 
   it.each([

@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   dayAvailability,
-  dominantTramo,
+  dominantEtapa,
   initialsOf,
   occupancyPct,
   openCounts,
@@ -49,7 +49,7 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   resolveTeamCapabilities: vi.fn(() => ({ canViewTeam: state.canViewTeam })),
   canViewTeamHours: vi.fn(() => state.teamHours),
 }));
-vi.mock("@/lib/tramos/compat", () => ({
+vi.mock("@/lib/etapas/compat", () => ({
   canSeeAdminData: vi.fn((user: { access: string }) => user.access === "Administrador"),
 }));
 vi.mock("@/lib/time-tracking/settings", () => ({
@@ -140,14 +140,14 @@ describe("occupancy and counts", () => {
   it("derives initials and the dominant etapa", () => {
     expect(initialsOf("Ana María", "López")).toBe("AL");
     expect(initialsOf("Ana")).toBe("A");
-    expect(dominantTramo(["diseno", null, "presale", "diseno"])).toBe("diseno");
-    expect(dominantTramo([null])).toBeNull();
+    expect(dominantEtapa(["diseno", null, "presale", "diseno"])).toBe("diseno");
+    expect(dominantEtapa([null])).toBeNull();
   });
 });
 
 describe("task order", () => {
   const today = "2026-11-04";
-  const base = { projectName: "Casa", tramo: null, status: "pendiente" };
+  const base = { projectName: "Casa", etapa: null, status: "pendiente" };
 
   it("puts overdue first (most late first), then by due date, undated last", () => {
     const items = toAttentionItems(
@@ -187,7 +187,7 @@ describe("people actions", async () => {
       .mockReset()
       .mockResolvedValue([staffRow(state.memberId), staffRow(OTHER, 0), { ...staffRow("44444444-4444-4444-8444-444444444444"), active: false }]);
     repo.listAssignedOpenTasks.mockReset().mockImplementation(async (ids: string[]) => {
-      return new Map(ids.map((id) => [id, [{ staffId: id, id: `t-${id}`, title: "T", status: "pendiente", due: null, projectName: "Casa", tramo: "diseno" }]]));
+      return new Map(ids.map((id) => [id, [{ staffId: id, id: `t-${id}`, title: "T", status: "pendiente", due: null, projectName: "Casa", etapa: "diseno" }]]));
     });
     repo.listActiveProjectsByStaff.mockReset().mockImplementation(async (ids: string[]) => {
       return new Map(ids.map((id) => [id, [{ staffId: id, projectId: "p", name: "Casa", progress: 40, role: "coordinador" }]]));
@@ -243,7 +243,7 @@ describe("people actions", async () => {
 
   it("builds the persona detail with role sublabels and hours for team-hours viewers", async () => {
     const detail = (await fetchPersonaDetailAction({ staffId: OTHER }))!;
-    expect(detail.person).toMatchObject({ id: OTHER, name: "Ana López", initials: "AL", puesto: "Diseñadora", tramo: "diseno" });
+    expect(detail.person).toMatchObject({ id: OTHER, name: "Ana López", initials: "AL", puesto: "Diseñadora", etapa: "diseno" });
     expect(detail.projects).toEqual([
       { id: "p", label: "Casa", sublabel: "coordinador", real: 40, href: "/proyectos/p" },
     ]);

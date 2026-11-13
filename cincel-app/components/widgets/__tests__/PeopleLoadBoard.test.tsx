@@ -33,10 +33,10 @@ vi.mock("@/lib/actions/preferences-actions", () => ({
 }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffDetailAction: vi.fn(), saveMemberAction: vi.fn() }));
 vi.mock("@/components/equipo/MemberEditorDrawer", () => ({ MemberEditorDrawer: () => null }));
-vi.mock("@/lib/tramos/compat", () => ({
-  tramoLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
-  tramoColorSlot: (key: string) => ({ presale: 1, diseno: 2, construccion: 3 })[key] ?? null,
-  tramoColorVar: (key: string) =>
+vi.mock("@/lib/etapas/compat", () => ({
+  etapaLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
+  etapaColorSlot: (key: string) => ({ presale: 1, diseno: 2, construccion: 3 })[key] ?? null,
+  etapaColorVar: (key: string) =>
     ({ presale: "var(--chart-1)", diseno: "var(--chart-2)", construccion: "var(--chart-3)" })[key] ?? "var(--muted-foreground)",
   phaseLabel: () => null,
   canSeeAdminData: () => false,
@@ -69,7 +69,7 @@ function person(id: string, name: string, patch: Partial<PersonDatum>): PersonDa
     name,
     initials: name.slice(0, 2).toUpperCase(),
     puesto: null,
-    tramo: "diseno",
+    etapa: "diseno",
     open: 4,
     overdue: 0,
     occupancyPct: 40,
@@ -87,21 +87,21 @@ const SATURATED: PersonDatum[] = [
     occupancyPct: 130,
     weeks: weeks([130, 90, 50, 20]),
     projects: [
-      { projectId: "p1", name: "Casa Lomas", tramo: "diseno", open: 8, overdue: 2, weeks: [8, 0, 0, 0] },
-      { projectId: "p2", name: "Oficina Roma", tramo: "diseno", open: 5, overdue: 0, weeks: [5, 0, 0, 0] },
+      { projectId: "p1", name: "Casa Lomas", etapa: "diseno", open: 8, overdue: 2, weeks: [8, 0, 0, 0] },
+      { projectId: "p2", name: "Oficina Roma", etapa: "diseno", open: 5, overdue: 0, weeks: [5, 0, 0, 0] },
     ],
   }),
   person(BRUNO, "Bruno Soto", { occupancyPct: 40 }),
-  person(CARLA, "Carla Méndez", { tramo: "construccion", occupancyPct: 90, weeks: weeks([90, 0, 60, 30], [0, 5, 2, 0]) }),
+  person(CARLA, "Carla Méndez", { etapa: "construccion", occupancyPct: 90, weeks: weeks([90, 0, 60, 30], [0, 5, 2, 0]) }),
 ];
 
-function task(id: string, due: string | null, tramo: string | null): AttentionItem {
+function task(id: string, due: string | null, etapa: string | null): AttentionItem {
   return {
     id,
     title: `Tarea ${id}`,
     href: `/tareas?tarea=${id}`,
     project: "Casa Lomas",
-    tramo,
+    etapa,
     reason: "",
     tone: "default",
     assignee: null,
@@ -114,7 +114,7 @@ const ANA_TASKS: AttentionItem[] = [
   task("t-overdue", "2026-11-02", "diseno"),
   task("t-soon", "2026-11-20", "diseno"),
   task("t-latest", "2026-11-27", "diseno"),
-  task("t-other-tramo", "2026-12-01", "construccion"),
+  task("t-other-etapa", "2026-12-01", "construccion"),
   task("t-undated", null, "diseno"),
 ];
 
@@ -227,7 +227,7 @@ describe("PeopleLoadBoard helpers", () => {
     const many = ["A", "B", "C", "D", "E"].map((name, i) => ({
       projectId: `p${i}`,
       name,
-      tramo: "diseno",
+      etapa: "diseno",
       open: 1,
       overdue: 1,
       weeks: [1, 0, 0, 0] as [number, number, number, number],

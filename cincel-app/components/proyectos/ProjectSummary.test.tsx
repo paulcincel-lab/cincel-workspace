@@ -31,9 +31,9 @@ vi.mock("@/components/widgets/KpiWidget", () => ({
 vi.mock("@/components/widgets/EntityCardGrid", () => ({
   EntityCardGrid: (props: object) => <pre data-widget="cards">{JSON.stringify(props)}</pre>,
 }));
-vi.mock("@/components/widgets/TramoStepperWidget", () => ({
-  TramoStepperWidget: (props: { title: string }) => (
-    <section aria-label={props.title} data-widget="tramos">
+vi.mock("@/components/widgets/EtapaStepperWidget", () => ({
+  EtapaStepperWidget: (props: { title: string }) => (
+    <section aria-label={props.title} data-widget="etapas">
       <pre>{JSON.stringify(props)}</pre>
     </section>
   ),

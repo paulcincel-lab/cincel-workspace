@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 
-import type { TimelineDay, TimelineItem, TramoTone } from "@/components/proyectos/projects-portfolio-data";
+import type { TimelineDay, TimelineItem, EtapaTone } from "@/components/proyectos/projects-portfolio-data";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
 import { staggerStyle } from "@/lib/ui/motion";
 import { cn } from "@/lib/utils";
@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils";
 /**
  * "Próximas entregas" of /proyectos in Visual (#992): an 11-day strip
  * (today … today + 10, project timezone) with one column per day and each
- * project's next delivery on its day, tinted by tramo. Today is marked
+ * project's next delivery on its day, tinted by etapa. Today is marked
  * (`aria-current="date"`). A day with more than `MAX_PER_DAY` deliveries shows
  * the first ones and "+{n} más", which opens the full list in a popover. The
  * grid keeps a 900 px minimum width and scrolls inside the card only. A
- * legend of tramo dots closes the card.
+ * legend of etapa dots closes the card.
  */
 export type DeliveryTimelineWidgetProps = {
   title: string;
@@ -22,7 +22,7 @@ export type DeliveryTimelineWidgetProps = {
   items: TimelineItem[];
   /** "10 – 20 NOV". */
   rangeLabel: string;
-  toneOf(key: string | null): TramoTone;
+  toneOf(key: string | null): EtapaTone;
   legend: { key: string; label: string }[];
   /**
    * Position among the page's sections: the card rises in (`rise`) 60 ms
@@ -42,7 +42,7 @@ function dayName(iso: string): string {
   return LONG_DAY.format(new Date(Date.UTC(y, m - 1, d))).replace(",", "");
 }
 
-function Item({ item, tone }: { item: TimelineItem; tone: TramoTone }) {
+function Item({ item, tone }: { item: TimelineItem; tone: EtapaTone }) {
   return (
     <div className="flex min-w-0 flex-col rounded-[10px] p-2 text-[11.5px]" style={{ background: tone.soft }}>
       <span className="truncate font-semibold" style={{ color: tone.ink }} title={item.title}>
@@ -105,7 +105,7 @@ export function DeliveryTimelineWidget({ title, days, items, rangeLabel, toneOf,
                 >
                   {shown.map((item) => (
                     <li key={item.projectId}>
-                      <Item item={item} tone={toneOf(item.tramoKey)} />
+                      <Item item={item} tone={toneOf(item.etapaKey)} />
                     </li>
                   ))}
                   {rest > 0 ? (
@@ -120,7 +120,7 @@ export function DeliveryTimelineWidget({ title, days, items, rangeLabel, toneOf,
                           <ul aria-label={dayName(day.iso)} className="flex flex-col gap-2">
                             {dayItems.map((item) => (
                               <li key={item.projectId}>
-                                <Item item={item} tone={toneOf(item.tramoKey)} />
+                                <Item item={item} tone={toneOf(item.etapaKey)} />
                               </li>
                             ))}
                           </ul>

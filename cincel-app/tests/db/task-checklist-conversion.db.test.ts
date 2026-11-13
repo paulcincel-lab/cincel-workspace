@@ -7,7 +7,7 @@
  *
  * - Items become subtasks of their task: title, done → completado (with
  *   closedAt), checklist order after the task's ordered subtasks, the task's
- *   creator, tramo and fase.
+ *   creator, etapa and fase.
  * - A subtask's items go to its parent (one level of nesting); a subtask
  *   whose parent is deleted keeps them (it behaves as top-level).
  * - An admin task gets admin subtasks; a deleted task is not scanned; a task

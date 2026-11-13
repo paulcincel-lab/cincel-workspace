@@ -37,10 +37,10 @@ vi.mock("@/lib/query/options/catalog", () => ({
 vi.mock("@/lib/settings/use-general-settings", () => ({
   useGeneralSettings: () => ({ regional: { timeZone: "America/Mexico_City" } }),
 }));
-vi.mock("@/lib/tramos/compat", () => ({
-  tramoLabel: (key: string) => ({ diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
-  tramoColorSlot: (key: string) => ({ diseno: 2, construccion: 3 })[key] ?? null,
-  tramoColorVar: () => "var(--chart-2)",
+vi.mock("@/lib/etapas/compat", () => ({
+  etapaLabel: (key: string) => ({ diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
+  etapaColorSlot: (key: string) => ({ diseno: 2, construccion: 3 })[key] ?? null,
+  etapaColorVar: () => "var(--chart-2)",
 }));
 // The quick add line itself is #984's; here it only hands a draft with a project to `onCreate`.
 vi.mock("@/components/widgets/QuickAddRow", () => ({
@@ -48,7 +48,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
     context,
     onCreate,
   }: {
-    context: { label: string; tramoId?: string | null; assigneeId?: string | null };
+    context: { label: string; etapaId?: string | null; assigneeId?: string | null };
     onCreate(d: unknown): Promise<unknown>;
   }) => (
     <input
@@ -59,7 +59,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
         void onCreate({
           title: input.value,
           projectId: "proj-1",
-          tramoId: context.tramoId ?? null,
+          etapaId: context.etapaId ?? null,
           assigneeId: context.assigneeId ?? null,
           dueDate: null,
           priority: "media",
@@ -82,9 +82,9 @@ const LUIS = "00000000-0000-4000-8000-000000000002";
 const SOFIA = "00000000-0000-4000-8000-000000000003";
 
 const PEOPLE: PersonDatum[] = [
-  { id: ANA, name: "Ana Ruiz", initials: "AR", puesto: "Diseñadora", tramo: "diseno", open: 4, overdue: 1, occupancyPct: 100, href: `/personas/equipo/${ANA}` },
-  { id: LUIS, name: "Luis Pérez", initials: "LP", puesto: null, tramo: "diseno", open: 1, overdue: 0, occupancyPct: 20, href: `/personas/equipo/${LUIS}` },
-  { id: SOFIA, name: "Sofía León", initials: "SL", puesto: "Residente", tramo: "construccion", open: 9, overdue: 3, occupancyPct: 150, href: `/personas/equipo/${SOFIA}` },
+  { id: ANA, name: "Ana Ruiz", initials: "AR", puesto: "Diseñadora", etapa: "diseno", open: 4, overdue: 1, occupancyPct: 100, href: `/personas/equipo/${ANA}` },
+  { id: LUIS, name: "Luis Pérez", initials: "LP", puesto: null, etapa: "diseno", open: 1, overdue: 0, occupancyPct: 20, href: `/personas/equipo/${LUIS}` },
+  { id: SOFIA, name: "Sofía León", initials: "SL", puesto: "Residente", etapa: "construccion", open: 9, overdue: 3, occupancyPct: 150, href: `/personas/equipo/${SOFIA}` },
 ];
 
 function detailFor(staffId: string) {
@@ -95,7 +95,7 @@ function detailFor(staffId: string) {
         title: `Planos de ${staffId.slice(-1)}`,
         href: `/tareas?tarea=${staffId}-t1`,
         project: "Casa Lomas",
-        tramo: "diseno",
+        etapa: "diseno",
         reason: "",
         tone: "default",
         assignee: null,

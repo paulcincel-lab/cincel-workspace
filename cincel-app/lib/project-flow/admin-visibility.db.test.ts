@@ -149,7 +149,7 @@ describe.skipIf(!url)("admin visibility across every reader (test DB)", async ()
   /** Every row of the Tablero (`getTareasBoard`) of one project. */
   const boardRows = async (projectId: string) => {
     const board = await tareasPageData.getTareasBoard({
-      filters: { tramo: null, proyecto: projectId, responsable: null, estado: null, q: null },
+      filters: { etapa: null, proyecto: projectId, responsable: null, estado: null, q: null },
     });
     return Object.values(board.columns).flatMap((c) => c.rows);
   };

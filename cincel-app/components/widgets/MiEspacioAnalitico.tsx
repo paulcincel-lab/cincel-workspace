@@ -13,7 +13,7 @@ import {
   ESTADO_PARAM,
   ESTADO_RETRASO,
   SEARCH_PARAM,
-  TRAMO_PARAM,
+  ETAPA_PARAM,
   abiertosParam,
   parseMiEspacioFilters,
   replaceMiEspacioParam,
@@ -63,7 +63,7 @@ import {
   shortDate,
   taskRow,
   timeAgo,
-  tramoGroupId,
+  etapaGroupId,
   type TaskRow,
 } from "@/lib/my-space/my-tasks";
 import {
@@ -97,7 +97,7 @@ import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-s
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { isTaskClosed, statusColorToken, statusDotClass } from "@/lib/tasks/status-options";
 import { addDays, localDate, mondayOf } from "@/lib/time-tracking/local-time";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorVar } from "@/lib/etapas/etapa-color";
 import type { TaskDetail, TaskListItem, TaskListRow } from "@/lib/types/core";
 import type {
   Checklist,
@@ -111,10 +111,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Mi espacio, Analítico (frame `MiEspacio-Analitico`): header, filters, five
- * KPIs, the "Ir a" anchors, then Mis tareas (project → tramo table with quick
+ * KPIs, the "Ir a" anchors, then Mis tareas (project → etapa table with quick
  * add per project), Horas de la semana and Bandeja por tipo side by side, and
  * Checklists. Every figure comes from the `me.*` queries; filters, search and
- * the expanded projects live in the URL (`?estado=`, `?tramo=`, `?q=`,
+ * the expanded projects live in the URL (`?estado=`, `?etapa=`, `?q=`,
  * `?abiertos=`). Owner-only: every read takes the staff id from the session.
  */
 export type MiEspacioAnaliticoProps = {
@@ -324,7 +324,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   const checklistsQuery = useInfiniteQuery({ ...meChecklistsOptions(), enabled: MY_SPACE.fetchChecklistsAction });
   const projectsQuery = useQuery({ ...catalogOptions.projectOptions(), enabled: canCreateTask || MY_SPACE.createChecklistAction });
 
-  // ── Tasks (#1051): every count from `me.tasksSummary`, the rows 30 a page per open tramo group.
+  // ── Tasks (#1051): every count from `me.tasksSummary`, the rows 30 a page per open etapa group.
   const queryClient = useQueryClient();
   const statusesQuery = useQuery(catalogOptions.taskStatuses());
   const { canCreateActivity, statusScope, canChangeResponsible } = capabilities;
@@ -352,15 +352,15 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   // The search reaches the server once typing pauses.
   const searchText = useDebouncedValue(filters.q, SEARCH_DEBOUNCE_MS);
   const summaryInput = useMemo(
-    () => myTasksSummaryInput({ tramo: filters.tramo, q: searchText, retraso }),
-    [filters.tramo, searchText, retraso],
+    () => myTasksSummaryInput({ etapa: filters.etapa, q: searchText, retraso }),
+    [filters.etapa, searchText, retraso],
   );
   const tasksQuery = useQuery(meTasksSummaryOptions(summaryInput));
   const summary = tasksQuery.data ?? EMPTY_MY_TASKS_SUMMARY;
-  const tramoOptions = summary.tramos;
-  const tramo = filters.tramo;
+  const etapaOptions = summary.etapas;
+  const etapa = filters.etapa;
 
-  // ── Rows per open tramo group.
+  // ── Rows per open etapa group.
   const [groupRows, setGroupRows] = useState<Record<string, GroupRowsState>>({});
   const rowActions = useRef(new Map<string, GroupRowsActions>());
   const onGroupState = useCallback((id: string, state: GroupRowsState) => {
@@ -388,7 +388,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
   const visibleIds = useMemo(() => visibleRows.map((row) => row.id), [visibleRows]);
   const selection = useTaskSelection({
     visibleIds,
-    resetKey: JSON.stringify([filters.estado, tramo, searchText, hideCompleted]),
+    resetKey: JSON.stringify([filters.estado, etapa, searchText, hideCompleted]),
   });
   const taskOfId = useCallback((id: string) => tasksById.get(id), [tasksById]);
   const all = summary.all;
@@ -419,29 +419,29 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
 
   // ── Sections, groups and the URL ──
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>(ALL_OPEN);
-  const [closedTramos, setClosedTramos] = useState<ReadonlySet<string>>(() => new Set());
+  const [closedEtapas, setClosedEtapas] = useState<ReadonlySet<string>>(() => new Set());
   const projectIds = groups.map((g) => g.id);
   const openProjects = filters.abiertos === null ? projectIds : projectIds.filter((id) => filters.abiertos!.includes(id));
   const expanded = [
     ...openProjects,
-    ...groups.flatMap((g) => (g.children ?? []).map((c) => c.id)).filter((id) => !closedTramos.has(id)),
+    ...groups.flatMap((g) => (g.children ?? []).map((c) => c.id)).filter((id) => !closedEtapas.has(id)),
   ];
   const everythingOpen =
-    SECTIONS.every((key) => openSections[key]) && openProjects.length === projectIds.length && closedTramos.size === 0;
-  // The rows load only for the open tramo groups.
+    SECTIONS.every((key) => openSections[key]) && openProjects.length === projectIds.length && closedEtapas.size === 0;
+  // The rows load only for the open etapa groups.
   const openGroups = useMemo(() => {
     const projects = new Set(openProjects);
     return summary.projects.flatMap((p) =>
       projects.has(p.project.id)
-        ? p.tramos
-            .filter((t) => groupRowCount(t, withClosed) > 0 && !closedTramos.has(tramoGroupId(p.project.id, t.tramo.id)))
+        ? p.etapas
+            .filter((t) => groupRowCount(t, withClosed) > 0 && !closedEtapas.has(etapaGroupId(p.project.id, t.etapa.id)))
             .map((t) => ({
-              id: tramoGroupId(p.project.id, t.tramo.id),
-              filters: meTasksGroupFilters(summaryInput, p.project.id, t.tramo.key, withClosed),
+              id: etapaGroupId(p.project.id, t.etapa.id),
+              filters: meTasksGroupFilters(summaryInput, p.project.id, t.etapa.key, withClosed),
             }))
         : [],
     );
-  }, [openProjects, summary.projects, closedTramos, withClosed, summaryInput]);
+  }, [openProjects, summary.projects, closedEtapas, withClosed, summaryInput]);
 
   function retryGroup(id: string) {
     const group = openGroups.find((g) => g.id === id);
@@ -454,14 +454,14 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     const next = new Set(ids);
     const projects = projectIds.filter((id) => next.has(id));
     setParam(ABIERTOS_PARAM, projects.length === projectIds.length ? null : abiertosParam(projects));
-    const tramoIds = groups.flatMap((g) => (g.children ?? []).map((c) => c.id));
-    setClosedTramos(new Set(tramoIds.filter((id) => !next.has(id))));
+    const etapaIds = groups.flatMap((g) => (g.children ?? []).map((c) => c.id));
+    setClosedEtapas(new Set(etapaIds.filter((id) => !next.has(id))));
   }
 
   function toggleEverything() {
     const open = !everythingOpen;
     setOpenSections(open ? ALL_OPEN : { tareas: false, horas: false, bandeja: false, checklists: false });
-    setClosedTramos(new Set());
+    setClosedEtapas(new Set());
     setParam(ABIERTOS_PARAM, open ? null : "");
   }
 
@@ -475,17 +475,17 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
 
   function clearFilters() {
     setParam(ESTADO_PARAM, null);
-    setParam(TRAMO_PARAM, null);
+    setParam(ETAPA_PARAM, null);
     setParam(SEARCH_PARAM, null);
   }
 
   // ── Mutations ──
-  const createTask = useActionMutation<{ draft: QuickAddDraft; projectId: string; tramoId: string | null }, TaskDetail>(
-    ({ draft, projectId, tramoId }) =>
+  const createTask = useActionMutation<{ draft: QuickAddDraft; projectId: string; etapaId: string | null }, TaskDetail>(
+    ({ draft, projectId, etapaId }) =>
       createUserTaskAction({
         projectId,
         title: draft.title,
-        workflowId: draft.tramoId ?? tramoId,
+        workflowId: draft.etapaId ?? etapaId,
         managerId: viewerId,
         priority: draft.priority,
         commitmentDate: draft.dueDate,
@@ -499,12 +499,12 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     },
   );
 
-  /** The tramo a quick add falls back to: the project's current tramo, else the only one among my tasks there. */
-  function fallbackTramo(group: Group<TaskRow>): string | null {
+  /** The etapa a quick add falls back to: the project's current etapa, else the only one among my tasks there. */
+  function fallbackEtapa(group: Group<TaskRow>): string | null {
     const current = projectsQuery.data?.find((p) => p.id === group.id)?.currentWorkflowId ?? null;
     if (current) return current;
-    const tramos = summary.projects.find((p) => p.project.id === group.id)?.tramos ?? [];
-    const ids = new Set(tramos.map((t) => t.tramo.id).filter(Boolean));
+    const etapas = summary.projects.find((p) => p.project.id === group.id)?.etapas ?? [];
+    const ids = new Set(etapas.map((t) => t.etapa.id).filter(Boolean));
     return ids.size === 1 ? ([...ids][0] as string) : null;
   }
 
@@ -537,12 +537,12 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
         context={{
           label: `Agregar tarea en ${group.label}`,
           projectId: group.id,
-          tramoId: fallbackTramo(group),
+          etapaId: fallbackEtapa(group),
           assigneeId: viewerId,
           placeholder: `Escribe para agregar una tarea en ${group.label}…  #etapa  fecha  !prioridad`,
         }}
         onCreate={async (draft): Promise<QuickAddCreated> => {
-          const task = await createTask.mutateAsync({ draft, projectId: group.id, tramoId: fallbackTramo(group) });
+          const task = await createTask.mutateAsync({ draft, projectId: group.id, etapaId: fallbackEtapa(group) });
           return { id: task.id, title: task.title };
         }}
       />
@@ -588,9 +588,9 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     setExporting(true);
     try {
       const lists = summary.projects.flatMap((p) =>
-        p.tramos
+        p.etapas
           .filter((t) => groupRowCount(t, withClosed) > 0)
-          .map((t) => meTasksGroupFilters(summaryInput, p.project.id, t.tramo.key, withClosed)),
+          .map((t) => meTasksGroupFilters(summaryInput, p.project.id, t.etapa.key, withClosed)),
       );
       const pages = await Promise.all(lists.map((f) => fetchAllMeTasksListRows(f)));
       const rows = pages.flatMap((list) =>
@@ -649,12 +649,12 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
       ],
     },
     {
-      id: TRAMO_PARAM,
+      id: ETAPA_PARAM,
       label: "Etapa",
-      value: tramo ?? "todos",
+      value: etapa ?? "todos",
       options: [
         { value: "todos", label: "Todos" },
-        ...tramoOptions.map((t) => ({ value: t.key, label: t.name, count: t.open, color: tramoColorVar(t) })),
+        ...etapaOptions.map((t) => ({ value: t.key, label: t.name, count: t.open, color: etapaColorVar(t) })),
       ],
     },
   ];
@@ -697,7 +697,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
         groups={filterGroups}
         onChange={(groupId, value) => {
           if (groupId === ESTADO_PARAM) setParam(ESTADO_PARAM, value === ESTADO_RETRASO ? ESTADO_RETRASO : null);
-          if (groupId === TRAMO_PARAM) setParam(TRAMO_PARAM, value === "todos" ? null : value);
+          if (groupId === ETAPA_PARAM) setParam(ETAPA_PARAM, value === "todos" ? null : value);
         }}
         search={{
           value: filters.q,
@@ -968,7 +968,7 @@ function useDebouncedValue<T>(value: T, ms: number): T {
   return settled;
 }
 
-/** What one tramo group's rows query reports to the page. */
+/** What one etapa group's rows query reports to the page. */
 type GroupRowsState = { rows: TaskListRow[] | undefined; loading: boolean; error: boolean; hasMore: boolean };
 type GroupRowsActions = { more(): void };
 
@@ -977,7 +977,7 @@ function sameState(a: GroupRowsState | undefined, b: GroupRowsState): boolean {
 }
 
 /**
- * One tramo group's rows (`useInfiniteQuery(me.tasksList(f))`, "retraso"
+ * One etapa group's rows (`useInfiniteQuery(me.tasksList(f))`, "retraso"
  * order, 30 a page; the first groups come seeded by the page). Renders
  * nothing: it reports the rows to the page, which hands them to
  * `GroupedTable`. Mounted only while its group is open.

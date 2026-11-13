@@ -20,19 +20,19 @@ export function newTaskSearch(params: URLSearchParams, open: boolean): string {
   return search ? `?${search}` : "";
 }
 
-/** The form defaults a URL carries: the view's `proyecto` and `tramo` filters. */
+/** The form defaults a URL carries: the view's `proyecto` and `etapa` filters. */
 export function newTaskDefaultsFromSearch(params: URLSearchParams): NewTaskDefaults {
   const defaults: NewTaskDefaults = {};
   const projectId = params.get("proyecto");
-  const tramoKey = readEtapaParam(params);
+  const etapaKey = readEtapaParam(params);
   if (projectId) defaults.projectId = projectId;
-  if (tramoKey) defaults.tramoKey = tramoKey;
+  if (etapaKey) defaults.etapaKey = etapaKey;
   return defaults;
 }
 
 /**
  * The `?nueva=1` entry of `<NewTaskDialogHost/>`: opens the dialog with the
- * URL's `proyecto`/`tramo` defaults and strips the param with
+ * URL's `proyecto`/`etapa` defaults and strips the param with
  * `history.replaceState`, so neither step re-renders the page on the server.
  * Every other param stays, so the view underneath is unchanged.
  */

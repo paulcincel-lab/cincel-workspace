@@ -11,10 +11,10 @@ import { describe, expect, it } from "vitest";
  *
  * Allowed on purpose (compatibility with the old name):
  * - a literal that is exactly the lowercase word "tramo" or "tramos": a key, kind, query key or
- *   segment name (identifiers rename in #1129, the table in #1130);
+ *   segment name (kept for the old name; the table and the monday mapping rename in #1130);
  * - `lib/assistant/prompt.ts`: the asistente's vocabulary line says it understands "tramo" and answers "etapa";
  * - `next.config.ts`: the permanent redirect of `/ajustes/tramos`;
- * - module specifiers (`@/lib/tramos/...`): file names rename in #1129.
+ * - module specifiers: kept allowed for old paths.
  */
 const ROOT = join(__dirname, "..", "..");
 const SCAN = ["app", "components", "lib", "hooks"];

@@ -10,11 +10,11 @@ afterEach(cleanup);
 type Parts = UIMessage["parts"];
 
 const TASKS = [
-  { title: "Planos de cancelería", tramo: "Diseño", manager: "Ana Ruiz", commitmentDate: "2026-10-20" },
-  { title: "Render del lobby", tramo: "Diseño", manager: "Jorge Mena", commitmentDate: "2026-11-02" },
-  { title: "Cotizar acabados", tramo: "Construcción", manager: "Luis Paz", commitmentDate: "2026-11-05" },
-  { title: "Revisar instalaciones", tramo: "Construcción", manager: "Ana Ruiz", commitmentDate: "2026-11-06" },
-  { title: "Ajustar presupuesto", tramo: "Presale", manager: "Eva Gil", commitmentDate: "2026-11-07" },
+  { title: "Planos de cancelería", etapa: "Diseño", manager: "Ana Ruiz", commitmentDate: "2026-10-20" },
+  { title: "Render del lobby", etapa: "Diseño", manager: "Jorge Mena", commitmentDate: "2026-11-02" },
+  { title: "Cotizar acabados", etapa: "Construcción", manager: "Luis Paz", commitmentDate: "2026-11-05" },
+  { title: "Revisar instalaciones", etapa: "Construcción", manager: "Ana Ruiz", commitmentDate: "2026-11-06" },
+  { title: "Ajustar presupuesto", etapa: "Presale", manager: "Eva Gil", commitmentDate: "2026-11-07" },
 ];
 
 function listTasks(state: string, extra: Record<string, unknown> = {}, id = "c1") {

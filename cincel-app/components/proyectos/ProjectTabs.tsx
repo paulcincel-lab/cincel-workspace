@@ -35,7 +35,7 @@ export type ProjectTabsProps = {
    * is left out when absent).
    */
   project: ProjectRef & {
-    tramo: WorkflowRef | null;
+    etapa: WorkflowRef | null;
     projectType?: string | null;
     addressCity?: string | null;
     manager?: StaffRef | null;

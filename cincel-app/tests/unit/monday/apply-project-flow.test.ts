@@ -465,7 +465,7 @@ describe.skipIf(!url)("apply and rollback, project flow (test DB)", { timeout: 6
       const projectId = refs.find((r) => r.entity === "project")!.rowId;
 
       // A later "Iniciar tramo" that created nothing still left its batch row: it goes with the project.
-      await tx.insert(schema.tramoStartBatches).values({ projectId, workflowId: W2, assignmentMode: "none" });
+      await tx.insert(schema.etapaStartBatches).values({ projectId, workflowId: W2, assignmentMode: "none" });
       expect(await findRollbackBlockers(tx, batchId)).toEqual([]);
 
       await deleteBatchRows(tx, batchId);
@@ -474,7 +474,7 @@ describe.skipIf(!url)("apply and rollback, project flow (test DB)", { timeout: 6
       expect(await tx.select().from(schema.projectSpaces).where(eq(schema.projectSpaces.projectId, projectId))).toEqual([]);
       expect(await tx.select().from(schema.projectStages).where(eq(schema.projectStages.projectId, projectId))).toEqual([]);
       expect(
-        await tx.select().from(schema.tramoStartBatches).where(eq(schema.tramoStartBatches.projectId, projectId)),
+        await tx.select().from(schema.etapaStartBatches).where(eq(schema.etapaStartBatches.projectId, projectId)),
       ).toEqual([]);
       expect(await refsOf(tx, batchId)).toEqual([]);
 

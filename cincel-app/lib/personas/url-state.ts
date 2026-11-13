@@ -64,16 +64,16 @@ export function contactIdFromHref(href: string, pathname: string): string | null
 /** `?estado=sobrecargadas|con-capacidad` (Analítico). */
 export const ANALITICO_ESTADO_PARAM = "estado";
 /** `?etapa=<key>` (old links: `?tramo=`). */
-export const TRAMO_PARAM = "etapa";
+export const ETAPA_PARAM = "etapa";
 /** `?alcance=mi-equipo`. */
 export const ALCANCE_PARAM = "alcance";
-/** `?abiertos=<tramoKey>,<tramoKey>`: the expanded tramo groups (absent = all). */
+/** `?abiertos=<etapaKey>,<etapaKey>`: the expanded etapa groups (absent = all). */
 export const ABIERTOS_PARAM = "abiertos";
 /** `?persona=<id>`: the one expanded person. */
 export const EXPANDED_PERSON_PARAM = "persona";
 
 export type AnaliticoTeamUrlState = TeamAnaliticoFilters & {
-  /** Expanded tramo group ids; null = default (all expanded). */
+  /** Expanded etapa group ids; null = default (all expanded). */
   abiertos: string[] | null;
   persona: string | null;
 };
@@ -85,7 +85,7 @@ export function parseAnaliticoTeamParams(params: ParamsLike): AnaliticoTeamUrlSt
   const estadoRaw = params?.get(ANALITICO_ESTADO_PARAM) ?? null;
   const estado: TeamAnaliticoFilters["estado"] =
     estadoRaw === "sobrecargadas" || estadoRaw === "con-capacidad" ? estadoRaw : "todas";
-  const tramo = readEtapaParam(params)?.trim() || null;
+  const etapa = readEtapaParam(params)?.trim() || null;
   const alcance: TeamAnaliticoFilters["alcance"] = params?.get(ALCANCE_PARAM) === "mi-equipo" ? "mi-equipo" : "todo";
   const q = params?.get(SEARCH_PARAM) ?? "";
   const abiertosRaw = params?.get(ABIERTOS_PARAM);
@@ -97,7 +97,7 @@ export function parseAnaliticoTeamParams(params: ParamsLike): AnaliticoTeamUrlSt
           .map((id) => id.trim())
           .filter(Boolean);
   const persona = params?.get(EXPANDED_PERSON_PARAM)?.trim() || null;
-  return { estado, tramo, alcance, q, abiertos, persona };
+  return { estado, etapa, alcance, q, abiertos, persona };
 }
 
 /** `pathname` with several params set (null or empty removes one), keeping the others. */
@@ -126,7 +126,7 @@ export function replaceSearchParams(updates: Record<string, string | null>): voi
 export function analiticoTeamParams(state: AnaliticoTeamUrlState): Record<string, string | null> {
   return {
     [ANALITICO_ESTADO_PARAM]: state.estado === "todas" ? null : state.estado,
-    [TRAMO_PARAM]: state.tramo,
+    [ETAPA_PARAM]: state.etapa,
     [ALCANCE_PARAM]: state.alcance === "mi-equipo" ? "mi-equipo" : null,
     [SEARCH_PARAM]: state.q.trim() ? state.q : null,
     [ABIERTOS_PARAM]: state.abiertos === null ? null : state.abiertos.length === 0 ? "," : state.abiertos.join(","),

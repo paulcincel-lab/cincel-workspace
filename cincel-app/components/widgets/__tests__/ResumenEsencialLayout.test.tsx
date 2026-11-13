@@ -29,7 +29,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
     context,
     onCreate,
   }: {
-    context: { label: string; projectId: string | null; tramoId?: string | null; placeholder?: string };
+    context: { label: string; projectId: string | null; etapaId?: string | null; placeholder?: string };
     onCreate(d: unknown): Promise<unknown>;
   }) => (
     <label>
@@ -41,7 +41,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
           void onCreate({
             title: (event.target as HTMLInputElement).value,
             projectId: context.projectId,
-            tramoId: context.tramoId ?? null,
+            etapaId: context.etapaId ?? null,
             assigneeId: null,
             dueDate: null,
             priority: "media",
@@ -70,17 +70,17 @@ vi.mock("@/components/widgets/EsencialItemRow", () => ({
   ),
 }));
 
-// The empty state's Iniciar tramo sheet (#1043) reads these; no test here starts a tramo.
-vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  previewStartTramoAction: vi.fn(() => new Promise(() => {})),
-  startTramoAction: vi.fn(),
-  undoStartTramoAction: vi.fn(),
+// The empty state's Iniciar etapa sheet (#1043) reads these; no test here starts an etapa.
+vi.mock("@/lib/actions/etapa-start-actions", () => ({
+  previewStartEtapaAction: vi.fn(() => new Promise(() => {})),
+  startEtapaAction: vi.fn(),
+  undoStartEtapaAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/tareas-actions", () => ({ getTareasStartSlotData: vi.fn(() => new Promise(() => {})) }));
 
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskListRow } from "@/lib/types/core";
-import { TRAMOS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { ETAPAS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
 import { seedResumenTasks } from "@/tests/unit/fixtures/resumen-summary";
 
 import { ResumenEsencialLayout } from "../ResumenEsencialLayout";
@@ -93,7 +93,7 @@ function task(over: Partial<TaskListRow>): TaskListRow {
     archived: false,
     commitmentDate: null,
     workflowId: "w-construccion",
-    workflow: TRAMOS[2],
+    workflow: ETAPAS[2],
     phase: null,
     manager: { id: "s1", name: "Paul Langarica" },
     parentTaskId: null,
@@ -107,7 +107,7 @@ const TASKS: TaskListRow[] = [
   task({ id: "a", title: "Colocar plafón", commitmentDate: "2026-11-01" }),
   task({ id: "b", title: "Instalar luminarias", status: "bloqueado", commitmentDate: "2026-11-20" }),
   task({ id: "c", title: "Pintar fachada", commitmentDate: "2026-11-14" }),
-  task({ id: "d", title: "Cerrar Diseño", status: "completado", workflowId: "w-diseno", workflow: TRAMOS[1] }),
+  task({ id: "d", title: "Cerrar Diseño", status: "completado", workflowId: "w-diseno", workflow: ETAPAS[1] }),
 ];
 
 function renderLayout(opts: { tasks?: TaskListRow[]; input?: ReturnType<typeof fixtureSummaryInput> } = {}) {
@@ -132,9 +132,9 @@ describe("ResumenEsencialLayout", () => {
     );
     expect(sections).toEqual(["Etapas", "Próximas tareas", "Equipo", "Archivos recientes"]);
 
-    const tramos = screen.getByRole("region", { name: "Etapas" });
-    expect(within(tramos).getByRole("heading", { name: "En Construcción · Obra negra" })).toBeTruthy();
-    expect(within(tramos).getByRole("img").getAttribute("aria-label")).toMatch(/^Etapas: Presale terminado/);
+    const etapas = screen.getByRole("region", { name: "Etapas" });
+    expect(within(etapas).getByRole("heading", { name: "En Construcción · Obra negra" })).toBeTruthy();
+    expect(within(etapas).getByRole("img").getAttribute("aria-label")).toMatch(/^Etapas: Presale terminado/);
 
     const rows = screen.getAllByTestId("item-row");
     expect(rows.map((r) => r.textContent)).toEqual(["Colocar plafón5 d tarde", "Instalar luminariasBloqueada", "Pintar fachada14 nov"]);
@@ -157,7 +157,7 @@ describe("ResumenEsencialLayout", () => {
     await act(async () => {
       fireEvent.keyDown(input, { key: "Enter" });
     });
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisar plafones", projectId: "p1", tramoId: "w-construccion" }));
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisar plafones", projectId: "p1", etapaId: "w-construccion" }));
     const rows = screen.getAllByTestId("item-row");
     expect(rows).toHaveLength(4);
     expect(rows[0]!.textContent).toBe("Revisar plafones");
@@ -198,7 +198,7 @@ describe("ResumenEsencialLayout", () => {
   it("no started etapa: the empty state with Iniciar una etapa, no suggested etapas (#1043)", () => {
     renderLayout({
       input: fixtureSummaryInput({
-        project: fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [] }),
+        project: fixtureProject({ needsEtapa: true, currentWorkflowId: null, currentWorkflow: null, etapas: [] }),
       }),
     });
     const card = screen.getByRole("region", { name: "Etapas" });
@@ -208,13 +208,13 @@ describe("ResumenEsencialLayout", () => {
   });
 
   it("started in Diseño: only Diseño, plus Siguiente: Construcción (#1043)", () => {
-    const diseno = TRAMOS[1]!;
+    const diseno = ETAPAS[1]!;
     renderLayout({
       input: fixtureSummaryInput({
         project: fixtureProject({
           currentWorkflowId: diseno.id,
           currentWorkflow: diseno,
-          tramos: [{ ...diseno, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
+          etapas: [{ ...diseno, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
         }),
       }),
     });

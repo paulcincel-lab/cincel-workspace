@@ -356,7 +356,7 @@ describe("list_events", () => {
       end: "2030-01-07T11:00:00-06:00",
       allDay: false,
       project: { id: PROJECT_ID, name: "Casa Roble" },
-      tramo: { id: WORKFLOW_ID, key: "construccion", name: "Construcción", colorSlot: 3 },
+      etapa: { id: WORKFLOW_ID, key: "construccion", name: "Construcción", colorSlot: 3 },
       location: null,
       meetUrl: "https://meet.example/abc",
       attendees: [{ name: "Luis Gómez", staffId: STAFF_B, response: "acepta" }],
@@ -374,7 +374,7 @@ describe("list_events", () => {
   it("lists task dates in range as all-day items, plus the meetings of calendar_events", async () => {
     mocks.fetchCalendarAction.mockResolvedValue([task()]);
     mocks.listEventItemsForTools.mockResolvedValue([
-      meeting({ id: "e:g1", eventId: "g1", source: "google", title: "Dentista", project: null, tramo: null, meetUrl: null, attendees: [], syncedAt: "2030-01-06T12:00:00.000Z" }),
+      meeting({ id: "e:g1", eventId: "g1", source: "google", title: "Dentista", project: null, etapa: null, meetUrl: null, attendees: [], syncedAt: "2030-01-06T12:00:00.000Z" }),
       meeting(),
     ]);
     const result = await run("list_events", SAMPLE_INPUT.list_events);

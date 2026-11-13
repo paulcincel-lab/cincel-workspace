@@ -8,7 +8,7 @@ import {
   PER_DAY_LIMIT,
   sortDayItems,
   taskRowToItem,
-  tramoRefOf,
+  etapaRefOf,
   type TaskItemRow,
 } from "@/lib/calendario/items";
 import type { CalEventItem, CalendarioFilters, CalItem } from "@/lib/types/calendario";
@@ -17,7 +17,7 @@ const FILTERS: CalendarioFilters = {
   mostrar: "todo",
   quien: "todos",
   proyectos: [],
-  tramo: null,
+  etapa: null,
   responsable: "11111111-1111-4111-8111-111111111111",
   apoyo: true,
   ocultarCompletadas: false,
@@ -102,9 +102,9 @@ describe("taskRowToItem", () => {
       today: "2026-11-11",
       canEdit: true,
     });
-    expect(item.tramo).toEqual({ id: "w1", key: "diseno", name: "Diseño", colorSlot: 2 });
-    expect(tramoRefOf({ id: "w", key: "x", name: "X", colorSlot: 5 })?.colorSlot).toBe(5);
-    expect(tramoRefOf(null)).toBeNull();
+    expect(item.etapa).toEqual({ id: "w1", key: "diseno", name: "Diseño", colorSlot: 2 });
+    expect(etapaRefOf({ id: "w", key: "x", name: "X", colorSlot: 5 })?.colorSlot).toBe(5);
+    expect(etapaRefOf(null)).toBeNull();
   });
 });
 

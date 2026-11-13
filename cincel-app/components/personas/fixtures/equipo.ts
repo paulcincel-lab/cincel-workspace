@@ -28,7 +28,7 @@ export function staffFixture(patch: Partial<Staff> & Pick<Staff, "id" | "name">)
   };
 }
 
-export const EQUIPO_TRAMOS: WorkflowRef[] = [
+export const EQUIPO_ETAPAS: WorkflowRef[] = [
   { id: "w1", key: "presale", name: "Presale", sortOrder: 0 },
   { id: "w2", key: "diseno", name: "Diseño", sortOrder: 1 },
   { id: "w3", key: "construccion", name: "Construcción", sortOrder: 2 },

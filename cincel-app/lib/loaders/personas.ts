@@ -18,7 +18,7 @@ import { toRecentActivity } from "@/lib/people/activity";
 import {
   addIsoDays,
   displayName,
-  dominantTramo,
+  dominantEtapa,
   fourWeeks,
   initialsOf,
   localIsoDate,
@@ -44,7 +44,7 @@ import { listStaff, loadStaffPositions, toStaff } from "@/lib/repositories/staff
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
 import { getTimeTrackingSettings, TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/settings";
 import { weekHours } from "@/lib/time-tracking/week-hours";
-import { canSeeAdminData } from "@/lib/tramos/compat";
+import { canSeeAdminData } from "@/lib/etapas/compat";
 import type { ContactType, ProviderSubtype, Staff, WorkflowRef } from "@/lib/types/core";
 import type { AbsenceRange, DayHours, PeopleOverviewRow, PersonaDetail } from "@/lib/types/redesign";
 import type { KpiDatum, ProgressItem } from "@/lib/types/widgets";
@@ -120,9 +120,9 @@ async function hoursByStaff(
   return weekHours(db, staffIds, weekStart, settings);
 }
 
-/** Active tramos in order, the way `listTramos` (`lib/tramos/compat.ts`) shapes them. */
-async function activeTramos(): Promise<WorkflowRef[]> {
-  const rows = await workflowsRepository.listTramosNav();
+/** Active etapas in order, the way `listEtapas` (`lib/etapas/compat.ts`) shapes them. */
+async function activeEtapas(): Promise<WorkflowRef[]> {
+  const rows = await workflowsRepository.listEtapasNav();
   return rows
     .filter((row) => row.key.trim() !== "")
     .map((row) => ({ id: row.id, key: row.key, name: row.name, sortOrder: row.sortOrder }))
@@ -191,17 +191,17 @@ export async function loadPeopleOverview(user: AuthenticatedUser, staff: Staff[]
 export async function loadPersonasEquipo(user: AuthenticatedUser): Promise<PersonasEquipoData> {
   requireTeamViewer(user);
   const teamCaps = resolveTeamCapabilities(user);
-  const [staff, tramos] = await Promise.all([
+  const [staff, etapas] = await Promise.all([
     listStaff(),
-    activeTramos().catch((): WorkflowRef[] => []),
+    activeEtapas().catch((): WorkflowRef[] => []),
   ]);
   const overview = await loadPeopleOverview(user, staff).catch((): PeopleOverviewRow[] => []);
-  const { people, emails } = buildTeamPeople(staff, overview, tramos);
+  const { people, emails } = buildTeamPeople(staff, overview, etapas);
   const activityCaps = resolveActivitiesCapabilities(user);
   return {
     people,
     emails,
-    tramos,
+    etapas,
     canCreate: teamCaps.canCreateCollaborator,
     canAssign: activityCaps.canChangeResponsible,
     canCreateTask: activityCaps.canCreateActivity,
@@ -352,7 +352,7 @@ export async function loadPersonasDetail(
       initials,
       photoUrl: withPhoto.has(staffId) ? `/api/staff/${staffId}/photo` : null,
       puesto: positions.positions[0]?.name ?? null,
-      tramo: dominantTramo(openTasks.map((t) => t.tramo)),
+      etapa: dominantEtapa(openTasks.map((t) => t.etapa)),
       open,
       overdue,
       activeProjects: projects.length,

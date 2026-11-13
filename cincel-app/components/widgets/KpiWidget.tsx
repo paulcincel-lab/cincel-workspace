@@ -10,7 +10,7 @@ import { DELTA_TEXT, formatKpiDelta, KpiRow, type KpiTileProps } from "@/compone
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { hasSparklineData, Sparkline } from "@/components/widgets/Sparkline";
 import { StyleView } from "@/components/widgets/StyleView";
-import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import type { WidgetView } from "@/lib/stores/dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { KpiDatum, RecordTableData } from "@/lib/types/widgets";
@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
  *
  * - Visual: tiles with label and delta chip (`delta.label` / `delta.tone`:
  *   "+4 vs. semana", "sin cambio"), value, full-width sparkline (`series7`,
- *   hidden without data), tramo split bar and context line (`caption`).
+ *   hidden without data), etapa split bar and context line (`caption`).
  *   Tiles fade in 40 ms apart (`anim-in`) and the sparkline draws in.
  * - Esencial: one card of big numbers + labels; no charts, no tints.
  * - Analítico: `RecordTable` rows: Indicador, Hoy, Δ 7 días, Prom. 30 días,
@@ -111,10 +111,10 @@ function toTile(item: KpiDatum, { selectedKey, onSelect }: Selection = {}): KpiT
     series7: item.series7,
     delta: item.delta,
     split: item.split?.map((s) => ({
-      key: s.tramo,
-      label: tramoLabel(s.tramo),
+      key: s.etapa,
+      label: etapaLabel(s.etapa),
       share: s.share,
-      colorVar: tramoColorVar(s.tramo),
+      colorVar: etapaColorVar(s.etapa),
     })),
     caption: item.caption,
     href: item.href,

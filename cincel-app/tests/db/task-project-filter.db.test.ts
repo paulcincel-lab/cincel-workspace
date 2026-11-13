@@ -88,7 +88,7 @@ describe.skipIf(!url)("Tareas Proyecto filter (test DB)", () => {
       expect(page.rows.map((r) => r.title.split(" ")[0]).sort()).toEqual(["A1", "A2", "A3", "G1"]);
       expect(page.total).toBe(4);
 
-      // ANDed with the single-project scope (a tramo group).
+      // ANDed with the single-project scope (an etapa group).
       const group = await listTasksPage(
         { search: ctx.marker, projectIds: [ctx.alfa, ctx.gama], projectId: ctx.beta },
         MEMBER,

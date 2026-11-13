@@ -46,7 +46,7 @@ describe("hasActiveCalendarioFilters", () => {
     expect(hasActiveCalendarioFilters({ ...base, mostrar: "tareas" })).toBe(true);
     expect(hasActiveCalendarioFilters({ ...base, quien: "todos" })).toBe(true);
     expect(hasActiveCalendarioFilters({ ...base, proyectos: ["p"] })).toBe(true);
-    expect(hasActiveCalendarioFilters({ ...base, tramo: "t" })).toBe(true);
+    expect(hasActiveCalendarioFilters({ ...base, etapa: "t" })).toBe(true);
     expect(hasActiveCalendarioFilters({ ...base, apoyo: false })).toBe(true);
     expect(hasActiveCalendarioFilters({ ...base, ocultarCompletadas: true })).toBe(true);
   });

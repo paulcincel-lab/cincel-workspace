@@ -2,7 +2,7 @@
 /**
  * Tareas Visual summary (#986) against a real Postgres: `loadTareasTrend`'s
  * four KPI tiles (7-day series and deltas), the people at work, the week
- * strip with its dominant tramo, and the viewer scoping (admin tasks only
+ * strip with its dominant etapa, and the viewer scoping (admin tasks only
  * where the board shows them). Runs only when TEST_DATABASE_URL points at a
  * migrated database. Every row a test creates carries a per-run marker and is
  * deleted afterwards; each test reads only its own rows through `q`.
@@ -20,7 +20,7 @@ type Actor = { id: string; name: string; access: "Administrador" | "Colaborador"
 
 const run = randomUUID().slice(0, 8);
 const TZ = "America/Mexico_City";
-const NO_FILTERS = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+const NO_FILTERS = { etapa: null, proyecto: null, responsable: null, estado: null, q: null };
 
 describe.skipIf(!url)("loadTareasTrend · Tareas Visual (test DB)", async () => {
   const { inArray } = await import("drizzle-orm");
@@ -41,10 +41,10 @@ describe.skipIf(!url)("loadTareasTrend · Tareas Visual (test DB)", async () => 
   let admin: Actor;
   let colab: Actor;
   let projectId = "";
-  const tramoA = `ta${run}`;
-  const tramoB = `tb${run}`;
-  let tramoAId = "";
-  let tramoBId = "";
+  const etapaA = `ta${run}`;
+  const etapaB = `tb${run}`;
+  let etapaAId = "";
+  let etapaBId = "";
 
   const userOf = (actor: Actor): User =>
     ({
@@ -113,16 +113,16 @@ describe.skipIf(!url)("loadTareasTrend · Tareas Visual (test DB)", async () => 
       .returning({ id: schema.projects.id });
     projectId = project.id;
     ids.projects.push(projectId);
-    const tramos = await db
+    const etapas = await db
       .insert(schema.workflows)
       .values([
-        { key: tramoA, name: `Etapa A ${run}`, sortOrder: 90 },
-        { key: tramoB, name: `Etapa B ${run}`, sortOrder: 91 },
+        { key: etapaA, name: `Etapa A ${run}`, sortOrder: 90 },
+        { key: etapaB, name: `Etapa B ${run}`, sortOrder: 91 },
       ])
       .returning({ id: schema.workflows.id });
-    tramoAId = tramos[0].id;
-    tramoBId = tramos[1].id;
-    ids.workflows.push(tramoAId, tramoBId);
+    etapaAId = etapas[0].id;
+    etapaBId = etapas[1].id;
+    ids.workflows.push(etapaAId, etapaBId);
 
     // KPI rows ("kpi"): A pendiente, B en proceso (colab), C overdue for days, G overdue since today,
     // D and F completed today, E completed a week ago.
@@ -137,12 +137,12 @@ describe.skipIf(!url)("loadTareasTrend · Tareas Visual (test DB)", async () => 
     await completedAt(f, new Date());
     await completedAt(e, localNoon(shiftIsoDate(today, -7)));
 
-    // Week rows ("week"): Monday 2 × tramo A + 1 × tramo B open and 1 closed; Wednesday 1 × tramo B by delivery date.
-    await addTask("week 1", { workflowId: tramoAId, commitmentDate: monday });
-    await addTask("week 2", { workflowId: tramoAId, commitmentDate: monday });
-    await addTask("week 3", { workflowId: tramoBId, commitmentDate: monday });
-    await addTask("week 4", { workflowId: tramoAId, commitmentDate: monday, status: "completado" });
-    await addTask("week 5", { workflowId: tramoBId, deliveryDate: shiftIsoDate(monday, 2) });
+    // Week rows ("week"): Monday 2 × etapa A + 1 × etapa B open and 1 closed; Wednesday 1 × etapa B by delivery date.
+    await addTask("week 1", { workflowId: etapaAId, commitmentDate: monday });
+    await addTask("week 2", { workflowId: etapaAId, commitmentDate: monday });
+    await addTask("week 3", { workflowId: etapaBId, commitmentDate: monday });
+    await addTask("week 4", { workflowId: etapaAId, commitmentDate: monday, status: "completado" });
+    await addTask("week 5", { workflowId: etapaBId, deliveryDate: shiftIsoDate(monday, 2) });
 
     // Scope rows ("scope"): one user task and one admin task, both managed by the admin.
     await addTask("scope user", { managerId: admin.id });
@@ -192,9 +192,9 @@ describe.skipIf(!url)("loadTareasTrend · Tareas Visual (test DB)", async () => 
     expect(trend.week.from).toBe(monday);
     expect(trend.week.to).toBe(shiftIsoDate(monday, 6));
     expect(trend.week.days.map((d) => d.date)).toEqual(Array.from({ length: 7 }, (_, i) => shiftIsoDate(monday, i)));
-    expect(trend.week.days[0]).toEqual({ date: monday, due: 3, tramoKey: tramoA });
-    expect(trend.week.days[1]).toEqual({ date: shiftIsoDate(monday, 1), due: 0, tramoKey: null });
-    expect(trend.week.days[2]).toEqual({ date: shiftIsoDate(monday, 2), due: 1, tramoKey: tramoB });
+    expect(trend.week.days[0]).toEqual({ date: monday, due: 3, etapaKey: etapaA });
+    expect(trend.week.days[1]).toEqual({ date: shiftIsoDate(monday, 1), due: 0, etapaKey: null });
+    expect(trend.week.days[2]).toEqual({ date: shiftIsoDate(monday, 2), due: 1, etapaKey: etapaB });
     expect(trend.week.total).toBe(4);
     expect(trend.week.days.reduce((sum, d) => sum + d.due, 0)).toBe(trend.week.total);
   });

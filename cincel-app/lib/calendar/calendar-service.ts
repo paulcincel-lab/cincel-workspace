@@ -4,8 +4,8 @@ import type { TaskListItem } from "@/lib/types/core";
 /** What the calendar reads of a task: a `TaskListItem` or a slim `TaskListRow` (no `notes`). */
 type CalendarTask = Omit<TaskListItem, "notes">;
 
-export const NO_TRAMO_LABEL = "Sin etapa";
-export const ADMIN_TRAMO_LABEL = "Administración";
+export const NO_ETAPA_LABEL = "Sin etapa";
+export const ADMIN_ETAPA_LABEL = "Administración";
 
 export function dateKey(value: Date): string {
   return value.toISOString().slice(0, 10);
@@ -33,11 +33,11 @@ function workflowHref(workflowKey: string | null): string {
   return `/actividades/${workflowKey}`;
 }
 
-/** Tramo key and label of a task's calendar events. */
-export function calendarTramo(task: Pick<TaskListItem, "kind" | "workflow">): { tramo: string; tramoLabel: string } {
-  if (task.workflow) return { tramo: task.workflow.key, tramoLabel: task.workflow.name };
-  if (task.kind === "admin") return { tramo: "admin", tramoLabel: ADMIN_TRAMO_LABEL };
-  return { tramo: "sin-tramo", tramoLabel: NO_TRAMO_LABEL };
+/** Etapa key and label of a task's calendar events. */
+export function calendarEtapa(task: Pick<TaskListItem, "kind" | "workflow">): { etapa: string; etapaLabel: string } {
+  if (task.workflow) return { etapa: task.workflow.key, etapaLabel: task.workflow.name };
+  if (task.kind === "admin") return { etapa: "admin", etapaLabel: ADMIN_ETAPA_LABEL };
+  return { etapa: "sin-etapa", etapaLabel: NO_ETAPA_LABEL };
 }
 
 function defaultTimeByType(type: CalendarEventType): string {
@@ -106,7 +106,7 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEvent[] {
   for (const task of tasks) {
     const workflowKey = task.workflow?.key ?? null;
     const baseHref = `${workflowHref(workflowKey)}?project=${encodeURIComponent(task.project.name)}`;
-    const { tramo, tramoLabel } = calendarTramo(task);
+    const { etapa, etapaLabel } = calendarEtapa(task);
 
     const pushEvent = ({ date, type, suffix }: { date: string | null; type: CalendarEventType; suffix: string }) => {
       if (!date) {
@@ -114,7 +114,7 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEvent[] {
       }
 
       events.push({
-        id: `${suffix}-${tramo}-${task.id}-${date}`,
+        id: `${suffix}-${etapa}-${task.id}-${date}`,
         taskId: task.id,
         date,
         time: defaultTimeFor(task, type),
@@ -122,8 +122,8 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEvent[] {
         project: task.project.name,
         projectId: task.project.id,
         responsible: task.manager?.name || "Sin responsable",
-        tramo,
-        tramoLabel,
+        etapa,
+        etapaLabel,
         phaseId: task.phase?.id ?? null,
         phaseLabel: task.phase?.name ?? "",
         type,

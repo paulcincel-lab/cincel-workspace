@@ -66,7 +66,7 @@ const NOT_FOUND = { title: "Proyecto no encontrado", message: "El proyecto no ex
  * (`qk.proyectos.resumenSummary(id)`: server aggregates, never the task
  * list, #1051) and the first page of the bitácora (`qk.proyectos.history(id)`,
  * "Actividad reciente"). In Analítico it also prefetches, in one call, the
- * first 30 rows of every "Tareas por tramo" group (`qk.tareas.list(f)`).
+ * first 30 rows of every "Tareas por etapa" group (`qk.tareas.list(f)`).
  */
 export default async function ProjectPage({
   params,
@@ -109,7 +109,7 @@ export default async function ProjectPage({
 }
 
 /**
- * Analítico "Tareas por tramo": the first page of every group with rows, in
+ * Analítico "Tareas por etapa": the first page of every group with rows, in
  * one `loadTareasListFirstPages` call, for the style and "Ocultar
  * completadas" the client renders (the `?estilo=` / `?completadas=`
  * overrides, else the viewer's choices). Nothing for Visual and Esencial.

@@ -2,7 +2,7 @@
 /**
  * Task table header sort (#1044) against a real Postgres: every column,
  * both directions, read through the page action (`getTareasListPage`) in
- * pages of 10 with the cursor, inside one Analítico tramo group. Each task
+ * pages of 10 with the cursor, inside one Analítico etapa group. Each task
  * comes back once, in the column's order, empty values last both ways.
  * Runs only when TEST_DATABASE_URL points at a migrated database. Every row
  * it creates carries a per-run marker and is deleted afterwards.
@@ -39,7 +39,7 @@ describe.skipIf(!url)("Tareas header sort: every column, both ways, across pages
   type TaskListRow = import("@/lib/types/core").TaskListRow;
 
   const base = tareasListFiltersOf(DEFAULT_TAREAS_QUERY);
-  const tramoKey = `orden-${run}`;
+  const etapaKey = `orden-${run}`;
   let adminId = "";
   const staffIds: string[] = [];
   let projectId = "";
@@ -48,9 +48,9 @@ describe.skipIf(!url)("Tareas header sort: every column, both ways, across pages
 
   const admin = () => ({ id: adminId, access: "Administrador" as const });
 
-  /** Every row of the tramo group in one sort, page by page (10 per page). */
+  /** Every row of the etapa group in one sort, page by page (10 per page). */
   async function readAll(orderBy: (typeof TASK_SORT_COLUMNS)[number], orderDir: "asc" | "desc"): Promise<TaskListRow[]> {
-    const filters = tareasGroupFilters(base, projectId, tramoKey, { orderBy, orderDir });
+    const filters = tareasGroupFilters(base, projectId, etapaKey, { orderBy, orderDir });
     const rows: TaskListRow[] = [];
     let cursor: string | null = null;
     let pages = 0;
@@ -82,7 +82,7 @@ describe.skipIf(!url)("Tareas header sort: every column, both ways, across pages
       .values({ name: `Orden ${run}`, status: "activo", managerId: adminId })
       .returning({ id: schema.projects.id });
     projectId = project!.id;
-    const [flow] = await db.insert(schema.workflows).values({ key: tramoKey, name: `Orden ${run}` }).returning({ id: schema.workflows.id });
+    const [flow] = await db.insert(schema.workflows).values({ key: etapaKey, name: `Orden ${run}` }).returning({ id: schema.workflows.id });
     workflowId = flow!.id;
     const statuses = ["pendiente", "en_proceso", "completado", "bloqueado"] as const;
     const priorities = ["alta", "media", "baja"] as const;

@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { unwrapActions } from "@/tests/helpers/action-result";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -129,10 +129,10 @@ function rawThread(id: string, opts: { unread?: boolean } = {}) {
 }
 
 describe.skipIf(!url)("gmail actions (test DB)", async () => {
-  // Reads the tramo catalog (and creates a tramo when the DB has none): one catalog file at a time.
+  // Reads the etapa catalog (and creates an etapa when the DB has none): one catalog file at a time.
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
 
   const { and, eq, inArray, isNull } = await import("drizzle-orm");

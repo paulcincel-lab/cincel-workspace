@@ -22,7 +22,7 @@ export function candidatePhasesFor(positions: Position[], positionIds: string[])
   return result;
 }
 
-/** "{tramo} · {fase}". */
+/** "{etapa} · {fase}". */
 export function candidatePhaseLabel(phase: CandidatePhase): string {
   return `${phase.workflowName} · ${phase.name}`;
 }

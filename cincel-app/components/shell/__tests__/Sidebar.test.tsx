@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
   assistant: { fetchAssistantThreadAction: false },
   bottomTabs: [] as { activeKey: string | null; items: { key: string }[]; more: { key: string }[] }[],
   inicioPage: vi.fn(async () => ({ inicio: {} })),
-  tareasPage: vi.fn(async () => ({ facets: {}, tramos: [], staff: [] })),
+  tareasPage: vi.fn(async () => ({ facets: {}, etapas: [], staff: [] })),
 }));
 
 // The avatar reads me.profile from the query cache; these tests render it without one.
@@ -54,7 +54,7 @@ vi.mock("@/lib/query/options/inicio", () => ({
   inicioPageOptions: () => ({ queryKey: ["inicio"], queryFn: state.inicioPage, staleTime: 30_000 }),
 }));
 vi.mock("@/lib/query/options/tareas", () => ({
-  tareasPageKeyInputOf: (query: { tramo: string | null }, estilo = "visual") => ({ estilo, tramo: query.tramo }),
+  tareasPageKeyInputOf: (query: { etapa: string | null }, estilo = "visual") => ({ estilo, etapa: query.etapa }),
   tareasPageOptions: (q: { estilo: string }) => ({ queryKey: ["tareas", "page", q], queryFn: state.tareasPage, staleTime: 30_000 }),
 }));
 vi.mock("@/components/asistente/AssistantButton", () => ({
@@ -197,8 +197,8 @@ describe("Sidebar", () => {
     renderSidebar({
       nav: {
         ...FULL_NAV,
-        tramos: [
-          ...FULL_NAV.tramos,
+        etapas: [
+          ...FULL_NAV.etapas,
           { key: "decoracion", name: "Decoración", colorVar: "var(--chart-4)", href: "/tareas?etapa=decoracion" },
         ],
       },
@@ -218,7 +218,7 @@ describe("Sidebar", () => {
   });
 
   it("renders only the items of the nav model", () => {
-    renderSidebar({ nav: { items: [navItem("proyectos")], tramos: [], footer: [] } });
+    renderSidebar({ nav: { items: [navItem("proyectos")], etapas: [], footer: [] } });
 
     expect(within(mainNav()).getAllByRole("link")).toHaveLength(1);
     expect(screen.queryByText("Etapas")).toBeNull();
@@ -398,7 +398,7 @@ describe("Sidebar hover prefetch", () => {
       await vi.advanceTimersByTimeAsync(NAV_PREFETCH_DEBOUNCE_MS);
     });
     expect(state.tareasPage).toHaveBeenCalledTimes(1);
-    expect(client.getQueryData(["tareas", "page", { estilo: "visual", tramo: null }])).toBeTruthy();
+    expect(client.getQueryData(["tareas", "page", { estilo: "visual", etapa: null }])).toBeTruthy();
   });
 
   it("prefetches nothing for the other links", async () => {

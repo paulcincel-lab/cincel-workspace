@@ -7,15 +7,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderKanban, Plus } from "lucide-react";
 
 import {
-  NO_TRAMO_KEY,
-  NO_TRAMO_LABEL,
+  NO_ETAPA_KEY,
+  NO_ETAPA_LABEL,
   PORTFOLIO_ANALITICO_DESCRIPTION,
   PROJECT_TASKS_TOGGLE_LABEL,
   PORTFOLIO_CLEAR_FILTERS,
   PORTFOLIO_FILTER_GROUP,
   PORTFOLIO_NO_MATCH,
   PORTFOLIO_SORTABLE_COLUMNS,
-  PROJECTS_BY_TRAMO_TITLE,
+  PROJECTS_BY_ETAPA_TITLE,
   PROJECTS_TITLE,
   DEFAULT_PORTFOLIO_FILTERS,
   applyPortfolioFilters,
@@ -25,7 +25,7 @@ import {
   formatDeliveryDate,
   initialSortDirection,
   listedProjects,
-  orderedTramos,
+  orderedEtapas,
   parsePortfolioFilters,
   percentText,
   portfolioById,
@@ -65,27 +65,27 @@ import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import { catalogStaffOptions } from "@/lib/query/options/catalog";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
 import { prefetchTareasListFirstPages } from "@/lib/query/options/tareas";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import { cn } from "@/lib/utils";
 
 /**
  * /proyectos in Analítico (#994, frame `Proyectos-Analitico`): header with
  * Exportar (CSV of the visible rows) and Nuevo proyecto, one `FilterCard`
- * (Mostrar, Tramo multi-select, Solo míos, Incluir pausados, search), the
- * `KpiStrip`, the "Proyectos por tramo" card (stacked bar and a legend whose
- * segments filter by tramo, expand / collapse all) and the portfolio in a
+ * (Mostrar, Etapa multi-select, Solo míos, Incluir pausados, search), the
+ * `KpiStrip`, the "Proyectos por etapa" card (stacked bar and a legend whose
+ * segments filter by etapa, expand / collapse all) and the portfolio in a
  * `GroupedTable`: one row per project (#1042), sortable, with heat cells and
- * totals. Tramo is a column and a filter, never a group: a project without
+ * totals. Etapa is a column and a filter, never a group: a project without
  * one is a row like the rest. Each project row expands into its open tasks
  * (`ProjectAnaliticoTasks`, loaded on first expand).
  *
  * Filters run on the client over `qk.proyectos.list()` (prefetched by the
- * page) and live in the URL (`mostrar`, `tramo`, `mios`, `pausados`, `q`),
- * written with `router.replace`. KPIs, the tramo bar and the totals are all
+ * page) and live in the URL (`mostrar`, `etapa`, `mios`, `pausados`, `q`),
+ * written with `router.replace`. KPIs, the etapa bar and the totals are all
  * computed from the visible rows. "Nuevo proyecto" calls `onNewProject`;
  * without it, it sets `?nuevo=1`, which the page's create dialog listens to.
  *
- * Tramo actual and Responsable edit in place (#1026, `portfolioEditColumns`):
+ * Etapa actual and Responsable edit in place (#1026, `portfolioEditColumns`):
  * the other columns are calculated and stay inert.
  */
 export type ProjectsAnaliticoLayoutProps = {
@@ -99,10 +99,10 @@ export const ANALITICO_EMPTY_TITLE = "Aún no hay proyectos";
 export const ANALITICO_NEW_PROJECT_LABEL = "Nuevo proyecto";
 export const ANALITICO_EXPAND_ALL = "Expandir todo";
 export const ANALITICO_COLLAPSE_ALL = "Contraer todo";
-/** The table's accessible name (the tramo card above is "Proyectos por tramo"). */
+/** The table's accessible name (the etapa card above is "Proyectos por etapa"). */
 export const PORTFOLIO_TABLE_LABEL = "Portafolio de proyectos";
-/** The tramo bar's legend: each segment filters by its tramo. */
-export const TRAMO_SEGMENTS_LABEL = "Filtrar por etapa";
+/** The etapa bar's legend: each segment filters by its etapa. */
+export const ETAPA_SEGMENTS_LABEL = "Filtrar por etapa";
 
 const NEW_PROJECT_PARAM = "nuevo";
 const SEARCH_DEBOUNCE_MS = 300;
@@ -137,7 +137,7 @@ export function ProjectsAnaliticoSkeleton(): ReactNode {
   );
 }
 
-/** Pressed toggles in a labelled group (Tramo multi-select, Solo míos, Incluir pausados). */
+/** Pressed toggles in a labelled group (Etapa multi-select, Solo míos, Incluir pausados). */
 function ToggleGroup({
   group,
   selected,
@@ -193,7 +193,7 @@ function downloadText(fileName: string, text: string, type: string): void {
 
 /** The Analítico body over loaded page data. */
 function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onNewProject(): void }) {
-  const { projects, portfolio, tramos, canSeeAdminData, canCreateProject, canChangeProjectStage, viewerStaffId } = data;
+  const { projects, portfolio, etapas, canSeeAdminData, canCreateProject, canChangeProjectStage, viewerStaffId } = data;
   const canEditProjectGeneral = data.canEditProjectGeneral ?? false;
   const qc = useQueryClient();
   const staffQuery = useQuery({ ...catalogStaffOptions(), enabled: canEditProjectGeneral });
@@ -226,15 +226,15 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
 
   const rows = useMemo(() => portfolioById(portfolio), [portfolio]);
   const listed = useMemo(() => listedProjects(projects), [projects]);
-  // Tramo keys the URL may name; anything else is ignored.
-  const knownTramos = useMemo(() => {
-    const keys = new Set(orderedTramos(listed, tramos).map((t) => t.key));
-    keys.add(NO_TRAMO_KEY);
+  // Etapa keys the URL may name; anything else is ignored.
+  const knownEtapas = useMemo(() => {
+    const keys = new Set(orderedEtapas(listed, etapas).map((t) => t.key));
+    keys.add(NO_ETAPA_KEY);
     return keys;
-  }, [listed, tramos]);
+  }, [listed, etapas]);
   const effective = useMemo<PortfolioFilters>(
-    () => ({ ...filters, tramos: filters.tramos.filter((key) => knownTramos.has(key)) }),
-    [filters, knownTramos],
+    () => ({ ...filters, etapas: filters.etapas.filter((key) => knownEtapas.has(key)) }),
+    [filters, knownEtapas],
   );
 
   const visible = useMemo(
@@ -246,7 +246,7 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
     [projects, rows, effective, viewerStaffId],
   );
   const kpis = useMemo(() => portfolioKpis(visible, rows, new Date(mountedAt)), [visible, rows, mountedAt]);
-  const table = useMemo(() => portfolioTable(visible, rows, tramos, { canSeeAdminData }), [visible, rows, tramos, canSeeAdminData]);
+  const table = useMemo(() => portfolioTable(visible, rows, etapas, { canSeeAdminData }), [visible, rows, etapas, canSeeAdminData]);
   const tableRows = useMemo(() => sortPortfolioRows(table.rows, sort), [table.rows, sort]);
   const groups = useMemo<Group<PortfolioTableRow>[]>(
     () => (tableRows.length > 0 ? [{ id: ROWS_GROUP_ID, label: PORTFOLIO_TABLE_LABEL, metrics: [], rows: tableRows, headless: true }] : []),
@@ -265,13 +265,13 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
       portfolioEditColumns(portfolioColumns({ canSeeAdminData }), {
         qc,
         projects: projectsById,
-        tramos,
+        etapas,
         staff,
         canChangeProjectStage,
         canEditProjectGeneral,
         canSeeAdminData,
       }),
-    [canSeeAdminData, qc, projectsById, tramos, staff, canChangeProjectStage, canEditProjectGeneral],
+    [canSeeAdminData, qc, projectsById, etapas, staff, canChangeProjectStage, canEditProjectGeneral],
   );
   const createdAt = useMemo(() => new Map(projects.map((p) => [p.id, Date.parse(p.createdAt)])), [projects]);
 
@@ -303,9 +303,9 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
     }, SEARCH_DEBOUNCE_MS);
   }
 
-  function toggleTramo(key: string) {
-    const tramosNext = effective.tramos.includes(key) ? effective.tramos.filter((k) => k !== key) : [...effective.tramos, key];
-    update({ ...filters, tramos: tramosNext });
+  function toggleEtapa(key: string) {
+    const etapasNext = effective.etapas.includes(key) ? effective.etapas.filter((k) => k !== key) : [...effective.etapas, key];
+    update({ ...filters, etapas: etapasNext });
   }
 
   function handleSort(key: string) {
@@ -345,10 +345,10 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
         }),
       label: (row) => PROJECT_TASKS_TOGGLE_LABEL(row.name),
       render: (row) => (
-        <ProjectAnaliticoTasks project={{ id: row.id, name: row.name }} tramos={tramos} staff={staffRefs} overdue={row.overdue} />
+        <ProjectAnaliticoTasks project={{ id: row.id, name: row.name }} etapas={etapas} staff={staffRefs} overdue={row.overdue} />
       ),
     }),
-    [openProjects, tramos, staffRefs],
+    [openProjects, etapas, staffRefs],
   );
   const isRowMuted = useCallback((row: PortfolioTableRow) => projectsById.get(row.id)?.status === "pausado", [projectsById]);
 
@@ -374,16 +374,16 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
             ) : null}
           </div>
         );
-      case "tramo": {
+      case "etapa": {
         const project = projectsById.get(row.id);
-        const tramo = project && !project.needsTramo ? (project.currentWorkflow ?? project.tramos.find((t) => t.current) ?? null) : null;
-        return tramo ? (
+        const etapa = project && !project.needsEtapa ? (project.currentWorkflow ?? project.etapas.find((t) => t.current) ?? null) : null;
+        return etapa ? (
           <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: tramoColorVar(tramo.key) }} />
-            <span className="truncate">{tramo.name}</span>
+            <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: etapaColorVar(etapa.key) }} />
+            <span className="truncate">{etapa.name}</span>
           </span>
         ) : (
-          <span className="text-muted-foreground">{NO_TRAMO_LABEL}</span>
+          <span className="text-muted-foreground">{NO_ETAPA_LABEL}</span>
         );
       }
       case "manager": {
@@ -395,7 +395,7 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
         );
       }
       case "real": {
-        const color = row.tramoKey ? tramoColorVar(row.tramoKey) : "var(--muted-foreground)";
+        const color = row.etapaKey ? etapaColorVar(row.etapaKey) : "var(--muted-foreground)";
         return (
           <span className="inline-flex items-center justify-end gap-2">
             <span
@@ -438,13 +438,13 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
   }
 
   const mostrarGroup = filterGroups.find((g) => g.id === PORTFOLIO_FILTER_GROUP.mostrar)!;
-  const tramoGroup = filterGroups.find((g) => g.id === PORTFOLIO_FILTER_GROUP.tramo)!;
+  const etapaGroup = filterGroups.find((g) => g.id === PORTFOLIO_FILTER_GROUP.etapa)!;
   const miosGroup = filterGroups.find((g) => g.id === PORTFOLIO_FILTER_GROUP.mios)!;
   const pausadosGroup = filterGroups.find((g) => g.id === PORTFOLIO_FILTER_GROUP.pausados)!;
 
   const totalShown = visible.length;
-  // The tramo bar: the Tramo filter's options (counts over the other filters), the empty ones left out.
-  const segments = tramoGroup.options.filter((option) => (option.count ?? 0) > 0);
+  // The etapa bar: the Etapa filter's options (counts over the other filters), the empty ones left out.
+  const segments = etapaGroup.options.filter((option) => (option.count ?? 0) > 0);
 
   const headerActions = (
     <>
@@ -478,8 +478,8 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
             }}
             extra={
               <>
-                {tramoGroup.options.length > 0 ? (
-                  <ToggleGroup group={tramoGroup} selected={effective.tramos} onToggle={toggleTramo} showLabel />
+                {etapaGroup.options.length > 0 ? (
+                  <ToggleGroup group={etapaGroup} selected={effective.etapas} onToggle={toggleEtapa} showLabel />
                 ) : null}
                 <ToggleGroup
                   group={miosGroup}
@@ -508,9 +508,9 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
           <div className="flex flex-col gap-4">
             <KpiStrip items={kpis} />
 
-            <section aria-label={PROJECTS_BY_TRAMO_TITLE} className="flex flex-col gap-2.5 rounded-xl border bg-card px-4 py-3.5 shadow-[var(--shadow-card)]">
+            <section aria-label={PROJECTS_BY_ETAPA_TITLE} className="flex flex-col gap-2.5 rounded-xl border bg-card px-4 py-3.5 shadow-[var(--shadow-card)]">
               <div className="flex items-baseline justify-between gap-2">
-                <h2 className="text-[13.5px] font-semibold">{PROJECTS_BY_TRAMO_TITLE}</h2>
+                <h2 className="text-[13.5px] font-semibold">{PROJECTS_BY_ETAPA_TITLE}</h2>
                 <span className="font-mono text-xs text-muted-foreground">
                   {totalShown} {totalShown === 1 ? "proyecto" : "proyectos"}
                 </span>
@@ -526,16 +526,16 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
                       />
                     ))}
                   </div>
-                  <ul aria-label={TRAMO_SEGMENTS_LABEL} className="flex flex-wrap gap-x-1 gap-y-1 text-[12.5px]">
+                  <ul aria-label={ETAPA_SEGMENTS_LABEL} className="flex flex-wrap gap-x-1 gap-y-1 text-[12.5px]">
                     {segments.map((segment) => {
-                      const pressed = effective.tramos.includes(segment.value);
+                      const pressed = effective.etapas.includes(segment.value);
                       return (
                         <li key={segment.value}>
                           <button
                             type="button"
                             aria-pressed={pressed}
-                            data-slot="tramo-segment"
-                            onClick={() => toggleTramo(segment.value)}
+                            data-slot="etapa-segment"
+                            onClick={() => toggleEtapa(segment.value)}
                             className={cn(
                               "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
                               pressed && "bg-muted",

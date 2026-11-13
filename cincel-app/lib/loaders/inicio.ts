@@ -16,7 +16,7 @@ import {
   INICIO_KPI_OWN_HOURS_LABEL,
   averageAgeByKey,
   averageDaysLateOn,
-  byTramoOrder,
+  byEtapaOrder,
   completedInWeek,
   inMemoryCounter,
   inicioPortfolioRows,
@@ -29,22 +29,22 @@ import {
   myWeekOf,
   nextReviewLine,
   projectActiveOn,
-  projectTramoGroup,
+  projectEtapaGroup,
   shiftIsoDate,
   statusResolver,
   taskDayState,
-  taskTramoGroup,
-  taskTramoKey,
-  taskTramoLabel,
-  tramoConcentrationLine,
-  tramoCountsLine,
-  tramoAssigneeRows,
-  tramoSplit,
+  taskEtapaGroup,
+  taskEtapaKey,
+  taskEtapaLabel,
+  etapaConcentrationLine,
+  etapaCountsLine,
+  etapaAssigneeRows,
+  etapaSplit,
   withProjectRisk,
 } from "@/lib/dashboard/inicio";
 import {
   attentionProgress,
-  dominantTramoByStaff,
+  dominantEtapaByStaff,
   horasSemanaKpi,
   inicioHero,
   openShiftsOf,
@@ -67,7 +67,7 @@ import { isTaskClosed } from "@/lib/tasks/status-options";
 import { mondayOf } from "@/lib/time-tracking/local-time";
 import { getTimeTrackingSettings } from "@/lib/time-tracking/settings";
 import { weekHours } from "@/lib/time-tracking/week-hours";
-import { canSeeAdminData, tramoColorVar } from "@/lib/tramos/compat";
+import { canSeeAdminData, etapaColorVar } from "@/lib/etapas/compat";
 import type { TaskKind } from "@/lib/types/core";
 import type { InicioData } from "@/lib/types/redesign";
 import type { KpiDatum } from "@/lib/types/widgets";
@@ -186,7 +186,7 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
   const blockedToday = tasks.filter((t) => state.blocked(t, today));
   const reviewsToday = tasks.filter((t) => state.reviewDue(t, today));
   const activeProjects = scopedProjects.filter((p) => p.status === "activo");
-  const tramoOfTask = (t: (typeof tasks)[number]) => t.workflow?.key ?? null;
+  const etapaOfTask = (t: (typeof tasks)[number]) => t.workflow?.key ?? null;
 
   // Horas esta semana: the scope's staff with team access, else the viewer's own hours.
   const staffById = new Map(staff.map((s) => [s.id, s]));
@@ -225,31 +225,31 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
         href: INICIO_KPI.proyectosActivos.href,
         deltaWindow: "mes",
       }),
-      split: tramoSplit(activeProjects, (p) => p.currentWorkflow?.key ?? null),
-      caption: tramoCountsLine(activeProjects, projectTramoGroup, KPI_CONTEXT.noActiveProjects),
+      split: etapaSplit(activeProjects, (p) => p.currentWorkflow?.key ?? null),
+      caption: etapaCountsLine(activeProjects, projectEtapaGroup, KPI_CONTEXT.noActiveProjects),
     },
     {
       ...kpiFromDaily(INICIO_KPI.vencidas.key, INICIO_KPI.vencidas.label, overdueDaily, {
         goodWhen: "down",
         href: INICIO_KPI.vencidas.href,
       }),
-      split: tramoSplit(overdueToday, tramoOfTask),
-      caption: tramoConcentrationLine(overdueToday, taskTramoGroup, KPI_CONTEXT.noOverdue),
+      split: etapaSplit(overdueToday, etapaOfTask),
+      caption: etapaConcentrationLine(overdueToday, taskEtapaGroup, KPI_CONTEXT.noOverdue),
     },
     {
       ...kpiFromDaily(INICIO_KPI.bloqueadas.key, INICIO_KPI.bloqueadas.label, blockedDaily, {
         goodWhen: "down",
         href: INICIO_KPI.bloqueadas.href,
       }),
-      split: tramoSplit(blockedToday, tramoOfTask),
-      caption: tramoConcentrationLine(blockedToday, taskTramoGroup, KPI_CONTEXT.noBlocked),
+      split: etapaSplit(blockedToday, etapaOfTask),
+      caption: etapaConcentrationLine(blockedToday, taskEtapaGroup, KPI_CONTEXT.noBlocked),
     },
     {
       ...kpiFromDaily(INICIO_KPI.revisiones.key, INICIO_KPI.revisiones.label, reviewsDaily, {
         goodWhen: "up",
         href: INICIO_KPI.revisiones.href,
       }),
-      split: tramoSplit(reviewsToday, tramoOfTask),
+      split: etapaSplit(reviewsToday, etapaOfTask),
       caption: nextReviewLine(openTasks, today),
     },
     {
@@ -265,8 +265,8 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
         goodWhen: "down",
         href: INICIO_KPI.abiertas.href,
       }),
-      split: tramoSplit(openTasks, tramoOfTask),
-      caption: tramoConcentrationLine(openTasks, taskTramoGroup, KPI_CONTEXT.noOpen),
+      split: etapaSplit(openTasks, etapaOfTask),
+      caption: etapaConcentrationLine(openTasks, taskEtapaGroup, KPI_CONTEXT.noOpen),
       visibleIn: ["visual", "analitico"],
     },
     {
@@ -291,13 +291,13 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
     },
   ];
 
-  // ── Tareas abiertas por tramo: value = open, secondary = overdue, extra = { diasProm } ──
-  const byTramo = [...openTasks].sort(byTramoOrder);
-  const ages = averageAgeByKey(byTramo, taskTramoKey, today, tz);
-  const tasksByTramo = toDistribution(byTramo, {
-    keyOf: taskTramoKey,
-    labelOf: taskTramoLabel,
-    colorVarOf: (t) => tramoColorVar(taskTramoKey(t)),
+  // ── Tareas abiertas por etapa: value = open, secondary = overdue, extra = { diasProm } ──
+  const byEtapa = [...openTasks].sort(byEtapaOrder);
+  const ages = averageAgeByKey(byEtapa, taskEtapaKey, today, tz);
+  const tasksByEtapa = toDistribution(byEtapa, {
+    keyOf: taskEtapaKey,
+    labelOf: taskEtapaLabel,
+    colorVarOf: (t) => etapaColorVar(taskEtapaKey(t)),
     secondaryOf: (t) => (state.overdue(t, today) ? 1 : 0),
   }).map((segment) => ({ ...segment, extra: { diasProm: ages.get(segment.key) ?? 0 } }));
 
@@ -333,7 +333,7 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
 
   // ── Avance de proyectos activos (budgetPct is admin-only) ──
   const portfolio = inicioPortfolioRows(activeProjects, tasks, today, (t, day) => state.open(t, day));
-  const tramoByStaff = dominantTramoByStaff(openTasks);
+  const etapaByStaff = dominantEtapaByStaff(openTasks);
   const projectById = new Map(activeProjects.map((p) => [p.id, p]));
   const openByProject = new Map<string, typeof openTasks>();
   for (const task of openTasks) openByProject.set(task.projectId, [...(openByProject.get(task.projectId) ?? []), task]);
@@ -346,7 +346,7 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
         open: item.open ?? 0,
         overdue: item.overdue ?? 0,
         deliveryDate: project?.endDate ?? null,
-        team: project ? projectTeam(project, openByProject.get(item.id) ?? [], tramoByStaff) : [],
+        team: project ? projectTeam(project, openByProject.get(item.id) ?? [], etapaByStaff) : [],
       };
     },
   );
@@ -357,24 +357,24 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
   // ── Inicio Visual (#989): hero, open shifts ──
   const hero = inicioHero(openTasks, overdueToday, today);
   const openShifts =
-    showTeam && openShiftIds ? openShiftsOf(openShiftIds, new Set(staffInScope), staffById, tramoByStaff) : null;
+    showTeam && openShiftIds ? openShiftsOf(openShiftIds, new Set(staffInScope), staffById, etapaByStaff) : null;
 
-  // ── Visual and Analítico: today's agenda of the scope; Analítico: open tasks per tramo and responsable, the caller's sections ──
+  // ── Visual and Analítico: today's agenda of the scope; Analítico: open tasks per etapa and responsable, the caller's sections ──
   const { items: todayMeetings } = await eventItemsInRange(
     user,
     { from: today, to: today },
-    { mostrar: "reuniones", quien: "yo", proyectos: [], tramo: null, responsable: null },
+    { mostrar: "reuniones", quien: "yo", proyectos: [], etapa: null, responsable: null },
     { canViewTeam: false },
   );
   const todayAgenda = todayAgendaItems(openTasks, today, todayMeetings);
-  const tasksByTramoAssignee = tramoAssigneeRows(openTasks, today, tz);
+  const tasksByEtapaAssignee = etapaAssigneeRows(openTasks, today, tz);
   const inicioSections = { showTeamWorkload: sections.showTeamWorkload, showProjectRisk: sections.showProjectRisk };
 
   const paceScope = dataScope === "assigned_tasks" ? "mine" : "team";
 
   return {
     kpis,
-    tasksByTramo,
+    tasksByEtapa,
     weeklyPace,
     attention,
     myDay,
@@ -386,7 +386,7 @@ export async function loadInicio(user: AuthenticatedUser): Promise<InicioData> {
     hero,
     openShifts,
     todayAgenda,
-    tasksByTramoAssignee,
+    tasksByEtapaAssignee,
     sections: inicioSections,
   };
 }

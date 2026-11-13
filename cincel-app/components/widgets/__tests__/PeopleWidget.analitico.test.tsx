@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Personas · Analítico (#1000): the grouped table tramo → persona → proyecto,
+ * Personas · Analítico (#1000): the grouped table etapa → persona → proyecto,
  * expand state kept in the URL, quick assign with its impact line, footer
  * totals and the CSV export of the visible people.
  */
@@ -14,13 +14,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
   };
 });
 
@@ -38,7 +38,7 @@ vi.mock("@/lib/quick-add/parse", () => ({
 
 vi.mock("@/components/widgets/QuickAddRow", () => ({
   QuickAddRow: (props: {
-    context: { label: string; projectId: string | null; tramoId?: string | null; assigneeId?: string | null };
+    context: { label: string; projectId: string | null; etapaId?: string | null; assigneeId?: string | null };
     onCreate(draft: Record<string, unknown>): Promise<unknown>;
   }) => (
     <tr>
@@ -50,7 +50,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
             void props.onCreate({
               title: (event.target as HTMLInputElement).value,
               projectId: props.context.projectId,
-              tramoId: props.context.tramoId ?? null,
+              etapaId: props.context.etapaId ?? null,
               assigneeId: null,
               dueDate: null,
               priority: "media",
@@ -65,7 +65,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
 vi.mock("@/lib/actions/tasks-actions", () => ({ createUserTaskAction: vi.fn() }));
 vi.mock("@/components/tareas/NewTaskDialog", () => ({ newTaskInvalidations: () => [] }));
 vi.mock("@/lib/query/options/catalog", () => ({
-  catalogTramosOptions: () => ({ queryKey: ["catalog", "tramos"], queryFn: async () => TRAMOS }),
+  catalogEtapasOptions: () => ({ queryKey: ["catalog", "etapas"], queryFn: async () => ETAPAS }),
 }));
 vi.mock("@/components/personas/PersonasTabs", () => ({ PersonasTabs: () => null }));
 vi.mock("@/components/widgets/PageHeader", () => ({
@@ -88,7 +88,7 @@ import type { PersonDatum } from "@/lib/types/widgets";
 
 const TODAY = "2026-11-09";
 const MONDAYS = ["2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"];
-const TRAMOS = [
+const ETAPAS = [
   { id: "w-pre", key: "presale", name: "Presale", sortOrder: 1 },
   { id: "w-dis", key: "diseno", name: "Diseño", sortOrder: 2 },
   { id: "w-con", key: "construccion", name: "Construcción", sortOrder: 3 },
@@ -104,7 +104,7 @@ const PEOPLE: PersonDatum[] = [
     name: "Ana Ruiz",
     initials: "AR",
     puesto: "Diseñadora",
-    tramo: "diseno",
+    etapa: "diseno",
     open: 6,
     overdue: 4,
     occupancyPct: 112,
@@ -112,8 +112,8 @@ const PEOPLE: PersonDatum[] = [
     href: "/personas/equipo/ana",
     weeks: weeks([112, 104, 86, 60], [6, 5, 4, 3]),
     projects: [
-      { projectId: "p1", name: "Oficina Polanco", tramo: "diseno", open: 2, overdue: 2, weeks: [2, 2, 0, 0] },
-      { projectId: "p2", name: "Casa Valle de Bravo", tramo: "diseno", open: 1, overdue: 0, weeks: [0, 1, 1, 1] },
+      { projectId: "p1", name: "Oficina Polanco", etapa: "diseno", open: 2, overdue: 2, weeks: [2, 2, 0, 0] },
+      { projectId: "p2", name: "Casa Valle de Bravo", etapa: "diseno", open: 1, overdue: 0, weeks: [0, 1, 1, 1] },
     ],
     sharesProjectWithViewer: true,
   },
@@ -122,14 +122,14 @@ const PEOPLE: PersonDatum[] = [
     name: "Valeria Ortiz",
     initials: "VO",
     puesto: "Diseñadora",
-    tramo: "diseno",
+    etapa: "diseno",
     open: 3,
     overdue: 0,
     occupancyPct: 70,
     capacity: 5,
     href: "/personas/equipo/valeria",
     weeks: weeks([70, 75, 50, 40], [3, 3, 2, 2]),
-    projects: [{ projectId: "p3", name: "Depto Roma Norte", tramo: "diseno", open: 3, overdue: 0, weeks: [3, 0, 0, 0] }],
+    projects: [{ projectId: "p3", name: "Depto Roma Norte", etapa: "diseno", open: 3, overdue: 0, weeks: [3, 0, 0, 0] }],
     sharesProjectWithViewer: false,
   },
   {
@@ -137,14 +137,14 @@ const PEOPLE: PersonDatum[] = [
     name: "Luis Pérez",
     initials: "LP",
     puesto: "Presale",
-    tramo: "presale",
+    etapa: "presale",
     open: 4,
     overdue: 1,
     occupancyPct: 85,
     capacity: 5,
     href: "/personas/equipo/luis",
     weeks: weeks([85, 70, 55, 40], [4, 3, 2, 2]),
-    projects: [{ projectId: "p4", name: "Casa Madrid 22", tramo: "presale", open: 4, overdue: 1, weeks: [4, 0, 0, 0] }],
+    projects: [{ projectId: "p4", name: "Casa Madrid 22", etapa: "presale", open: 4, overdue: 1, weeks: [4, 0, 0, 0] }],
     sharesProjectWithViewer: true,
   },
   {
@@ -152,19 +152,19 @@ const PEOPLE: PersonDatum[] = [
     name: "Sofía León",
     initials: "SL",
     puesto: "Decoración",
-    tramo: "construccion",
+    etapa: "construccion",
     open: 2,
     overdue: 0,
     occupancyPct: 55,
     capacity: 5,
     href: "/personas/equipo/sofia",
     weeks: weeks([55, 0, 60, 40], [2, 0, 3, 2], [0, 5, 0, 0]),
-    projects: [{ projectId: "p5", name: "Depto Condesa", tramo: "construccion", open: 2, overdue: 0, weeks: [2, 0, 0, 0] }],
+    projects: [{ projectId: "p5", name: "Depto Condesa", etapa: "construccion", open: 2, overdue: 0, weeks: [2, 0, 0, 0] }],
     sharesProjectWithViewer: false,
   },
 ];
 
-type TeamProps = Omit<PeopleTeamAnaliticoProps, "people" | "loading" | "state" | "onStateChange" | "tramos" | "today">;
+type TeamProps = Omit<PeopleTeamAnaliticoProps, "people" | "loading" | "state" | "onStateChange" | "etapas" | "today">;
 
 function UrlTeam(props: Partial<TeamProps>) {
   const [state, setState] = useTeamAnaliticoState();
@@ -173,7 +173,7 @@ function UrlTeam(props: Partial<TeamProps>) {
       people={PEOPLE}
       show={["load", "projects"]}
       team={{
-        tramos: TRAMOS,
+        etapas: ETAPAS,
         today: TODAY,
         state,
         onStateChange: setState,
@@ -212,7 +212,7 @@ afterEach(() => {
 describe("PeopleWidget · Personas Analítico", () => {
   it("expands a person and shows project rows", () => {
     renderTeam();
-    // Groups in tramo order, every group expanded, no person expanded.
+    // Groups in etapa order, every group expanded, no person expanded.
     const groupButtons = within(table()).getAllByRole("button", { expanded: true }).filter((b) => b.getAttribute("aria-controls")?.startsWith("g-"));
     expect(groupButtons.map((b) => b.getAttribute("aria-controls"))).toEqual(["g-presale-rows", "g-diseno-rows", "g-construccion-rows"]);
     expect(screen.queryByText("Oficina Polanco")).toBeNull();
@@ -294,7 +294,7 @@ describe("PeopleWidget · Personas Analítico", () => {
     expect(onCreateTask).toHaveBeenCalledTimes(1);
     const [assignee, draft] = onCreateTask.mock.calls[0]!;
     expect(assignee.id).toBe("valeria");
-    expect(draft).toMatchObject({ title: "Revisar planos", projectId: "p1", tramoId: "w-dis", assigneeId: "valeria", dueDate: "2026-11-20" });
+    expect(draft).toMatchObject({ title: "Revisar planos", projectId: "p1", etapaId: "w-dis", assigneeId: "valeria", dueDate: "2026-11-20" });
 
     // Without canAssign the impact line stays and the button goes.
     cleanup();

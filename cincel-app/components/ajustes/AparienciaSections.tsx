@@ -169,7 +169,7 @@ function ThemeMiniPreview({ tokens }: { tokens: OrgAppearance["tokens"] }) {
   );
 }
 
-/** 14 px swatch dots: the primary and the four tramo slots of the theme. */
+/** 14 px swatch dots: the primary and the four etapa slots of the theme. */
 function ThemeSwatches({ tokens }: { tokens: OrgAppearance["tokens"] }) {
   return (
     <span style={previewVars(tokens)} className="flex items-center gap-1.5">
@@ -247,7 +247,7 @@ export function AparienciaModoSection() {
 
 // ── Estilo ──────────────────────────────────────────────────────────────────
 
-/** Visual: three kanban columns with a tramo dot and two cards each. */
+/** Visual: three kanban columns with an etapa dot and two cards each. */
 function VisualSchematic() {
   return (
     <span className="grid flex-1 grid-cols-3 gap-1.5">

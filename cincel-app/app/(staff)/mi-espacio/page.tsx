@@ -28,7 +28,7 @@ function first(value: string | string[] | undefined): string | null {
  * client reads under `<Hydrate>`; mutations then patch that cache instead of
  * re-rendering the route. The tasks (#1051): the counts of the URL's
  * Analítico filters and the first page of what the rendered style shows
- * first (the board columns, the first Esencial cards or the first tramo
+ * first (the board columns, the first Esencial cards or the first etapa
  * groups), never every task.
  */
 export default async function MiEspacioPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -57,7 +57,7 @@ export default async function MiEspacioPage({ searchParams }: { searchParams: Pr
   // Only Analítico narrows the counts by the URL's filters (the loader decides); Visual and Esencial count everything.
   const data = await loadMiEspacio(user, new Date(), {
     style,
-    analiticoInput: myTasksSummaryInput({ tramo: filters.tramo, q: filters.q, retraso: filters.estado === "retraso" }),
+    analiticoInput: myTasksSummaryInput({ etapa: filters.etapa, q: filters.q, retraso: filters.estado === "retraso" }),
     withClosed,
   });
   seedMiEspacio(qc, data);

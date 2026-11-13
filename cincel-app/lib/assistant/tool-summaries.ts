@@ -147,9 +147,9 @@ export function summarizeCreateTasksFromNotes(input: unknown): string {
 }
 
 export function summarizeRebalanceWorkload(input: unknown): string {
-  const tramo = text(input, "tramo");
+  const etapa = text(input, "etapa");
   const max = field(input, "maxPerPerson");
-  const scope = tramo ? ` de ${quoted(tramo)}` : "";
+  const scope = etapa ? ` de ${quoted(etapa)}` : "";
   const limit = typeof max === "number" && Number.isFinite(max) ? ` (máximo ${max} por persona)` : " según la capacidad de cada persona";
   return `Repartir las tareas abiertas${scope}${limit}`;
 }
@@ -891,9 +891,9 @@ export function summarizeCreateClient(input: unknown): string {
 export function summarizeOnboardClient(input: unknown): string {
   const name = text(input, "name");
   const project = text(input, "projectName");
-  const tramo = WORKFLOW_NAMES[text(input, "workflow") || "presale"] ?? text(input, "workflow");
+  const etapa = WORKFLOW_NAMES[text(input, "workflow") || "presale"] ?? text(input, "workflow");
   const who = name ? `a ${quoted(name)}` : "un cliente";
-  return `Arrancar ${who}${project ? ` con el proyecto ${quoted(project)}` : ""} y las tareas de ${tramo}`;
+  return `Arrancar ${who}${project ? ` con el proyecto ${quoted(project)}` : ""} y las tareas de ${etapa}`;
 }
 
 export function summarizeCreateRfc(input: unknown): string {
@@ -937,7 +937,7 @@ Object.assign(toolSummaries, {
 export type ToolPreviewRow = {
   op: "+" | "~" | "−";
   title: string;
-  tramo?: { key: string; name: string; sortOrder: number };
+  etapa?: { key: string; name: string; sortOrder: number };
   person?: string;
   /** Already formatted ("vie 13 nov"). */
   date?: string;
@@ -1012,14 +1012,14 @@ export const toolPreviews: Partial<Record<string, ToolPreview>> = {
   create_task: (input) => ({
     op: "+",
     title: text(input, "description") || "Tarea nueva",
-    tramo: WORKFLOW_PREVIEW[text(input, "workflow")],
+    etapa: WORKFLOW_PREVIEW[text(input, "workflow")],
     person: optional(text(input, "manager")),
     date: previewDate(input, "commitmentDate"),
   }),
   assign_task: (input) => ({
     op: "~",
     title: text(input, "descriptionContains") || "Tarea",
-    tramo: WORKFLOW_PREVIEW[text(input, "workflow")],
+    etapa: WORKFLOW_PREVIEW[text(input, "workflow")],
     person: optional(text(input, "manager")),
   }),
   reschedule_task: (input) => ({ op: "~", title: text(input, "reason") || "Entrega de la tarea", date: previewDate(input, "dueDate") }),
@@ -1054,7 +1054,7 @@ export const toolPreviews: Partial<Record<string, ToolPreview>> = {
   onboard_client: (input) => ({
     op: "+",
     title: [text(input, "name"), text(input, "projectName")].filter(Boolean).join(" · ") || "Cliente nuevo",
-    tramo: WORKFLOW_PREVIEW[text(input, "workflow") || "presale"],
+    etapa: WORKFLOW_PREVIEW[text(input, "workflow") || "presale"],
     person: optional(text(input, "manager")),
   }),
   discard_project: (input) => ({ op: "−", title: text(input, "projectName") || "Proyecto" }),

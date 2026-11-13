@@ -4,7 +4,7 @@ import { bucketTaskTrend } from "./task-trend";
 import {
   agendaSortKey,
   averageAgeByKey,
-  byTramoOrder,
+  byEtapaOrder,
   completedInWeek,
   inMemoryCounter,
   inicioPortfolioRows,
@@ -16,9 +16,9 @@ import {
   projectActiveOn,
   statusResolver,
   taskDayState,
-  taskTramoKey,
-  taskTramoLabel,
-  tramoSplit,
+  taskEtapaKey,
+  taskEtapaLabel,
+  etapaSplit,
 } from "./inicio";
 
 const TZ = "America/Mexico_City";
@@ -174,11 +174,11 @@ describe("inMemoryCounter", () => {
 
 describe("etapa grouping", () => {
   it("keys by workflow, then admin and sin etapa", () => {
-    expect(taskTramoKey(task({ id: "a", workflow: presale }))).toBe("presale");
-    expect(taskTramoKey(task({ id: "b", kind: "admin" }))).toBe("admin");
-    expect(taskTramoKey(task({ id: "c" }))).toBe("sin-tramo");
-    expect(taskTramoLabel(task({ id: "b", kind: "admin" }))).toBe("Administración");
-    expect(taskTramoLabel(task({ id: "c" }))).toBe("Sin etapa");
+    expect(taskEtapaKey(task({ id: "a", workflow: presale }))).toBe("presale");
+    expect(taskEtapaKey(task({ id: "b", kind: "admin" }))).toBe("admin");
+    expect(taskEtapaKey(task({ id: "c" }))).toBe("sin-etapa");
+    expect(taskEtapaLabel(task({ id: "b", kind: "admin" }))).toBe("Administración");
+    expect(taskEtapaLabel(task({ id: "c" }))).toBe("Sin etapa");
   });
 
   it("orders by etapa sortOrder with no etapa and admin last", () => {
@@ -187,17 +187,17 @@ describe("etapa grouping", () => {
       task({ id: "none" }),
       task({ id: "d", workflow: diseno }),
       task({ id: "p", workflow: presale }),
-    ].sort(byTramoOrder);
+    ].sort(byEtapaOrder);
     expect(sorted.map((t) => t.id)).toEqual(["p", "d", "none", "admin"]);
   });
 
   it("splits shares by etapa over every item", () => {
     const items = [task({ id: "1", workflow: presale }), task({ id: "2", workflow: presale }), task({ id: "3", workflow: diseno }), task({ id: "4" })];
-    expect(tramoSplit(items, (t) => t.workflow?.key ?? null)).toEqual([
-      { tramo: "presale", share: 0.5 },
-      { tramo: "diseno", share: 0.25 },
+    expect(etapaSplit(items, (t) => t.workflow?.key ?? null)).toEqual([
+      { etapa: "presale", share: 0.5 },
+      { etapa: "diseno", share: 0.25 },
     ]);
-    expect(tramoSplit([], () => "presale")).toEqual([]);
+    expect(etapaSplit([], () => "presale")).toEqual([]);
   });
 
   it("averages the age of each group in days", () => {
@@ -207,12 +207,12 @@ describe("etapa grouping", () => {
         task({ id: "2", workflow: presale, createdAt: "2026-11-04T18:00:00Z" }),
         task({ id: "3", createdAt: "2026-11-07T18:00:00Z" }),
       ],
-      taskTramoKey,
+      taskEtapaKey,
       TODAY,
       TZ,
     );
     expect(ages.get("presale")).toBe(4.5);
-    expect(ages.get("sin-tramo")).toBe(0);
+    expect(ages.get("sin-etapa")).toBe(0);
   });
 });
 

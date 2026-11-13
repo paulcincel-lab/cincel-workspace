@@ -12,7 +12,7 @@ const day = (date: string, over: Partial<CalDay> = {}): CalDay => ({
 function event(id: string, date: string, start: string): CalEventItem {
   return {
     kind: "event", id: `e:${id}`, eventId: id, source: "cincel", title: id, date, start, end: start, allDay: false,
-    project: null, tramo: null, location: null, meetUrl: null, attendees: [], attendeeCount: 0, organizer: null,
+    project: null, etapa: null, location: null, meetUrl: null, attendees: [], attendeeCount: 0, organizer: null,
     googleHtmlLink: null, syncedAt: null, syncError: null, minutes: "ninguna", canEdit: false,
   };
 }

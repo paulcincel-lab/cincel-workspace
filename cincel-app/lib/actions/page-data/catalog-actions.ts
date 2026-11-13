@@ -39,7 +39,7 @@ export async function fetchCatalogProjectOptions(input: z.input<typeof EmptyInpu
   return loadCatalogProjectOptions(await requireCapabilityUser());
 }
 
-/** Active tramos (`catalog.workflows` and `catalog.tramos`). */
+/** Active etapas (`catalog.workflows` and `catalog.etapas`). */
 export async function fetchCatalogWorkflows(input: z.input<typeof EmptyInput> = {}): Promise<WorkflowRef[]> {
   parseInput(EmptyInput, input);
   await requireCapabilityUser();
@@ -57,7 +57,7 @@ export async function fetchCatalogStaff(input: z.input<typeof EmptyInput> = {}):
   return loadCatalogStaff(await requireCapabilityUser());
 }
 
-/** Assignable staff for a tramo, only `{id,name,suggested}`, suggested first. */
+/** Assignable staff for an etapa, only `{id,name,suggested}`, suggested first. */
 export async function fetchCatalogAssignableStaff(
   input: z.input<typeof AssignableStaffInput>,
 ): Promise<CatalogAssignableStaffOption[]> {

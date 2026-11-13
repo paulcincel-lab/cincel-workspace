@@ -49,7 +49,7 @@ import { useActionMutation } from "@/lib/query/mutation";
 import { catalogWorkflowsOptions } from "@/lib/query/options/catalog";
 import { personasDetailOptions } from "@/lib/query/options/personas";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
-import { tramoColorSlot, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorSlot, etapaLabel } from "@/lib/etapas/compat";
 import type { TaskDetail, UserTaskInput } from "@/lib/types/core";
 import type { AttentionItem, PersonDatum } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
@@ -60,7 +60,7 @@ import { cn } from "@/lib/utils";
  * and a load meter). One card at a time expands to its open tasks
  * (`personas.detail(id)`, read only on expand) and a quick assign line that
  * creates a task for that person, with a hint to hand it to someone lighter
- * in the same tramo when the person would go over 100 %. Filter, search and
+ * in the same etapa when the person would go over 100 %. Filter, search and
  * the expanded card live in the URL (`?estado=`, `?q=`, `?persona=`).
  *
  * Load is a task count (`occupancyPct` = open ÷ capacity); thresholds come
@@ -183,7 +183,7 @@ function taskItemFromCreated(task: TaskDetail): AttentionItem {
     title: task.title,
     href: `/tareas?tarea=${task.id}`,
     project: task.project?.name ?? "",
-    tramo: task.workflow?.key ?? null,
+    etapa: task.workflow?.key ?? null,
     reason: "",
     tone: "default",
     assignee: null,
@@ -381,7 +381,7 @@ function PersonCard({
   const shown = Math.max(0, Math.min(pct, 100));
   const name = firstName(person.name);
   const chipKey = status.kind === "bucket" ? status.bucket : "vacaciones";
-  const meta = [person.puesto ?? null, person.tramo ? tramoLabel(person.tramo) : null].filter(Boolean).join(" · ");
+  const meta = [person.puesto ?? null, person.etapa ? etapaLabel(person.etapa) : null].filter(Boolean).join(" · ");
 
   useEffect(() => {
     if (!expanded || !focusQuickAdd) return;
@@ -415,7 +415,7 @@ function PersonCard({
             aria-hidden="true"
             className={cn(
               "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-              areaTintClass(person.tramo ? tramoColorSlot(person.tramo) : null),
+              areaTintClass(person.etapa ? etapaColorSlot(person.etapa) : null),
             )}
           >
             {person.initials}
@@ -554,7 +554,7 @@ function ExpandedBody({ person, people, today, created, canCreateTask, canAssign
       <ul aria-label={`Tareas abiertas de ${person.name}`} className="flex flex-col">
         {rows.map((item, i) => {
           const late = isOverdue(item, today);
-          const slot = item.tramo ? tramoColorSlot(item.tramo) : null;
+          const slot = item.etapa ? etapaColorSlot(item.etapa) : null;
           return (
             <li key={item.id} className={cn("py-2.5 [&_a]:line-clamp-2", i > 0 && "border-t border-muted")}>
               <EsencialItemRow
@@ -564,8 +564,8 @@ function ExpandedBody({ person, people, today, created, canCreateTask, canAssign
                 isNew={createdIds.has(item.id)}
                 meta={[
                   ...(item.project ? [{ key: "project", label: item.project }] : []),
-                  ...(item.tramo
-                    ? [{ key: "tramo", label: tramoLabel(item.tramo), dot: slot ? `var(--chart-${slot})` : undefined }]
+                  ...(item.etapa
+                    ? [{ key: "etapa", label: etapaLabel(item.etapa), dot: slot ? `var(--chart-${slot})` : undefined }]
                     : []),
                   ...(createdIds.has(item.id) ? [{ key: "new", label: "Nueva" }] : []),
                 ]}
@@ -617,7 +617,7 @@ function QuickAssign({ person, people, today, canAssign, onCreated }: QuickAssig
   const overloaded = projectedPct(person) > 100;
   const hintVisible = overloaded && candidate !== null && !swapped;
   const assignee = swapped && candidate ? candidate : person;
-  const tramoId = person.tramo ? (workflows?.find((w) => w.key === person.tramo)?.id ?? null) : null;
+  const etapaId = person.etapa ? (workflows?.find((w) => w.key === person.etapa)?.id ?? null) : null;
 
   const create = useActionMutation<UserTaskInput, TaskDetail>(createUserTaskAction, {
     invalidate: (vars: UserTaskInput) => [
@@ -643,7 +643,7 @@ function QuickAssign({ person, people, today, canAssign, onCreated }: QuickAssig
     const task = await create.mutateAsync({
       projectId: draft.projectId,
       title: draft.title,
-      workflowId: draft.tramoId ?? tramoId,
+      workflowId: draft.etapaId ?? etapaId,
       managerId,
       commitmentDate: draft.dueDate,
       priority: draft.priority,
@@ -672,7 +672,7 @@ function QuickAssign({ person, people, today, canAssign, onCreated }: QuickAssig
             context={{
               label: `Asignar una tarea a ${assignee.name}`,
               projectId: null,
-              tramoId,
+              etapaId,
               assigneeId: assignee.id,
               placeholder: `Asignar una tarea a ${firstName(assignee.name)}…`,
             }}
@@ -687,7 +687,7 @@ function QuickAssign({ person, people, today, canAssign, onCreated }: QuickAssig
           <span>
             {`${firstName(person.name)} ya va al ${person.occupancyPct ?? 0} %. ${firstName(candidate.name)} está al ${
               candidate.occupancyPct ?? 0
-            } % en ${person.tramo ? tramoLabel(person.tramo) : ""}.`}
+            } % en ${person.etapa ? etapaLabel(person.etapa) : ""}.`}
           </span>
           {canAssign ? (
             <Button type="button" variant="secondary" size="sm" className="rounded-full" onClick={swap}>

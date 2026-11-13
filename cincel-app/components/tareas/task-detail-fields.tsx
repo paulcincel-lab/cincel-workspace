@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Task detail fields shared by `TaskSheet` (redesign FE §3.4): tramo, fase and
+ * Task detail fields shared by `TaskSheet` (redesign FE §3.4): etapa, fase and
  * espacio selects, the attachment grid and their helpers.
  * The select options come from the catalog keys the sheet's one call seeds
  * (`useTaskSheetCatalogs`).
@@ -54,17 +54,17 @@ export function sortTaskHistory(history: TaskDetail["history"]): TaskDetail["his
 }
 
 const NO_STATUSES: TaskStatusOption[] = [];
-const NO_TRAMOS: WorkflowRef[] = [];
+const NO_ETAPAS: WorkflowRef[] = [];
 const NO_STAFF: CatalogAssignableStaffOption[] = [];
 const NO_PHASES: WorkflowPhaseRef[] = [];
 const NO_SPACES: ProjectSpaceRef[] = [];
 
 export type TaskSheetCatalogs = {
   statuses: TaskStatusOption[];
-  tramos: WorkflowRef[];
-  /** Responsable and "@" mentions: `{id,name,suggested}`, suggested for the task's tramo first. */
+  etapas: WorkflowRef[];
+  /** Responsable and "@" mentions: `{id,name,suggested}`, suggested for the task's etapa first. */
   staff: CatalogAssignableStaffOption[];
-  /** The active fases of the task's tramo; empty without one. */
+  /** The active fases of the task's etapa; empty without one. */
   phases: WorkflowPhaseRef[];
   /** The project's espacios; empty for an admin task. */
   spaces: ProjectSpaceRef[];
@@ -74,7 +74,7 @@ export type TaskSheetCatalogs = {
  * The options of the sheet's selects, from the catalog keys `getTaskSheetData`
  * seeded (`catalog.taskStatuses`, `catalog.workflows`,
  * `catalog.assignableStaff(workflowId)`, `catalog.projectSpaces(pid)` and the
- * tramo's fases): no request while they are fresh, a refetch of only the
+ * etapa's fases): no request while they are fresh, a refetch of only the
  * stale one otherwise.
  */
 export function useTaskSheetCatalogs(
@@ -86,13 +86,13 @@ export function useTaskSheetCatalogs(
   const withSpaces = loaded && task.kind !== "admin";
   const withPhases = withSpaces && workflowId !== null;
   const statuses = useQuery({ ...catalogTaskStatusesOptions(), enabled: loaded }).data ?? NO_STATUSES;
-  const tramos = useQuery({ ...catalogWorkflowsOptions(), enabled: loaded }).data ?? NO_TRAMOS;
+  const etapas = useQuery({ ...catalogWorkflowsOptions(), enabled: loaded }).data ?? NO_ETAPAS;
   const staff = useQuery({ ...catalogAssignableStaffOptions(workflowId), enabled: loaded }).data ?? NO_STAFF;
   const phases = useQuery({ ...taskPhasesOptions(workflowId ?? ""), enabled: withPhases }).data ?? NO_PHASES;
   const spaces = useQuery({ ...catalogProjectSpacesOptions(task?.projectId ?? ""), enabled: withSpaces }).data ?? NO_SPACES;
   return {
     statuses,
-    tramos,
+    etapas,
     staff,
     phases: withPhases ? phases : NO_PHASES,
     spaces: withSpaces ? spaces : NO_SPACES,
@@ -104,21 +104,21 @@ export function taskAttachmentHref(taskId: string, attachmentId: string): string
   return `/api/tareas/${taskId}/adjuntos/${attachmentId}`;
 }
 
-/** Tramo select for a non-admin task that has none (legacy rows); the select is hidden once it has one. */
-export function TaskTramoSelect({
-  tramos,
+/** Etapa select for a non-admin task that has none (legacy rows); the select is hidden once it has one. */
+export function TaskEtapaSelect({
+  etapas,
   onChange,
   triggerClassName = "w-56",
   disabled,
 }: {
-  tramos: WorkflowRef[];
+  etapas: WorkflowRef[];
   onChange: (workflowId: string) => void;
   triggerClassName?: string;
   disabled?: boolean;
 }) {
   return (
     <Select
-      items={Object.fromEntries(tramos.map((t) => [t.id, t.name]))}
+      items={Object.fromEntries(etapas.map((t) => [t.id, t.name]))}
       value=""
       disabled={disabled}
       onValueChange={(v) => {
@@ -129,7 +129,7 @@ export function TaskTramoSelect({
         <SelectValue placeholder="Sin etapa" />
       </SelectTrigger>
       <SelectContent>
-        {tramos.map((t) => (
+        {etapas.map((t) => (
           <SelectItem key={t.id} value={t.id}>
             {t.name}
           </SelectItem>
@@ -140,7 +140,7 @@ export function TaskTramoSelect({
 }
 
 /**
- * Fase select over the task's tramo catalog. A task without fase shows
+ * Fase select over the task's etapa catalog. A task without fase shows
  * "Sin fase · revisar"; a fase that is no longer active shows "(inactiva)".
  */
 export function TaskPhaseSelect({

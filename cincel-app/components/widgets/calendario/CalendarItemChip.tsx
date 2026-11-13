@@ -5,10 +5,10 @@ import { useState, type KeyboardEvent } from "react";
 import { RowActionsMenu } from "@/components/widgets/RowActionsMenu";
 import type { BoardCardDragProps } from "@/components/tablero/useBoardDrag";
 import { cn } from "@/lib/utils";
-import { tramoColorClass, tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorClass, etapaColorVar } from "@/lib/etapas/etapa-color";
 import { formatHours } from "@/lib/calendario/alerts";
 import { attendeesLabel, timeOf } from "@/components/calendario/meeting-format";
-import type { CalEventItem, CalItem, CalTramoRef } from "@/lib/types/calendario";
+import type { CalEventItem, CalItem, CalEtapaRef } from "@/lib/types/calendario";
 
 import { COMPLETED_TAG, MOVE_TO_OTHER_DAY, OVERDUE_TAG } from "./grid-copy";
 import { MoveDayDialog } from "./MoveDayDialog";
@@ -30,8 +30,8 @@ export type CalendarItemChipProps = {
   dragging?: boolean;
 };
 
-function tramoInput(tramo: CalTramoRef | null) {
-  return tramo ? { key: tramo.key ?? "", sortOrder: 0, colorSlot: tramo.colorSlot } : null;
+function etapaInput(etapa: CalEtapaRef | null) {
+  return etapa ? { key: etapa.key ?? "", sortOrder: 0, colorSlot: etapa.colorSlot } : null;
 }
 
 /** "10:30" of an ISO time with offset. */
@@ -55,8 +55,8 @@ function MeetingExtras({ item, density }: { item: CalEventItem; density: "card" 
 }
 
 /**
- * One task or meeting on the calendar (FE §4): tramo colour, overdue ring,
- * completed greyed, meeting with its time in mono and a left edge in the tramo
+ * One task or meeting on the calendar (FE §4): etapa colour, overdue ring,
+ * completed greyed, meeting with its time in mono and a left edge in the etapa
  * colour. A task the viewer can move shows a drag cursor and a `⋯` menu.
  */
 export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMoveDay, onPickDay, dragging }: CalendarItemChipProps) {
@@ -67,7 +67,7 @@ export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMove
   const isTask = item.kind === "task";
   const overdue = isTask && item.overdue;
   const completed = isTask && item.completed;
-  const tramo = tramoInput(item.tramo);
+  const etapa = etapaInput(item.etapa);
   const movable = isTask && item.canEdit && Boolean(onPickDay);
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -109,10 +109,10 @@ export function CalendarItemChip({ item, density, proposal, onOpen, drag, onMove
         drag?.draggable && "cursor-grab active:cursor-grabbing",
         dragging && "opacity-50",
       )}
-      style={item.kind === "event" ? { borderLeftColor: tramoColorVar(tramo) } : undefined}
+      style={item.kind === "event" ? { borderLeftColor: etapaColorVar(etapa) } : undefined}
       {...(drag ?? {})}
     >
-      {isTask ? <span aria-hidden className={cn("size-2 shrink-0 rounded-full", tramoColorClass(tramo))} /> : null}
+      {isTask ? <span aria-hidden className={cn("size-2 shrink-0 rounded-full", etapaColorClass(etapa))} /> : null}
       <button
         type="button"
         aria-label={label}

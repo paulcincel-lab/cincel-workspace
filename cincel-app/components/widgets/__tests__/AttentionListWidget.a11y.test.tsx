@@ -3,15 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import axe from "axe-core";
 
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
-    listTramos: async () => [],
+    listEtapas: async () => [],
     canSeeAdminData: () => false,
   };
 });
@@ -34,7 +34,7 @@ const MODES = ["light", "dark"] as const;
  * Token pairs of `CONTRAST_PAIRS` the widget paints: titles and meta on `card`,
  * late dates and the critical pill (`destructive`), the warn pill
  * (`warning-ink`), the ok pill (`success`), the default pill (`secondary`),
- * avatar initials (`primary`), tramo bars and dots (`chart-N` on `card`).
+ * avatar initials (`primary`), etapa bars and dots (`chart-N` on `card`).
  */
 const ATTENTION_PAIRS = new Set([
   "foreground/card",

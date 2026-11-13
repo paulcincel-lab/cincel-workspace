@@ -146,7 +146,7 @@ export function shortDate(iso: string): string {
     .replace(".", "");
 }
 
-/** "Diseño · entrega 28 nov" (the tramo alone without a delivery date). */
+/** "Diseño · entrega 28 nov" (the etapa alone without a delivery date). */
 export function projectMeta(item: ProgressItem): string {
   const parts = [item.sublabel, item.deliveryDate ? `entrega ${shortDate(item.deliveryDate)}` : null].filter(Boolean);
   return parts.join(" · ");

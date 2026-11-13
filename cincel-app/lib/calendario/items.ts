@@ -1,7 +1,7 @@
 /** Row → CalItem mapping (BE §5.2, §5.3). Pure and client-safe. Task mapping lives here; meetings map in `calendario-events-range.ts`. */
 import { BASE_STATUS_LABEL } from "@/lib/tasks/status-options";
-import { tramoColorSlot } from "@/lib/tramos/tramo-color";
-import type { CalItem, CalPersonRef, CalTaskItem, CalTramoRef, CalendarioFilters } from "@/lib/types/calendario";
+import { etapaColorSlot } from "@/lib/etapas/etapa-color";
+import type { CalItem, CalPersonRef, CalTaskItem, CalEtapaRef, CalendarioFilters } from "@/lib/types/calendario";
 import type { TaskPriority, TaskStatus } from "@/lib/types/core";
 
 /** Items per day the range loader returns, by vista (`mes` 3, `semana` 12, `dia` 200). */
@@ -22,12 +22,12 @@ export function isOverdue(t: { date: string; completed: boolean }, today: string
   return !t.completed && t.date < today;
 }
 
-/** The tramo colour slot of a workflow row, or null. A missing `sortOrder` counts as 0 (no slot from order). */
-export function tramoRefOf(
+/** The etapa colour slot of a workflow row, or null. A missing `sortOrder` counts as 0 (no slot from order). */
+export function etapaRefOf(
   w: { id: string; key: string | null; name: string; colorSlot: number | null; sortOrder?: number | null } | null,
-): CalTramoRef | null {
+): CalEtapaRef | null {
   if (!w) return null;
-  const slot = tramoColorSlot({ key: w.key ?? "", sortOrder: w.sortOrder ?? 0, colorSlot: w.colorSlot });
+  const slot = etapaColorSlot({ key: w.key ?? "", sortOrder: w.sortOrder ?? 0, colorSlot: w.colorSlot });
   return { id: w.id, key: w.key, name: w.name, colorSlot: slot };
 }
 
@@ -75,8 +75,8 @@ export function taskRowToItem(row: TaskItemRow, ctx: { today: string; canEdit: b
     date: due.date,
     dateField: due.field,
     project: row.projectId ? { id: row.projectId, name: row.projectName ?? "" } : null,
-    tramo: row.workflowId
-      ? tramoRefOf({
+    etapa: row.workflowId
+      ? etapaRefOf({
           id: row.workflowId,
           key: row.workflowKey,
           name: row.workflowName ?? "",

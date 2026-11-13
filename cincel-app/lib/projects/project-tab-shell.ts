@@ -86,7 +86,7 @@ export async function loadProjectShell(
     project: {
       id: detail.id,
       name: detail.name,
-      tramo: detail.currentWorkflow,
+      etapa: detail.currentWorkflow,
       projectType: detail.projectType,
       addressCity: detail.addressCity,
       manager: detail.manager,

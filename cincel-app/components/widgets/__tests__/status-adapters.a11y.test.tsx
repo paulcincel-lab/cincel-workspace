@@ -5,15 +5,15 @@ import axe from "axe-core";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { StatusChip } from "@/components/widgets/StatusChip";
-import { TramoBadge, type TramoBadgeVariant } from "@/components/widgets/TramoBadge";
-import { STATUS_FIXTURE, TRAMO_FIXTURE } from "@/components/widgets/fixtures/status-adapters";
+import { EtapaBadge, type EtapaBadgeVariant } from "@/components/widgets/EtapaBadge";
+import { STATUS_FIXTURE, ETAPA_FIXTURE } from "@/components/widgets/fixtures/status-adapters";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const MODES = ["light", "dark"] as const;
-const VARIANTS: TramoBadgeVariant[] = ["chip", "dot", "text"];
+const VARIANTS: EtapaBadgeVariant[] = ["chip", "dot", "text"];
 
 afterEach(() => {
   cleanup();
@@ -38,22 +38,22 @@ function Fixture() {
           <StatusChip status={status} size="md" />
         </li>
       ))}
-      {Object.entries(TRAMO_FIXTURE).flatMap(([key, tramo]) =>
+      {Object.entries(ETAPA_FIXTURE).flatMap(([key, etapa]) =>
         VARIANTS.map((variant) => (
           <li key={`t-${key}-${variant}`}>
-            <TramoBadge tramo={tramo} variant={variant} />
+            <EtapaBadge etapa={etapa} variant={variant} />
           </li>
         ))
       )}
       <li>
         <StatusChip status={null} />
-        <TramoBadge tramo={null} />
+        <EtapaBadge etapa={null} />
       </li>
     </ul>
   );
 }
 
-describe("StatusChip and TramoBadge accessibility", () => {
+describe("StatusChip and EtapaBadge accessibility", () => {
   for (const theme of THEME_IDS) {
     for (const mode of MODES) {
       for (const style of STYLES) {
@@ -79,7 +79,7 @@ describe("StatusChip and TramoBadge accessibility", () => {
           <Fixture />
         </StyleProvider>
       );
-      for (const el of container.querySelectorAll('[data-slot="status-chip"], [data-slot="tramo-badge"]')) {
+      for (const el of container.querySelectorAll('[data-slot="status-chip"], [data-slot="etapa-badge"]')) {
         expect(el.textContent?.trim()).not.toBe("");
       }
       for (const dot of container.querySelectorAll("span[aria-hidden]")) {

@@ -36,7 +36,7 @@ export const INICIO_NON_ADMIN: InicioData = {
       visibleIn: ["analitico"],
     },
   ],
-  tasksByTramo: [
+  tasksByEtapa: [
     { key: "presale", label: "Presale", value: 14, colorVar: "var(--chart-1)", secondary: 1, extra: { diasProm: 4 } },
     { key: "diseno", label: "Diseño", value: 22, colorVar: "var(--chart-2)", secondary: 2, extra: { diasProm: 7 } },
     { key: "construccion", label: "Construcción", value: 19, colorVar: "var(--chart-3)", secondary: 3, extra: { diasProm: 9 } },
@@ -62,7 +62,7 @@ export const INICIO_NON_ADMIN: InicioData = {
       title: "Revisar planos de cocina",
       href: "/tareas?tarea=t-1",
       project: "Casa Lomas",
-      tramo: "diseno",
+      etapa: "diseno",
       reason: "Vencida",
       tone: "critical",
       assignee: { id: "s-2", name: "Luis Pérez", initials: "LP" },
@@ -71,17 +71,17 @@ export const INICIO_NON_ADMIN: InicioData = {
     },
   ],
   myDay: [
-    { id: "e-1", title: "Visita de obra", start: "2026-11-06T16:00:00Z", end: "2026-11-06T17:00:00Z", project: "Casa Lomas", tramo: "construccion" },
-    { id: "e-2", title: "Junta de diseño", start: "2026-11-06T19:00:00Z", project: "Depto Roma", tramo: "diseno" },
+    { id: "e-1", title: "Visita de obra", start: "2026-11-06T16:00:00Z", end: "2026-11-06T17:00:00Z", project: "Casa Lomas", etapa: "construccion" },
+    { id: "e-2", title: "Junta de diseño", start: "2026-11-06T19:00:00Z", project: "Depto Roma", etapa: "diseno" },
   ],
   myWeek: {
     today: [
-      { id: "e-1", title: "Visita de obra", start: "2026-11-06T16:00:00Z", end: "2026-11-06T17:00:00Z", project: "Casa Lomas", tramo: "construccion" },
-      { id: "e-2", title: "Junta de diseño", start: "2026-11-06T19:00:00Z", project: "Depto Roma", tramo: "diseno" },
+      { id: "e-1", title: "Visita de obra", start: "2026-11-06T16:00:00Z", end: "2026-11-06T17:00:00Z", project: "Casa Lomas", etapa: "construccion" },
+      { id: "e-2", title: "Junta de diseño", start: "2026-11-06T19:00:00Z", project: "Depto Roma", etapa: "diseno" },
     ],
     week: [
-      { id: "c-diseno-t-7-2026-11-07", title: "Entregar renders de fachada", start: "2026-11-07T09:00", estimated: true, project: "Casa Lomas", tramo: "diseno", href: "/tareas?tarea=t-7" },
-      { id: "c-construccion-t-8-2026-11-08", title: "Cotizar acabados", start: "2026-11-08T09:00", estimated: true, project: "Depto Roma", tramo: "construccion", href: "/tareas?tarea=t-8" },
+      { id: "c-diseno-t-7-2026-11-07", title: "Entregar renders de fachada", start: "2026-11-07T09:00", estimated: true, project: "Casa Lomas", etapa: "diseno", href: "/tareas?tarea=t-7" },
+      { id: "c-construccion-t-8-2026-11-08", title: "Cotizar acabados", start: "2026-11-08T09:00", estimated: true, project: "Depto Roma", etapa: "construccion", href: "/tareas?tarea=t-8" },
     ],
     total: 2,
   },
@@ -103,8 +103,8 @@ export const INICIO_NON_ADMIN: InicioData = {
   openShifts: {
     count: 2,
     people: [
-      { id: "s-2", initials: "LP", tramo: "diseno" },
-      { id: "s-3", initials: "MR", tramo: "construccion" },
+      { id: "s-2", initials: "LP", etapa: "diseno" },
+      { id: "s-3", initials: "MR", etapa: "construccion" },
     ],
   },
   todayAgenda: [
@@ -114,7 +114,7 @@ export const INICIO_NON_ADMIN: InicioData = {
       start: "2026-11-06T09:00",
       estimated: true,
       project: "Casa Lomas",
-      tramo: "diseno",
+      etapa: "diseno",
       href: "/tareas?tarea=t-9",
       kind: "entrega",
       assignee: { id: "s-2", name: "Luis Pérez", initials: "LP" },
@@ -134,7 +134,7 @@ export const INICIO_ADMIN: InicioData = {
       title: ADMIN_TASK_TITLE,
       href: "/tareas?tarea=t-admin",
       project: "Administración",
-      tramo: null,
+      etapa: null,
       reason: "Vence hoy",
       tone: "warn",
       assignee: { id: "s-1", name: "Ana López", initials: "AL" },
@@ -146,7 +146,7 @@ export const INICIO_ADMIN: InicioData = {
 
 export const INICIO_EMPTY: InicioData = {
   kpis: [],
-  tasksByTramo: [],
+  tasksByEtapa: [],
   weeklyPace: [],
   attention: [],
   myDay: [],

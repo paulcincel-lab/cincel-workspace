@@ -17,7 +17,7 @@ import {
 } from "@/lib/assistant/tool-summaries";
 import { toToolStep, type ToolApprovalGroup, type ToolStep } from "@/lib/assistant/tool-steps";
 import { actionErrorText } from "@/lib/errors";
-import { tramoColorClass } from "@/lib/tramos/tramo-color";
+import { etapaColorClass } from "@/lib/etapas/etapa-color";
 import { cn } from "@/lib/utils";
 
 /** One approval-gated call (the single-call form of the card). */
@@ -304,10 +304,10 @@ function PreviewRows({
               {row.op}
             </span>
             <span className={cn("min-w-0 flex-1", failed ? "text-destructive-ink" : "text-foreground")}>{row.title}</span>
-            {row.tramo ? (
+            {row.etapa ? (
               <span className="flex items-center gap-1.5 text-xs text-foreground-soft">
-                <span aria-hidden="true" className={cn("size-[7px] rounded-full", tramoColorClass(row.tramo))} />
-                {row.tramo.name}
+                <span aria-hidden="true" className={cn("size-[7px] rounded-full", etapaColorClass(row.etapa))} />
+                {row.etapa.name}
               </span>
             ) : null}
             {row.person ? <span className="w-[84px] truncate text-xs text-foreground-soft">{row.person}</span> : null}

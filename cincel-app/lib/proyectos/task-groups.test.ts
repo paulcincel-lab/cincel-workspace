@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
-import { groupFichaTasks, hasTasksWithoutTramo } from "./task-groups";
+import { groupFichaTasks, hasTasksWithoutEtapa } from "./task-groups";
 
 const PRESALE: WorkflowRef = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
 const DISENO: WorkflowRef = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
@@ -34,7 +34,7 @@ describe("groupFichaTasks", () => {
       ["Ejecutivo", ["t1"]],
       ["Sin fase · revisar", ["t2"]],
     ]);
-    expect(groups[2].kind).toBe("sin_tramo");
+    expect(groups[2].kind).toBe("sin_etapa");
   });
 
   it("adds «Administración» only for admins", () => {
@@ -44,8 +44,8 @@ describe("groupFichaTasks", () => {
     expect(admin?.phases[0].tasks.map((t) => t.id)).toEqual(["t6"]);
   });
 
-  it("detects non-admin tasks without a etapa", () => {
-    expect(hasTasksWithoutTramo(tasks)).toBe(true);
-    expect(hasTasksWithoutTramo([task("a", { kind: "admin" }), task("b", { workflow: PRESALE })])).toBe(false);
+  it("detects non-admin tasks without an etapa", () => {
+    expect(hasTasksWithoutEtapa(tasks)).toBe(true);
+    expect(hasTasksWithoutEtapa([task("a", { kind: "admin" }), task("b", { workflow: PRESALE })])).toBe(false);
   });
 });

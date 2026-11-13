@@ -1,7 +1,7 @@
 import type { HistoryEvent } from "@/lib/types/core";
 import { formatDateDMY } from "@/lib/utils/date";
 
-/** Display name of each id the history may mention (staff, fases, espacios, tramos, estados, proyectos). */
+/** Display name of each id the history may mention (staff, fases, espacios, etapas, estados, proyectos). */
 export type HistoryNames = ReadonlyMap<string, string>;
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -16,7 +16,7 @@ const FIELD_LABELS: Record<string, string> = {
   notes: "descripción",
   phaseId: "fase",
   spaceId: "espacio",
-  workflowId: "tramo",
+  workflowId: "etapa",
   managerId: "responsable",
   status: "estado",
   estado: "estado",
@@ -103,8 +103,8 @@ export function historyEventText(item: HistoryEvent, names?: HistoryNames): stri
   if (item.kind === "comentario") return item.comment ?? "";
   const before = historyValueText(item.field, item.beforeValue, names);
   const after = historyValueText(item.field, item.afterValue, names);
-  // A task's tramo move stores the tramo names (`updateTask`, #1022).
-  if (item.field === "tramo") return `Movió la tarea de ${before} a ${after}`;
+  // A task's etapa move stores the etapa names (`updateTask`, #1022).
+  if (item.field === "etapa") return `Movió la tarea de ${before} a ${after}`;
   // The equipo de apoyo stores the names (`setTaskSupport`, #1038); "" is nobody.
   if (item.field === "support") return `Cambió el equipo de apoyo: ${before} → ${after}`;
   return `Cambió ${historyFieldLabel(item.field)}: ${before} → ${after}`;

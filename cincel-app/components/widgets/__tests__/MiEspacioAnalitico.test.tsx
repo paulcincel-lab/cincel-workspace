@@ -169,7 +169,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
             void onCreate({
               title: (event.target as HTMLInputElement).value,
               projectId: context.projectId,
-              tramoId: null,
+              etapaId: null,
               assigneeId: context.assigneeId ?? null,
               dueDate: null,
               priority: "media",
@@ -282,12 +282,12 @@ const CHECKLISTS: Checklist[] = [
   },
 ];
 
-/** The summary and the first page of every tramo group of the URL's filters, as the page seeds them. */
+/** The summary and the first page of every etapa group of the URL's filters, as the page seeds them. */
 function seedTasks(client: ReturnType<typeof createTestQueryClient>, tasks: TaskListItem[] = TASKS) {
   const server = fakeMyTasks(tasks, TODAY);
   myTasks.server = server;
   const f = parseMiEspacioFilters(new URLSearchParams(nav.search));
-  const input = myTasksSummaryInput({ tramo: f.tramo, q: f.q, retraso: f.estado === "retraso" });
+  const input = myTasksSummaryInput({ etapa: f.etapa, q: f.q, retraso: f.estado === "retraso" });
   const withClosed = new URLSearchParams(nav.search).get("completadas") === "1";
   server.seed(client, input, server.analiticoLists(input, withClosed));
   return server;
@@ -511,7 +511,7 @@ describe("MiEspacioAnalitico paging (#1051)", () => {
   );
   const diseno = () => grouped.props!.groups.find((g) => g.id === "p1")!.children!.find((c) => c.id === "p1:w-dis")!;
 
-  it("a etapa group loads 30 rows, says how many remain and loads the next page", async () => {
+  it("an etapa group loads 30 rows, says how many remain and loads the next page", async () => {
     const { client } = renderAnalitico({ tasks: MANY });
     expect(diseno().rows).toHaveLength(30);
     expect(diseno()).toMatchObject({ hasMore: true, remaining: 5 });

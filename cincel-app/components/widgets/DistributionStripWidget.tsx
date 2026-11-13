@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * A distribution shown as a horizontal strip in Visual (redesign FE §3.5
- * "Proyectos por tramo": one flexible segment per category, flex = count,
+ * "Proyectos por etapa": one flexible segment per category, flex = count,
  * tinted background, 3 px bottom border in the category color, count +
  * name). Esencial and Analítico are exactly `DistributionWidget` (text list;
  * table with totals), so the same props render the three styles.

@@ -29,13 +29,13 @@ import {
   loadAjustesEstatus,
   loadAjustesPermisos,
   loadAjustesPuestos,
-  loadAjustesTramos,
+  loadAjustesEtapas,
 } from "@/lib/loaders/ajustes-catalogs";
 import type {
   AjustesEstatusPageData,
   AjustesPermisosPageData,
   AjustesPuestosPageData,
-  AjustesTramosPageData,
+  AjustesEtapasPageData,
 } from "@/lib/types/ajustes-catalogs";
 
 /**
@@ -137,16 +137,16 @@ export async function getAjustesEstatusPageData(input: z.input<typeof EmptyInput
   return loadAjustesEstatus(await requireCapabilityUser());
 }
 
-/** Ajustes › Puestos: the puestos and the tramos with their fases. Administrador, else FORBIDDEN. */
+/** Ajustes › Puestos: the puestos and the etapas with their fases. Administrador, else FORBIDDEN. */
 export async function getAjustesPuestosPageData(input: z.input<typeof EmptyInput> = {}): Promise<AjustesPuestosPageData> {
   parseInput(EmptyInput, input);
   return loadAjustesPuestos(await requireCapabilityUser());
 }
 
-/** Ajustes › Tramos y fases: every tramo with its fases and templates. Administrador, else FORBIDDEN. */
-export async function getAjustesTramosPageData(input: z.input<typeof EmptyInput> = {}): Promise<AjustesTramosPageData> {
+/** Ajustes › Etapas y fases: every etapa with its fases and templates. Administrador, else FORBIDDEN. */
+export async function getAjustesEtapasPageData(input: z.input<typeof EmptyInput> = {}): Promise<AjustesEtapasPageData> {
   parseInput(EmptyInput, input);
-  return loadAjustesTramos(await requireCapabilityUser());
+  return loadAjustesEtapas(await requireCapabilityUser());
 }
 
 /**

@@ -65,8 +65,8 @@ async function loadVisibleProject(
   return project;
 }
 
-/** The tramo of a task created from mail: the project's current tramo, else the first live one. */
-async function taskTramoFor(project: { currentWorkflowId: string | null }): Promise<string> {
+/** The etapa of a task created from mail: the project's current etapa, else the first live one. */
+async function taskEtapaFor(project: { currentWorkflowId: string | null }): Promise<string> {
   if (project.currentWorkflowId) {
     const [current] = await db
       .select({ id: workflows.id })
@@ -359,7 +359,7 @@ async function createTaskFromGmailThreadActionImpl(
   const thread = await gmailRepository.findGmailThread(db, staffId, id);
   if (!thread) throw new Error("NOT_FOUND");
   const project = await loadVisibleProject(user, parsed.projectId);
-  const workflowId = await taskTramoFor(project);
+  const workflowId = await taskEtapaFor(project);
 
   const sender = formatAddress({ name: thread.fromName, email: thread.fromEmail });
   const notes = [

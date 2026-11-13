@@ -1,15 +1,15 @@
 /**
  * Token colors of the Visual Resumen widgets, as CSS values for SVG strokes
- * and inline fills: a tramo's color, ink and soft tint (tramo tokens over
+ * and inline fills: an etapa's color, ink and soft tint (etapa tokens over
  * `chart-*`, soft = `tint-*`), and the load heat of a person (`OCCUPANCY_HEAT`
  * thresholds: ≥ 90 destructive, ≥ 60 warning, else success). Only `var(--…)`
  * tokens; no hex.
  */
 import { loadTone } from "@/components/widgets/PeopleWidget";
-import { tramoColorSlot } from "@/lib/tramos/tramo-color";
+import { etapaColorSlot } from "@/lib/etapas/etapa-color";
 import type { WorkflowRef } from "@/lib/types/core";
 
-export type TramoTone = { color: string; ink: string; soft: string };
+export type EtapaTone = { color: string; ink: string; soft: string };
 
 const SOFT_BY_SLOT: Record<number, string> = {
   1: "var(--tint-primary)",
@@ -19,17 +19,17 @@ const SOFT_BY_SLOT: Record<number, string> = {
   5: "var(--tint-success)",
 };
 
-export const NEUTRAL_TONE: TramoTone = {
+export const NEUTRAL_TONE: EtapaTone = {
   color: "var(--muted-foreground)",
   ink: "var(--foreground)",
   soft: "var(--muted)",
 };
 
-/** The tone of a tramo by key (the catalog gives its sortOrder for unknown keys); neutral without one. */
-export function tramoTone(key: string | null | undefined, catalog: WorkflowRef[] = []): TramoTone {
+/** The tone of an etapa by key (the catalog gives its sortOrder for unknown keys); neutral without one. */
+export function etapaTone(key: string | null | undefined, catalog: WorkflowRef[] = []): EtapaTone {
   if (!key) return NEUTRAL_TONE;
   const sortOrder = catalog.find((t) => t.key === key)?.sortOrder ?? 0;
-  const slot = tramoColorSlot({ key, sortOrder });
+  const slot = etapaColorSlot({ key, sortOrder });
   if (!slot) return NEUTRAL_TONE;
   return { color: `var(--chart-${slot})`, ink: `var(--chart-${slot}-ink)`, soft: SOFT_BY_SLOT[slot] ?? "var(--muted)" };
 }

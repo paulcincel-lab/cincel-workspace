@@ -17,7 +17,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
  */
 export type InicioWidget =
   | "kpis"
-  | "tramoDonut"
+  | "etapaDonut"
   | "weeklyPace"
   | "attention"
   | "myDay"
@@ -38,7 +38,7 @@ export type InicioKpiKey =
 /** Every Inicio widget id; stored keys of other ids are dropped on rehydrate. */
 export const INICIO_WIDGETS: readonly InicioWidget[] = [
   "kpis",
-  "tramoDonut",
+  "etapaDonut",
   "weeklyPace",
   "attention",
   "myDay",
@@ -52,7 +52,7 @@ export const INICIO_WIDGETS: readonly InicioWidget[] = [
 export type WeeklyPaceSeries = "completed" | "created";
 export const WEEKLY_PACE_SERIES: readonly WeeklyPaceSeries[] = ["completed", "created"];
 
-/** Analítico table filters (`lib/inicio/analitico-filters.ts`): Responsable and Tramo, persisted like `range`. */
+/** Analítico table filters (`lib/inicio/analitico-filters.ts`): Responsable and Etapa, persisted like `range`. */
 export type InicioFilterKey = (typeof INICIO_FILTER_KEYS)[number];
 
 export const useInicioDashboard = createDashboardStore<InicioWidget, InicioKpiKey, InicioFilterKey>("inicio", {
@@ -61,6 +61,8 @@ export const useInicioDashboard = createDashboardStore<InicioWidget, InicioKpiKe
   filters: INICIO_FILTER_KEYS,
   // The last visible series of "Ritmo semanal" cannot be hidden.
   series: { weeklyPace: WEEKLY_PACE_SERIES },
+  // Compatibility: saved choices stored under the old names (`tramoDonut`, filter `tramo`) still apply.
+  legacyKeys: { tramoDonut: "etapaDonut", tramo: "etapa" },
 });
 
 /** The KPI keys of `lib/dashboard/inicio.ts` (`INICIO_KPI`). */
@@ -82,7 +84,7 @@ export function isInicioKpiKey(key: string): key is InicioKpiKey {
 }
 
 /** Per-style views matching what each widget renders by default. */
-export const TRAMO_VIEW = { visual: "chart", esencial: "chart", analitico: "table" } as const satisfies Record<
+export const ETAPA_VIEW = { visual: "chart", esencial: "chart", analitico: "table" } as const satisfies Record<
   PresentationStyle,
   WidgetView
 >;

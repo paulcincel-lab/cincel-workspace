@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/shadcn/input";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { PageHeader } from "@/components/widgets/PageHeader";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
-import { tramoBadgeModel } from "@/components/widgets/TramoBadge";
+import { etapaBadgeModel } from "@/components/widgets/EtapaBadge";
 import { IMPLEMENTED as MY_SPACE } from "@/lib/actions/my-space-actions.flags";
 import { createChecklistAction } from "@/lib/actions/my-space-actions";
 import { markNotificationsReadAction } from "@/lib/actions/notifications-actions";
@@ -61,7 +61,7 @@ import {
 } from "@/lib/query/options/mi-espacio";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { addDays, localDate, mondayOf } from "@/lib/time-tracking/local-time";
-import { tramoColorSlot, tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorSlot, etapaColorVar } from "@/lib/etapas/etapa-color";
 import { listItemOfRow } from "@/lib/tareas/page-data";
 import type { TaskDetail, TaskListItem, UserTaskInput } from "@/lib/types/core";
 import { loadMoreText } from "@/components/widgets/table-rows";
@@ -521,7 +521,7 @@ function TasksBoard({
   });
 
   async function onCreate(bucket: MyTaskBucket, draft: QuickAddDraft) {
-    if (!draft.projectId || !draft.tramoId) {
+    if (!draft.projectId || !draft.etapaId) {
       onAnnounce("Indica el proyecto y la etapa de la tarea.");
       throw new Error("INVALID: proyecto");
     }
@@ -529,7 +529,7 @@ function TasksBoard({
       bucket,
       input: {
         projectId: draft.projectId,
-        workflowId: draft.tramoId,
+        workflowId: draft.etapaId,
         title: draft.title,
         managerId: draft.assigneeId ?? meId,
         priority: draft.priority,
@@ -676,9 +676,9 @@ function taskHref(taskId: string): string {
 
 function TaskCard({ task, today, fresh, style }: { task: TaskListItem; today: string; fresh: boolean; style: CSSProperties }) {
   const due = dueInfo(task, today);
-  const tramo = task.workflow ? tramoBadgeModel(task.workflow) : null;
-  const slot = task.workflow ? tramoColorSlot(task.workflow) : null;
-  const color = tramoColorVar(task.workflow);
+  const etapa = task.workflow ? etapaBadgeModel(task.workflow) : null;
+  const slot = task.workflow ? etapaColorSlot(task.workflow) : null;
+  const color = etapaColorVar(task.workflow);
   const ink = slot ? `var(--chart-${slot}-ink)` : "var(--muted-foreground)";
   const subtasks = task.subtaskCount;
   const done = task.subtaskDoneCount;
@@ -691,13 +691,13 @@ function TaskCard({ task, today, fresh, style }: { task: TaskListItem; today: st
       style={{ ...style, borderTopColor: color }}
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        {tramo ? (
+        {etapa ? (
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-medium ${TINT_14}`}
             style={{ "--tint": color, color: ink } as CSSProperties}
           >
             <span aria-hidden="true" className="size-1.5 rounded-full" style={{ backgroundColor: color }} />
-            {tramo.label}
+            {etapa.label}
           </span>
         ) : (
           <span className="text-[11.5px] text-muted-foreground">Sin etapa</span>

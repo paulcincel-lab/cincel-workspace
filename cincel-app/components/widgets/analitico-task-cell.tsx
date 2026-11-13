@@ -7,7 +7,7 @@ import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
 import { PeopleStack } from "@/components/widgets/PeopleStack";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { statusDotClass } from "@/lib/tasks/status-options";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,13 +27,13 @@ export function renderAnaliticoTaskCell(columnKey: string, row: AnaliticoRow): R
           <SubtaskProgressChip task={row.task} />
         </span>
       );
-    case "tramo": {
-      const tramo = row.task.workflow;
-      if (!tramo) return <span className="text-muted-foreground">{row.tramo}</span>;
+    case "etapa": {
+      const etapa = row.task.workflow;
+      if (!etapa) return <span className="text-muted-foreground">{row.etapa}</span>;
       return (
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full" style={{ background: tramoColorVar(tramo.key, tramo.sortOrder) }} />
-          {row.tramo}
+          <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full" style={{ background: etapaColorVar(etapa.key, etapa.sortOrder) }} />
+          {row.etapa}
         </span>
       );
     }

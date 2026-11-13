@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils";
 
 /**
  * Visual-only footer of an `EntityCardGrid` card (redesign FE §3.5, §15.2):
- * a step bar (e.g. the project's tramos: done / current / next) and the team
+ * a step bar (e.g. the project's etapas: done / current / next) and the team
  * avatars. Esencial and Analítico render nothing: their cards and tables
- * already carry the same facts as text (meta, tramo, avance).
+ * already carry the same facts as text (meta, etapa, avance).
  */
 export type EntityCardFooterProps = {
   steps?: { key: string; label: string; state: "done" | "current" | "next"; colorVar: string }[];
-  /** Accessible name of the step bar, e.g. "Tramos". */
+  /** Accessible name of the step bar, e.g. "Etapas". */
   stepsLabel?: string;
   people?: { id: string; name: string; initials: string }[];
   /** Accessible name of the avatar group, e.g. "Equipo". */

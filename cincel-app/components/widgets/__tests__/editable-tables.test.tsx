@@ -67,11 +67,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-type Task = Record<string, unknown> & { id: string; tarea: string; tramo: string; estatus: string; dias: number; bloqueada?: boolean };
+type Task = Record<string, unknown> & { id: string; tarea: string; etapa: string; estatus: string; dias: number; bloqueada?: boolean };
 
 const ok = { ok: true as const, data: null };
 
-function editOf(key: "tarea" | "tramo" | "estatus", commit = vi.fn(async () => ok)): CellEdit<Task> {
+function editOf(key: "tarea" | "etapa" | "estatus", commit = vi.fn(async () => ok)): CellEdit<Task> {
   if (key === "tarea") return { kind: "text", required: true, value: (row) => row.tarea, commit };
   return {
     kind: "select",
@@ -88,15 +88,15 @@ function editOf(key: "tarea" | "tramo" | "estatus", commit = vi.fn(async () => o
 function columns(commit = vi.fn(async () => ok)): RecordColumn<Task>[] {
   return [
     { key: "tarea", label: "Tarea", edit: editOf("tarea", commit) },
-    { key: "tramo", label: "Etapa", edit: editOf("tramo", commit), canEdit: (row) => (row.bloqueada ? LOCK_REASON.tramo : true) },
+    { key: "etapa", label: "Etapa", edit: editOf("etapa", commit), canEdit: (row) => (row.bloqueada ? LOCK_REASON.etapa : true) },
     { key: "dias", label: "Días de retraso", format: "days" },
     { key: "estatus", label: "Estatus", edit: editOf("estatus", commit) },
   ];
 }
 
-const t1: Task = { id: "t1", tarea: "Planos", tramo: "diseno", estatus: "abierta", dias: 2 };
-const t2: Task = { id: "t2", tarea: "Permisos", tramo: "diseno", estatus: "abierta", dias: 0, bloqueada: true };
-const t3: Task = { id: "t3", tarea: "Obra negra", tramo: "obra", estatus: "abierta", dias: 5 };
+const t1: Task = { id: "t1", tarea: "Planos", etapa: "diseno", estatus: "abierta", dias: 2 };
+const t2: Task = { id: "t2", tarea: "Permisos", etapa: "diseno", estatus: "abierta", dias: 0, bloqueada: true };
+const t3: Task = { id: "t3", tarea: "Obra negra", etapa: "obra", estatus: "abierta", dias: 5 };
 
 function groupsOf(rows: Task[]): Group<Task>[] {
   return [
@@ -105,11 +105,11 @@ function groupsOf(rows: Task[]): Group<Task>[] {
       label: "Casa Lomas",
       metrics: [],
       children: [
-        { id: "diseno", label: "Diseño", metrics: [], rows: rows.filter((r) => r.tramo === "diseno") },
-        { id: "obra", label: "Obra", metrics: [], rows: rows.filter((r) => r.tramo === "obra"), hasMore: true },
+        { id: "diseno", label: "Diseño", metrics: [], rows: rows.filter((r) => r.etapa === "diseno") },
+        { id: "obra", label: "Obra", metrics: [], rows: rows.filter((r) => r.etapa === "obra"), hasMore: true },
       ],
     },
-    { id: "p2", label: "Torre Norte", metrics: [], rows: rows.filter((r) => r.tramo === "otro") },
+    { id: "p2", label: "Torre Norte", metrics: [], rows: rows.filter((r) => r.etapa === "otro") },
   ];
 }
 
@@ -162,7 +162,7 @@ describe("GroupedTable with editable columns", () => {
 
   it("opens on Enter and F2, and Cerrar / Esc returns focus to the cell", () => {
     render(grouped([t1, t3]));
-    const target = cell("t1", "tramo");
+    const target = cell("t1", "etapa");
     target.focus();
     key(target, "Enter");
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
@@ -184,19 +184,19 @@ describe("GroupedTable with editable columns", () => {
   it("shows the lock reason on a locked cell and never clears it", () => {
     const commit = vi.fn(async () => ok);
     render(grouped([t2], columns(commit)));
-    const locked = cell("t2", "tramo");
+    const locked = cell("t2", "etapa");
     expect(locked.dataset.cellState).toBe("locked");
     expect(locked.querySelector("[data-slot='cell-lock']")).toBeTruthy();
     key(locked, "Delete");
     expect(commit).not.toHaveBeenCalled();
     fireEvent.click(locked);
-    expect(screen.getByText(LOCK_REASON.tramo)).toBeTruthy();
+    expect(screen.getByText(LOCK_REASON.etapa)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Elegir" })).toBeNull();
   });
 
   it("moves with the arrows across tables, skipping group headers and Cargar más", () => {
     render(grouped([t1, t2, t3]));
-    const start = cell("t1", "tramo");
+    const start = cell("t1", "etapa");
     start.focus();
     key(start, "ArrowRight");
     expect(document.activeElement).toBe(cell("t1", "dias"));
@@ -217,7 +217,7 @@ describe("GroupedTable with editable columns", () => {
   it("saves and moves to the next editable cell of the row on Tab", async () => {
     const commit = vi.fn(async () => ok);
     render(grouped([t1], columns(commit)));
-    fireEvent.click(cell("t1", "tramo"));
+    fireEvent.click(cell("t1", "etapa"));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Tab" }));
     });
@@ -259,18 +259,18 @@ describe("GroupedTable with editable columns", () => {
     let rows = [t1, t3];
     // The stand-in editor saves "nuevo"; the page moves the row to Obra.
     const commit = vi.fn(async () => {
-      rows = rows.map((r) => (r.id === "t1" ? { ...r, tramo: "obra" } : r));
+      rows = rows.map((r) => (r.id === "t1" ? { ...r, etapa: "obra" } : r));
       return ok;
     });
     const cols = columns(commit);
     const { rerender } = render(grouped(rows, cols));
-    expect(cell("t1", "tramo").closest("tr")?.getAttribute("data-grid-group")).toBe("diseno");
-    fireEvent.click(cell("t1", "tramo"));
+    expect(cell("t1", "etapa").closest("tr")?.getAttribute("data-grid-group")).toBe("diseno");
+    fireEvent.click(cell("t1", "etapa"));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Elegir" }));
     });
     rerender(grouped(rows, cols));
-    const moved = cell("t1", "tramo");
+    const moved = cell("t1", "etapa");
     const tr = moved.closest("tr");
     expect(tr?.getAttribute("data-grid-group")).toBe("obra");
     expect(tr?.hasAttribute("data-row-flash")).toBe(true);

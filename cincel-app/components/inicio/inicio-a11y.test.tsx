@@ -152,7 +152,7 @@ describe("Inicio dashboard controls accessibility", () => {
     useInicioDashboard.setState({
       range: "4w",
       collapsed: { myDay: true, workload: true },
-      views: { analitico: { tramoDonut: "chart", weeklyPace: "chart" } },
+      views: { analitico: { etapaDonut: "chart", weeklyPace: "chart" } },
       hiddenSeries: { weeklyPace: ["created"] },
     });
     renderInicio("analitico", INICIO_NON_ADMIN);

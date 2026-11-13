@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Portal Resumen in Analítico (frame `Portal-Analitico`): title row, KPI strip, "Ir a" chips and three
- * collapsible tables (Fases por tramo, Entregables, Archivos por carpeta). Everything comes from the portal
+ * collapsible tables (Fases por etapa, Entregables, Archivos por carpeta). Everything comes from the portal
  * DTOs; columns and KPIs without data (real dates, monthly delta) are left out. The open sections live in
  * `?abiertos=` (all open when the param is absent).
  */
@@ -109,12 +109,12 @@ function kpiItems(k: PortalKpis): KpiStripItem[] {
         : {}),
     },
   ];
-  if (k.tramo) {
+  if (k.etapa) {
     items.push({
-      key: "tramo",
-      label: PORTAL_ANALITICO_COPY.tramoActual,
-      value: k.tramo.name,
-      delta: { label: `${k.tramo.pct} %`, tone: "neutral" },
+      key: "etapa",
+      label: PORTAL_ANALITICO_COPY.etapaActual,
+      value: k.etapa.name,
+      delta: { label: `${k.etapa.pct} %`, tone: "neutral" },
     });
   }
   items.push({
@@ -178,9 +178,9 @@ export function PortalAnalitico({ project, data: overview }: PortalAnaliticoProp
   const hasReal = portalScheduleHasRealDates(schedule);
 
   const kpis = useMemo(() => buildPortalKpis(data, today), [data, today]);
-  const phaseGroups = useMemo(() => buildPortalPhaseTable(schedule, today, data.tramos), [schedule, today, data.tramos]);
+  const phaseGroups = useMemo(() => buildPortalPhaseTable(schedule, today, data.etapas), [schedule, today, data.etapas]);
   const phaseTotals = useMemo(() => portalPhaseTotals(phaseGroups), [phaseGroups]);
-  const entregables = useMemo(() => buildPortalEntregables(schedule, today, data.tramos), [schedule, today, data.tramos]);
+  const entregables = useMemo(() => buildPortalEntregables(schedule, today, data.etapas), [schedule, today, data.etapas]);
   const nextEntregable = useMemo(() => portalNextEntregable(schedule, today), [schedule, today]);
   const fileGroups = useMemo(() => buildPortalFilesByFolder(portalFolderGroupsOf(data)), [data]);
   const fileTotals = useMemo(() => (fileGroups ? portalFilesTotals(fileGroups) : null), [fileGroups]);
@@ -247,7 +247,7 @@ export function PortalAnalitico({ project, data: overview }: PortalAnaliticoProp
   ];
   const entregableColumns: RecordColumn[] = [
     { key: "entregable", label: "Entregable" },
-    { key: "tramo", label: "Etapa" },
+    { key: "etapa", label: "Etapa" },
     { key: "fechaPlan", label: "Fecha plan", mono: true },
     ...(hasReal ? [{ key: "fechaReal", label: "Fecha real", mono: true }] : []),
     { key: "estado", label: "Estado" },
@@ -361,7 +361,7 @@ export function PortalAnalitico({ project, data: overview }: PortalAnaliticoProp
               if (key === "entregable") return <span className={LONG_TEXT} title={row.entregable}>{row.entregable}</span>;
               if (key === "desvio") return desvioCell(row.desvio);
               if (key === "fechaReal") return row.fechaReal ?? "—";
-              if (key === "tramo") return row.tramo ?? "—";
+              if (key === "etapa") return row.etapa ?? "—";
               return undefined;
             }}
           />

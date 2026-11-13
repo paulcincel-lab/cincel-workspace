@@ -16,7 +16,7 @@ export type TareasMostrar = "todas" | "abiertas" | "en_retraso";
 export const TAREAS_MOSTRAR: readonly TareasMostrar[] = ["todas", "abiertas", "en_retraso"];
 
 export type TareasQuery = {
-  tramo: string | null;
+  etapa: string | null;
   /** "yo", a staff id, "todos" (written by Esencial's Solo mías toggle: everyone) or null. */
   responsable: "yo" | "todos" | string | null;
   /** `?proyecto=<id>`: one project (also what the project page links to). */
@@ -58,7 +58,7 @@ export const TAREAS_COMPLETADAS_PARAM = "completadas";
 export const TAREAS_SEARCH_MAX = 200;
 
 export const DEFAULT_TAREAS_QUERY: TareasQuery = {
-  tramo: null,
+  etapa: null,
   responsable: null,
   proyecto: null,
   proyectos: [],
@@ -70,7 +70,7 @@ export const DEFAULT_TAREAS_QUERY: TareasQuery = {
   nueva: false,
 };
 
-/** Tramo keys (`workflows.key`): letters, digits, `_` and `-`. */
+/** Etapa keys (`workflows.key`): letters, digits, `_` and `-`. */
 const KEY_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Row ids (staff, projects) are UUIDs. */
@@ -146,7 +146,7 @@ export function parseTareasQuery(sp: URLSearchParams, defaults: TareasQueryDefau
   const responsable = sp.get("responsable");
   const estado = sp.get("estado");
   return {
-    tramo: key(readEtapaParam(sp)),
+    etapa: key(readEtapaParam(sp)),
     responsable: responsable === "yo" || responsable === TAREAS_RESPONSABLE_TODOS ? responsable : id(responsable),
     ...proyectosPatch(parseProyectosParam(sp.get("proyecto"))),
     estado: estado !== null && (TAREAS_ESTADOS as readonly string[]).includes(estado) ? estado : null,
@@ -163,7 +163,7 @@ export function parseTareasQuery(sp: URLSearchParams, defaults: TareasQueryDefau
 /** `?…` for a partial query (round trip with `parseTareasQuery`). Defaults are left out; "" when nothing is set. */
 export function toTareasSearch(q: Partial<TareasQuery>): string {
   const sp = new URLSearchParams();
-  if (q.tramo) sp.set("etapa", q.tramo);
+  if (q.etapa) sp.set("etapa", q.etapa);
   if (q.responsable) sp.set("responsable", q.responsable);
   const proyectos = selectedProyectos(q);
   if (proyectos.length > 0) sp.set("proyecto", proyectos.join(","));
@@ -196,9 +196,9 @@ export function toUrlSearchParams(sp: Record<string, string | string[] | undefin
   return out;
 }
 
-/** True when any filter (tramo, responsable, proyecto, estado, search, mostrar) narrows the tasks. */
+/** True when any filter (etapa, responsable, proyecto, estado, search, mostrar) narrows the tasks. */
 export function hasTareasFilters(q: TareasQuery): boolean {
-  return Boolean(q.tramo || responsableFilter(q.responsable) || selectedProyectos(q).length > 0 || q.estado || q.q || (q.mostrar && q.mostrar !== "todas"));
+  return Boolean(q.etapa || responsableFilter(q.responsable) || selectedProyectos(q).length > 0 || q.estado || q.q || (q.mostrar && q.mostrar !== "todas"));
 }
 
 /** `?responsable=todos`: everyone's tasks, kept in the URL so Esencial's "Solo mías" off is shareable. */
@@ -223,13 +223,13 @@ export function isEsencialSoloMias(responsable: TareasQuery["responsable"]): boo
 }
 
 /**
- * True when an Esencial filter narrows the tasks: the tramo, proyecto,
+ * True when an Esencial filter narrows the tasks: the etapa, proyecto,
  * estado, search, mostrar, or a responsable other than "yo" (Solo mías off
  * counts, so "Quitar filtros" brings it back).
  */
 export function hasEsencialFilters(q: TareasQuery): boolean {
   return Boolean(
-    q.tramo || selectedProyectos(q).length > 0 || q.estado || q.q || (q.mostrar && q.mostrar !== "todas") || !isEsencialSoloMias(q.responsable),
+    q.etapa || selectedProyectos(q).length > 0 || q.estado || q.q || (q.mostrar && q.mostrar !== "todas") || !isEsencialSoloMias(q.responsable),
   );
 }
 

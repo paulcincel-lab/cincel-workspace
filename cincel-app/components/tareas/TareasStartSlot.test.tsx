@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react
 
 import { qk } from "@/lib/query/keys";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
-import type { StartTramoResult, TramoBoard } from "@/lib/types/core";
+import type { StartEtapaResult, EtapaBoard } from "@/lib/types/core";
 import type { StartSlotCandidate, TareasStartSlotData } from "@/lib/types/tareas-start-slot";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
@@ -17,10 +17,10 @@ vi.mock("next/navigation", () => ({
 
 const pageData = vi.hoisted(() => ({ getTareasStartSlotData: vi.fn() }));
 vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
-vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  previewStartTramoAction: vi.fn(),
-  startTramoAction: vi.fn(),
-  undoStartTramoAction: vi.fn(),
+vi.mock("@/lib/actions/etapa-start-actions", () => ({
+  previewStartEtapaAction: vi.fn(),
+  startEtapaAction: vi.fn(),
+  undoStartEtapaAction: vi.fn(),
 }));
 
 const sonner = vi.hoisted(() => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
@@ -28,8 +28,8 @@ vi.mock("sonner", () => sonner);
 
 /** What the slot hands the sheet, and buttons to close it or report a start. */
 const sheetProps = vi.hoisted(() => ({ staff: [] as unknown[] }));
-vi.mock("@/components/tareas/StartTramoSheet", () => ({
-  StartTramoSheet: ({
+vi.mock("@/components/tareas/StartEtapaSheet", () => ({
+  StartEtapaSheet: ({
     open,
     projectId,
     staff,
@@ -44,7 +44,7 @@ vi.mock("@/components/tareas/StartTramoSheet", () => ({
   }) => {
     sheetProps.staff = staff;
     return (
-      <div data-testid="start-tramo-sheet" data-open={String(open)} data-project={projectId ?? ""}>
+      <div data-testid="start-etapa-sheet" data-open={String(open)} data-project={projectId ?? ""}>
         <button type="button" onClick={onClose}>
           Cerrar hoja
         </button>
@@ -66,16 +66,16 @@ import { TareasStartSlot } from "./TareasStartSlot";
 
 const DISENO = { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 };
 
-const BOARD: TramoBoard = {
+const BOARD: EtapaBoard = {
   workflow: DISENO,
-  ready: [{ project: { id: "p7", name: "Casa Valle" }, currentTramo: null, readySince: "2026-11-02T10:00:00.000Z", pending: null }],
+  ready: [{ project: { id: "p7", name: "Casa Valle" }, currentEtapa: null, readySince: "2026-11-02T10:00:00.000Z", pending: null }],
   upcoming: [
     {
       project: { id: "p8", name: "Loft Centro" },
-      currentTramo: null,
+      currentEtapa: null,
       readySince: null,
       pending: {
-        tramo: { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 },
+        etapa: { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 },
         phase: { id: "f-cobro", name: "Cobro", sortOrder: 3 },
         open: 1,
         total: 2,
@@ -94,7 +94,7 @@ function slotData(overrides: Partial<TareasStartSlotData> = {}): TareasStartSlot
   return { board: BOARD, candidates: CANDIDATES, canStart: true, ...overrides };
 }
 
-const STARTED: StartTramoResult = {
+const STARTED: StartEtapaResult = {
   batchId: "b-1",
   createdCount: 3,
   skippedCount: 0,
@@ -108,7 +108,7 @@ function renderSlot(client = createTestQueryClient()) {
 }
 
 function sheet() {
-  return screen.getByTestId("start-tramo-sheet");
+  return screen.getByTestId("start-etapa-sheet");
 }
 
 let replaceState: MockInstance<History["replaceState"]>;
@@ -134,7 +134,7 @@ describe("TareasStartSlot", () => {
     expect(await screen.findByText("Listos para iniciar (1)")).toBeTruthy();
     expect(screen.getByText("Próximos (1)")).toBeTruthy();
     expect(pageData.getTareasStartSlotData).toHaveBeenCalledTimes(1);
-    expect(pageData.getTareasStartSlotData).toHaveBeenCalledWith({ tramoId: "w-diseno" });
+    expect(pageData.getTareasStartSlotData).toHaveBeenCalledWith({ etapaId: "w-diseno" });
     expect(sheet().getAttribute("data-open")).toBe("false");
   });
 

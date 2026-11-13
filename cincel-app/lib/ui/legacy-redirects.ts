@@ -19,6 +19,7 @@ export type LegacySearchParams = Record<string, string | string[] | undefined> |
 /** `/configuracion/[x]` segments renamed under `/ajustes` (FE §2.2). */
 const CONFIGURACION_RENAMES: Readonly<Record<string, string>> = {
   workflows: "etapas",
+  // Compatibility: the old route name (`/configuracion/tramos`) still redirects.
   tramos: "etapas",
   areas: "puestos",
   "importar-monday": "monday",
@@ -155,7 +156,7 @@ function targetFor(path: string): string | null {
  * The redesign URL an old route redirects to (FE §2.2), or
  * null when `pathname` is not a legacy route. The target's own query keys come
  * first and win over the same keys in the old query; every other old key is
- * kept in its original order. `/actividades/[tramo]?project=X` (Project Flow's
+ * kept in its original order. `/actividades/[etapa]?project=X` (Project Flow's
  * start deep link) also gets `iniciar=1`.
  */
 export function legacyRedirectTarget(pathname: string, searchParams?: LegacySearchParams): string | null {
@@ -174,8 +175,8 @@ export function legacyRedirectTarget(pathname: string, searchParams?: LegacySear
     query.append(key === LEGACY_TRAMO_PARAM ? ETAPA_PARAM : key, value);
   }
 
-  const isTramoStart = path.startsWith("/actividades/") && path !== "/actividades/general";
-  if (isTramoStart && query.get("project") && !query.has("iniciar")) query.append("iniciar", "1");
+  const isEtapaStart = path.startsWith("/actividades/") && path !== "/actividades/general";
+  if (isEtapaStart && query.get("project") && !query.has("iniciar")) query.append("iniciar", "1");
 
   const serialized = query.toString();
   return serialized ? `${targetPath}?${serialized}` : targetPath;

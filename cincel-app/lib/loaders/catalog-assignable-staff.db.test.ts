@@ -1,8 +1,8 @@
 // @vitest-environment node
 /**
- * `loadCatalogAssignableStaff` against a real Postgres: with a tramo, each
+ * `loadCatalogAssignableStaff` against a real Postgres: with an etapa, each
  * person carries `openCount` / `overdueCount` (their open tasks in that
- * tramo, overdue = due before today in the org time zone); without one the
+ * etapa, overdue = due before today in the org time zone); without one the
  * counts are absent. Runs only when TEST_DATABASE_URL points at a migrated
  * database. Every row a test creates carries a per-run marker and is deleted
  * afterwards.
@@ -31,8 +31,8 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
   let ana = "";
   let luis = "";
   let sofia = "";
-  let tramo = "";
-  let otherTramo = "";
+  let etapa = "";
+  let otherEtapa = "";
   let project = "";
   let deletedProject = "";
 
@@ -68,7 +68,7 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
       .insert(schema.tasks)
       .values({
         projectId: project,
-        workflowId: tramo,
+        workflowId: etapa,
         kind: "usuario",
         title: `Carga ${run} ${label}`,
         createdById: ana,
@@ -84,20 +84,20 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
     ana = await addStaff("ana");
     luis = await addStaff("luis");
     sofia = await addStaff("sofia");
-    tramo = await addWorkflow("tramo");
-    otherTramo = await addWorkflow("otro");
+    etapa = await addWorkflow("etapa");
+    otherEtapa = await addWorkflow("otro");
     project = await addProject("obra");
     deletedProject = await addProject("borrado");
 
-    // Ana: 3 open in the tramo, 2 of them overdue (commitment, else delivery date).
+    // Ana: 3 open in the etapa, 2 of them overdue (commitment, else delivery date).
     await addTask("ana vencida compromiso", { managerId: ana, commitmentDate: "2026-11-01" });
     await addTask("ana vencida entrega", { managerId: ana, deliveryDate: "2026-11-02" });
     await addTask("ana a tiempo", { managerId: ana, deliveryDate: "2026-11-30" });
-    // Not counted: closed, archived, deleted, another tramo, a deleted project.
+    // Not counted: closed, archived, deleted, another etapa, a deleted project.
     await addTask("ana completada", { managerId: ana, status: "completado", closedAt: new Date(), commitmentDate: "2026-11-01" });
     await addTask("ana archivada", { managerId: ana, archived: true });
     await addTask("ana borrada", { managerId: ana, deletedAt: new Date() });
-    await addTask("ana otra etapa", { managerId: ana, workflowId: otherTramo });
+    await addTask("ana otra etapa", { managerId: ana, workflowId: otherEtapa });
     await addTask("ana proyecto borrado", { managerId: ana, projectId: deletedProject });
     await db.update(schema.projects).set({ deletedAt: new Date() }).where(inArray(schema.projects.id, [deletedProject]));
     // Luis: 1 open, due today (not overdue).
@@ -119,7 +119,7 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
   });
 
   it("counts open and overdue tasks per person in the etapa", async () => {
-    const rows = await loadCatalogAssignableStaff(user, { workflowId: tramo }, { now: NOW });
+    const rows = await loadCatalogAssignableStaff(user, { workflowId: etapa }, { now: NOW });
     const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get(ana)).toMatchObject({ openCount: 3, overdueCount: 2 });
     expect(byId.get(luis)).toMatchObject({ openCount: 1, overdueCount: 0 });
@@ -127,11 +127,11 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
   });
 
   it("counts only the etapa asked for", async () => {
-    const rows = await loadCatalogAssignableStaff(user, { workflowId: otherTramo }, { now: NOW });
+    const rows = await loadCatalogAssignableStaff(user, { workflowId: otherEtapa }, { now: NOW });
     expect(rows.find((r) => r.id === ana)).toMatchObject({ openCount: 1, overdueCount: 0 });
   });
 
-  it("has no counts without a etapa", async () => {
+  it("has no counts without an etapa", async () => {
     const rows = await loadCatalogAssignableStaff(user, { workflowId: null }, { now: NOW });
     const row = rows.find((r) => r.id === ana);
     expect(row).toBeDefined();

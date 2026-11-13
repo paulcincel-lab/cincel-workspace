@@ -44,7 +44,7 @@ describe("actionErrorText", () => {
 
   it("maps ADMIN_TASK and TOUCHED", () => {
     expect(actionErrorText(new Error("ADMIN_TASK"))).toBe("Las tareas de administración no tienen fase ni espacio.");
-    expect(actionErrorText(new Error("TOUCHED"), { tramoName: "Diseño" })).toBe(
+    expect(actionErrorText(new Error("TOUCHED"), { etapaName: "Diseño" })).toBe(
       "No se puede deshacer: ya se editó una de las tareas creadas o Diseño se inició de nuevo después.",
     );
   });

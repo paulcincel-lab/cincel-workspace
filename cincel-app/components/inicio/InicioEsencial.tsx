@@ -26,7 +26,7 @@ import { runAction, useActionMutation } from "@/lib/query/mutation";
 import { catalogProjectOptionsOptions } from "@/lib/query/options/catalog";
 import type { InicioPageData } from "@/lib/loaders/inicio";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
-import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import type { TaskDetail, UserTaskInput } from "@/lib/types/core";
 import type { InicioData } from "@/lib/types/redesign";
 import type { AgendaItem, AttentionItem, ProgressItem } from "@/lib/types/widgets";
@@ -144,20 +144,20 @@ export function overdueAttention(items: AttentionItem[]): number {
   return items.filter((a) => a.daysLate !== null && a.daysLate > 0).length;
 }
 
-/** The meta of an attention row: tramo (or "Bloqueado"), project, then "12 días tarde" in destructive. */
+/** The meta of an attention row: etapa (or "Bloqueado"), project, then "12 días tarde" in destructive. */
 export function attentionMeta(item: AttentionItem): EsencialMeta[] {
   const blocked = item.reason === ATTENTION_REASON.bloqueada;
   const meta: EsencialMeta[] = [
     {
-      key: "tramo",
-      label: blocked ? ESENCIAL_COPY.blocked : item.tramo ? tramoLabel(item.tramo) : item.reason,
-      dot: blocked ? "var(--destructive)" : item.tramo ? tramoColorVar(item.tramo) : "var(--muted-foreground)",
+      key: "etapa",
+      label: blocked ? ESENCIAL_COPY.blocked : item.etapa ? etapaLabel(item.etapa) : item.reason,
+      dot: blocked ? "var(--destructive)" : item.etapa ? etapaColorVar(item.etapa) : "var(--muted-foreground)",
     },
     { key: "project", label: item.project, tone: "muted" },
   ];
   if (item.daysLate !== null && item.daysLate > 0) {
     meta.push({ key: "late", label: `${item.daysLate} ${plural(item.daysLate, "día", "días")} tarde`, tone: "destructive" });
-  } else if (!blocked && item.tramo) {
+  } else if (!blocked && item.etapa) {
     meta.push({ key: "reason", label: item.reason, tone: "muted" });
   }
   return meta;
@@ -203,7 +203,7 @@ function MoreLink({ href, children }: { href: string; children: ReactNode }) {
 }
 
 function agendaRow(item: AgendaItem, right: string, isNew: boolean) {
-  const color = item.tramo ? tramoColorVar(item.tramo) : "var(--muted-foreground)";
+  const color = item.etapa ? etapaColorVar(item.etapa) : "var(--muted-foreground)";
   return (
     <li key={item.id} title={item.title}>
       <EsencialItemRow
@@ -267,9 +267,9 @@ function WeekCard({ data, now, meId }: { data: InicioData; now: Date; meId: stri
 
   async function onCreate(draft: QuickAddDraft): Promise<QuickAddCreated> {
     const project = draft.projectId ? projects.find((p) => p.id === draft.projectId) : undefined;
-    const workflowId = draft.tramoId ?? project?.currentWorkflowId ?? null;
+    const workflowId = draft.etapaId ?? project?.currentWorkflowId ?? null;
     if (!draft.projectId || !workflowId) {
-      // No project (or tramo) to create in: the dialog takes over, prefilled.
+      // No project (or etapa) to create in: the dialog takes over, prefilled.
       openNewTask({ title: draft.title, ...(draft.projectId ? { projectId: draft.projectId } : {}) }, "inicio");
       throw new Error("NEW_TASK_DIALOG");
     }
@@ -436,7 +436,7 @@ function ProjectsCard({ items }: { items: ProgressItem[] }) {
                     </span>
                   )}
                   <span
-                    data-slot="project-tramo"
+                    data-slot="project-etapa"
                     className={item.atRisk ? "shrink-0 text-[12.5px] text-destructive" : "shrink-0 text-[12.5px] text-muted-foreground"}
                   >
                     {item.atRisk

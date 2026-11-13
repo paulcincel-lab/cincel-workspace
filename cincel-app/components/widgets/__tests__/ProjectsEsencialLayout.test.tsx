@@ -11,14 +11,14 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn() }));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
     canSeeAdminData: () => false,
-    listTramos: async () => [],
-    tramoLabel: (key: string) => key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    listEtapas: async () => [],
+    etapaLabel: (key: string) => key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
   };
 });
@@ -130,7 +130,7 @@ describe("ProjectsEsencialLayout", () => {
     expect(cardLinks(container).map((a) => a.getAttribute("href"))).toEqual(["/proyectos/p-andares"]);
   });
 
-  it("no-results copy with and without a etapa", () => {
+  it("no-results copy with and without an etapa", () => {
     renderLayout();
     const input = screen.getByLabelText("Buscar proyectos");
     fireEvent.change(input, { target: { value: "zzz" } });
@@ -146,8 +146,8 @@ describe("ProjectsEsencialLayout", () => {
   });
 
   it("project without etapa shows Sin etapa", () => {
-    const sinTramo = { ...PROJECTS[2], id: "p-sin", name: "Bodega Norte", status: "activo" as const };
-    const { container } = renderLayout({ projects: [PROJECTS[0], sinTramo] });
+    const sinEtapa = { ...PROJECTS[2], id: "p-sin", name: "Bodega Norte", status: "activo" as const };
+    const { container } = renderLayout({ projects: [PROJECTS[0], sinEtapa] });
     expect(screen.getByRole("radio", { name: /Sin etapa/ })).toBeTruthy();
     const card = cardLinks(container).find((a) => a.getAttribute("href") === "/proyectos/p-sin");
     expect(card).toBeTruthy();

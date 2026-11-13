@@ -13,7 +13,7 @@ import { PageHeader as BasePageHeader, type PageHeaderProps as BaseProps } from 
  * - The only place a staff page renders `EstiloSwitch` (placement guard);
  *   pages pass their own actions, which come first.
  * - `estilo={false}` on the pages with one style (Ajustes, the document
- *   reader, Tramos).
+ *   reader, Etapas).
  * - The switch hides itself when the organization fixed the style, so the
  *   actions row then holds only the page actions.
  * - Tab order: breadcrumb links, page actions in DOM order, the Estilo

@@ -33,12 +33,12 @@ vi.mock("@/lib/auth/session", () => ({
     return { member: { id: user.id }, email: user.email, access: user.access };
   }),
 }));
-/** The Tramos and Puestos loaders (Query Migration 9b): the pages prefetch with them. */
+/** The Etapas and Puestos loaders (Query Migration 9b): the pages prefetch with them. */
 const catalogLoaders = vi.hoisted(() => ({
   loadAjustesEstatus: vi.fn(),
   loadAjustesPermisos: vi.fn(),
   loadAjustesPuestos: vi.fn(),
-  loadAjustesTramos: vi.fn(),
+  loadAjustesEtapas: vi.fn(),
 }));
 vi.mock("@/lib/loaders/ajustes-catalogs", () => catalogLoaders);
 
@@ -95,7 +95,7 @@ vi.mock("@/components/ajustes/MondayImportSections", () => ({
 }));
 vi.mock("@/components/ajustes/GoogleSettings", () => ({ GoogleSettings: stand("GoogleSettings") }));
 vi.mock("@/components/configuracion/GoogleSetupWizard", () => ({ GoogleSetupWizard: stand("GoogleSetupWizard") }));
-vi.mock("@/app/(staff)/ajustes/(admin)/etapas/TramosClient", () => ({ TramosClient: stand("TramosClient") }));
+vi.mock("@/app/(staff)/ajustes/(admin)/etapas/EtapasClient", () => ({ EtapasClient: stand("EtapasClient") }));
 vi.mock("@/app/(staff)/ajustes/(admin)/puestos/PuestosClient", () => ({ PuestosClient: stand("PuestosClient") }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
@@ -104,8 +104,8 @@ import MondayPage from "../monday/page";
 import GoogleLayout from "../google/layout";
 import GooglePage from "../google/page";
 import GoogleSetupPage from "../google/primeros-pasos/page";
-import TramosLayout from "../etapas/layout";
-import TramosPage from "../etapas/page";
+import EtapasLayout from "../etapas/layout";
+import EtapasPage from "../etapas/page";
 import PuestosLayout from "../puestos/layout";
 import PuestosPage from "../puestos/page";
 import { renderWithQueryClient } from "@/lib/query/test-utils";
@@ -126,7 +126,7 @@ type Layout = (props: { children: ReactNode }) => Promise<ReactNode>;
 const PAGES: { name: string; Page: Page; Layout: Layout }[] = [
   { name: "monday", Page: MondayPage, Layout: MondayLayout },
   { name: "google", Page: GooglePage, Layout: GoogleLayout },
-  { name: "tramos", Page: TramosPage, Layout: TramosLayout },
+  { name: "etapas", Page: EtapasPage, Layout: EtapasLayout },
   { name: "puestos", Page: PuestosPage, Layout: PuestosLayout },
 ];
 
@@ -178,7 +178,7 @@ describe("Ajustes admin segments: monday, Google, Etapas y fases, Puestos", () =
         expect(googleReads.listGroupMappings).not.toHaveBeenCalled();
         expect(googleReads.loadGoogleHealth).not.toHaveBeenCalled();
         expect(workflows.fetchWorkflowsAction).not.toHaveBeenCalled();
-        expect(catalogLoaders.loadAjustesTramos).not.toHaveBeenCalled();
+        expect(catalogLoaders.loadAjustesEtapas).not.toHaveBeenCalled();
         expect(catalogLoaders.loadAjustesPuestos).not.toHaveBeenCalled();
       });
 
@@ -357,15 +357,15 @@ describe("/ajustes/google/primeros-pasos", () => {
 
 describe("/ajustes/etapas and /ajustes/puestos", () => {
   it("prefetch their page data for the viewer and hydrate it (the clients take no props)", async () => {
-    const tramos = { workflows: [{ id: "w-1", key: "diseno", name: "Diseño", sortOrder: 1, active: true }] };
-    catalogLoaders.loadAjustesTramos.mockResolvedValue(tramos);
-    const tramosPage = await TramosPage();
-    renderWithQueryClient(tramosPage);
-    expect(catalogLoaders.loadAjustesTramos).toHaveBeenCalledWith(expect.objectContaining({ access: "Administrador" }));
-    expect(seen.props.TramosClient).toEqual({});
-    const tramosQc = (tramosPage.props as { qc: import("@tanstack/react-query").QueryClient }).qc;
-    expect(tramosQc.getQueryData(qk.ajustes.page("tramos"))).toEqual(tramos);
-    expect(tramosQc.getQueryData(qk.catalog.workflows())).toEqual([
+    const etapas = { workflows: [{ id: "w-1", key: "diseno", name: "Diseño", sortOrder: 1, active: true }] };
+    catalogLoaders.loadAjustesEtapas.mockResolvedValue(etapas);
+    const etapasPage = await EtapasPage();
+    renderWithQueryClient(etapasPage);
+    expect(catalogLoaders.loadAjustesEtapas).toHaveBeenCalledWith(expect.objectContaining({ access: "Administrador" }));
+    expect(seen.props.EtapasClient).toEqual({});
+    const etapasQc = (etapasPage.props as { qc: import("@tanstack/react-query").QueryClient }).qc;
+    expect(etapasQc.getQueryData(qk.ajustes.page("etapas"))).toEqual(etapas);
+    expect(etapasQc.getQueryData(qk.catalog.workflows())).toEqual([
       { id: "w-1", key: "diseno", name: "Diseño", sortOrder: 1 },
     ]);
     expect(workflows.fetchWorkflowsAction).not.toHaveBeenCalled();
@@ -382,9 +382,9 @@ describe("/ajustes/etapas and /ajustes/puestos", () => {
   });
 
   it("still render when the loader fails (the client query then loads or shows the error)", async () => {
-    catalogLoaders.loadAjustesTramos.mockRejectedValue(new Error("FORBIDDEN"));
-    const page = await TramosPage();
+    catalogLoaders.loadAjustesEtapas.mockRejectedValue(new Error("FORBIDDEN"));
+    const page = await EtapasPage();
     const qc = (page.props as { qc: import("@tanstack/react-query").QueryClient }).qc;
-    expect(qc.getQueryData(qk.ajustes.page("tramos"))).toBeUndefined();
+    expect(qc.getQueryData(qk.ajustes.page("etapas"))).toBeUndefined();
   });
 });

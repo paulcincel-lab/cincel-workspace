@@ -20,7 +20,7 @@ vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
 }));
 vi.mock("@/lib/actions/workflows-actions", () => ({
   fetchWorkflowsAction: vi.fn(async () => []),
-  fetchTramosNavAction: vi.fn(async () => []),
+  fetchEtapasNavAction: vi.fn(async () => []),
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   createUserTaskAction: vi.fn(),

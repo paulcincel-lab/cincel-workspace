@@ -9,7 +9,7 @@ import {
   INICIO_WIDGETS,
   isInicioKpiKey,
   PACE_VIEW,
-  TRAMO_VIEW,
+  ETAPA_VIEW,
   useInicioDashboard,
   WORKLOAD_VIEW,
 } from "./inicio-dashboard-store";
@@ -68,7 +68,7 @@ describe("useInicioDashboard instance", () => {
       collapsed: { attention: true },
       views: { visual: { weeklyPace: "table" } },
       hiddenSeries: { weeklyPace: ["created"] },
-      filters: { responsable: null, tramo: null },
+      filters: { responsable: null, etapa: null },
     });
   });
 
@@ -96,20 +96,41 @@ describe("useInicioDashboard instance", () => {
 
   it("filters persist and rehydrate", async () => {
     const state = useInicioDashboard.getState();
-    expect(state.filters).toEqual({ responsable: null, tramo: null });
+    expect(state.filters).toEqual({ responsable: null, etapa: null });
     state.setFilter("responsable", "s-2");
-    state.setFilter("tramo", "diseno");
+    state.setFilter("etapa", "diseno");
     const stored = JSON.parse(localStorage.getItem(KEY) ?? "null") as { state: Record<string, unknown> };
-    expect(stored.state.filters).toEqual({ responsable: "s-2", tramo: "diseno" });
+    expect(stored.state.filters).toEqual({ responsable: "s-2", etapa: "diseno" });
 
     useInicioDashboard.getState().reset();
-    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, tramo: null });
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, etapa: null });
     localStorage.setItem(KEY, JSON.stringify({ state: stored.state, version: 1 }));
     await useInicioDashboard.persist.rehydrate();
-    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-2", tramo: "diseno" });
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-2", etapa: "diseno" });
 
     useInicioDashboard.getState().clearFilters();
-    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, tramo: null });
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, etapa: null });
+  });
+
+  it("reads the choices saved under the old names (tramoDonut, filter tramo)", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        state: {
+          range: "8w",
+          collapsed: { tramoDonut: true },
+          views: { visual: { tramoDonut: "table" } },
+          hiddenSeries: {},
+          filters: { responsable: "s-3", tramo: "diseno" },
+        },
+        version: 1,
+      }),
+    );
+    await useInicioDashboard.persist.rehydrate();
+    const s = useInicioDashboard.getState();
+    expect(s.collapsed).toEqual({ etapaDonut: true });
+    expect(s.views).toEqual({ visual: { etapaDonut: "table" } });
+    expect(s.filters).toEqual({ responsable: "s-3", etapa: "diseno" });
   });
 
   it("unknown keys dropped", async () => {
@@ -121,20 +142,20 @@ describe("useInicioDashboard instance", () => {
           collapsed: {},
           views: {},
           hiddenSeries: {},
-          filters: { responsable: "s-3", tramo: 4, otro: "x" },
+          filters: { responsable: "s-3", etapa: 4, otro: "x" },
         },
         version: 1,
       }),
     );
     await useInicioDashboard.persist.rehydrate();
-    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-3", tramo: null });
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-3", etapa: null });
     // A key the instance does not declare is ignored.
     (useInicioDashboard.getState().setFilter as (key: string, value: string | null) => void)("otro", "y");
-    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-3", tramo: null });
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: "s-3", etapa: null });
   });
 
   it("keeps the per-style fallbacks equal to today's rendering", () => {
-    for (const fallback of [TRAMO_VIEW, PACE_VIEW, WORKLOAD_VIEW]) {
+    for (const fallback of [ETAPA_VIEW, PACE_VIEW, WORKLOAD_VIEW]) {
       expect(fallback).toEqual({ visual: "chart", esencial: "chart", analitico: "table" });
     }
     expect(INICIO_WIDGETS).toContain("weeklyPace");

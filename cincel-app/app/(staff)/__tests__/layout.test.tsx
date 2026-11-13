@@ -92,7 +92,7 @@ const DISABLED_TODAY: TodayStatus = {
   hoursPerDay: 8,
 };
 
-const NAV = { items: [], tramos: [], footer: [] };
+const NAV = { items: [], etapas: [], footer: [] };
 
 async function renderLayout(children: ReactNode) {
   return render(await StaffLayout({ children }));

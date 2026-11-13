@@ -16,7 +16,7 @@ import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { EsencialItemRow, type EsencialMeta } from "@/components/widgets/EsencialItemRow";
 import { ProjectFilter } from "@/components/widgets/ProjectFilter";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
-import { tramoDot } from "@/components/widgets/esencial-tokens";
+import { etapaDot } from "@/components/widgets/esencial-tokens";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import type { TareasListFilters } from "@/lib/query/keys";
 import {
@@ -60,7 +60,7 @@ import {
 /**
  * Tareas · Esencial (frame `Lista-Esencial`, Estilos #987): the signed-in
  * user's tasks as one soft card per project. Header, the filter chips
- * (Mostrar, tramo, Solo mías), then `EsencialCard`s with `EsencialItemRow`s
+ * (Mostrar, etapa, Solo mías), then `EsencialCard`s with `EsencialItemRow`s
  * (status last), a quick-add on the last line and the "N completadas"
  * disclosure, whose rows load on the first expand.
  *
@@ -86,7 +86,7 @@ const MOSTRAR_LABEL: Record<TareasMostrar, string> = {
 };
 const MOSTRAR_ORDER: readonly TareasMostrar[] = ["todas", "abiertas", "en_retraso"];
 
-const NO_TRAMOS: WorkflowRef[] = [];
+const NO_ETAPAS: WorkflowRef[] = [];
 
 /** "Mis tareas por proyecto: lo que tienes asignado, Ana." (no name: without it). */
 export function esencialDescription(firstName: string | null): string {
@@ -133,10 +133,10 @@ function firstNameOf(name: string | null | undefined): string | null {
   return first ? first : null;
 }
 
-/** The meta items of a row: the tramo dot and name, then the due date (destructive when overdue). */
+/** The meta items of a row: the etapa dot and name, then the due date (destructive when overdue). */
 function rowMeta(row: TaskListRow, today: string): EsencialMeta[] {
   const meta: EsencialMeta[] = [];
-  if (row.workflow) meta.push({ key: "tramo", label: row.workflow.name, dot: tramoDot(row.workflow) });
+  if (row.workflow) meta.push({ key: "etapa", label: row.workflow.name, dot: etapaDot(row.workflow) });
   const due = taskDueDate(row);
   if (due) {
     meta.push({
@@ -315,7 +315,7 @@ function ProjectCard({
 }
 
 export type TareasEsencialProps = {
-  /** Project Flow's start slot under the header (only with one tramo filter). */
+  /** Project Flow's start slot under the header (only with one etapa filter). */
   startSlot?: ReactNode;
 };
 
@@ -326,7 +326,7 @@ export function TareasEsencial({ startSlot }: TareasEsencialProps = {}) {
   const urlFilters = useTareasFilters(listQuery);
   const filters = useMemo(() => tareasEsencialFilters(urlFilters), [urlFilters]);
   const page = useTareasPage(query);
-  const tramos = page.data?.tramos ?? NO_TRAMOS;
+  const etapas = page.data?.etapas ?? NO_ETAPAS;
 
   // The page bundle seeds both keys: they wait for it, so a filter change sends one request.
   const ready = useTareasPageReady(query);
@@ -360,7 +360,7 @@ export function TareasEsencial({ startSlot }: TareasEsencialProps = {}) {
   const rowHref = useCallback((id: string) => taskSheetHrefFor(pathname, search, id), [pathname, search]);
 
   // ── Quick-add: creates in the card's project, assigned to me unless `@persona` says otherwise; the
-  // tramo is `#tramo`, else the project's current one (resolved by `QuickAddRow`). The line shows the
+  // etapa is `#etapa`, else the project's current one (resolved by `QuickAddRow`). The line shows the
   // pending row until the create settles; the real row then enters with `row-new`.
   const quickAdd = useQuickAddCreate();
   const recent = useQuickAddRecent((s) => s.recent);
@@ -388,16 +388,16 @@ export function TareasEsencial({ startSlot }: TareasEsencialProps = {}) {
           {mostrarCounts ? <ChipCount value={mostrarCounts[m]} destructive={m === "en_retraso"} /> : null}
         </FilterChip>
       ))}
-      {tramos.length > 0 ? <ChipDivider /> : null}
-      {tramos.map((tramo) => (
+      {etapas.length > 0 ? <ChipDivider /> : null}
+      {etapas.map((etapa) => (
         <FilterChip
-          key={tramo.key}
-          pressed={query.tramo === tramo.key}
-          onClick={() => replaceQuery({ tramo: query.tramo === tramo.key ? null : tramo.key })}
+          key={etapa.key}
+          pressed={query.etapa === etapa.key}
+          onClick={() => replaceQuery({ etapa: query.etapa === etapa.key ? null : etapa.key })}
         >
-          <ChipDot color={tramoDot(tramo)} />
-          <span>{tramo.name}</span>
-          {facets ? <ChipCount value={facets.byTramo[tramo.key] ?? 0} /> : null}
+          <ChipDot color={etapaDot(etapa)} />
+          <span>{etapa.name}</span>
+          {facets ? <ChipCount value={facets.byEtapa[etapa.key] ?? 0} /> : null}
         </FilterChip>
       ))}
       <ChipDivider />
@@ -422,7 +422,7 @@ export function TareasEsencial({ startSlot }: TareasEsencialProps = {}) {
   const actions: ReactNode = canCreate ? (
     <Button
       onClick={() =>
-        openNewTask({ projectId: query.proyecto ?? undefined, tramoKey: query.tramo ?? undefined }, "tareas")
+        openNewTask({ projectId: query.proyecto ?? undefined, etapaKey: query.etapa ?? undefined }, "tareas")
       }
     >
       <Plus aria-hidden="true" data-icon="inline-start" />

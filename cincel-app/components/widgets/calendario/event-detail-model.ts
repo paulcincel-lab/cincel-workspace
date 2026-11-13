@@ -6,7 +6,7 @@ export const DETAIL_COPY = {
   unassigned: "Sin asignar",
   taskKind: "Tarea",
   meetingKind: "Reunión",
-  noTramo: "Sin etapa",
+  noEtapa: "Sin etapa",
   noProject: "Sin proyecto",
   history: "HISTORIAL",
   historyEmpty: "Todavía no hay movimientos.",
@@ -42,13 +42,13 @@ export function taskNote(item: CalTaskItem): string {
   return item.overdue ? DETAIL_COPY.overdueNote : DETAIL_COPY.dueNote;
 }
 
-export function tramoName(item: CalItem): string {
-  return item.tramo?.name ?? DETAIL_COPY.noTramo;
+export function etapaName(item: CalItem): string {
+  return item.etapa?.name ?? DETAIL_COPY.noEtapa;
 }
 
 /** "Tarea · Diseño" / "Reunión · Diseño". */
 export function kindChip(item: CalItem): string {
-  return `${item.kind === "task" ? DETAIL_COPY.taskKind : DETAIL_COPY.meetingKind} · ${tramoName(item)}`;
+  return `${item.kind === "task" ? DETAIL_COPY.taskKind : DETAIL_COPY.meetingKind} · ${etapaName(item)}`;
 }
 
 /** "Ana García · Pendiente". */
@@ -57,8 +57,8 @@ export function responsableLine(item: CalTaskItem): string {
 }
 
 /** "Casa Madrid 22 · Diseño". */
-export function projectTramoLine(item: CalItem): string {
-  return `${item.project?.name ?? DETAIL_COPY.noProject} · ${tramoName(item)}`;
+export function projectEtapaLine(item: CalItem): string {
+  return `${item.project?.name ?? DETAIL_COPY.noProject} · ${etapaName(item)}`;
 }
 
 export function findAction(actions: readonly DetailAction[], ...keys: string[]): DetailAction | undefined {

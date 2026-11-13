@@ -16,7 +16,7 @@ import {
   filterSectionLinks,
   isBibliotecaSection,
   parseTipo,
-  parseTramo,
+  parseEtapa,
   pickDocumentPart,
   resourceDownload,
   sectionTable,
@@ -132,12 +132,12 @@ describe("biblioteca catalog", () => {
     const links = bibliotecaFixture();
     expect(filterSectionLinks(links, "formatos-obra", {}).map((l) => l.id)).toHaveLength(3);
     expect(filterSectionLinks(links, "formatos-obra", { tipo: "drive_folder" }).map((l) => l.id)).toEqual(["acta"]);
-    expect(filterSectionLinks(links, "formatos-obra", { tramo: "construccion" }).map((l) => l.id).sort()).toEqual(["acta", "bitacora"]);
+    expect(filterSectionLinks(links, "formatos-obra", { etapa: "construccion" }).map((l) => l.id).sort()).toEqual(["acta", "bitacora"]);
     expect(filterSectionLinks(links, "formatos-obra", { query: "levant" }).map((l) => l.id)).toEqual(["levantamiento"]);
     expect(parseTipo("web")).toBe("web");
     expect(parseTipo("otro")).toBeNull();
-    expect(parseTramo(["diseno"])).toBe("diseno");
-    expect(parseTramo("presale")).toBeNull();
+    expect(parseEtapa(["diseno"])).toBe("diseno");
+    expect(parseEtapa("presale")).toBeNull();
   });
 
   it("finds the viewer's favorite of a row by Drive id or URL", () => {
@@ -155,7 +155,7 @@ describe("biblioteca catalog", () => {
     expect(labels).toEqual(["favorito", "nombre", "tipo", "etapa", "actualizado", "acciones"]);
     expect(labels.some((l) => /vistas|descargas/.test(l))).toBe(false);
     const table = sectionTable([bibliotecaFixture()[3]], new Set(["bitacora"]));
-    expect(table.rows[0]).toMatchObject({ id: "bitacora", favorito: true, tipo: "Archivo", tramo: "Construcción" });
+    expect(table.rows[0]).toMatchObject({ id: "bitacora", favorito: true, tipo: "Archivo", etapa: "Construcción" });
   });
 
   it("downloads Drive files through the app only with Drive configured, as the workspace", () => {

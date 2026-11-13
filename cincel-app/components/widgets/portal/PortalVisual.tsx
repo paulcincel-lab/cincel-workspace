@@ -6,21 +6,21 @@ import { pushPortalHref } from "@/components/portal/PortalProjectTabs";
 import {
   formatPortalFileSize,
   PORTAL_OVERVIEW_COPY,
-  PORTAL_TRAMO_STATE_LABEL,
+  PORTAL_ETAPA_STATE_LABEL,
   portalFileType,
   portalInitials,
   type PortalOverviewData,
   type PortalRecentFile,
 } from "@/lib/portal/overview";
 import { portalDocumentDownloadUrl, portalProjectTabHref } from "@/lib/portal/project-tabs";
-import { tramoColorSlot, type TramoColorSlot } from "@/lib/tramos/tramo-color";
-import type { PortalProjectDTO, PortalTeamMemberDTO, PortalTramoDTO } from "@/lib/types/portal";
+import { etapaColorSlot, type EtapaColorSlot } from "@/lib/etapas/etapa-color";
+import type { PortalProjectDTO, PortalTeamMemberDTO, PortalEtapaDTO } from "@/lib/types/portal";
 import type { AgendaItem } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
 /**
  * Portal Resumen in the Visual style (frame `Portal-Visual`): hero with the project's photo (or a gradient)
- * and the overall progress ring, the tramos as bars, the next four deliveries on a timeline, the newest shared
+ * and the overall progress ring, the etapas as bars, the next four deliveries on a timeline, the newest shared
  * documents as cards and the Cincel team. Rendered by `PortalProjectOverview` through `PageStyleLayout`; every
  * value comes from the allow-listed portal DTOs via `PortalOverviewData`. Motion only through the shared
  * utilities (`anim-in`, `lift`, `ring`, `grow-x`), all off under `prefers-reduced-motion`.
@@ -29,8 +29,8 @@ import { cn } from "@/lib/utils";
 export const PORTAL_VISUAL_COPY = {
   avanceGeneral: "AVANCE GENERAL",
   proximaEntrega: "Próxima entrega",
-  enTramo: (name: string) => `En ${name}`,
-  tramosEnMarcha: (n: number, total: number) => `${n} de ${total} etapas en marcha`,
+  enEtapa: (name: string) => `En ${name}`,
+  etapasEnMarcha: (n: number, total: number) => `${n} de ${total} etapas en marcha`,
   entregaFinal: "entrega final estimada",
   entregaFinalSola: "Entrega final estimada",
   verTodos: "Ver todos →",
@@ -59,8 +59,8 @@ function clampPct(value: number): number {
   return Math.max(0, Math.min(100, Math.round(Number.isFinite(value) ? value : 0)));
 }
 
-/** CSS variables of a tramo color slot: `--pv-color` (dot, bar) and `--pv-ink` (text on card or tint). */
-function colorVars(slot: TramoColorSlot | null): CSSProperties {
+/** CSS variables of an etapa color slot: `--pv-color` (dot, bar) and `--pv-ink` (text on card or tint). */
+function colorVars(slot: EtapaColorSlot | null): CSSProperties {
   const vars: Record<string, string> = slot
     ? { "--pv-color": `var(--chart-${slot})`, "--pv-ink": `var(--chart-${slot}-ink)` }
     : { "--pv-color": "var(--muted-foreground)", "--pv-ink": "var(--foreground)" };
@@ -71,8 +71,8 @@ function colorVars(slot: TramoColorSlot | null): CSSProperties {
 const TINT_BG =
   "bg-[color-mix(in_oklab,var(--pv-color)_14%,var(--card))] dark:bg-[color-mix(in_oklab,var(--pv-color)_22%,var(--card))]";
 
-function slotOf(tramo: PortalTramoDTO, index: number): TramoColorSlot | null {
-  return tramoColorSlot({ key: tramo.key, sortOrder: index + 1 });
+function slotOf(etapa: PortalEtapaDTO, index: number): EtapaColorSlot | null {
+  return etapaColorSlot({ key: etapa.key, sortOrder: index + 1 });
 }
 
 const CARD = "rounded-[14px] border bg-card shadow-xs";
@@ -132,8 +132,8 @@ function CoverPhoto({ projectId }: { projectId: string }) {
 }
 
 function HeroPanel({ project, data }: PortalVisualProps) {
-  const heroIndex = data.heroTramo ? data.tramos.indexOf(data.heroTramo) : -1;
-  const heroSlot = data.heroTramo ? slotOf(data.heroTramo, heroIndex) : null;
+  const heroIndex = data.heroEtapa ? data.etapas.indexOf(data.heroEtapa) : -1;
+  const heroSlot = data.heroEtapa ? slotOf(data.heroEtapa, heroIndex) : null;
   return (
     <div
       className={cn(
@@ -148,15 +148,15 @@ function HeroPanel({ project, data }: PortalVisualProps) {
         <h1 className="mt-1 break-words text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
           {project.name}
         </h1>
-        {data.heroTramo || data.nextEntrega ? (
+        {data.heroEtapa || data.nextEntrega ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            {data.heroTramo ? (
+            {data.heroEtapa ? (
               <span
                 style={colorVars(heroSlot)}
                 className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-[13px] font-medium"
               >
                 <span aria-hidden="true" className="size-2 rounded-full bg-(--pv-color)" />
-                {PORTAL_VISUAL_COPY.enTramo(data.heroTramo.name)}
+                {PORTAL_VISUAL_COPY.enEtapa(data.heroEtapa.name)}
               </span>
             ) : null}
             {data.nextEntrega ? (
@@ -176,7 +176,7 @@ const RING_R = 48;
 
 function RingCard({ project, data }: PortalVisualProps) {
   const pct = clampPct(project.progressPct);
-  const total = data.tramos.length;
+  const total = data.etapas.length;
   const end = project.endDate ? portalMonthYear(project.endDate) : null;
   return (
     <div className={cn(CARD, "lift flex min-w-0 flex-col items-center gap-3 p-6")}>
@@ -213,7 +213,7 @@ function RingCard({ project, data }: PortalVisualProps) {
       </svg>
       {total > 0 || end ? (
         <p className="text-center text-[13px]">
-          {total > 0 ? PORTAL_VISUAL_COPY.tramosEnMarcha(data.tramosActive, total) : null}
+          {total > 0 ? PORTAL_VISUAL_COPY.etapasEnMarcha(data.etapasActive, total) : null}
           {end ? (
             <>
               {total > 0 ? ` · ${PORTAL_VISUAL_COPY.entregaFinal} ` : `${PORTAL_VISUAL_COPY.entregaFinalSola} `}
@@ -228,53 +228,53 @@ function RingCard({ project, data }: PortalVisualProps) {
 
 // ── Fases ────────────────────────────────────────────────────────────────────
 
-function tramoStateText(tramo: PortalTramoDTO): string {
-  if (tramo.state === "completado") return `${PORTAL_TRAMO_STATE_LABEL.completado} · 100 %`;
-  if (tramo.state === "en_curso") return `${PORTAL_TRAMO_STATE_LABEL.en_curso} · ${clampPct(tramo.progressPct)} %`;
-  return tramo.startMonth
-    ? `${PORTAL_TRAMO_STATE_LABEL.por_iniciar} · ${portalMonthYear(tramo.startMonth)}`
-    : PORTAL_TRAMO_STATE_LABEL.por_iniciar;
+function etapaStateText(etapa: PortalEtapaDTO): string {
+  if (etapa.state === "completado") return `${PORTAL_ETAPA_STATE_LABEL.completado} · 100 %`;
+  if (etapa.state === "en_curso") return `${PORTAL_ETAPA_STATE_LABEL.en_curso} · ${clampPct(etapa.progressPct)} %`;
+  return etapa.startMonth
+    ? `${PORTAL_ETAPA_STATE_LABEL.por_iniciar} · ${portalMonthYear(etapa.startMonth)}`
+    : PORTAL_ETAPA_STATE_LABEL.por_iniciar;
 }
 
-function PhaseBar({ tramo, index }: { tramo: PortalTramoDTO; index: number }) {
-  const pct = tramo.state === "completado" ? 100 : tramo.state === "por_iniciar" ? 0 : clampPct(tramo.progressPct);
-  const label = PORTAL_TRAMO_STATE_LABEL[tramo.state];
+function PhaseBar({ etapa, index }: { etapa: PortalEtapaDTO; index: number }) {
+  const pct = etapa.state === "completado" ? 100 : etapa.state === "por_iniciar" ? 0 : clampPct(etapa.progressPct);
+  const label = PORTAL_ETAPA_STATE_LABEL[etapa.state];
   return (
-    <div className="flex min-w-0 flex-col gap-2" style={colorVars(slotOf(tramo, index))}>
+    <div className="flex min-w-0 flex-col gap-2" style={colorVars(slotOf(etapa, index))}>
       <div
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct}
-        aria-label={`${tramo.name}, ${label.toLowerCase()}`}
+        aria-label={`${etapa.name}, ${label.toLowerCase()}`}
         className={cn(
           "h-2 overflow-hidden rounded-full",
-          tramo.state === "completado" ? "bg-(--pv-color)" : tramo.state === "en_curso" ? TINT_BG : "bg-accent",
+          etapa.state === "completado" ? "bg-(--pv-color)" : etapa.state === "en_curso" ? TINT_BG : "bg-accent",
         )}
       >
-        {tramo.state === "en_curso" && pct > 0 ? (
+        {etapa.state === "en_curso" && pct > 0 ? (
           <div className="grow-x h-full rounded-full bg-(--pv-color)" style={{ width: `${pct}%` }} />
         ) : null}
       </div>
-      <span className="break-words text-sm font-semibold">{tramo.name}</span>
+      <span className="break-words text-sm font-semibold">{etapa.name}</span>
       <span
         className={cn(
           "text-[12.5px] tabular-nums",
-          tramo.state === "por_iniciar" ? "text-muted-foreground" : "text-(--pv-ink)",
+          etapa.state === "por_iniciar" ? "text-muted-foreground" : "text-(--pv-ink)",
         )}
       >
-        {tramoStateText(tramo)}
+        {etapaStateText(etapa)}
       </span>
     </div>
   );
 }
 
-function FasesCard({ tramos }: { tramos: PortalTramoDTO[] }) {
+function FasesCard({ etapas }: { etapas: PortalEtapaDTO[] }) {
   return (
     <Section title={PORTAL_OVERVIEW_COPY.fases}>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {tramos.map((tramo, index) => (
-          <PhaseBar key={tramo.key} tramo={tramo} index={index} />
+        {etapas.map((etapa, index) => (
+          <PhaseBar key={etapa.key} etapa={etapa} index={index} />
         ))}
       </div>
     </Section>
@@ -286,7 +286,7 @@ function FasesCard({ tramos }: { tramos: PortalTramoDTO[] }) {
 /** How many deliveries the timeline shows. */
 export const PORTAL_VISUAL_ENTREGAS = 4;
 
-function EntregasCard({ entregas, slot }: { entregas: AgendaItem[]; slot: TramoColorSlot | null }) {
+function EntregasCard({ entregas, slot }: { entregas: AgendaItem[]; slot: EtapaColorSlot | null }) {
   const items = entregas.slice(0, PORTAL_VISUAL_ENTREGAS);
   return (
     <Section title={PORTAL_OVERVIEW_COPY.entregas} className="gap-[18px]">
@@ -326,7 +326,7 @@ const IMAGE_TYPES = new Set(["JPG", "JPEG", "PNG", "WEBP", "GIF", "HEIC", "SVG",
 const SHEET_TYPES = new Set(["XLSX", "XLS", "CSV", "ODS", "NUMBERS"]);
 
 /** Tile tint per document type: PDF violet, images blue, spreadsheets cyan, the rest neutral. */
-function typeSlot(type: string): TramoColorSlot | null {
+function typeSlot(type: string): EtapaColorSlot | null {
   const t = type.toUpperCase();
   if (t === "PDF") return 2;
   if (IMAGE_TYPES.has(t)) return 1;
@@ -448,15 +448,15 @@ function TeamSection({ team, projectName }: { team: PortalTeamMemberDTO[]; proje
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export function PortalVisual({ project, data }: PortalVisualProps) {
-  const heroIndex = data.heroTramo ? data.tramos.indexOf(data.heroTramo) : -1;
-  const entregaSlot = data.heroTramo ? slotOf(data.heroTramo, heroIndex) : null;
+  const heroIndex = data.heroEtapa ? data.etapas.indexOf(data.heroEtapa) : -1;
+  const entregaSlot = data.heroEtapa ? slotOf(data.heroEtapa, heroIndex) : null;
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-[1240px] flex-col gap-6 px-4 pt-6 pb-12 sm:px-8" data-slot="portal-visual">
       <section aria-label={project.name} className="anim-in grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-3">
         <HeroPanel project={project} data={data} />
         <RingCard project={project} data={data} />
       </section>
-      {data.tramos.length > 0 ? <FasesCard tramos={data.tramos} /> : null}
+      {data.etapas.length > 0 ? <FasesCard etapas={data.etapas} /> : null}
       <EntregasCard entregas={data.entregas} slot={entregaSlot} />
       {data.documentos !== null ? <DocumentosSection projectId={project.id} files={data.recentFiles} /> : null}
       {data.team.length > 0 ? <TeamSection team={data.team} projectName={project.name} /> : null}

@@ -17,8 +17,8 @@ const h = vi.hoisted(() => ({
   addProjectCommentAction: vi.fn(),
   fetchScheduleAction: vi.fn(),
   updateTaskAction: vi.fn(),
-  previewStartTramoAction: vi.fn(),
-  startTramoAction: vi.fn(),
+  previewStartEtapaAction: vi.fn(),
+  startEtapaAction: vi.fn(),
   fetchWorkflowsAction: vi.fn(),
   getAppSetting: vi.fn(),
   recordComment: vi.fn(),
@@ -40,9 +40,9 @@ vi.mock("@/lib/actions/projects-actions", () => ({
 }));
 vi.mock("@/lib/actions/schedule-actions", () => ({ fetchScheduleAction: h.fetchScheduleAction }));
 vi.mock("@/lib/actions/tasks-actions", () => ({ updateTaskAction: h.updateTaskAction }));
-vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  previewStartTramoAction: h.previewStartTramoAction,
-  startTramoAction: h.startTramoAction,
+vi.mock("@/lib/actions/etapa-start-actions", () => ({
+  previewStartEtapaAction: h.previewStartEtapaAction,
+  startEtapaAction: h.startEtapaAction,
 }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowsAction: h.fetchWorkflowsAction }));
 vi.mock("@/lib/repositories/app-settings-repository", () => ({ getAppSetting: h.getAppSetting }));
@@ -396,13 +396,13 @@ describe("writes", () => {
       { id: "w1", key: "presale", name: "Presale" },
       { id: "w2", key: "diseno", name: "Diseño" },
     ]);
-    h.previewStartTramoAction.mockResolvedValue({
+    h.previewStartEtapaAction.mockResolvedValue({
       phases: [
         { phase: { id: "ph1" }, templates: [{ id: "tp1", title: "Anteproyecto" }], existing: 0, candidates: [] },
         { phase: { id: "ph2" }, templates: [], existing: 3, candidates: [] },
       ],
     });
-    h.startTramoAction.mockResolvedValue({ batchId: "b1", createdCount: 2, skippedCount: 0, stageCreated: true, project: PROJECT, workflow: { id: "w2" } });
+    h.startEtapaAction.mockResolvedValue({ batchId: "b1", createdCount: 2, skippedCount: 0, stageCreated: true, project: PROJECT, workflow: { id: "w2" } });
     h.batchRows = [
       { id: "task-1", commitmentDate: "2026-11-11", reviewDate: null, deliveryDate: "2026-11-21" },
       { id: "task-2", commitmentDate: null, reviewDate: null, deliveryDate: null },
@@ -410,7 +410,7 @@ describe("writes", () => {
 
     const result = await run("schedule_from_template");
 
-    expect(h.startTramoAction).toHaveBeenCalledWith({ projectId: "p1", workflowId: "w2", phaseIds: ["ph1"], assignment: { mode: "none" } });
+    expect(h.startEtapaAction).toHaveBeenCalledWith({ projectId: "p1", workflowId: "w2", phaseIds: ["ph1"], assignment: { mode: "none" } });
     // Project start 2026-11-01 → 2026-12-01 is +30 days.
     expect(h.updateTaskAction).toHaveBeenCalledTimes(1);
     expect(h.updateTaskAction).toHaveBeenCalledWith("task-1", { commitmentDate: "2026-12-11", reviewDate: null, deliveryDate: "2026-12-21" });
@@ -427,16 +427,16 @@ describe("writes", () => {
 
   it("schedule_from_template creates nothing when the templates are already on the project", async () => {
     h.fetchWorkflowsAction.mockResolvedValue([{ id: "w2", key: "diseno", name: "Diseño" }]);
-    h.previewStartTramoAction.mockResolvedValue({ phases: [{ phase: { id: "ph1" }, templates: [], existing: 4, candidates: [] }] });
+    h.previewStartEtapaAction.mockResolvedValue({ phases: [{ phase: { id: "ph1" }, templates: [], existing: 4, candidates: [] }] });
     const result = await run("schedule_from_template");
     expect(result).toMatchObject({ ok: false, error: "NOTHING_TO_CREATE" });
-    expect(h.startTramoAction).not.toHaveBeenCalled();
+    expect(h.startEtapaAction).not.toHaveBeenCalled();
     expect(h.addProjectCommentAction).not.toHaveBeenCalled();
   });
 
   it("returns action errors with the Spanish copy", async () => {
     h.fetchWorkflowsAction.mockResolvedValue([{ id: "w2", key: "diseno", name: "Diseño" }]);
-    h.previewStartTramoAction.mockRejectedValue(new Error("FORBIDDEN"));
+    h.previewStartEtapaAction.mockRejectedValue(new Error("FORBIDDEN"));
     const result = await run("schedule_from_template");
     expect(result).toEqual({ ok: false, error: "FORBIDDEN", message: "No tienes permiso para realizar esta acción." });
   });

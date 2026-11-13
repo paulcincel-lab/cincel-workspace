@@ -7,9 +7,9 @@ import type { FlowExecutor } from "@/lib/project-flow/db";
 import { FLOW_ERROR, flowError } from "@/lib/project-flow/errors";
 import { recordChanges } from "@/lib/repositories/history-repository";
 import { assertPhaseInWorkflow, listPhasesByWorkflow } from "@/lib/repositories/workflow-phases-repository";
-import { TRAMO_COLOR_SLOTS, type TramoColorSlot } from "@/lib/tramos/tramo-color";
+import { ETAPA_COLOR_SLOTS, type EtapaColorSlot } from "@/lib/etapas/etapa-color";
 import type {
-  TramoReadiness,
+  EtapaReadiness,
   Workflow,
   WorkflowDetail,
   WorkflowInput,
@@ -25,9 +25,9 @@ const clean = (v: string | null | undefined): string | null => {
 };
 
 /** A stored `color_slot` as a slot; anything outside 1–5 reads as null (derived color). */
-export function toColorSlot(value: number | null | undefined): TramoColorSlot | null {
-  return typeof value === "number" && (TRAMO_COLOR_SLOTS as readonly number[]).includes(value)
-    ? (value as TramoColorSlot)
+export function toColorSlot(value: number | null | undefined): EtapaColorSlot | null {
+  return typeof value === "number" && (ETAPA_COLOR_SLOTS as readonly number[]).includes(value)
+    ? (value as EtapaColorSlot)
     : null;
 }
 
@@ -90,14 +90,14 @@ const toRef = (w: { id: string; key: string; name: string; sortOrder: number; co
 
 /**
  * Readiness from `READINESS` (lib/project-flow/catalog.ts), resolved through
- * `workflow_phases.key` among live workflows. Null for a tramo with no rule,
- * or when the previous tramo or its gate fase is missing.
+ * `workflow_phases.key` among live workflows. Null for an etapa with no rule,
+ * or when the previous etapa or its gate fase is missing.
  */
 function resolveReadiness(
   workflow: { key: string },
   byKey: ReadonlyMap<string, { id: string; key: string; name: string; sortOrder: number }>,
   phasesOf: (workflowId: string) => Array<{ id: string; name: string; sortOrder: number; key: string | null }>
-): TramoReadiness {
+): EtapaReadiness {
   const rule = READINESS[workflow.key];
   if (!rule) return null;
   const after = byKey.get(rule.after);
@@ -126,7 +126,7 @@ export async function listWorkflows(
   const ids = rows.map((r) => r.id);
   const [phases, gateRows] = await Promise.all([
     listPhasesByWorkflow(ids, { includeInactive: options.includeInactivePhases }),
-    // Every fase with a key of every live workflow: readiness gates may sit in a tramo filtered out above.
+    // Every fase with a key of every live workflow: readiness gates may sit in an etapa filtered out above.
     db
       .select({
         id: workflowPhases.id,
@@ -153,7 +153,7 @@ export async function listWorkflows(
 }
 
 /**
- * Active tramos with their active fases, in **one** query, for pickers that
+ * Active etapas with their active fases, in **one** query, for pickers that
  * only need the fases (Ajustes › Puestos, `PositionEditorDrawer`). Same order
  * and fase rows as `listWorkflows({})`, but `templates` is always `[]` and
  * `readiness` is always `null`: use `listWorkflows` when those matter.
@@ -209,7 +209,7 @@ export async function getWorkflowByKey(key: string): Promise<WorkflowDetail | nu
 }
 
 /** INVALID for a color slot outside 1–5 (`workflows_color_slot_check`). */
-function cleanColorSlot(value: number | null | undefined): TramoColorSlot | null {
+function cleanColorSlot(value: number | null | undefined): EtapaColorSlot | null {
   if (value === null || value === undefined) return null;
   const slot = toColorSlot(value);
   if (slot === null) throw new Error("INVALID: colorSlot");
@@ -368,7 +368,7 @@ export async function listTemplates(
   return rows.map((r) => toTemplate(r, names));
 }
 
-/** `phaseId` is required. Errors: NOT_FOUND (tramo), INVALID (no fase), PHASE_MISMATCH, NAME_TAKEN. */
+/** `phaseId` is required. Errors: NOT_FOUND (etapa), INVALID (no fase), PHASE_MISMATCH, NAME_TAKEN. */
 export async function createTemplate(
   workflowId: string,
   input: WorkflowTaskTemplateInput,
@@ -498,7 +498,7 @@ export async function reorderTemplates(workflowId: string, orderedIds: string[])
   });
 }
 
-/** One transaction, `sort_order` = index, live tramos only (Ajustes › Tramos y fases). */
+/** One transaction, `sort_order` = index, live etapas only (Ajustes › Etapas y fases). */
 export async function reorderWorkflows(orderedIds: string[]): Promise<void> {
   await db.transaction(async (tx) => {
     for (const [i, id] of orderedIds.entries()) {
@@ -510,7 +510,7 @@ export async function reorderWorkflows(orderedIds: string[]): Promise<void> {
   });
 }
 
-/** Per tramo id: the live active projects whose current tramo it is ("Proyectos activos"). */
+/** Per etapa id: the live active projects whose current etapa it is ("Proyectos activos"). */
 export async function countActiveProjectsByWorkflow(): Promise<Record<string, number>> {
   const rows = await db
     .select({ workflowId: projects.currentWorkflowId, n: count() })
@@ -522,7 +522,7 @@ export async function countActiveProjectsByWorkflow(): Promise<Record<string, nu
   return out;
 }
 
-/** Per fase id: its live tasks ("{n} tareas" in the tramo editor). */
+/** Per fase id: its live tasks ("{n} tareas" in the etapa editor). */
 export async function countTasksByPhase(): Promise<Record<string, number>> {
   const rows = await db
     .select({ phaseId: tasks.phaseId, n: count() })
@@ -534,8 +534,8 @@ export async function countTasksByPhase(): Promise<Record<string, number>> {
   return out;
 }
 
-/** Active tramos for the sidebar and tabs, by `sortOrder` (BE §8.2). */
-export async function listTramosNav(): Promise<WorkflowRef[]> {
+/** Active etapas for the sidebar and tabs, by `sortOrder` (BE §8.2). */
+export async function listEtapasNav(): Promise<WorkflowRef[]> {
   const rows = await db
     .select({
       id: workflows.id,
@@ -552,7 +552,7 @@ export async function listTramosNav(): Promise<WorkflowRef[]> {
 
 /**
  * Whether Presale starts on its own when a project is created: a live,
- * active `presale` tramo set to `on_create` (the create dialog's copy). One
+ * active `presale` etapa set to `on_create` (the create dialog's copy). One
  * statement instead of the full `listWorkflows` the page used to read.
  */
 export async function presaleAutoStart(): Promise<boolean> {
@@ -573,7 +573,7 @@ export async function presaleAutoStart(): Promise<boolean> {
 
 /**
  * The UI switch (BE §7.1): `true` stores `on_create` for the first active
- * tramo and `on_ready` for the others; `false` stores `manual`. NOT_FOUND.
+ * etapa and `on_ready` for the others; `false` stores `manual`. NOT_FOUND.
  */
 export async function setWorkflowAutoStart(
   id: string,

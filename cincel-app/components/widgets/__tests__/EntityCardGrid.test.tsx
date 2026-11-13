@@ -84,10 +84,10 @@ describe("EntityCardGrid", () => {
 
     const cards = container.querySelectorAll('[data-slot="card"][data-item]');
     expect(cards).toHaveLength(entityCardProjectsFixture.length);
-    // Tramo items get the tinted 84 px head and a 52 px ring.
+    // Etapa items get the tinted 84 px head and a 52 px ring.
     expect(container.querySelectorAll('[data-slot="entity-head"]')).toHaveLength(entityCardProjectsFixture.length);
     expect(container.querySelectorAll('[data-slot="entity-progress"]')).toHaveLength(entityCardProjectsFixture.length);
-    // Cards carry the tramo color for the tint.
+    // Cards carry the etapa color for the tint.
     const first = cards[0] as HTMLElement;
     expect(first.style.getPropertyValue("--entity-color")).toMatch(/^var\(--chart-[1-3]\)$/);
     expect(first.className).toContain("shadow-sm");
@@ -98,7 +98,7 @@ describe("EntityCardGrid", () => {
     }
   });
 
-  it("Visual: items without a etapa render an icon chip instead of a tinted head", () => {
+  it("Visual: items without an etapa render an icon chip instead of a tinted head", () => {
     const { container } = renderGrid("visual", { items: entityCardLibraryFixture });
     expect(container.querySelector('[data-slot="entity-head"]')).toBeNull();
     expect(container.querySelectorAll('[data-slot="entity-icon"]')).toHaveLength(entityCardLibraryFixture.length);

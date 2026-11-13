@@ -23,7 +23,7 @@ const ID = "33333333-3333-4333-8333-333333333333";
 
 const shell = {
   detail: { id: ID },
-  project: { id: ID, name: "Casa Lomas", tramo: null },
+  project: { id: ID, name: "Casa Lomas", etapa: null },
   counts: { tareas: 3, archivos: 0, clientes: 1 },
   canManagePortal: true,
 } as unknown as ProjectTabShell;

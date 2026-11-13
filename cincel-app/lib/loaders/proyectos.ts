@@ -29,7 +29,7 @@ import { listInvitableContacts, type PortalInvitableContact } from "@/lib/reposi
 import type { PortalAccessRow, PortalActivityRow } from "@/lib/types/portal";
 import type { StaffFilesResult } from "@/lib/types/workspace-access";
 // List, Resumen and Tareas (5a, #959)
-import { loadProjectResumen, tramoCatalog } from "@/lib/proyectos/project-resumen";
+import { loadProjectResumen, etapaCatalog } from "@/lib/proyectos/project-resumen";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import { listPortfolioRows } from "@/lib/repositories/projects-portfolio-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
@@ -271,17 +271,17 @@ export type ProyectosPageData = {
   projects: ProjectListItem[];
   /** `budgetSpentPct` is null unless `canSeeAdminData`. */
   portfolio: PortfolioRow[];
-  tramos: WorkflowRef[];
+  etapas: WorkflowRef[];
   /** Presale starts on its own when a project is created (the create dialog's copy). */
   presaleAutoStart: boolean;
   canSeeAdminData: boolean;
   canCreateProject: boolean;
-  /** The board may move projects between tramos (`setProjectCurrentTramoAction` checks it again). */
+  /** The board may move projects between etapas (`setProjectCurrentEtapaAction` checks it again). */
   canChangeProjectStage: boolean;
   /** Project fields edit in place (Responsable, #1026); `updateProjectAction` checks it again. Absent = false. */
   canEditProjectGeneral?: boolean;
-  /** The create dialog shows "Tramo inicial" (`canCreateProject` and `activities.canCreateActivity`, #1034). Absent = false. */
-  canPickStartTramo?: boolean;
+  /** The create dialog shows "Etapa inicial" (`canCreateProject` and `activities.canCreateActivity`, #1034). Absent = false. */
+  canPickStartEtapa?: boolean;
   /** The viewer's staff id ("Solo míos": manager, coordinator or member). */
   viewerStaffId: string;
   /** Today in the project timezone (`scheduleToday`), `YYYY-MM-DD`: the delivery timeline's first day. */
@@ -300,11 +300,11 @@ export type ProyectoTareasData = {
 const ADMIN_TAREAS_KINDS: TaskKind[] = ["workflow", "usuario", "admin"];
 
 /**
- * `/proyectos` for `user`: the projects, their portfolio rows, the tramos and
+ * `/proyectos` for `user`: the projects, their portfolio rows, the etapas and
  * the create dialog's flags. Without `canViewProjects`, empty lists. The
  * create dialog's client and staff options are not here: they are lazy
  * `catalog.contacts('cliente')` / `catalog.staff()` queries. At most 8
- * statements: projects (3: rows, tramos, members), portfolio (3), tramos (1),
+ * statements: projects (3: rows, etapas, members), portfolio (3), etapas (1),
  * Presale auto-start (1).
  */
 export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new Date()): Promise<ProyectosPageData> {
@@ -316,7 +316,7 @@ export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new
     return {
       projects: [],
       portfolio: [],
-      tramos: [],
+      etapas: [],
       presaleAutoStart: false,
       canSeeAdminData: isAdmin,
       canCreateProject: false,
@@ -326,45 +326,45 @@ export async function loadProyectosPage(user: AuthenticatedUser, now: Date = new
       today,
     };
   }
-  const [projects, portfolio, tramos, presaleAutoStart] = await Promise.all([
+  const [projects, portfolio, etapas, presaleAutoStart] = await Promise.all([
     projectsRepository.listProjects({}, viewerScopeOf(user)),
     listPortfolioRows({ includeAdminData: isAdmin, now }),
-    tramoCatalog(),
+    etapaCatalog(),
     workflowsRepository.presaleAutoStart(),
   ]);
   return {
     projects,
     // The repository already nulls the budget for non-admins; the loader keeps the rule too.
     portfolio: isAdmin ? portfolio : portfolio.map((row) => ({ ...row, budgetSpentPct: null })),
-    tramos,
+    etapas,
     presaleAutoStart,
     canSeeAdminData: isAdmin,
     canCreateProject: capabilities.canCreateProject,
     canChangeProjectStage: capabilities.canChangeProjectStage,
     canEditProjectGeneral: capabilities.canEditProjectGeneral,
-    canPickStartTramo: canPickStartTramo(user),
+    canPickStartEtapa: canPickStartEtapa(user),
     viewerStaffId,
     today,
   };
 }
 
-/** Choosing the starting tramo of a new project: create projects and start tramos (#1034). */
-function canPickStartTramo(user: AuthenticatedUser): boolean {
+/** Choosing the starting etapa of a new project: create projects and start etapas (#1034). */
+function canPickStartEtapa(user: AuthenticatedUser): boolean {
   return resolveProjectsCapabilities(user).canCreateProject && resolveActivitiesCapabilities(user).canCreateActivity;
 }
 
 /**
- * `qk.proyectos.createStart()`: the create dialog's "Tramo inicial" options
+ * `qk.proyectos.createStart()`: the create dialog's "Etapa inicial" options
  * (#1034), one query (`listWorkflowPhaseTree`). Null without
- * `canPickStartTramo`.
+ * `canPickStartEtapa`.
  */
 export async function loadProjectCreateStartOptions(user: AuthenticatedUser): Promise<ProjectCreateStartOptions | null> {
-  if (!canPickStartTramo(user)) return null;
+  if (!canPickStartEtapa(user)) return null;
   const tree = await workflowsRepository.listWorkflowPhaseTree();
   const first = tree[0];
   return {
     defaultWorkflowId: first && first.autoStart === "on_create" && first.phases.length > 0 ? first.id : null,
-    tramos: tree.map((wf) => ({
+    etapas: tree.map((wf) => ({
       id: wf.id,
       key: wf.key,
       name: wf.name,
@@ -424,7 +424,7 @@ export async function loadProyectoTareasSummary(
 
 /**
  * `qk.proyectos.resumenSummary(id)` loader (#1051): every task number of the
- * Resumen (KPIs, tramos and fases, team load, "Lo que sigue") as SQL
+ * Resumen (KPIs, etapas and fases, team load, "Lo que sigue") as SQL
  * aggregates, four grouped statements, so the Resumen never reads the
  * project's task list. Null like `loadProyectoTareas`; without
  * `canViewActivities`, an empty summary.

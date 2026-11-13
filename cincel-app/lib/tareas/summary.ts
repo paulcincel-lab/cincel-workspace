@@ -1,7 +1,7 @@
 /**
  * Tareas · Analítico counts (`qk.tareas.summary(f)`): one grouping-sets query
- * over project + tramo, project and the whole set (`tasksRepository.taskSummary`),
- * so every KPI, "Ir a" count, header, tramo row and footer is right however
+ * over project + etapa, project and the whole set (`tasksRepository.taskSummary`),
+ * so every KPI, "Ir a" count, header, etapa row and footer is right however
  * many tasks match, not only over the loaded rows. Pure and client-safe.
  *
  * - open: not completado and no closing custom status;
@@ -14,61 +14,61 @@ import type { TaskSort } from "@/lib/tareas/sort";
 
 export type TareasSummaryCounts = { total: number; open: number; overdue: number; blocked: number; daysLateSum: number };
 
-export type TareasSummaryTramo = TareasSummaryCounts & {
-  /** `id: null` = the tasks without a tramo ("Sin tramo"), sorted last. */
-  tramo: { id: string | null; key: string | null; name: string; sortOrder: number };
+export type TareasSummaryEtapa = TareasSummaryCounts & {
+  /** `id: null` = the tasks without an etapa ("Sin etapa"), sorted last. */
+  etapa: { id: string | null; key: string | null; name: string; sortOrder: number };
 };
 
-export type TareasSummaryProject = TareasSummaryCounts & { project: { id: string; name: string }; tramos: TareasSummaryTramo[] };
+export type TareasSummaryProject = TareasSummaryCounts & { project: { id: string; name: string }; etapas: TareasSummaryEtapa[] };
 
 export type TareasSummary = {
-  /** The filtered set, by overdue desc then name; tramos by sort order. */
+  /** The filtered set, by overdue desc then name; etapas by sort order. */
   projects: TareasSummaryProject[];
   totals: TareasSummaryCounts & { projects: number };
   /**
    * The same filters without `mostrar` ("de 4", "de 28"). `projectList` names
-   * every project of that set with its task count and its count per tramo id
-   * (`""` = Sin tramo), so En retraso can name the projects it hides and say
+   * every project of that set with its task count and its count per etapa id
+   * (`""` = Sin etapa), so En retraso can name the projects it hides and say
    * "4 de 8 tareas".
    */
   unfiltered: { projects: number; total: number; projectList?: TareasSummaryUnfilteredProject[] };
 };
 
-export type TareasSummaryUnfilteredProject = { id: string; name: string; total: number; byTramo: Record<string, number> };
+export type TareasSummaryUnfilteredProject = { id: string; name: string; total: number; byEtapa: Record<string, number> };
 
-/** `byTramo` key of a tramo (`""` for Sin tramo). */
-export const summaryTramoKey = (tramoId: string | null): string => tramoId ?? "";
+/** `byEtapa` key of an etapa (`""` for Sin etapa). */
+export const summaryEtapaKey = (etapaId: string | null): string => etapaId ?? "";
 
 /**
- * The list filters of one Analítico tramo group (`qk.tareas.list`): the page
- * filters narrowed to the project and the tramo ("Sin tramo" is
- * `SIN_TRAMO_KEY`), in the "retraso" order or the header sort (`sort`,
+ * The list filters of one Analítico etapa group (`qk.tareas.list`): the page
+ * filters narrowed to the project and the etapa ("Sin etapa" is
+ * `SIN_ETAPA_KEY`), in the "retraso" order or the header sort (`sort`,
  * #1044; `orderDir` left out for asc, so the default key stays the same).
  */
 export function tareasGroupFilters(
   f: TareasListFilters,
   projectId: string,
-  tramoKey: string | null,
+  etapaKey: string | null,
   sort?: TaskSort | null,
 ): TareasListFilters {
   // The group is one project: the Proyecto multi-select (#1045) adds nothing, so its key stays the same.
   const { proyectos: _proyectos, ...rest } = f;
   const orderBy = sort?.orderBy ?? "retraso";
   const orderDir = sort?.orderDir === "desc" ? { orderDir: "desc" as const } : {};
-  return { ...rest, proyecto: projectId, tramo: tramoKey ?? SIN_TRAMO_KEY, orderBy, ...orderDir };
+  return { ...rest, proyecto: projectId, etapa: etapaKey ?? SIN_ETAPA_KEY, orderBy, ...orderDir };
 }
 
-/** Name of the tramo group of the tasks without a tramo. */
-export const SIN_TRAMO_LABEL = "Sin etapa";
+/** Name of the etapa group of the tasks without an etapa. */
+export const SIN_ETAPA_LABEL = "Sin etapa";
 
 /**
- * The tramo filter value of the "Sin tramo" group (`TareasListFilters.tramo`):
- * the tasks without a tramo. No live tramo key starts with `__`.
+ * The etapa filter value of the "Sin etapa" group (`TareasListFilters.etapa`):
+ * the tasks without an etapa. No live etapa key starts with `__`.
  */
-export const SIN_TRAMO_KEY = "__sin_tramo";
+export const SIN_ETAPA_KEY = "__sin_etapa";
 
-/** Sort order of "Sin tramo": after every real tramo. */
-export const SIN_TRAMO_SORT = 2147483647;
+/** Sort order of "Sin etapa": after every real etapa. */
+export const SIN_ETAPA_SORT = 2147483647;
 
 export const EMPTY_SUMMARY_COUNTS: TareasSummaryCounts = { total: 0, open: 0, overdue: 0, blocked: 0, daysLateSum: 0 };
 
@@ -90,9 +90,9 @@ export function compareSummaryProjects(a: TareasSummaryProject, b: TareasSummary
   return b.overdue - a.overdue || a.project.name.localeCompare(b.project.name, "es");
 }
 
-/** Tramos by sort order ("Sin tramo" last), then name. */
-export function compareSummaryTramos(a: TareasSummaryTramo, b: TareasSummaryTramo): number {
-  return a.tramo.sortOrder - b.tramo.sortOrder || a.tramo.name.localeCompare(b.tramo.name, "es");
+/** Etapas by sort order ("Sin etapa" last), then name. */
+export function compareSummaryEtapas(a: TareasSummaryEtapa, b: TareasSummaryEtapa): number {
+  return a.etapa.sortOrder - b.etapa.sortOrder || a.etapa.name.localeCompare(b.etapa.name, "es");
 }
 
 /** The projects of the unfiltered set that the filtered one leaves out (En retraso hides them), by name. */

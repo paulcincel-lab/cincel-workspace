@@ -53,7 +53,7 @@ const PROJECTS: CatalogProjectOption[] = [
   { id: "p-roble", name: "Casa Roble", status: "activo", currentWorkflowId: "w-diseno" },
 ];
 
-const CONTEXT: QuickAddContext = { label: "Diseño", projectId: "p-roble", tramoId: "w-diseno", assigneeId: null };
+const CONTEXT: QuickAddContext = { label: "Diseño", projectId: "p-roble", etapaId: "w-diseno", assigneeId: null };
 
 function seededClient(): QueryClient {
   const client = createTestQueryClient();
@@ -117,7 +117,7 @@ describe("QuickAddRow", () => {
     expect(onCreate).toHaveBeenCalledWith({
       title: "Revisar plafones",
       projectId: "p-roble",
-      tramoId: "w-diseno",
+      etapaId: "w-diseno",
       assigneeId: "p-ana",
       dueDate: "2026-11-13",
       priority: "alta",
@@ -155,7 +155,7 @@ describe("QuickAddRow", () => {
   });
 
   it("suggests the least-loaded person of the etapa when nobody is set", () => {
-    const { input } = renderRow({ context: { label: "Diseño", projectId: "p-roble", tramoId: "w-diseno" } });
+    const { input } = renderRow({ context: { label: "Diseño", projectId: "p-roble", etapaId: "w-diseno" } });
     typeInto(input, "Revisar planos");
     expect(hint()).toContain("Luisa Gómez tiene 1 abierta en");
     fireEvent.keyDown(input, { key: "Tab" });
@@ -253,7 +253,7 @@ describe("QuickAddRow", () => {
     expect(useNewTaskUi.getState()).toMatchObject({
       open: true,
       source: "quick-add",
-      defaults: { title: "Revisar", tramoKey: "diseno", managerId: "p-ana", deliveryDate: "2026-11-13", priority: "alta" },
+      defaults: { title: "Revisar", etapaKey: "diseno", managerId: "p-ana", deliveryDate: "2026-11-13", priority: "alta" },
     });
     expect(input.value).toBe("");
   });
@@ -273,7 +273,7 @@ describe("QuickAddRow", () => {
     typeInto(input, "Revisar #presale");
     expect(document.querySelector('[data-slot="quick-add-chips"]')?.textContent).not.toContain("· de la etapa");
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisar", tramoId: "w-presale" }));
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisar", etapaId: "w-presale" }));
     await screen.findByText("Creada: Creada");
   });
 

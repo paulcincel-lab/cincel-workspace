@@ -12,7 +12,7 @@ import type { WidgetView } from "@/lib/stores/dashboard-store";
 import type { DistributionSegment, RecordColumn, RecordTableData } from "@/lib/types/widgets";
 
 /**
- * Distribution in three styles (redesign FE §4.10.1, §15.3 "Tareas por tramo"):
+ * Distribution in three styles (redesign FE §4.10.1, §15.3 "Tareas por etapa"):
  *
  * - Visual: donut + legend on `components/ui/shadcn/chart.tsx` (replaces
  *   the old dashboard donut); the donut scales in (`ring-in`, 0.9 s).
@@ -149,7 +149,7 @@ export function distributionTable({
   };
 }
 
-/** Accessible summary of the donut ("Tareas por tramo: Presale 9 (18%), …; abiertas 51"). */
+/** Accessible summary of the donut ("Tareas por etapa: Presale 9 (18%), …; abiertas 51"). */
 export function distributionSummary(title: string, segments: DistributionSegment[], totalLabel?: string): string {
   const total = sumValues(segments);
   const parts = segments.map((s) => `${s.label} ${s.value} (${percentOf(s.value, total) ?? 0}%)`);

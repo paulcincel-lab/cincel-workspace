@@ -20,8 +20,8 @@ export const FLOW_ERROR = {
 } as const;
 export type FlowErrorCode = (typeof FLOW_ERROR)[keyof typeof FLOW_ERROR];
 
-/** `updateTaskAction` changing a task's existing tramo without being admin (#1022). */
-export const TASK_TRAMO_CHANGE_FORBIDDEN = "FORBIDDEN: task etapa change";
+/** `updateTaskAction` changing a task's existing etapa without being admin (#1022). */
+export const TASK_ETAPA_CHANGE_FORBIDDEN = "FORBIDDEN: task etapa change";
 
 /** `{ ok: false, error }` codes of the new monday actions (FE §7.8). */
 export const MONDAY_FLOW_ERROR = {
@@ -33,7 +33,7 @@ export type MondayFlowErrorCode = (typeof MONDAY_FLOW_ERROR)[keyof typeof MONDAY
 
 /** New monday plan issue codes (BE §10.4); added to `PlanIssueCode` when the importer switches (Phase 4). */
 export const FLOW_PLAN_WARNING_CODES = ["PHASE_UNRESOLVED", "CLIENT_MISSING", "ADMIN_ASSIGNEE_CLEARED"] as const;
-export const FLOW_PLAN_BLOCKING_CODES = ["TRAMO_MISSING", "PROJECT_NAME_TAKEN"] as const;
+export const FLOW_PLAN_BLOCKING_CODES = ["ETAPA_MISSING", "PROJECT_NAME_TAKEN"] as const;
 export type FlowPlanIssueCode =
   | (typeof FLOW_PLAN_WARNING_CODES)[number]
   | (typeof FLOW_PLAN_BLOCKING_CODES)[number];

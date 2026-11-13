@@ -14,7 +14,7 @@ import { filterTeamAnalitico, personasCsv, personasCsvFileName } from "@/lib/per
 import { useTeamAnaliticoState } from "@/lib/personas/use-team-analitico-state";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
-import { catalogTramosOptions } from "@/lib/query/options/catalog";
+import { catalogEtapasOptions } from "@/lib/query/options/catalog";
 import { TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/local-time";
 import type { UserTaskInput } from "@/lib/types/core";
 import type { PersonDatum } from "@/lib/types/widgets";
@@ -50,7 +50,7 @@ function downloadText(text: string, filename: string): void {
  */
 export function EquipoAnalitico({ people, counts, canCreate, canAssign, canCreateTask, onAddPerson }: EquipoAnaliticoProps) {
   const [state, setState] = useTeamAnaliticoState();
-  const { data: tramos = [] } = useQuery(catalogTramosOptions());
+  const { data: etapas = [] } = useQuery(catalogEtapasOptions());
   const today = localIsoDate(new Date(), TIME_TRACKING_TIME_ZONE);
   const create = useActionMutation(createUserTaskAction, {
     invalidate: (vars: UserTaskInput) => [qk.personas.equipo(), ...newTaskInvalidations(vars.projectId)],
@@ -62,7 +62,7 @@ export function EquipoAnalitico({ people, counts, canCreate, canAssign, canCreat
     const task = await create.mutateAsync({
       projectId: draft.projectId,
       title: draft.title,
-      workflowId: draft.tramoId,
+      workflowId: draft.etapaId,
       managerId: assignee.id,
       priority: draft.priority,
       commitmentDate: draft.dueDate,
@@ -75,7 +75,7 @@ export function EquipoAnalitico({ people, counts, canCreate, canAssign, canCreat
     downloadText(personasCsv(rows, today), personasCsvFileName(today));
   }
 
-  const activeTramos = tramos.filter((t) => t.key.trim() !== "");
+  const activeEtapas = etapas.filter((t) => t.key.trim() !== "");
 
   return (
     <div className="flex flex-col gap-4">
@@ -102,7 +102,7 @@ export function EquipoAnalitico({ people, counts, canCreate, canAssign, canCreat
           action: canCreate ? { label: "Agregar", onClick: onAddPerson } : undefined,
         }}
         team={{
-          tramos: activeTramos,
+          etapas: activeEtapas,
           today,
           state,
           onStateChange: setState,

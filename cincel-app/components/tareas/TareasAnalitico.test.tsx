@@ -54,9 +54,9 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
   QuickAddRow: (props: QuickAddProps) => {
     quickAddRows.push(props);
     return (
-      <tr data-testid="quick-add" data-project={props.context.projectId ?? ""} data-tramo={props.context.tramoId ?? ""}>
+      <tr data-testid="quick-add" data-project={props.context.projectId ?? ""} data-etapa={props.context.etapaId ?? ""}>
         <td colSpan={props.colSpan}>
-          <button type="button" onClick={() => void props.onCreate({ title: "Nueva", projectId: props.context.projectId, tramoId: props.context.tramoId ?? null, assigneeId: null, dueDate: null, priority: "media" })}>
+          <button type="button" onClick={() => void props.onCreate({ title: "Nueva", projectId: props.context.projectId, etapaId: props.context.etapaId ?? null, assigneeId: null, dueDate: null, priority: "media" })}>
             {props.context.label}
           </button>
         </td>
@@ -73,7 +73,7 @@ import {
   ANALITICO_FACETS,
   ANALITICO_LATE_SUMMARY,
   ANALITICO_SUMMARY,
-  ANALITICO_TRAMOS,
+  ANALITICO_ETAPAS,
   seedAnalitico,
 } from "./fixtures/analitico-summary";
 import { qk } from "@/lib/query/keys";
@@ -94,7 +94,7 @@ function renderAnalitico(search = "", { canCreate = true } = {}) {
     <TareasAnalitico
       query={query}
       facets={ANALITICO_FACETS}
-      tramos={ANALITICO_TRAMOS}
+      etapas={ANALITICO_ETAPAS}
       staff={[{ id: "s1", name: "Ana Ruiz" }]}
       actions={null}
       search=""
@@ -159,7 +159,7 @@ describe("TareasAnalitico", () => {
     expect(late.container.querySelector('[data-slot="tareas-totals"]')?.textContent).toBe(
       "Total · 3 vencidas en 1 proyecto19 días de retraso · 6.3 d promedio",
     );
-    // Header and tramo captions say how many of all.
+    // Header and etapa captions say how many of all.
     const lomas = screen.getByRole("region", { name: "Casa Lomas" });
     expect(lomas.textContent).toContain("3 de 4 tareas · 2 etapas");
     expect(lomas.textContent).toContain("1 de 2 tareas");
@@ -187,7 +187,7 @@ describe("TareasAnalitico", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Contraer todo" }));
     await waitFor(() => expect(screen.getByText("Se contrajeron 5 grupos")).toBeTruthy());
-    // Collapsed projects hide their tramo groups: only the two project headers remain.
+    // Collapsed projects hide their etapa groups: only the two project headers remain.
     expect(headers().every((b) => b.getAttribute("aria-expanded") === "false")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Expandir todo" }));
@@ -224,14 +224,14 @@ describe("TareasAnalitico", () => {
     renderAnalitico();
     const rows = screen.getAllByTestId("quick-add");
     expect(rows).toHaveLength(3);
-    expect(rows.map((r) => `${r.dataset.project}/${r.dataset.tramo}`)).toEqual(["p1/w-presale", "p1/w-diseno", "p2/w-diseno"]);
+    expect(rows.map((r) => `${r.dataset.project}/${r.dataset.etapa}`)).toEqual(["p1/w-presale", "p1/w-diseno", "p2/w-diseno"]);
     expect(quickAddRows.at(-1)?.variant).toBe("row");
     expect(quickAddRows.at(-1)?.context.placeholder).toBe("Nueva tarea en Diseño…");
-    // The project and tramo come from the group.
+    // The project and etapa come from the group.
     await act(async () => {
       fireEvent.click(within(rows[0]).getByRole("button"));
     });
-    expect(quickAdd.create).toHaveBeenCalledWith(expect.objectContaining({ projectId: "p1", tramoId: "w-presale" }));
+    expect(quickAdd.create).toHaveBeenCalledWith(expect.objectContaining({ projectId: "p1", etapaId: "w-presale" }));
     cleanup();
 
     renderAnalitico("mostrar=en_retraso");
@@ -273,10 +273,10 @@ describe("TareasAnalitico", () => {
     expect(within(mostrar).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Todas7", "Abiertas6", "En retraso3"]);
     fireEvent.click(within(mostrar).getByRole("radio", { name: /En retraso/ }));
     expect(onQuery).toHaveBeenCalledWith({ mostrar: "en_retraso" });
-    const tramo = screen.getByRole("radiogroup", { name: "Etapa" });
-    fireEvent.click(within(tramo).getByRole("radio", { name: /Presale/ }));
-    expect(onQuery).toHaveBeenCalledWith({ tramo: "presale" });
-    fireEvent.click(within(tramo).getByRole("radio", { name: /Todos/ }));
+    const etapa = screen.getByRole("radiogroup", { name: "Etapa" });
+    fireEvent.click(within(etapa).getByRole("radio", { name: /Presale/ }));
+    expect(onQuery).toHaveBeenCalledWith({ etapa: "presale" });
+    fireEvent.click(within(etapa).getByRole("radio", { name: /Todos/ }));
     expect(screen.getByRole("searchbox", { name: "Buscar tareas" })).toBeTruthy();
   });
 
@@ -295,7 +295,7 @@ describe("TareasAnalitico", () => {
       <TareasAnalitico
         query={query}
         facets={ANALITICO_FACETS}
-        tramos={ANALITICO_TRAMOS}
+        etapas={ANALITICO_ETAPAS}
         staff={[]}
         actions={null}
         search=""

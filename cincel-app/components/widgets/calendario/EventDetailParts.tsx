@@ -5,31 +5,31 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { PeopleStack } from "@/components/widgets/PeopleStack";
-import { tramoColorClass } from "@/lib/tramos/tramo-color";
-import type { CalItem, CalTramoRef, DetailAction } from "@/lib/types/calendario";
+import { etapaColorClass } from "@/lib/etapas/etapa-color";
+import type { CalItem, CalEtapaRef, DetailAction } from "@/lib/types/calendario";
 import { cn } from "@/lib/utils";
 
-import { DETAIL_COPY, kindChip, projectTramoLine, responsableLine, taskNote, taskWhen } from "./event-detail-model";
+import { DETAIL_COPY, kindChip, projectEtapaLine, responsableLine, taskNote, taskWhen } from "./event-detail-model";
 
-/** A tramo's colour as the dot and band classes (tokens only). */
-export function tramoBandClass(tramo: CalTramoRef | null): string {
-  return tramo ? tramoColorClass({ key: tramo.key ?? "", sortOrder: 0, colorSlot: tramo.colorSlot }) : tramoColorClass(null);
+/** An etapa's colour as the dot and band classes (tokens only). */
+export function etapaBandClass(etapa: CalEtapaRef | null): string {
+  return etapa ? etapaColorClass({ key: etapa.key ?? "", sortOrder: 0, colorSlot: etapa.colorSlot }) : etapaColorClass(null);
 }
 
-export function TramoBand({ tramo, className }: { tramo: CalTramoRef | null; className?: string }) {
-  return <span aria-hidden data-slot="tramo-band" className={cn("block h-1 w-full rounded-full", tramoBandClass(tramo), className)} />;
+export function EtapaBand({ etapa, className }: { etapa: CalEtapaRef | null; className?: string }) {
+  return <span aria-hidden data-slot="etapa-band" className={cn("block h-1 w-full rounded-full", etapaBandClass(etapa), className)} />;
 }
 
 export function KindChip({ item }: { item: CalItem }) {
   return <Badge variant="outline">{kindChip(item)}</Badge>;
 }
 
-/** The task facts every presentation shares: when, project · tramo, responsable · estatus, note. */
+/** The task facts every presentation shares: when, project · etapa, responsable · estatus, note. */
 export function TaskFacts({ item, showNote = true }: { item: Extract<CalItem, { kind: "task" }>; showNote?: boolean }) {
   return (
     <div className="flex flex-col gap-1.5 text-sm">
       <p className={cn("font-medium", item.overdue ? "text-destructive" : "text-foreground")}>{taskWhen(item)}</p>
-      <p className="text-muted-foreground">{projectTramoLine(item)}</p>
+      <p className="text-muted-foreground">{projectEtapaLine(item)}</p>
       <p className="flex items-center gap-2 text-muted-foreground">
         <PeopleStack people={item.manager ? [item.manager] : []} label="Responsable" />
         <span>{responsableLine(item)}</span>

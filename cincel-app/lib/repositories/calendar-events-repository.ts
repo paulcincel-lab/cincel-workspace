@@ -30,7 +30,7 @@ import {
   workflows,
 } from "@/lib/db/schema";
 import { recordChange, recordComment } from "@/lib/repositories/history-repository";
-import { tramoColorSlot } from "@/lib/tramos/tramo-color";
+import { etapaColorSlot } from "@/lib/etapas/etapa-color";
 import type {
   AttendeeResponse,
   CalEventAttendee,
@@ -149,7 +149,7 @@ const itemSelect = {
   minutesStatus: meetingMinutes.status,
 };
 
-/** The joins shared by every read: project, tramo (own or the project's current one), organizer, minutes. */
+/** The joins shared by every read: project, etapa (own or the project's current one), organizer, minutes. */
 function selectItemRows(tx: Tx = db) {
   return tx
     .select(itemSelect)
@@ -162,7 +162,7 @@ function selectItemRows(tx: Tx = db) {
 
 function slotOf(row: ItemRow): 1 | 2 | 3 | 4 | 5 | null {
   if (!row.wfId) return null;
-  return tramoColorSlot({ key: row.wfKey ?? "", sortOrder: row.wfOrder ?? 0, colorSlot: row.wfSlot }) as 1 | 2 | 3 | 4 | 5 | null;
+  return etapaColorSlot({ key: row.wfKey ?? "", sortOrder: row.wfOrder ?? 0, colorSlot: row.wfSlot }) as 1 | 2 | 3 | 4 | 5 | null;
 }
 
 function toItem(user: AuthenticatedUser, row: ItemRow, attendees: CalEventAttendee[]): CalEventItem {
@@ -179,7 +179,7 @@ function toItem(user: AuthenticatedUser, row: ItemRow, attendees: CalEventAttend
     end: toOffsetIso(ev.endsAt, ev.timeZone),
     allDay: ev.allDay,
     project: ev.projectId && row.projectName ? { id: ev.projectId, name: row.projectName } : null,
-    tramo: row.wfId ? { id: row.wfId, key: row.wfKey, name: row.wfName ?? "", colorSlot: slotOf(row) } : null,
+    etapa: row.wfId ? { id: row.wfId, key: row.wfKey, name: row.wfName ?? "", colorSlot: slotOf(row) } : null,
     location: ev.location,
     meetUrl: ev.meetUrl,
     attendees,
@@ -516,7 +516,7 @@ async function writeAttendees(tx: Tx, eventId: string, rows: ResolvedAttendee[])
 
 // ── Writes ──────────────────────────────────────────────────────────────────
 
-/** Linking a project requires seeing it; returns the project's current tramo for the edge colour. */
+/** Linking a project requires seeing it; returns the project's current etapa for the edge colour. */
 async function assertProjectLinkable(tx: Tx, user: AuthenticatedUser, projectId: string): Promise<{ currentWorkflowId: string | null }> {
   if (!resolveProjectsCapabilities(user).canViewProjects) throw new Error("FORBIDDEN");
   const [project] = await tx

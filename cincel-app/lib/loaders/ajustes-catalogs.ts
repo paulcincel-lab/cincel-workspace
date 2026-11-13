@@ -25,20 +25,20 @@ import type {
   AjustesEstatusPageData,
   AjustesPermisosPageData,
   AjustesPuestosPageData,
-  AjustesTramosPageData,
+  AjustesEtapasPageData,
   PermisosStaffRow,
 } from "@/lib/types/ajustes-catalogs";
 
 /**
  * Loaders of the Ajustes catalog segments (Query Migration 9b, #964):
- * estatus, puestos, tramos and permisos. Each checks the segment capability
+ * estatus, puestos, etapas and permisos. Each checks the segment capability
  * (`AJUSTES_SEGMENT_CAPABILITY`, the rule of the segment layout) and throws
  * FORBIDDEN without it, so the page-data actions and the server prefetch
  * apply the same rule. Their result is dehydrated into public HTML: only
  * what the page shows leaves the server.
  */
 
-type CatalogSegment = "estatus" | "puestos" | "tramos" | "permisos";
+type CatalogSegment = "estatus" | "puestos" | "etapas" | "permisos";
 
 function requireSegment(user: AuthenticatedUser, segment: CatalogSegment): void {
   if (!AJUSTES_SEGMENT_CAPABILITY[segment](user)) throw new Error(`FORBIDDEN: ajustes ${segment}`);
@@ -61,7 +61,7 @@ export async function loadAjustesEstatus(user: AuthenticatedUser): Promise<Ajust
 }
 
 /**
- * Puestos: the puestos (4 q) and the active tramos with their active fases
+ * Puestos: the puestos (4 q) and the active etapas with their active fases
  * for the candidate picker, in one query (`listWorkflowPhaseTree`): 5 q in
  * one wave, instead of the full `listWorkflows` (5 q in 3 waves).
  */
@@ -75,12 +75,12 @@ export async function loadAjustesPuestos(user: AuthenticatedUser): Promise<Ajust
 }
 
 /**
- * Tramos y fases: every tramo, fase and template, inactive ones included for
- * a manager (as `fetchWorkflowsAction`), plus active projects per tramo and
+ * Etapas y fases: every etapa, fase and template, inactive ones included for
+ * a manager (as `fetchWorkflowsAction`), plus active projects per etapa and
  * tasks per fase, in one wave.
  */
-export async function loadAjustesTramos(user: AuthenticatedUser): Promise<AjustesTramosPageData> {
-  requireSegment(user, "tramos");
+export async function loadAjustesEtapas(user: AuthenticatedUser): Promise<AjustesEtapasPageData> {
+  requireSegment(user, "etapas");
   const [workflows, activeProjects, phaseTaskCounts] = await Promise.all([
     resolveWorkflowsCapabilities(user).canManageWorkflows
       ? workflowsRepository.listWorkflows({

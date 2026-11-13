@@ -9,7 +9,7 @@ import { newTaskWorkflowsKey, useQuickAddUndo } from "@/components/tareas/quick-
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { AreaBadge } from "@/components/v2/status/AreaBadge";
-import { tramoBadgeModel } from "@/components/widgets/TramoBadge";
+import { etapaBadgeModel } from "@/components/widgets/EtapaBadge";
 import { fetchCatalogAssignableStaff, fetchCatalogProjectOptions } from "@/lib/actions/page-data/catalog-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
@@ -25,7 +25,7 @@ import {
   type ParsedQuickAdd,
   type QuickAddPerson,
   type QuickAddToken,
-  type QuickAddTramo,
+  type QuickAddEtapa,
 } from "@/lib/quick-add/parse";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { openAssistant } from "@/lib/stores/assistant-ui-store";
@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
  * Smart quick-add (ADR 0005, frames `QuickAdd`, `Main`, `Lista-Esencial`,
  * `Tareas-Visual`): the last line of a list (`row`, inside `GroupedTable`),
  * an Esencial card (`card`) or a kanban column (`column`) is an input;
- * typing there creates a task. `parseQuickAdd` reads `@persona`, `#tramo`,
+ * typing there creates a task. `parseQuickAdd` reads `@persona`, `#etapa`,
  * dates and `!prioridad`; chips preview the draft and one suggestion line
  * offers the next step (Tab accepts it). Enter calls `onCreate` (a pending
  * row shows until it settles, then a "Creada" line with "Deshacer"); without
@@ -50,7 +50,7 @@ import { cn } from "@/lib/utils";
 export type QuickAddContext = {
   label: string;
   projectId: string | null;
-  tramoId?: string | null;
+  etapaId?: string | null;
   status?: string;
   assigneeId?: string | null;
   placeholder?: string;
@@ -60,7 +60,7 @@ export type QuickAddContext = {
 export type QuickAddDraft = {
   title: string;
   projectId: string | null;
-  tramoId: string | null;
+  etapaId: string | null;
   assigneeId: string | null;
   dueDate: string | null;
   priority: TaskPriority;
@@ -108,7 +108,7 @@ function joinNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} o ${names[names.length - 1]}`;
 }
 
-/** The tramo's people (the catalog's suggested ones) with their load, least loaded first. */
+/** The etapa's people (the catalog's suggested ones) with their load, least loaded first. */
 function loadedPeople(people: readonly QuickAddPerson[]): LoadedPerson[] {
   return people
     .filter(
@@ -121,18 +121,18 @@ function loadedPeople(people: readonly QuickAddPerson[]): LoadedPerson[] {
  * The suggestion line, first match wins: an ambiguous token, the least-loaded
  * person when nobody is set, a lighter person when the assignee has 2+
  * overdue, a Friday (Monday on Fridays) when there is no date, else ready.
- * Rules 2–3 need the per-person counts, absent without a tramo.
+ * Rules 2–3 need the per-person counts, absent without an etapa.
  */
 export function quickAddSuggestion(input: {
   parsed: ParsedQuickAdd;
   people: readonly QuickAddPerson[];
-  tramos: readonly QuickAddTramo[];
-  tramoName: string | null;
+  etapas: readonly QuickAddEtapa[];
+  etapaName: string | null;
   assigneeId: string | null;
   contextHasAssignee: boolean;
   today: string;
 }): QuickAddSuggestion {
-  const { parsed, people, tramoName, assigneeId, today } = input;
+  const { parsed, people, etapaName, assigneeId, today } = input;
 
   const ambiguous = parsed.tokens.find((t) => t.status === "ambiguous" && (t.candidates?.length ?? 0) > 1);
   if (ambiguous?.candidates) {
@@ -140,7 +140,7 @@ export function quickAddSuggestion(input: {
     const isPerson = ambiguous.kind === "person";
     const replacement = isPerson
       ? personHandle(people.find((p) => p.id === first.id) ?? { id: first.id, name: first.label }, people)
-      : `#${input.tramos.find((t) => t.id === first.id)?.key ?? first.label}`;
+      : `#${input.etapas.find((t) => t.id === first.id)?.key ?? first.label}`;
     const names = joinNames(ambiguous.candidates.slice(0, 3).map((c) => c.label));
     return {
       text: `${isPerson ? "¿Quién?" : "¿Qué etapa?"} ${names}.`,
@@ -148,13 +148,13 @@ export function quickAddSuggestion(input: {
     };
   }
 
-  const load = tramoName ? loadedPeople(people) : [];
+  const load = etapaName ? loadedPeople(people) : [];
   const personToken = [...parsed.tokens].reverse().find((t) => t.kind === "person" && t.status === "resolved");
 
   if (!personToken && !input.contextHasAssignee && load.length > 0) {
     const x = load[0];
     return {
-      text: `${x.name} tiene ${abiertas(x.openCount)} en ${tramoName}. ¿Asignar a ${x.name}?`,
+      text: `${x.name} tiene ${abiertas(x.openCount)} en ${etapaName}. ¿Asignar a ${x.name}?`,
       action: { label: `Asignar a ${firstName(x.name)}`, apply: (text) => appendToken(text, personHandle(x, people)) },
     };
   }
@@ -166,7 +166,7 @@ export function quickAddSuggestion(input: {
     if (lighter) {
       const handle = personHandle(lighter, people);
       return {
-        text: `${assignee.name} ya tiene ${abiertas(open)} en ${tramoName} y ${vencidas(assignee.overdueCount ?? 0)}. ${lighter.name} tiene ${lighter.openCount}. ¿Cambiar a ${lighter.name}?`,
+        text: `${assignee.name} ya tiene ${abiertas(open)} en ${etapaName} y ${vencidas(assignee.overdueCount ?? 0)}. ${lighter.name} tiene ${lighter.openCount}. ¿Cambiar a ${lighter.name}?`,
         action: {
           label: `Cambiar a ${firstName(lighter.name)}`,
           apply: (text) => (personToken ? replaceToken(text, personToken, handle) : appendToken(text, handle)),
@@ -242,20 +242,20 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
     select: toProjectChoices,
   });
   const workflows = useMemo<WorkflowDetail[]>(() => workflowsQuery.data ?? [], [workflowsQuery.data]);
-  const tramos = useMemo<QuickAddTramo[]>(() => workflows.map((w) => ({ id: w.id, key: w.key, name: w.name })), [workflows]);
+  const etapas = useMemo<QuickAddEtapa[]>(() => workflows.map((w) => ({ id: w.id, key: w.key, name: w.name })), [workflows]);
   const project = projectsQuery.data?.find((p) => p.id === context.projectId) ?? null;
 
   const today = zonedIsoDate(new Date(), timeZone);
 
-  // The tramo never depends on the people, so a first parse without them picks the staff query.
-  const tramoParse = parseQuickAdd(text, { today, people: [], tramos, meId });
-  const tramoFromContext = !tramoParse.tramoId && context.tramoId != null;
-  const tramoId = tramoParse.tramoId ?? context.tramoId ?? resolveWorkflowId(null, workflows, { project });
-  const workflow = workflows.find((w) => w.id === tramoId) ?? null;
+  // The etapa never depends on the people, so a first parse without them picks the staff query.
+  const etapaParse = parseQuickAdd(text, { today, people: [], etapas, meId });
+  const etapaFromContext = !etapaParse.etapaId && context.etapaId != null;
+  const etapaId = etapaParse.etapaId ?? context.etapaId ?? resolveWorkflowId(null, workflows, { project });
+  const workflow = workflows.find((w) => w.id === etapaId) ?? null;
 
   const staffQuery = useQuery({
-    queryKey: qk.catalog.assignableStaff(tramoId),
-    queryFn: () => runAction(fetchCatalogAssignableStaff, { workflowId: tramoId }),
+    queryKey: qk.catalog.assignableStaff(etapaId),
+    queryFn: () => runAction(fetchCatalogAssignableStaff, { workflowId: etapaId }),
     staleTime: STALE.catalog,
     enabled: activated && workflowsQuery.data !== undefined,
     placeholderData: keepPreviousData,
@@ -263,13 +263,13 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
   });
   const people = useMemo<QuickAddPerson[]>(() => staffQuery.data ?? [], [staffQuery.data]);
 
-  const parsed = parseQuickAdd(text, { today, people, tramos, meId });
+  const parsed = parseQuickAdd(text, { today, people, etapas, meId });
   const contextHasAssignee = context.assigneeId !== undefined;
   const assigneeId = parsed.assigneeId ?? (contextHasAssignee ? (context.assigneeId ?? null) : meId);
   const draft: QuickAddDraft = {
     title: parsed.title,
     projectId: context.projectId,
-    tramoId,
+    etapaId,
     assigneeId,
     dueDate: parsed.dueDate ?? null,
     priority: parsed.priority ?? "media",
@@ -282,13 +282,13 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
   const hasText = text.trim().length > 0;
   const showPreview = hasText && !slashMode;
   const blocked = parsed.tokens.some((t) => t.status === "ambiguous");
-  const tramoModel = workflow ? tramoBadgeModel(workflow) : null;
+  const etapaModel = workflow ? etapaBadgeModel(workflow) : null;
   const suggestion = showPreview
     ? quickAddSuggestion({
         parsed,
         people,
-        tramos,
-        tramoName: tramoModel?.label ?? null,
+        etapas,
+        etapaName: etapaModel?.label ?? null,
         assigneeId,
         contextHasAssignee,
         today,
@@ -336,7 +336,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
       openNewTask(
         {
           title: draft.title,
-          ...(workflow ? { tramoKey: workflow.key } : {}),
+          ...(workflow ? { etapaKey: workflow.key } : {}),
           managerId: draft.assigneeId,
           ...(draft.dueDate ? { deliveryDate: draft.dueDate } : {}),
           priority: draft.priority,
@@ -419,10 +419,10 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
         <User aria-hidden="true" />
         {personLabel}
       </Badge>
-      {tramoModel ? (
+      {etapaModel ? (
         <span className="anim-in inline-flex items-center gap-1">
-          <AreaBadge name={tramoModel.label} colorSlot={tramoModel.slot} tinted />
-          {tramoFromContext ? <span className="text-xs font-normal text-muted-foreground">· de la etapa</span> : null}
+          <AreaBadge name={etapaModel.label} colorSlot={etapaModel.slot} tinted />
+          {etapaFromContext ? <span className="text-xs font-normal text-muted-foreground">· de la etapa</span> : null}
         </span>
       ) : null}
       {draft.dueDate ? (

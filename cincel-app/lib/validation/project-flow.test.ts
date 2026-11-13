@@ -4,7 +4,7 @@ import {
   OrderedIdsSchema,
   parseInput,
   ProjectCreateInputSchema,
-  StartTramoInputSchema,
+  StartEtapaInputSchema,
   WorkflowPhaseInputSchema,
 } from "./project-flow";
 
@@ -29,13 +29,13 @@ describe("parseInput", () => {
 
   it("checks the etapa start payload", () => {
     const base = { projectId: id, workflowId: other, phaseIds: [id], assignment: { mode: "self" } };
-    expect(parseInput(StartTramoInputSchema, base)).toEqual(base);
+    expect(parseInput(StartEtapaInputSchema, base)).toEqual(base);
     expect(
-      parseInput(StartTramoInputSchema, { ...base, assignment: { mode: "by_phase", managers: { [id]: null } } })
+      parseInput(StartEtapaInputSchema, { ...base, assignment: { mode: "by_phase", managers: { [id]: null } } })
     ).toEqual({ ...base, assignment: { mode: "by_phase", managers: { [id]: null } } });
-    expect(() => parseInput(StartTramoInputSchema, { ...base, assignment: { mode: "everyone" } })).toThrow(
+    expect(() => parseInput(StartEtapaInputSchema, { ...base, assignment: { mode: "everyone" } })).toThrow(
       /^INVALID: assignment/
     );
-    expect(() => parseInput(StartTramoInputSchema, { ...base, projectId: "nope" })).toThrow("INVALID: projectId");
+    expect(() => parseInput(StartEtapaInputSchema, { ...base, projectId: "nope" })).toThrow("INVALID: projectId");
   });
 });

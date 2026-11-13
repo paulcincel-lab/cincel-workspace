@@ -89,8 +89,8 @@ function taskScope(user: AuthenticatedUser, from: string, to: string, filters: C
     f.managerId = eff.responsable;
   }
   if (eff.proyectos.length > 0) f.projectIds = eff.proyectos;
-  if (eff.tramo === "none") f.withoutWorkflow = true;
-  else if (eff.tramo) f.workflowId = eff.tramo;
+  if (eff.etapa === "none") f.withoutWorkflow = true;
+  else if (eff.etapa) f.workflowId = eff.etapa;
   const due = taskDueSql();
   const where = and(
     whereFilters(f, viewer),

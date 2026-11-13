@@ -16,7 +16,7 @@ const meeting: CalEventItem = {
   end: "2026-11-12T11:00:00-06:00",
   allDay: false,
   project: null,
-  tramo: { id: "w", key: "diseno", name: "Diseño", colorSlot: 2 },
+  etapa: { id: "w", key: "diseno", name: "Diseño", colorSlot: 2 },
   location: "Madrid 22",
   meetUrl: null,
   attendees: [{ name: "Ana García", staffId: null, response: "pendiente" }],

@@ -1,7 +1,7 @@
 /**
  * Proyecto · Resumen task counts from the server (#1051). Pure and
  * client-safe: `qk.proyectos.resumenSummary(id)` carries SQL aggregates of
- * the project's tasks (per tramo and fase, per Responsable and tramo) plus
+ * the project's tasks (per etapa and fase, per Responsable and etapa) plus
  * the few "Lo que sigue" rows, and these functions turn them into the same
  * shapes the three Resumen layouts render (`project-summary.ts` derives them
  * from task rows; the numbers are the same). Counts read top-level tasks
@@ -18,22 +18,22 @@ import {
   daysBetween,
   loadToneOf,
   shortDate,
-  startedTramos,
-  tramoRunState,
+  startedEtapas,
+  etapaRunState,
   type NextTask,
   type PhaseRow,
   type ProjectSummaryInput,
   type StatusCount,
   type TeamLoadCard,
   type TeamLoadRow,
-  type TramoProgress,
+  type EtapaProgress,
 } from "@/lib/proyectos/project-summary";
 import { initialsOf } from "@/lib/people/aggregates";
-import { SIN_TRAMO_KEY } from "@/lib/tareas/summary";
+import { SIN_ETAPA_KEY } from "@/lib/tareas/summary";
 import type { ProjectDetail, StaffRef, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 
 /**
- * The top-level tasks of one tramo and fase (`workflow` / `phase` null: none).
+ * The top-level tasks of one etapa and fase (`workflow` / `phase` null: none).
  * "Open" is any status but completado and "overdue" an open task whose
  * commitment date is before today, as the Resumen counted them; "closed" is
  * `isTaskClosed` (completado or a custom status that closes), what "Ocultar
@@ -62,7 +62,7 @@ export type ResumenPhaseBucket = {
   latestClosed: string | null;
 };
 
-/** One Responsable's tasks in one tramo (`workflow` null: none). */
+/** One Responsable's tasks in one etapa (`workflow` null: none). */
 export type ResumenManagerBucket = {
   staffId: string;
   workflow: WorkflowRef | null;
@@ -165,13 +165,13 @@ export function sumBuckets(buckets: readonly Totals[]): Totals {
   );
 }
 
-/** The buckets of one tramo (`null`: without tramo). */
+/** The buckets of one etapa (`null`: without etapa). */
 function bucketsOf(summary: Pick<ResumenTareasSummary, "buckets">, workflowId: string | null): ResumenPhaseBucket[] {
   return summary.buckets.filter((b) => (b.workflow?.id ?? null) === workflowId);
 }
 
-/** Per tramo id ("" = without tramo): the tramo and its totals, in tramo order. */
-function tramoTotals(summary: Pick<ResumenTareasSummary, "buckets">): Map<string, { workflow: WorkflowRef | null; totals: Totals }> {
+/** Per etapa id ("" = without etapa): the etapa and its totals, in etapa order. */
+function etapaTotals(summary: Pick<ResumenTareasSummary, "buckets">): Map<string, { workflow: WorkflowRef | null; totals: Totals }> {
   const out = new Map<string, { workflow: WorkflowRef | null; parts: ResumenPhaseBucket[] }>();
   for (const b of summary.buckets) {
     const id = b.workflow?.id ?? "";
@@ -182,7 +182,7 @@ function tramoTotals(summary: Pick<ResumenTareasSummary, "buckets">): Map<string
   return new Map([...out].map(([id, e]) => [id, { workflow: e.workflow, totals: sumBuckets(e.parts) }]));
 }
 
-/** The tramo with the most tasks by `count`; a tie goes to the earlier tramo. */
+/** The etapa with the most tasks by `count`; a tie goes to the earlier etapa. */
 function dominantOf(rows: ResumenManagerBucket[], count: (row: ResumenManagerBucket) => number, pick: (w: WorkflowRef) => string) {
   let best: { value: string; n: number } | null = null;
   const ordered = [...rows].filter((r) => r.workflow && count(r) > 0).sort((a, b) => a.workflow!.sortOrder - b.workflow!.sortOrder);
@@ -201,22 +201,22 @@ const sumOf = (rows: ResumenManagerBucket[], pick: (row: ResumenManagerBucket) =
 
 // ── Visual and Esencial ──────────────────────────────────────────────────────
 
-/** `tramoProgress` from the summary: one row per started tramo. */
-export function resumenTramoProgress(
+/** `etapaProgress` from the summary: one row per started etapa. */
+export function resumenEtapaProgress(
   summary: Pick<ResumenTareasSummary, "buckets">,
   catalog: WorkflowRef[],
   project: ProjectDetail,
-): TramoProgress[] {
-  const started = new Map(project.tramos.map((t) => [t.id, t]));
-  const totals = tramoTotals(summary);
-  return startedTramos(catalog, project).map((tramo) => {
-    const run = started.get(tramo.id) ?? null;
-    const state = tramoRunState(project, tramo);
-    const own = totals.get(tramo.id)?.totals ?? ZERO;
+): EtapaProgress[] {
+  const started = new Map(project.etapas.map((t) => [t.id, t]));
+  const totals = etapaTotals(summary);
+  return startedEtapas(catalog, project).map((etapa) => {
+    const run = started.get(etapa.id) ?? null;
+    const state = etapaRunState(project, etapa);
+    const own = totals.get(etapa.id)?.totals ?? ZERO;
     return {
-      tramoId: tramo.id,
-      key: tramo.key || tramo.id,
-      label: tramo.name,
+      etapaId: etapa.id,
+      key: etapa.key || etapa.id,
+      label: etapa.name,
       state,
       pct: own.total > 0 ? Math.round((own.done / own.total) * 100) : 0,
       open: own.total - own.done,
@@ -295,19 +295,19 @@ export function resumenTeamLoadCards(
       loadPct: teamLoad[id]?.loadPct ?? 0,
       overdueHere: sumOf(rows, (r) => r.liveOverdue),
       blockedHere: sumOf(rows, (r) => r.liveBlocked),
-      tramoKey: dominantOf(rows, (r) => r.live, (w) => w.key),
+      etapaKey: dominantOf(rows, (r) => r.live, (w) => w.key),
     };
   });
 }
 
-/** The Esencial avatar tint: the tramo key where the person has the most tasks (subtasks included). */
-export function resumenAvatarTramo(summary: Pick<ResumenTareasSummary, "managers">, staffId: string): string | null {
+/** The Esencial avatar tint: the etapa key where the person has the most tasks (subtasks included). */
+export function resumenAvatarEtapa(summary: Pick<ResumenTareasSummary, "managers">, staffId: string): string | null {
   return dominantOf(managerRows(summary, staffId), (r) => r.all, (w) => w.key);
 }
 
 // ── Analítico ────────────────────────────────────────────────────────────────
 
-/** The current fase: the first fase (by `sortOrder`) of the current tramo with open tasks. */
+/** The current fase: the first fase (by `sortOrder`) of the current etapa with open tasks. */
 function currentPhaseIdOf(summary: Pick<ResumenTareasSummary, "buckets">, project: ProjectDetail): string | null {
   const candidates = summary.buckets
     .filter(
@@ -343,48 +343,48 @@ function phaseRowOf(phaseId: string | null, name: string, current: boolean, t: T
   };
 }
 
-const TRAMO_STATE_LABEL = { done: "cerrado", current: "en curso", next: "sin iniciar" } as const;
+const ETAPA_STATE_LABEL = { done: "cerrado", current: "en curso", next: "sin iniciar" } as const;
 
-/** `tramoPhaseGroups` ("Tramos y fases") from the summary. */
+/** `etapaPhaseGroups` ("Etapas y fases") from the summary. */
 export function resumenPhaseGroups(
   summary: Pick<ResumenTareasSummary, "buckets">,
   catalog: WorkflowRef[],
-  phasesByTramo: Record<string, WorkflowPhaseRef[]>,
+  phasesByEtapa: Record<string, WorkflowPhaseRef[]>,
   project: ProjectDetail,
   today: string,
 ): { groups: Group<PhaseRow>[]; totals: Record<string, string> } {
   const currentPhaseId = currentPhaseIdOf(summary, project);
   const allRows: PhaseRow[] = [];
 
-  const groups = startedTramos(catalog, project).map((tramo): Group<PhaseRow> => {
-    const inTramo = bucketsOf(summary, tramo.id);
-    const byPhase = new Map(inTramo.filter((b) => b.phase).map((b) => [b.phase!.id, b]));
-    const known = [...(phasesByTramo[tramo.id] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  const groups = startedEtapas(catalog, project).map((etapa): Group<PhaseRow> => {
+    const inEtapa = bucketsOf(summary, etapa.id);
+    const byPhase = new Map(inEtapa.filter((b) => b.phase).map((b) => [b.phase!.id, b]));
+    const known = [...(phasesByEtapa[etapa.id] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
     const knownIds = new Set(known.map((p) => p.id));
-    const extra = inTramo
+    const extra = inEtapa
       .filter((b) => b.phase && !knownIds.has(b.phase.id))
       .map((b) => b.phase!)
       .sort((a, b) => a.sortOrder - b.sortOrder);
     const rows = [...known, ...extra].map((phase) =>
       phaseRowOf(phase.id, phase.name, phase.id === currentPhaseId, byPhase.get(phase.id) ?? ZERO, today),
     );
-    const unphased = inTramo.find((b) => b.phase === null);
+    const unphased = inEtapa.find((b) => b.phase === null);
     if (unphased && unphased.total > 0) rows.push(phaseRowOf(null, RESUMEN_SIN_FASE, false, unphased, today));
     allRows.push(...rows);
 
-    const state = tramoRunState(project, tramo);
-    const t = sumBuckets(inTramo);
+    const state = etapaRunState(project, etapa);
+    const t = sumBuckets(inEtapa);
     const open = t.total - t.done;
     const pct = pctOf(t.total - open, t.total);
     return {
-      id: tramo.id,
-      label: tramo.name,
+      id: etapa.id,
+      label: etapa.name,
       caption: countLabel(rows.length, "fase", "fases"),
       metrics: [
         ...(state === "current" ? [{ key: "actual", value: "actual", pill: true }] : []),
         state === "done" && open > 0
           ? { key: "estado", value: `cerrado con ${open} pendiente`, tone: "warning" as const }
-          : { key: "estado", value: `${TRAMO_STATE_LABEL[state]} ${pct} %` },
+          : { key: "estado", value: `${ETAPA_STATE_LABEL[state]} ${pct} %` },
         { key: "tareas", value: countLabel(t.total, "tarea", "tareas") },
         {
           key: "vencidas",
@@ -421,13 +421,13 @@ export function resumenPhaseGroups(
   };
 }
 
-/** One "Tareas por tramo" group without its rows (they page in through `qk.tareas.list`). */
+/** One "Tareas por etapa" group without its rows (they page in through `qk.tareas.list`). */
 export type ResumenTaskGroup = {
-  /** The tramo id, or "admin" for the tasks without tramo. */
+  /** The etapa id, or "admin" for the tasks without etapa. */
   id: string;
   label: string;
-  /** The tramo; null for "Administración". */
-  tramo: WorkflowRef | null;
+  /** The etapa; null for "Administración". */
+  etapa: WorkflowRef | null;
   caption: string;
   metrics: GroupMetric[];
   /** Rows the group lists (closed ones left out when hiding them). */
@@ -437,8 +437,8 @@ export type ResumenTaskGroup = {
 };
 
 /**
- * `taskGroupsByTramo` ("Tareas por tramo") from the summary, without rows:
- * started tramos (also empty), then tramos not started that have tasks, then
+ * `taskGroupsByEtapa` ("Tareas por etapa") from the summary, without rows:
+ * started etapas (also empty), then etapas not started that have tasks, then
  * "Administración". Groups with overdue tasks first by Σ days late. With
  * `hideCompleted` the counts leave the closed tasks out, as the table does.
  * Also the header numbers ("{n} tareas · {k} abiertas · {v} vencidas").
@@ -446,7 +446,7 @@ export type ResumenTaskGroup = {
 export function resumenTaskGroups(
   summary: Pick<ResumenTareasSummary, "buckets">,
   catalog: WorkflowRef[],
-  project: Pick<ProjectDetail, "tramos">,
+  project: Pick<ProjectDetail, "etapas">,
   hideCompleted: boolean,
 ): {
   groups: ResumenTaskGroup[];
@@ -457,10 +457,10 @@ export function resumenTaskGroups(
   /** Every top-level task, closed ones included (the CSV export shows with any). */
   all: number;
 } {
-  const totals = tramoTotals(summary);
+  const totals = etapaTotals(summary);
   const shownOf = (t: Totals) => (hideCompleted ? t.total - t.closed : t.total);
-  const tramos = startedTramos(catalog, project);
-  const known = new Set(tramos.map((t) => t.id));
+  const etapas = startedEtapas(catalog, project);
+  const known = new Set(etapas.map((t) => t.id));
   const byId = new Map(catalog.map((t) => [t.id, t]));
   const extra = [...totals.entries()]
     .filter(([id, e]) => id !== "" && !known.has(id) && shownOf(e.totals) > 0)
@@ -469,14 +469,14 @@ export function resumenTaskGroups(
       return ref ? [ref] : [];
     })
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  const buckets: { id: string; label: string; tramo: WorkflowRef | null; t: Totals }[] = [...tramos, ...extra].map((tramo) => ({
-    id: tramo.id,
-    label: tramo.name,
-    tramo,
-    t: totals.get(tramo.id)?.totals ?? ZERO,
+  const buckets: { id: string; label: string; etapa: WorkflowRef | null; t: Totals }[] = [...etapas, ...extra].map((etapa) => ({
+    id: etapa.id,
+    label: etapa.name,
+    etapa,
+    t: totals.get(etapa.id)?.totals ?? ZERO,
   }));
   const admin = totals.get("")?.totals;
-  if (admin && shownOf(admin) > 0) buckets.push({ id: "admin", label: RESUMEN_ADMIN_GROUP, tramo: null, t: admin });
+  if (admin && shownOf(admin) > 0) buckets.push({ id: "admin", label: RESUMEN_ADMIN_GROUP, etapa: null, t: admin });
 
   const built = buckets.map((bucket, index) => {
     const { t } = bucket;
@@ -487,7 +487,7 @@ export function resumenTaskGroups(
     const group: ResumenTaskGroup = {
       id: bucket.id,
       label: bucket.label,
-      tramo: bucket.tramo,
+      etapa: bucket.etapa,
       caption: countLabel(count, "tarea", "tareas"),
       metrics: [
         ...(late > 0 ? [{ key: "vencidas", value: `${countLabel(late, "vencida", "vencidas")} · ${daysSum} d`, tone: "destructive" as const }] : []),
@@ -522,51 +522,51 @@ export function resumenTaskGroups(
 }
 
 /**
- * The `qk.tareas.list` filters of one "Tareas por tramo" group: the project,
- * the group's tramo (or the tasks without one, with the admin tasks for an
+ * The `qk.tareas.list` filters of one "Tareas por etapa" group: the project,
+ * the group's etapa (or the tasks without one, with the admin tasks for an
  * administrator), "Ocultar completadas" and the overdue-first order.
  */
 export function resumenGroupListFilters(
   projectId: string,
-  tramoKey: string | null,
+  etapaKey: string | null,
   options: { hideCompleted: boolean; includeAdmin: boolean },
 ): TareasListFilters {
   return {
-    tramo: tramoKey ?? SIN_TRAMO_KEY,
+    etapa: etapaKey ?? SIN_ETAPA_KEY,
     proyecto: projectId,
     responsable: null,
     estado: null,
     q: null,
     ...(options.hideCompleted ? { mostrar: "abiertas" as const } : {}),
     orderBy: "retraso",
-    ...(options.includeAdmin && tramoKey === null ? { incluirAdmin: true as const } : {}),
+    ...(options.includeAdmin && etapaKey === null ? { incluirAdmin: true as const } : {}),
   };
 }
 
-/** Every "Tareas por tramo" group with rows, as `{ id, filters }` (the page prefetches their first pages). */
+/** Every "Tareas por etapa" group with rows, as `{ id, filters }` (the page prefetches their first pages). */
 export function resumenGroupLists(
-  data: Pick<ProjectSummaryInput, "project" | "tramoCatalog">,
+  data: Pick<ProjectSummaryInput, "project" | "etapaCatalog">,
   summary: ResumenTareasSummary,
   hideCompleted: boolean,
 ): { id: string; count: number; filters: TareasListFilters }[] {
   if (!summary.canViewTasks) return [];
-  return resumenTaskGroups(summary, data.tramoCatalog, data.project, hideCompleted)
+  return resumenTaskGroups(summary, data.etapaCatalog, data.project, hideCompleted)
     .groups.filter((g) => g.count > 0)
     .map((g) => ({
       id: g.id,
       count: g.count,
-      filters: resumenGroupListFilters(data.project.id, g.tramo?.key ?? null, { hideCompleted, includeAdmin: summary.includeAdmin }),
+      filters: resumenGroupListFilters(data.project.id, g.etapa?.key ?? null, { hideCompleted, includeAdmin: summary.includeAdmin }),
     }));
 }
 
 /**
  * The groups whose first page the page prefetches for the style it renders:
- * every group with rows in Analítico ("Tareas por tramo" is an Analítico
+ * every group with rows in Analítico ("Tareas por etapa" is an Analítico
  * table), none in Visual and Esencial.
  */
 export function resumenPrefetchLists(
   style: PresentationStyle,
-  data: Pick<ProjectSummaryInput, "project" | "tramoCatalog">,
+  data: Pick<ProjectSummaryInput, "project" | "etapaCatalog">,
   summary: ResumenTareasSummary,
   hideCompleted: boolean,
 ): { id: string; count: number; filters: TareasListFilters }[] {

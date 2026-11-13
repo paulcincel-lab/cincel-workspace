@@ -117,17 +117,17 @@ describe("/mi-espacio page", () => {
 
   it("Analítico narrows the task counts by the URL's filters and the closed-task switch (#1051)", async () => {
     appearance.style = "analitico";
-    await renderPage({ tramo: "diseno", q: " planos ", estado: "retraso", completadas: "1" });
+    await renderPage({ etapa: "diseno", q: " planos ", estado: "retraso", completadas: "1" });
     expect(loader.loadMiEspacio).toHaveBeenCalledWith(USER, expect.any(Date), {
       style: "analitico",
-      analiticoInput: { tramo: "diseno", q: "planos", retraso: true },
+      analiticoInput: { etapa: "diseno", q: "planos", retraso: true },
       withClosed: true,
     });
     // `?estilo=` wins over the viewer's style.
-    await renderPage({ estilo: "visual", tramo: "diseno" });
+    await renderPage({ estilo: "visual", etapa: "diseno" });
     expect(loader.loadMiEspacio).toHaveBeenLastCalledWith(USER, expect.any(Date), {
       style: "visual",
-      analiticoInput: { tramo: "diseno", q: null },
+      analiticoInput: { etapa: "diseno", q: null },
       withClosed: false,
     });
     appearance.style = "esencial";

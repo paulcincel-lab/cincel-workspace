@@ -42,14 +42,14 @@ import { UuidSchema, parseInput } from "@/lib/validation/project-flow";
 
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
 
-const TareasStartSlotInput = z.object({ tramoId: UuidSchema });
+const TareasStartSlotInput = z.object({ etapaId: UuidSchema });
 
 /**
- * `qk.tareas.startSlot(tramoId)` (Query Migration 4d, #958): the Lista start
- * slot of one tramo (board, candidates `{id,name,suggested}`, `canStart`).
+ * `qk.tareas.startSlot(etapaId)` (Query Migration 4d, #958): the Lista start
+ * slot of one etapa (board, candidates `{id,name,suggested}`, `canStart`).
  * Parses the input, requires a staff session and hands the viewer to the
  * loader, which requires the Tareas capability (FORBIDDEN otherwise). Null
- * when the tramo is missing or inactive. Read-only.
+ * when the etapa is missing or inactive. Read-only.
  */
 export async function getTareasStartSlotData(
   input: z.input<typeof TareasStartSlotInput>,
@@ -102,7 +102,7 @@ export type { TareasListFilters } from "@/lib/query/keys";
 
 /**
  * `qk.tareas.page(q)` (Query Migration 4a, #955): one `/tareas` view in one
- * call (facets, tramos, `{id,name}` staff, and the Lista first page or every
+ * call (facets, etapas, `{id,name}` staff, and the Lista first page or every
  * Tablero column). Parses the input, requires a staff session and hands the
  * viewer to the loader, which requires the Tareas capability (FORBIDDEN
  * otherwise). Read-only.
@@ -189,7 +189,7 @@ export async function getTareasByProject(input: z.input<typeof TareasFiltersInpu
 // ── Analítico summary (Estilos, #988) ────────────────────────────────────────
 
 /**
- * `qk.tareas.summary(f)`: the Tareas Analítico counts per project and tramo,
+ * `qk.tareas.summary(f)`: the Tareas Analítico counts per project and etapa,
  * per project and in total (one grouping-sets query), plus the same filters
  * without `mostrar`. FORBIDDEN without Tareas. Read-only.
  */

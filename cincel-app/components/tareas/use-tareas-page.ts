@@ -31,14 +31,14 @@ export function useTareasQuery(): TareasQuery {
 
 /** The filters of a query, stable while their values stay the same. */
 export function useTareasFilters(query: TareasQuery): TareasListFilters {
-  const { tramo, proyecto, responsable, estado, q, mostrar, completadas, apoyo } = query;
+  const { etapa, proyecto, responsable, estado, q, mostrar, completadas, apoyo } = query;
   // The Proyecto multi-select (#1045) by value: a new array with the same ids keeps the filters.
   const proyectosKey = (query.proyectos ?? []).join(",");
   return useMemo(
     () =>
       tareasListFiltersOf({
         ...DEFAULT_TAREAS_QUERY,
-        tramo,
+        etapa,
         proyecto,
         proyectos: proyectosKey ? proyectosKey.split(",") : [],
         responsable,
@@ -48,7 +48,7 @@ export function useTareasFilters(query: TareasQuery): TareasListFilters {
         completadas,
         apoyo,
       }),
-    [tramo, proyecto, proyectosKey, responsable, estado, q, mostrar, completadas, apoyo],
+    [etapa, proyecto, proyectosKey, responsable, estado, q, mostrar, completadas, apoyo],
   );
 }
 

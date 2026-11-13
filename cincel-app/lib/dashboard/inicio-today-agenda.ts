@@ -17,8 +17,8 @@ import type { InicioAgendaItem } from "@/lib/types/redesign";
 /** Calendar event types that are events of the day (the rest are task dates). */
 const EVENT_TYPES: ReadonlySet<CalendarEventType> = new Set<CalendarEventType>(["Reunion", "Visita de obra"]);
 
-/** Calendar tramo keys that aren't `workflows.key`. */
-const NON_TRAMO_KEYS = new Set(["sin-tramo", "admin"]);
+/** Calendar etapa keys that aren't `workflows.key`. */
+const NON_ETAPA_KEYS = new Set(["sin-etapa", "admin"]);
 
 type AgendaTask = Omit<TaskListItem, "notes">;
 
@@ -35,7 +35,7 @@ export function meetingAgendaItem(meeting: CalEventItem): InicioAgendaItem {
     end: meeting.end,
     allDay: meeting.allDay,
     project: meeting.project?.name,
-    tramo: (meeting.tramo?.key as InicioAgendaItem["tramo"]) ?? null,
+    etapa: (meeting.etapa?.key as InicioAgendaItem["etapa"]) ?? null,
     attendees: meeting.attendees.map((a) => a.name).filter(Boolean),
     href: `/calendario?vista=dia&fecha=${meeting.date}&evento=${meeting.id}`,
     kind: "evento",
@@ -67,7 +67,7 @@ export function todayAgendaItems(tasks: AgendaTask[], today: string, meetings?: 
         start: `${event.date}T${event.time}`,
         estimated: true,
         project: event.project,
-        tramo: NON_TRAMO_KEYS.has(event.tramo) ? null : event.tramo,
+        etapa: NON_ETAPA_KEYS.has(event.etapa) ? null : event.etapa,
         href: taskHref(event.taskId),
         kind: "evento" as const,
         assignee: task ? assigneeOf(task) : null,
@@ -84,7 +84,7 @@ export function todayAgendaItems(tasks: AgendaTask[], today: string, meetings?: 
       start: today,
       allDay: true,
       project: task.project.name,
-      tramo: task.workflow?.key ?? null,
+      etapa: task.workflow?.key ?? null,
       href: taskHref(task.id),
       kind: "entrega" as const,
       assignee: assigneeOf(task),

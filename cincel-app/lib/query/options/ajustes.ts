@@ -25,13 +25,13 @@ import {
   getAjustesEstatusPageData,
   getAjustesPermisosPageData,
   getAjustesPuestosPageData,
-  getAjustesTramosPageData,
+  getAjustesEtapasPageData,
 } from "@/lib/actions/page-data/ajustes-actions";
 import type {
   AjustesEstatusPageData,
   AjustesPermisosPageData,
   AjustesPuestosPageData,
-  AjustesTramosPageData,
+  AjustesEtapasPageData,
 } from "@/lib/types/ajustes-catalogs";
 import type { WorkflowDetail, WorkflowRef } from "@/lib/types/core";
 import { getAjustesMondayPageData } from "@/lib/actions/page-data/ajustes-actions";
@@ -133,16 +133,16 @@ export function ajustesGoogleOptions() {
   });
 }
 
-// ── Catalog segments (9b): estatus, puestos, tramos, permisos ───────────────
+// ── Catalog segments (9b): estatus, puestos, etapas, permisos ───────────────
 
 export type {
   AjustesEstatusPageData,
   AjustesPermisosPageData,
   AjustesPuestosPageData,
-  AjustesTramosPageData,
+  AjustesEtapasPageData,
 } from "@/lib/types/ajustes-catalogs";
 
-/** `catalog.workflows` rows (active tramos by `sortOrder`, then name) from a page's tramos. */
+/** `catalog.workflows` rows (active etapas by `sortOrder`, then name) from a page's etapas. */
 export function toWorkflowRefs(workflows: readonly WorkflowDetail[]): WorkflowRef[] {
   return workflows
     .filter((workflow) => workflow.active)
@@ -152,7 +152,7 @@ export function toWorkflowRefs(workflows: readonly WorkflowDetail[]): WorkflowRe
 
 /**
  * Seeds the catalogs a catalog page already carries, so a later invalidation
- * stays targeted: Estatus seeds `catalog.taskStatuses`, Puestos and Tramos
+ * stays targeted: Estatus seeds `catalog.taskStatuses`, Puestos and Etapas
  * seed `catalog.workflows`. Called by the query functions on the client and
  * by the pages after their server prefetch.
  */
@@ -161,7 +161,7 @@ export function seedAjustesCatalogs(
   page:
     | { seg: "estatus"; data: AjustesEstatusPageData }
     | { seg: "puestos"; data: AjustesPuestosPageData }
-    | { seg: "tramos"; data: AjustesTramosPageData },
+    | { seg: "etapas"; data: AjustesEtapasPageData },
 ): void {
   if (page.seg === "estatus") client.setQueryData(qk.catalog.taskStatuses(), page.data.statuses);
   else client.setQueryData(qk.catalog.workflows(), toWorkflowRefs(page.data.workflows));
@@ -192,12 +192,12 @@ export function ajustesPuestosOptions() {
   });
 }
 
-export function ajustesTramosOptions() {
-  return queryOptions<AjustesTramosPageData>({
-    queryKey: qk.ajustes.page("tramos"),
+export function ajustesEtapasOptions() {
+  return queryOptions<AjustesEtapasPageData>({
+    queryKey: qk.ajustes.page("etapas"),
     queryFn: async ({ client }) => {
-      const data = await getAjustesTramosPageData({});
-      seedAjustesCatalogs(client, { seg: "tramos", data });
+      const data = await getAjustesEtapasPageData({});
+      seedAjustesCatalogs(client, { seg: "etapas", data });
       return data;
     },
     staleTime: STALE.ajustes,

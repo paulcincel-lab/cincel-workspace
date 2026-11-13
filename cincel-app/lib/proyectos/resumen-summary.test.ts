@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  esencialTramoLine,
+  esencialEtapaLine,
   nextTasks,
   resumenKpis,
   resumenTasks,
   statusCounts,
-  taskGroupsByTramo,
+  taskGroupsByEtapa,
   teamLoadCards,
   teamLoadRows,
-  tramoPhaseGroups,
-  tramoProgress,
+  etapaPhaseGroups,
+  etapaProgress,
 } from "@/lib/proyectos/project-summary";
 import {
-  resumenAvatarTramo,
+  resumenAvatarEtapa,
   resumenGroupListFilters,
   resumenGroupLists,
   resumenHeroCounts,
@@ -24,17 +24,17 @@ import {
   resumenTaskGroups,
   resumenTeamLoadCards,
   resumenTeamLoadRows,
-  resumenTramoProgress,
+  resumenEtapaProgress,
 } from "@/lib/proyectos/resumen-summary";
-import { dominantTramo } from "@/lib/people/aggregates";
+import { dominantEtapa } from "@/lib/people/aggregates";
 import { isTaskClosed } from "@/lib/tasks/status-options";
 import type { TaskListRow } from "@/lib/types/core";
-import { PHASES_BY_TRAMO, TASK_ROWS, TRAMOS, fixtureSummaryInput, fixtureTaskRow } from "@/tests/unit/fixtures/project-summary";
+import { PHASES_BY_ETAPA, TASK_ROWS, ETAPAS, fixtureSummaryInput, fixtureTaskRow } from "@/tests/unit/fixtures/project-summary";
 import { resumenSummaryOfRows } from "@/tests/unit/fixtures/resumen-summary";
 
 const TODAY = "2026-11-06";
-const [presale, diseno, construccion] = TRAMOS;
-const phase = (tramoId: string, i: number) => PHASES_BY_TRAMO[tramoId]![i]!;
+const [presale, diseno, construccion] = ETAPAS;
+const phase = (etapaId: string, i: number) => PHASES_BY_ETAPA[etapaId]![i]!;
 
 /** The Resumen fixture plus fases, a custom closed status, an admin task, a fase off the catalog and overdue closes. */
 const ROWS: TaskListRow[] = [
@@ -80,13 +80,13 @@ const ROWS: TaskListRow[] = [
   fixtureTaskRow("t-admin-2", { kind: "admin", workflowId: null, workflow: null, status: "completado", title: "Alta en el SAT", managerId: null, manager: null }),
 ];
 
-const data = fixtureSummaryInput({ phasesByTramo: PHASES_BY_TRAMO, today: TODAY });
+const data = fixtureSummaryInput({ phasesByEtapa: PHASES_BY_ETAPA, today: TODAY });
 const summary = resumenSummaryOfRows(ROWS, TODAY, { includeAdmin: true });
 const strip = <T extends { rows?: unknown }>(groups: T[]) => groups.map(({ rows: _rows, ...g }) => (void _rows, g));
 
 describe("Resumen numbers from the summary match the ones derived from the task rows (#1051)", () => {
   it("Visual: etapa progress, status donut, hero chips, team cards", () => {
-    expect(resumenTramoProgress(summary, data.tramoCatalog, data.project)).toEqual(tramoProgress(ROWS, data.tramoCatalog, data.project, TODAY));
+    expect(resumenEtapaProgress(summary, data.etapaCatalog, data.project)).toEqual(etapaProgress(ROWS, data.etapaCatalog, data.project, TODAY));
     expect(resumenStatusCounts(summary)).toEqual(statusCounts(ROWS));
     const open = nextTasks(ROWS, TODAY, Number.POSITIVE_INFINITY);
     expect(resumenHeroCounts(summary)).toEqual({
@@ -108,11 +108,11 @@ describe("Resumen numbers from the summary match the ones derived from the task 
   });
 
   it("Esencial: etapa line and avatar tint", () => {
-    expect(esencialTramoLine(data, resumenTramoProgress(summary, data.tramoCatalog, data.project))).toEqual(
-      esencialTramoLine(data, tramoProgress(ROWS, data.tramoCatalog, data.project, TODAY)),
+    expect(esencialEtapaLine(data, resumenEtapaProgress(summary, data.etapaCatalog, data.project))).toEqual(
+      esencialEtapaLine(data, etapaProgress(ROWS, data.etapaCatalog, data.project, TODAY)),
     );
     for (const id of ["s1", "s2", "s3"]) {
-      expect(resumenAvatarTramo(summary, id)).toBe(dominantTramo(ROWS.filter((t) => t.manager?.id === id).map((t) => t.workflow?.key ?? null)));
+      expect(resumenAvatarEtapa(summary, id)).toBe(dominantEtapa(ROWS.filter((t) => t.manager?.id === id).map((t) => t.workflow?.key ?? null)));
     }
   });
 
@@ -120,8 +120,8 @@ describe("Resumen numbers from the summary match the ones derived from the task 
     expect(resumenKpisOf(data, summary)).toEqual(resumenKpis(data, ROWS));
     const noPortfolio = { ...data, portfolio: null };
     expect(resumenKpisOf(noPortfolio, summary)).toEqual(resumenKpis(noPortfolio, ROWS));
-    expect(resumenPhaseGroups(summary, data.tramoCatalog, data.phasesByTramo, data.project, TODAY)).toEqual(
-      tramoPhaseGroups(ROWS, data.tramoCatalog, data.phasesByTramo, data.project, TODAY),
+    expect(resumenPhaseGroups(summary, data.etapaCatalog, data.phasesByEtapa, data.project, TODAY)).toEqual(
+      etapaPhaseGroups(ROWS, data.etapaCatalog, data.phasesByEtapa, data.project, TODAY),
     );
     expect(resumenTeamLoadRows(data, summary)).toEqual(teamLoadRows(data, ROWS));
   });
@@ -129,8 +129,8 @@ describe("Resumen numbers from the summary match the ones derived from the task 
   it("Analítico: «Tareas por etapa» groups, with and without «Ocultar completadas»", () => {
     for (const hide of [false, true]) {
       const shownRows = hide ? ROWS.filter((t) => !isTaskClosed(t)) : ROWS;
-      const old = taskGroupsByTramo(shownRows, data.tramoCatalog, data.project, TODAY);
-      const next = resumenTaskGroups(summary, data.tramoCatalog, data.project, hide);
+      const old = taskGroupsByEtapa(shownRows, data.etapaCatalog, data.project, TODAY);
+      const next = resumenTaskGroups(summary, data.etapaCatalog, data.project, hide);
       expect(next.groups.map(({ id, label, caption, metrics }) => ({ id, label, caption, metrics }))).toEqual(strip(old.groups));
       expect(next.groups.map((g) => g.count)).toEqual(old.groups.map((g) => g.rows!.length));
       expect(next.totals).toEqual(old.totals);
@@ -148,7 +148,7 @@ describe("Resumen numbers from the summary match the ones derived from the task 
 
   it("group lists: the etapa key, «Sin etapa» with the admin tasks, closed ones left out on the server", () => {
     expect(resumenGroupListFilters("p1", "construccion", { hideCompleted: false, includeAdmin: true })).toEqual({
-      tramo: "construccion",
+      etapa: "construccion",
       proyecto: "p1",
       responsable: null,
       estado: null,
@@ -156,7 +156,7 @@ describe("Resumen numbers from the summary match the ones derived from the task 
       orderBy: "retraso",
     });
     expect(resumenGroupListFilters("p1", null, { hideCompleted: true, includeAdmin: true })).toEqual({
-      tramo: "__sin_tramo",
+      etapa: "__sin_etapa",
       proyecto: "p1",
       responsable: null,
       estado: null,

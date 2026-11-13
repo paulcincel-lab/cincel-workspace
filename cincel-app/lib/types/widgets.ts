@@ -12,7 +12,7 @@ import type { AbsenceRange, PersonProjectLoad, PresentationStyle, WeekLoad } fro
 export type Series7 = number[];
 export type Tone = "default" | "ok" | "warn" | "critical";
 /** `workflows.key`. */
-export type TramoKey = string;
+export type EtapaKey = string;
 
 /** Color of a KPI delta: better, worse or unchanged. */
 export type KpiDeltaTone = "good" | "bad" | "neutral";
@@ -34,7 +34,7 @@ export type KpiDatum = {
   min30?: number;
   max30?: number;
   /** share 0–1. */
-  split?: { tramo: TramoKey; share: number }[];
+  split?: { etapa: EtapaKey; share: number }[];
   caption?: string;
   href?: string;
   /** Omitted = all styles (review B13). */
@@ -69,7 +69,7 @@ export type ProgressItem = {
   /** The project's delivery date (`endDate`, `YYYY-MM-DD`), null without one. */
   deliveryDate?: string | null;
   /** Manager, coordinator and task assignees, deduplicated (Inicio Visual avatars). */
-  team?: { id: string; initials: string; tramo: TramoKey | null }[];
+  team?: { id: string; initials: string; etapa: EtapaKey | null }[];
   /** Overdue share ≥ 45 % of open tasks (`projectAtRisk`); only with `sections.showProjectRisk`. */
   atRisk?: boolean;
 };
@@ -79,7 +79,7 @@ export type AttentionItem = {
   title: string;
   href: string;
   project: string;
-  tramo: TramoKey | null;
+  etapa: EtapaKey | null;
   reason: string;
   tone: Tone;
   assignee: { id: string; name: string; initials: string } | null;
@@ -103,7 +103,7 @@ export type AgendaItem = {
   allDay?: boolean;
   estimated?: boolean;
   project?: string;
-  tramo?: TramoKey | null;
+  etapa?: EtapaKey | null;
   attendees?: string[];
   href?: string;
   /** Only when a Cutto URL is stored on the event (none until Cutto Q1). */
@@ -123,7 +123,7 @@ export type PersonDatum = {
   photoUrl?: string | null;
   /** Project Flow positions when present, else null (no access role as puesto). */
   puesto?: string | null;
-  tramo?: TramoKey | null;
+  etapa?: EtapaKey | null;
   open: number;
   overdue: number;
   activeProjects?: number;
@@ -154,7 +154,7 @@ export type EntityCard = {
   href?: string;
   /** lucide icon name. */
   iconName?: string;
-  tramo?: TramoKey | null;
+  etapa?: EtapaKey | null;
   progress?: number;
   badges?: { label: string; tone: Tone }[];
   meta?: { label: string; value: string }[];

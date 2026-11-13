@@ -6,9 +6,9 @@ import axe from "axe-core";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { EsencialItemRow } from "@/components/widgets/EsencialItemRow";
-import { tramoDot } from "@/components/widgets/esencial-tokens";
+import { etapaDot } from "@/components/widgets/esencial-tokens";
 import { esencialCardsFixture } from "@/components/widgets/fixtures/esencial";
-import { STATUS_FIXTURE, TRAMO_FIXTURE } from "@/components/widgets/fixtures/status-adapters";
+import { STATUS_FIXTURE, ETAPA_FIXTURE } from "@/components/widgets/fixtures/status-adapters";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS } from "@/lib/ui/themes";
 import type { ThemeId } from "@/lib/types/redesign";
@@ -19,7 +19,7 @@ const MODES = ["light", "dark"] as const;
  * Token pairs of `CONTRAST_PAIRS` the rows paint on `card`: titles
  * (`foreground`), meta and muted rows (`muted-foreground`), overdue dates and
  * Bloqueado (`destructive`), text statuses (`warning-ink`, `success`) and the
- * tramo / status dots (`chart-1..3`, 3:1).
+ * etapa / status dots (`chart-1..3`, 3:1).
  */
 const ROW_PAIRS = new Set([
   "foreground/card",
@@ -88,7 +88,7 @@ function renderRows() {
             title="Firmar orden de cambio"
             href="/tareas/t-6"
             meta={[
-              { key: "project", label: "Depto Roma Norte", dot: tramoDot(TRAMO_FIXTURE.construccion) },
+              { key: "project", label: "Depto Roma Norte", dot: etapaDot(ETAPA_FIXTURE.construccion) },
               { key: "late", label: "12 días tarde", tone: "destructive" },
             ]}
             status={{ kind: "text", label: "Bloqueada", tone: "destructive" }}

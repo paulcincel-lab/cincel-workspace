@@ -50,9 +50,9 @@ import type { RecordTableData } from "@/lib/types/widgets";
 const table: RecordTableData = {
   columns: [
     { key: "nombre", label: "Nombre" },
-    { key: "tramo", label: "Etapa" },
+    { key: "etapa", label: "Etapa" },
   ],
-  rows: [{ id: "p1", nombre: "Casa Espino", tramo: "Diseño" }],
+  rows: [{ id: "p1", nombre: "Casa Espino", etapa: "Diseño" }],
 };
 
 const emptyTable: RecordTableData = { columns: table.columns, rows: [] };
@@ -158,7 +158,7 @@ describe("ListPage", () => {
 
   it("forwards the board's column totals and has no quick-add prop (the widget opens the shell dialog)", () => {
     const columnPages = {
-      filters: { tramo: null, proyecto: null, responsable: null, estado: null, q: null },
+      filters: { etapa: null, proyecto: null, responsable: null, estado: null, q: null },
       columns: { pendiente: { total: 40, nextCursor: "c1" } },
     };
     render(<ListPage header={{ title: "Tablero" }} spec={{ kind: "board", board, table, columnPages }} />);

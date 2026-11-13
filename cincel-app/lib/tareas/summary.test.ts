@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_SUMMARY_COUNTS,
-  SIN_TRAMO_KEY,
+  SIN_ETAPA_KEY,
   hiddenSummaryProjects,
   pctVencidas,
   retrasoPromedio,
@@ -29,16 +29,16 @@ describe("summary helpers", () => {
   it("names the projects the filtered set hides, by name", () => {
     const summary: TareasSummary = {
       projects: [
-        { project: { id: "a", name: "Alfa" }, ...counts({ total: 1 }), tramos: [] },
+        { project: { id: "a", name: "Alfa" }, ...counts({ total: 1 }), etapas: [] },
       ],
       totals: { ...counts({ total: 1 }), projects: 1 },
       unfiltered: {
         projects: 3,
         total: 9,
         projectList: [
-          { id: "c", name: "Casa Valle de Bravo", total: 4, byTramo: {} },
-          { id: "a", name: "Alfa", total: 3, byTramo: {} },
-          { id: "b", name: "Bosque", total: 2, byTramo: {} },
+          { id: "c", name: "Casa Valle de Bravo", total: 4, byEtapa: {} },
+          { id: "a", name: "Alfa", total: 3, byEtapa: {} },
+          { id: "b", name: "Bosque", total: 2, byEtapa: {} },
         ],
       },
     };
@@ -46,8 +46,8 @@ describe("summary helpers", () => {
   });
 
   it("tareasGroupFilters narrows to the project and etapa in retraso order", () => {
-    const f = { tramo: null, proyecto: null, responsable: "yo", estado: null, q: "plano", mostrar: "en_retraso" as const };
-    expect(tareasGroupFilters(f, "p1", "diseno")).toEqual({ ...f, proyecto: "p1", tramo: "diseno", orderBy: "retraso" });
-    expect(tareasGroupFilters(f, "p1", null).tramo).toBe(SIN_TRAMO_KEY);
+    const f = { etapa: null, proyecto: null, responsable: "yo", estado: null, q: "plano", mostrar: "en_retraso" as const };
+    expect(tareasGroupFilters(f, "p1", "diseno")).toEqual({ ...f, proyecto: "p1", etapa: "diseno", orderBy: "retraso" });
+    expect(tareasGroupFilters(f, "p1", null).etapa).toBe(SIN_ETAPA_KEY);
   });
 });

@@ -1,7 +1,7 @@
 /**
  * `GroupedTable`, `KpiStrip` and `FilterCard` fixtures (ADR 0005; frames
  * `Main` and `Analitico-Vencidas`): Tareas in Analítico grouped by project →
- * tramo, with the KPI strip and the filter card above. Data shapes come only
+ * etapa, with the KPI strip and the filter card above. Data shapes come only
  * from the widget types.
  */
 import type { FilterGroup } from "@/components/widgets/FilterCard";
@@ -37,7 +37,7 @@ function task(id: string, tarea: string, estatus: string, vence: string, diasRet
   return { id, tarea, responsable: "Oscar R.", estatus, vence, diasRetraso, subtareas: "1/3", ...extra };
 }
 
-/** `Main`: two projects, each with tramos (second level). */
+/** `Main`: two projects, each with etapas (second level). */
 export const groupedTaskGroups: Group<GroupedTaskRow>[] = [
   {
     id: "casa-lomas",
@@ -132,7 +132,7 @@ export const filterCardFixture: FilterGroup[] = [
     ],
   },
   {
-    id: "tramo",
+    id: "etapa",
     label: "Etapa",
     value: "todos",
     options: [

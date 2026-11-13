@@ -22,8 +22,8 @@ describe("?etapa= and the old ?tramo=", () => {
   });
 
   it("the Tareas query parses the old param and writes the new one", () => {
-    expect(parseTareasQuery(new URLSearchParams("tramo=diseno")).tramo).toBe("diseno");
-    expect(toTareasSearch({ tramo: "diseno" })).toBe("?etapa=diseno");
+    expect(parseTareasQuery(new URLSearchParams("tramo=diseno")).etapa).toBe("diseno");
+    expect(toTareasSearch({ etapa: "diseno" })).toBe("?etapa=diseno");
   });
 
   it("legacy redirects carry the stage as etapa", () => {
@@ -31,5 +31,16 @@ describe("?etapa= and the old ?tramo=", () => {
     expect(legacyRedirectTarget("/configuracion/tramos")).toBe("/ajustes/etapas");
     expect(legacyRedirectTarget("/configuracion/workflows")).toBe("/ajustes/etapas");
     expect(legacyRedirectTarget("/dashboard", new URLSearchParams("tramo=x"))).toBe("/inicio?etapa=x");
+  });
+});
+
+describe("sin-tramo, the old no-etapa value", () => {
+  it("reads as sin-etapa from either parameter, and leaves other values alone", () => {
+    expect(readEtapaParam(new URLSearchParams("etapa=sin-tramo"))).toBe("sin-etapa");
+    expect(readEtapaParam(new URLSearchParams("tramo=sin-tramo"))).toBe("sin-etapa");
+    expect(readEtapaParam(new URLSearchParams("etapa=sin-etapa"))).toBe("sin-etapa");
+    expect(readEtapaParam(new URLSearchParams("etapa=diseno"))).toBe("diseno");
+    expect(pickEtapaParam({ etapa: "sin-tramo" })).toBe("sin-etapa");
+    expect(pickEtapaParam({ tramo: ["sin-tramo", "x"] })).toEqual(["sin-etapa", "x"]);
   });
 });

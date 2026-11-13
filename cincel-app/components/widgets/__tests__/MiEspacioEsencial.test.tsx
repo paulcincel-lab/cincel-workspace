@@ -119,7 +119,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
         void onCreate({
           title,
           projectId: context.projectId,
-          tramoId: context.tramoId ?? null,
+          etapaId: context.etapaId ?? null,
           assigneeId: context.assigneeId ?? null,
           dueDate: null,
           priority: "media",

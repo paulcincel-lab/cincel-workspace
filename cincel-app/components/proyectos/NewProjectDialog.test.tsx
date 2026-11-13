@@ -16,7 +16,7 @@ vi.mock("@/lib/actions/projects-actions", () => ({
   submitProjectCreateAction: vi.fn(async () => ({ ok: true, project: { id: "p-new" } })),
   updateProjectAction: vi.fn(async () => undefined),
 }));
-vi.mock("@/lib/tramos/compat", () => ({ tramoColorVar: () => "var(--chart-1)" }));
+vi.mock("@/lib/etapas/compat", () => ({ etapaColorVar: () => "var(--chart-1)" }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({
   getProyectosPageData: vi.fn(),
   getProjectCreateStartOptions: vi.fn(async () => START_OPTIONS),
@@ -75,7 +75,7 @@ function renderPortfolio(patch: Partial<ProyectosPageData> = {}) {
 
 const START_OPTIONS = vi.hoisted(() => ({
   defaultWorkflowId: "wf-presale",
-  tramos: [
+  etapas: [
     {
       id: "wf-presale",
       key: "presale",
@@ -253,7 +253,7 @@ describe("/proyectos?nuevo=1", () => {
 
   it("shows Etapa inicial to staff who can start etapas", async () => {
     nav.params = new URLSearchParams("nuevo=1");
-    renderPortfolio({ canPickStartTramo: true });
+    renderPortfolio({ canPickStartEtapa: true });
     expect(await screen.findByRole("combobox", { name: "Etapa inicial" })).toBeTruthy();
   });
 

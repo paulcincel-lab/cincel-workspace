@@ -10,7 +10,7 @@
  * what is tested), revalidation, `after()` and Drive are mocked.
  *
  * `db:migrate` skips the `ensure*` steps, so the fixture makes sure the first
- * tramo has its catalog fases and templates (the Presale rows of
+ * etapa has its catalog fases and templates (the Presale rows of
  * DEFAULT_CATALOG, BE §5.1-5.2) and removes what it added afterwards. Every
  * other row carries a per-run marker and is deleted at the end.
  */
@@ -18,7 +18,7 @@ import { unwrapActions } from "@/tests/helpers/action-result";
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -103,7 +103,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();
@@ -128,7 +128,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
 
   const ids = { staff: [] as string[], contacts: [] as string[], projects: [] as string[] };
   const seeded = { phases: [] as string[], templates: [] as string[] };
-  let firstTramo = { id: "", key: "", autoStart: "manual" as "manual" | "on_create" | "on_ready" };
+  let firstEtapa = { id: "", key: "", autoStart: "manual" as "manual" | "on_create" | "on_ready" };
   let expectedTaskCount = 0;
   let admin: Actor;
   let admin2: Actor;
@@ -149,8 +149,8 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
     return { id: row.id, name: `Flujo ${run} ${label}`, email, access };
   }
 
-  async function setFirstTramoAutoStart(value: "manual" | "on_create" | "on_ready") {
-    await db.update(schema.workflows).set({ autoStart: value }).where(eq(schema.workflows.id, firstTramo.id));
+  async function setFirstEtapaAutoStart(value: "manual" | "on_create" | "on_ready") {
+    await db.update(schema.workflows).set({ autoStart: value }).where(eq(schema.workflows.id, firstEtapa.id));
   }
 
   async function createAs(actor: Actor, label: string) {
@@ -211,7 +211,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
       .where(and(eq(schema.workflows.active, true), isNull(schema.workflows.deletedAt)))
       .orderBy(asc(schema.workflows.sortOrder))
       .limit(1);
-    firstTramo = { id: first.id, key: first.key, autoStart: first.autoStart };
+    firstEtapa = { id: first.id, key: first.key, autoStart: first.autoStart };
 
     const existingPhases = await db
       .select({ id: schema.workflowPhases.id })
@@ -248,7 +248,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
       );
     expectedTaskCount = count;
 
-    await setFirstTramoAutoStart("on_create");
+    await setFirstEtapaAutoStart("on_create");
   });
 
   beforeEach(() => {
@@ -256,7 +256,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
   });
 
   afterAll(async () => {
-    await setFirstTramoAutoStart(firstTramo.autoStart);
+    await setFirstEtapaAutoStart(firstEtapa.autoStart);
     const projectTaskIds = ids.projects.length
       ? (
           await db
@@ -296,19 +296,19 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
       const [row] = await db.select().from(schema.projects).where(eq(schema.projects.id, project.id));
       expect(row.clientId).toBeNull();
       expect(row.status).toBe("activo");
-      expect(row.currentWorkflowId).toBe(firstTramo.id);
+      expect(row.currentWorkflowId).toBe(firstEtapa.id);
 
       const stages = await db
         .select()
         .from(schema.projectStages)
         .where(eq(schema.projectStages.projectId, project.id));
-      expect(stages.map((s) => s.workflowId)).toEqual([firstTramo.id]);
+      expect(stages.map((s) => s.workflowId)).toEqual([firstEtapa.id]);
 
       const tasks = await liveTasks(project.id);
       const flow = tasks.filter((t) => t.kind === "workflow");
-      if (seeded.templates.length || firstTramo.key === "presale") expect(expectedTaskCount).toBe(10);
+      if (seeded.templates.length || firstEtapa.key === "presale") expect(expectedTaskCount).toBe(10);
       expect(flow).toHaveLength(expectedTaskCount);
-      expect(flow.every((t) => t.workflowId === firstTramo.id && t.phaseId && t.templateId)).toBe(true);
+      expect(flow.every((t) => t.workflowId === firstEtapa.id && t.phaseId && t.templateId)).toBe(true);
       // Auto-started tasks are "Sin asignar" (BE §9.4).
       expect(flow.every((t) => t.managerId === null)).toBe(true);
       expect(new Set(flow.map((t) => t.templateId)).size).toBe(flow.length);
@@ -330,7 +330,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
     });
 
     it("with auto-start off leaves the etapa unstarted but still adds the admin task", async () => {
-      await setFirstTramoAutoStart("manual");
+      await setFirstEtapaAutoStart("manual");
       try {
         const project = await createAs(admin, "sin-inicio");
 
@@ -346,7 +346,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
         expect(tasks.filter((t) => t.kind === "workflow")).toHaveLength(0);
         expect(tasks.filter((t) => t.kind === "admin" && t.systemKey === ASSIGN_CLIENT_SYSTEM_KEY)).toHaveLength(1);
       } finally {
-        await setFirstTramoAutoStart("on_create");
+        await setFirstEtapaAutoStart("on_create");
       }
     });
 
@@ -446,7 +446,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
       const [phase] = await db
         .select({ id: schema.workflowPhases.id })
         .from(schema.workflowPhases)
-        .where(and(eq(schema.workflowPhases.workflowId, firstTramo.id), eq(schema.workflowPhases.active, true)))
+        .where(and(eq(schema.workflowPhases.workflowId, firstEtapa.id), eq(schema.workflowPhases.active, true)))
         .limit(1);
       phaseId = phase.id;
       const [space] = await db

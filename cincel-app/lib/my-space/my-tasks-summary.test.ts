@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SIN_TRAMO_KEY } from "@/lib/tareas/summary";
+import { SIN_ETAPA_KEY } from "@/lib/tareas/summary";
 
 import {
   EMPTY_MY_TASKS_COUNTS,
@@ -25,8 +25,8 @@ const MONDAY = "2026-11-09";
 
 describe("Mi espacio task filters (#1051)", () => {
   it("summary input: trimmed search, retraso only when on", () => {
-    expect(myTasksSummaryInput({ tramo: null, q: "  ", retraso: false })).toEqual({ tramo: null, q: null });
-    expect(myTasksSummaryInput({ tramo: "diseno", q: " planos ", retraso: true })).toEqual({ tramo: "diseno", q: "planos", retraso: true });
+    expect(myTasksSummaryInput({ etapa: null, q: "  ", retraso: false })).toEqual({ etapa: null, q: null });
+    expect(myTasksSummaryInput({ etapa: "diseno", q: " planos ", retraso: true })).toEqual({ etapa: "diseno", q: "planos", retraso: true });
   });
 
   it("board columns by commitment date: Hoy holds the overdue ones, Después the undated ones", () => {
@@ -42,20 +42,20 @@ describe("Mi espacio task filters (#1051)", () => {
   it("first page: 5 cards per column, 4 rows per Esencial card, 30 elsewhere", () => {
     expect(meTasksFirstPageSize(meTasksBucketFilters("hoy"))).toBe(ME_BOARD_FIRST_PAGE);
     expect(meTasksFirstPageSize(meTasksProjectFilters("p1"))).toBe(ME_ESENCIAL_LIMITS.perProject);
-    expect(meTasksFirstPageSize(meTasksGroupFilters({ tramo: null, q: null }, "p1", "diseno", false))).toBe(ME_TASKS_PAGE_SIZE);
+    expect(meTasksFirstPageSize(meTasksGroupFilters({ etapa: null, q: null }, "p1", "diseno", false))).toBe(ME_TASKS_PAGE_SIZE);
   });
 
   it("group filters: project, etapa (Sin etapa key), search, closed only outside En retraso", () => {
-    expect(meTasksGroupFilters({ tramo: null, q: "x" }, "p1", null, true)).toEqual({
+    expect(meTasksGroupFilters({ etapa: null, q: "x" }, "p1", null, true)).toEqual({
       proyecto: "p1",
-      tramo: SIN_TRAMO_KEY,
+      etapa: SIN_ETAPA_KEY,
       q: "x",
       cerradas: true,
       orderBy: "retraso",
     });
-    expect(meTasksGroupFilters({ tramo: null, q: null, retraso: true }, "p1", "diseno", true)).toEqual({
+    expect(meTasksGroupFilters({ etapa: null, q: null, retraso: true }, "p1", "diseno", true)).toEqual({
       proyecto: "p1",
-      tramo: "diseno",
+      etapa: "diseno",
       retraso: true,
       orderBy: "retraso",
     });
@@ -68,8 +68,8 @@ describe("Mi espacio task filters (#1051)", () => {
     expect(rowFitsMeList(meTasksBucketFilters("despues"), { ...row, commitmentDate: null }, MONDAY)).toBe(true);
     expect(rowFitsMeList(meTasksProjectFilters("p1"), row, MONDAY)).toBe(true);
     expect(rowFitsMeList(meTasksProjectFilters("p2"), row, MONDAY)).toBe(false);
-    expect(rowFitsMeList({ proyecto: "p1", tramo: SIN_TRAMO_KEY }, row, MONDAY)).toBe(false);
-    expect(rowFitsMeList({ proyecto: "p1", tramo: "diseno", q: "x" }, row, MONDAY)).toBe(false);
+    expect(rowFitsMeList({ proyecto: "p1", etapa: SIN_ETAPA_KEY }, row, MONDAY)).toBe(false);
+    expect(rowFitsMeList({ proyecto: "p1", etapa: "diseno", q: "x" }, row, MONDAY)).toBe(false);
   });
 });
 
@@ -82,10 +82,10 @@ describe("Analítico groups from the summary", () => {
       {
         project: { id: "p1", name: "Casa Lomas" },
         ...counts({ open: 3, overdue: 1, blocked: 1, daysLateSum: 5, maxDaysLate: 5, closed: 2 }),
-        tramos: [
-          { tramo: { id: "w-pre", key: "presale", name: "Presale", sortOrder: 1 }, ...counts({ open: 1 }) },
+        etapas: [
+          { etapa: { id: "w-pre", key: "presale", name: "Presale", sortOrder: 1 }, ...counts({ open: 1 }) },
           {
-            tramo: { id: "w-dis", key: "diseno", name: "Diseño", sortOrder: 2 },
+            etapa: { id: "w-dis", key: "diseno", name: "Diseño", sortOrder: 2 },
             ...counts({ open: 2, overdue: 1, blocked: 1, daysLateSum: 5, maxDaysLate: 5, closed: 2 }),
           },
         ],
@@ -93,7 +93,7 @@ describe("Analítico groups from the summary", () => {
       {
         project: { id: "p2", name: "Torre Sur" },
         ...counts({ closed: 1 }),
-        tramos: [{ tramo: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...counts({ closed: 1 }) }],
+        etapas: [{ etapa: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...counts({ closed: 1 }) }],
       },
     ],
   };

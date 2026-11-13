@@ -4,7 +4,7 @@
  * Runs only when TEST_DATABASE_URL points at a migrated database; every test
  * runs inside a transaction that is rolled back.
  *
- * - one grouping-sets statement returns the tramo, project and total levels;
+ * - one grouping-sets statement returns the etapa, project and total levels;
  * - overdue is `coalesce(commitment, delivery)` before today in America/Mexico_City;
  * - blocked and the days-late sum;
  * - `unfiltered` ignores `mostrar`;
@@ -28,7 +28,7 @@ vi.mock("@/lib/db/client", () => ({
 
 import { taskSummary } from "@/lib/repositories/tasks-repository";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
-import { SIN_TRAMO_LABEL, pctVencidas, retrasoPromedio } from "@/lib/tareas/summary";
+import { SIN_ETAPA_LABEL, pctVencidas, retrasoPromedio } from "@/lib/tareas/summary";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -99,7 +99,7 @@ describe.skipIf(!url)("taskSummary (test DB)", () => {
   /**
    * Alfa · Diseño: 2 overdue (3 and 9 days), 1 open on time, 1 completado.
    * Alfa · Obra: 1 overdue by delivery date (12 days), blocked.
-   * Alfa · Sin tramo: 1 open without a date.
+   * Alfa · Sin etapa: 1 open without a date.
    * Beta · Diseño: 1 open on time, 1 closed by a custom status that was overdue.
    */
   async function seed(tx: Tx, ctx: Ctx) {
@@ -133,14 +133,14 @@ describe.skipIf(!url)("taskSummary (test DB)", () => {
       expect(summary.projects.map((p) => p.project.id)).toEqual([ctx.alpha, ctx.beta]);
       const [alpha, beta] = summary.projects;
       expect(alpha).toMatchObject({ total: 6, open: 5, overdue: 3, blocked: 1, daysLateSum: 24 });
-      // Tramos by sort order, Sin tramo last.
-      expect(alpha.tramos.map((t) => t.tramo.name)).toEqual(["Diseño", "Obra", SIN_TRAMO_LABEL]);
-      expect(alpha.tramos[0]).toMatchObject({ total: 4, open: 3, overdue: 2, blocked: 0, daysLateSum: 12 });
-      expect(alpha.tramos[2].tramo).toEqual({ id: null, key: null, name: SIN_TRAMO_LABEL, sortOrder: 2147483647 });
+      // Etapas by sort order, Sin etapa last.
+      expect(alpha.etapas.map((t) => t.etapa.name)).toEqual(["Diseño", "Obra", SIN_ETAPA_LABEL]);
+      expect(alpha.etapas[0]).toMatchObject({ total: 4, open: 3, overdue: 2, blocked: 0, daysLateSum: 12 });
+      expect(alpha.etapas[2].etapa).toEqual({ id: null, key: null, name: SIN_ETAPA_LABEL, sortOrder: 2147483647 });
       expect(beta).toMatchObject({ total: 2, open: 1, overdue: 0, daysLateSum: 0 });
       // The levels add up.
       for (const p of summary.projects) {
-        expect(p.tramos.reduce((sum, t) => sum + t.total, 0)).toBe(p.total);
+        expect(p.etapas.reduce((sum, t) => sum + t.total, 0)).toBe(p.total);
       }
       expect(pctVencidas(summary.totals)).toBe(50);
       expect(retrasoPromedio(summary.totals)).toBe(8);
@@ -171,7 +171,7 @@ describe.skipIf(!url)("taskSummary (test DB)", () => {
     await inTx(async (tx, ctx) => {
       await seed(tx, ctx);
       const summary = await taskSummary({ search: ctx.marker }, MEMBER, TODAY);
-      const obra = summary.projects[0].tramos.find((t) => t.tramo.id === ctx.obra)!;
+      const obra = summary.projects[0].etapas.find((t) => t.etapa.id === ctx.obra)!;
       expect(obra).toMatchObject({ total: 1, open: 1, overdue: 1, blocked: 1, daysLateSum: 12 });
       // A closed task past its date is neither overdue nor late.
       const beta = summary.projects.find((p) => p.project.id === ctx.beta)!;
@@ -186,13 +186,13 @@ describe.skipIf(!url)("taskSummary (test DB)", () => {
       const late = await taskSummary({ search: ctx.marker, mostrar: "en_retraso" }, MEMBER, TODAY);
       expect(late.totals).toMatchObject({ total: 3, overdue: 3, projects: 1 });
       expect(late.projects.map((p) => p.project.id)).toEqual([ctx.alpha]);
-      // Tramos without overdue tasks drop out too.
-      expect(late.projects[0].tramos.map((t) => t.tramo.id)).toEqual([ctx.diseno, ctx.obra]);
+      // Etapas without overdue tasks drop out too.
+      expect(late.projects[0].etapas.map((t) => t.etapa.id)).toEqual([ctx.diseno, ctx.obra]);
       expect(late.unfiltered).toMatchObject({ projects: 2, total: 8 });
       const alpha = late.unfiltered.projectList!.find((p) => p.id === ctx.alpha)!;
       expect(alpha.total).toBe(6);
-      expect(alpha.byTramo[ctx.diseno]).toBe(4);
-      expect(alpha.byTramo[""]).toBe(1);
+      expect(alpha.byEtapa[ctx.diseno]).toBe(4);
+      expect(alpha.byEtapa[""]).toBe(1);
 
       const open = await taskSummary({ search: ctx.marker, mostrar: "abiertas" }, MEMBER, TODAY);
       expect(open.totals).toMatchObject({ total: 6, open: 6, projects: 2 });

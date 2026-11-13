@@ -141,8 +141,8 @@ export type DateQuickPick = (typeof DATE_QUICK_PICKS)[number]["id"];
 export const LOCK_REASON = {
   /** Not the task's responsable nor an admin (`requireTaskWriter`). */
   taskWriter: "Solo el responsable o un admin puede cambiar esta tarea.",
-  /** Tramo change (#1022): admins only. */
-  tramo: "Solo un admin puede mover la tarea de etapa.",
+  /** Etapa change (#1022): admins only. */
+  etapa: "Solo un admin puede mover la tarea de etapa.",
   /** Responsable without `canChangeResponsible`. */
   responsible: "Solo un admin puede cambiar el responsable.",
   /** Apoyo (equipo de apoyo, #1038): the same permission as the Responsable. */
@@ -151,9 +151,9 @@ export const LOCK_REASON = {
   status: "Tu rol no puede cambiar el estatus de las tareas.",
   /** Fase of a subtask: it inherits the parent's. */
   subtaskPhase: "La fase viene de la tarea principal.",
-  /** Admin tasks have no tramo, fase nor espacio. */
+  /** Admin tasks have no etapa, fase nor espacio. */
   adminTask: "Las tareas de administración no tienen etapa, fase ni espacio.",
-  /** Project fields: project admin rules of `updateProjectAction` / `setProjectCurrentTramoAction`. */
+  /** Project fields: project admin rules of `updateProjectAction` / `setProjectCurrentEtapaAction`. */
   project: "Solo un admin puede cambiar este proyecto.",
 } as const;
 export type LockReasonKey = keyof typeof LOCK_REASON;

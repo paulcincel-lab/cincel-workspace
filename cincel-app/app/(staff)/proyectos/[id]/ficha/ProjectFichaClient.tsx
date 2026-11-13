@@ -29,9 +29,9 @@ import {
 import { ProjectAdminFields, projectAdminPatch, type ProjectAdminValue } from "@/components/proyectos/ProjectAdminFields";
 import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard";
 import { canRemapImport, RemapImportSheet } from "@/components/proyectos/RemapImportSheet";
-import { ProjectTramosCard } from "@/components/proyectos/ProjectTramosCard";
+import { ProjectEtapasCard } from "@/components/proyectos/ProjectEtapasCard";
 import { ProjectSpacesCard } from "@/components/proyectos/ProjectSpacesCard";
-import { groupFichaTasks, hasTasksWithoutTramo, NO_PHASE_LABEL } from "@/lib/proyectos/task-groups";
+import { groupFichaTasks, hasTasksWithoutEtapa, NO_PHASE_LABEL } from "@/lib/proyectos/task-groups";
 import { hasImportData, ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
@@ -46,7 +46,7 @@ import {
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
-import { catalogContactsOptions, catalogStaffOptions, catalogTramosOptions } from "@/lib/query/options/catalog";
+import { catalogContactsOptions, catalogStaffOptions, catalogEtapasOptions } from "@/lib/query/options/catalog";
 import { proyectoFichaOptions } from "@/lib/query/options/proyectos";
 import { useUpdateProjectMutation } from "@/lib/proyectos/ficha-mutations";
 import type { ProjectDetail, ProjectLink, TaskLinkInput } from "@/lib/types/core";
@@ -85,7 +85,7 @@ export type ProjectFichaClientProps = {
 /**
  * `/proyectos/[id]/ficha`: the project's ficha form. Reads
  * `qk.proyectos.tab(id,'ficha')` (prefetched by the page) and the editor's
- * catalogs (`catalog.staff`, `catalog.contacts()`, `catalog.tramos`), which
+ * catalogs (`catalog.staff`, `catalog.contacts()`, `catalog.etapas`), which
  * the page prefetches for editors. Every save is a `useActionMutation` that
  * updates only the keys it changes; edit drafts are local form state.
  */
@@ -99,7 +99,7 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
   const ficha = useQuery(proyectoFichaOptions(projectId));
   const staffQuery = useQuery({ ...catalogStaffOptions(), enabled: caps.canEditProjectGeneral });
   const contactsQuery = useQuery({ ...catalogContactsOptions(), enabled: caps.canEditProjectGeneral });
-  const tramosQuery = useQuery({ ...catalogTramosOptions(), enabled: caps.canChangeProjectStage || isAdmin });
+  const etapasQuery = useQuery({ ...catalogEtapasOptions(), enabled: caps.canChangeProjectStage || isAdmin });
 
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<ProjectDetail>>({});
@@ -137,7 +137,7 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
   });
 
   const tasks = useMemo(() => ficha.data?.tasks ?? [], [ficha.data]);
-  // Tramo → Fase (FE §3.5); admins also get the project's admin tasks.
+  // Etapa → Fase (FE §3.5); admins also get the project's admin tasks.
   const taskGroups = useMemo(() => groupFichaTasks(tasks, { includeAdmin: isAdmin }), [tasks, isAdmin]);
   const staff = staffQuery.data ?? [];
   const allContacts = contactsQuery.data ?? [];
@@ -402,12 +402,12 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
               )}
             </section>
 
-            <ProjectTramosCard
+            <ProjectEtapasCard
               project={project}
-              workflows={tramosQuery.data ?? []}
-              canChangeTramo={caps.canChangeProjectStage}
+              workflows={etapasQuery.data ?? []}
+              canChangeEtapa={caps.canChangeProjectStage}
               isAdmin={isAdmin}
-              hasTasksWithoutTramo={hasTasksWithoutTramo(tasks)}
+              hasTasksWithoutEtapa={hasTasksWithoutEtapa(tasks)}
             />
 
             <ProjectSpacesCard projectId={project.id} canEdit={caps.canEditProjectGeneral} />
@@ -426,7 +426,7 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
                       <div className="border-t border-border">
                         {group.phases.map((phaseGroup) => (
                           <div key={phaseGroup.id}>
-                            {group.kind === "tramo" ? (
+                            {group.kind === "etapa" ? (
                               <div className="bg-muted/40 px-4 py-1.5 text-xs font-medium text-muted-foreground">
                                 {phaseGroup.phase ? phaseGroup.name : <Badge variant="outline">{NO_PHASE_LABEL}</Badge>}
                               </div>

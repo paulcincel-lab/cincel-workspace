@@ -5,7 +5,7 @@ import axe from "axe-core";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { buildPortalOverview } from "@/lib/portal/overview";
-import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
+import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalEtapaDTO } from "@/lib/types/portal";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 import { CONTRAST_PAIRS, checkContrast } from "@/lib/ui/contrast";
 import { THEME_IDS, THEME_PRESETS, TOKEN_NAMES } from "@/lib/ui/themes";
@@ -47,7 +47,7 @@ const schedule: PortalScheduleDTO = {
     { key: "PA::Losa", planta: "PA", seccion: "Losa", start: "2026-11-01", end: "2026-11-30", progressPct: 0 },
   ],
 };
-const tramos: PortalTramoDTO[] = [
+const etapas: PortalEtapaDTO[] = [
   { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
   { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 62, startMonth: "2026-06" },
   { key: "construccion", name: "Construcción", state: "por_iniciar", progressPct: 0, startMonth: null },
@@ -56,7 +56,7 @@ const files: PortalFileDTO[] = [
   { id: "f1", name: "Contrato.pdf", mimeType: "application/pdf", sizeBytes: 120_000, modifiedAt: "2026-09-15T00:00:00Z", kind: "file", deliveredAs: "original" },
   { id: "f2", name: "Planta.pdf", mimeType: "application/pdf", sizeBytes: 2_400_000, modifiedAt: "2026-10-28T00:00:00Z", kind: "file", deliveredAs: "original" },
 ];
-const data = buildPortalOverview({ project, schedule, tramos, files, today: "2026-11-07" });
+const data = buildPortalOverview({ project, schedule, etapas, files, today: "2026-11-07" });
 
 /** What the redesign puts on the portal: the org preset's tokens as CSS variables, `data-theme` for the mode. */
 function applyTheme(theme: ThemeId, mode: Mode) {
@@ -175,7 +175,7 @@ describe("portal Visual accessibility", () => {
   const visualData = buildPortalOverview({
     project,
     schedule,
-    tramos,
+    etapas,
     files,
     folders: [
       { folderId: "root", name: "General", files },

@@ -28,7 +28,7 @@ export const DEFAULT_CALENDARIO_FILTERS: CalendarioFilters = {
   mostrar: "todo",
   quien: "yo",
   proyectos: [],
-  tramo: null,
+  etapa: null,
   responsable: null,
   apoyo: true,
   ocultarCompletadas: false,
@@ -59,7 +59,7 @@ export function normalizeCalendarioFilters(
     mostrar: MOSTRAR.includes(merged.mostrar) ? merged.mostrar : "todo",
     quien: merged.quien === "todos" ? "todos" : "yo",
     proyectos: [...new Set(merged.proyectos ?? [])].sort(),
-    tramo: merged.tramo || null,
+    etapa: merged.etapa || null,
     // `responsable` only makes sense for "todos".
     responsable: merged.quien === "todos" ? merged.responsable || null : null,
     apoyo: merged.apoyo !== false,
@@ -90,7 +90,7 @@ export function parseCalendarioQuery(search: SearchInput, defaults: CalendarioQu
         mostrar: mostrar && MOSTRAR.includes(mostrar) ? mostrar : "todo",
         quien,
         proyectos,
-        tramo: readEtapaParam(p),
+        etapa: readEtapaParam(p),
         responsable: p.get("responsable"),
         apoyo: p.get("apoyo") !== "0",
         ocultarCompletadas: ocultar === "1" ? true : ocultar === "0" ? false : (defaults.ocultarCompletadas ?? false),
@@ -118,7 +118,7 @@ export function toCalendarioSearch(q: CalendarioQuery, defaults: CalendarioQuery
   if (f.mostrar !== "todo") p.set("mostrar", f.mostrar);
   if (f.quien !== "yo") p.set("quien", f.quien);
   if (f.proyectos.length) p.set("proyectos", f.proyectos.join(","));
-  if (f.tramo) p.set("etapa", f.tramo);
+  if (f.etapa) p.set("etapa", f.etapa);
   if (f.responsable) p.set("responsable", f.responsable);
   if (!f.apoyo) p.set("apoyo", "0");
   if (f.ocultarCompletadas !== (defaults.ocultarCompletadas ?? false)) p.set("ocultar", f.ocultarCompletadas ? "1" : "0");

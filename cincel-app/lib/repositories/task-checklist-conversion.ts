@@ -156,8 +156,8 @@ async function planAndApply(
     const t = item.target;
     const order = (nextOrder.get(t.id) ?? 0) + 1;
     nextOrder.set(t.id, order);
-    // An admin parent makes an admin child (no tramo, fase or espacio); otherwise
-    // the child takes the parent's tramo and fase, as createSubtask does.
+    // An admin parent makes an admin child (no etapa, fase or espacio); otherwise
+    // the child takes the parent's etapa and fase, as createSubtask does.
     const admin = t.kind === "admin";
     const [sub] = await database
       .insert(tasks)

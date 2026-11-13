@@ -49,7 +49,7 @@ function workflowOf(r: { workflowId: string | null; workflowKey: string | null; 
   return r.workflowId ? { id: r.workflowId, key: r.workflowKey ?? "", name: r.workflowName ?? "", sortOrder: r.workflowSort ?? 0 } : null;
 }
 
-/** Per tramo and fase: the top-level tasks' counts and dates (one grouped statement). */
+/** Per etapa and fase: the top-level tasks' counts and dates (one grouped statement). */
 export async function resumenPhaseBuckets(projectId: string, includeAdmin: boolean, today: string): Promise<ResumenPhaseBucket[]> {
   const rows = await db
     .select({
@@ -113,7 +113,7 @@ export async function resumenPhaseBuckets(projectId: string, includeAdmin: boole
   }));
 }
 
-/** Per Responsable and tramo: every task (subtasks included) and the top-level counts (one grouped statement). */
+/** Per Responsable and etapa: every task (subtasks included) and the top-level counts (one grouped statement). */
 export async function resumenManagerBuckets(projectId: string, includeAdmin: boolean, today: string): Promise<ResumenManagerBucket[]> {
   const live = sql`${tasks.parentTaskId} is null`;
   const rows = await db
@@ -190,7 +190,7 @@ async function openTaskCards(projectId: string, includeAdmin: boolean, today: st
     (r): NextTask => ({
       id: r.id,
       title: r.title,
-      tramoKey: r.workflowKey ?? null,
+      etapaKey: r.workflowKey ?? null,
       phase: r.phaseName ?? null,
       responsable: r.managerId ? { id: r.managerId, name: r.managerName ?? "" } : null,
       dueDate: r.due,

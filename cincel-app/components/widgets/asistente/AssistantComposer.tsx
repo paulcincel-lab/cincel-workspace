@@ -5,7 +5,7 @@ import { ArrowUpIcon, Loader2Icon, PaperclipIcon, XIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
-import { tramoColorClass } from "@/lib/tramos/tramo-color";
+import { etapaColorClass } from "@/lib/etapas/etapa-color";
 import type { ContextChip } from "@/lib/types/asistente";
 import { cn } from "@/lib/utils";
 
@@ -206,8 +206,8 @@ export function AssistantComposer({
                   chip.kind === "project" ? "bg-secondary text-secondary-foreground" : "bg-muted text-sidebar-foreground",
                 )}
               >
-                {chip.tramo ? (
-                  <span aria-hidden className={cn("size-[7px] shrink-0 rounded-full", tramoColorClass(chip.tramo))} />
+                {chip.etapa ? (
+                  <span aria-hidden className={cn("size-[7px] shrink-0 rounded-full", etapaColorClass(chip.etapa))} />
                 ) : null}
                 <span className="truncate">{chip.label}</span>
                 <button

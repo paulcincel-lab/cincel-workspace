@@ -11,7 +11,7 @@ import type { PageHeaderProps } from "@/components/shell/PageHeader";
 import { ListPage, type ListSpec } from "@/components/patterns/ListPage";
 import { OPEN_TASK_LABEL } from "@/components/widgets/editable-cell";
 import { PeopleStack } from "@/components/widgets/PeopleStack";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions } from "@/lib/query/options/tareas";
 import type { TareasListFilters } from "@/lib/query/keys";
@@ -27,7 +27,7 @@ import { LISTA_COLUMNS, listaTable, listaTasks, withSubtaskRows } from "./lista-
 import { SubtaskToggle, subtaskOfLabel, useSubtaskRows } from "./use-subtask-rows";
 import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
 import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
-import { TareasStartSlot, startSlotTramo } from "./TareasStartSlot";
+import { TareasStartSlot, startSlotEtapa } from "./TareasStartSlot";
 import { TAREAS_CELL_KEYS, useTaskCellEdits } from "./use-task-cell-edits";
 import { deleteTargetOf, useDeleteTasks } from "./use-delete-tasks";
 import { TaskBulkBar } from "./TaskBulkBar";
@@ -38,7 +38,7 @@ import { replaceTareasUrl, useTareasFilters, useTareasPage, useTareasPageReady, 
 export const LISTA_EMPTY: EmptyStateProps = { title: "No hay tareas con estos filtros" };
 
 export type TareasListaProps = {
-  /** The `/tareas` query: its filters key the list (`qk.tareas.list(f)`); one tramo mounts the start slot. */
+  /** The `/tareas` query: its filters key the list (`qk.tareas.list(f)`); one etapa mounts the start slot. */
   query: TareasQuery;
   header: PageHeaderProps;
   filters?: ReactNode;
@@ -46,7 +46,7 @@ export type TareasListaProps = {
   empty?: EmptyStateProps;
 };
 
-const NO_TRAMOS: WorkflowRef[] = [];
+const NO_ETAPAS: WorkflowRef[] = [];
 const NO_STAFF: { id: string; name: string }[] = [];
 const sameRow = (row: TaskListRow) => row;
 /** Every Lista column with a server sort (#1044). */
@@ -59,7 +59,7 @@ const LISTA_SORTABLE = LISTA_COLUMNS.map((c) => c.key).filter((key) => key in TA
  * renders the three styles from the one table (Visual grouped by estatus with
  * Completado collapsed, Esencial plain rows with the Plazo column, Analítico
  * dense rows sorted by delay with the by-project summary columns), so this
- * view never branches on the style. With a single tramo, Project Flow's
+ * view never branches on the style. With a single etapa, Project Flow's
  * start slot (its own query, `qk.tareas.startSlot`) sits above the table.
  */
 export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY }: TareasListaProps) {
@@ -87,7 +87,7 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
   );
   const ready = useTareasPageReady(query);
   const page = useTareasPage(query).data;
-  const tramos = page?.tramos ?? NO_TRAMOS;
+  const etapas = page?.etapas ?? NO_ETAPAS;
   const staff = page?.staff ?? NO_STAFF;
   const list = useInfiniteQuery({ ...tareasListInfiniteOptions(listFilters), enabled: ready });
 
@@ -99,10 +99,10 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
     () => (pages ?? []).flatMap((p) => p.rows.filter((r) => !isHidden(r.id, r.parentTaskId)).map(listItemOfRow)),
     [pages, isHidden],
   );
-  // Idempotent: the rows come narrowed by tramo and proyecto already.
+  // Idempotent: the rows come narrowed by etapa and proyecto already.
   const tasks = useMemo(
-    () => listaTasks(loaded, { tramo: query.tramo, proyecto: query.proyecto }),
-    [loaded, query.tramo, query.proyecto],
+    () => listaTasks(loaded, { etapa: query.etapa, proyecto: query.proyecto }),
+    [loaded, query.etapa, query.proyecto],
   );
   // ── Subtasks (#1048): an open parent's subtasks follow it, in its estatus group.
   const rowsById = useMemo(() => new Map((pages ?? []).flatMap((p) => p.rows).map((r) => [r.id, r])), [pages]);
@@ -130,7 +130,7 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
     (row: Record<string, unknown>): TaskListItem | undefined => tasksById.get(String(row.id)),
     [tasksById],
   );
-  const cells = useTaskCellEdits<Record<string, unknown>>({ taskOf, tramos, staff });
+  const cells = useTaskCellEdits<Record<string, unknown>>({ taskOf, etapas, staff });
   const data = useMemo(() => {
     const table = listaTable(tasks, undefined, { serverOrder: sort !== null });
     return { ...table, rows: withSubtaskRows(table.rows, childrenOf), columns: cells.withEdits(table.columns) };
@@ -197,7 +197,7 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
           </>
         );
       }
-      if (columnKey === "tramo" && task.workflow) return <TramoBadge tramo={task.workflow} />;
+      if (columnKey === "etapa" && task.workflow) return <EtapaBadge etapa={task.workflow} />;
       if (columnKey === TASK_SUPPORT_COLUMN) return <PeopleStack people={task.support} label={SUPPORT_COLUMN_LABEL} />;
       return undefined;
     },
@@ -245,8 +245,8 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
     [data, renderCell, rowMenu, selectedIds, onSelectionChange, onEndReached, hasNextPage, isFetchingNextPage, remaining, tableSort],
   );
 
-  const slotTramo = startSlotTramo(query.tramo, tramos);
-  const slot = slotTramo ? <TareasStartSlot key={slotTramo.id} workflow={slotTramo} /> : null;
+  const slotEtapa = startSlotEtapa(query.etapa, etapas);
+  const slot = slotEtapa ? <TareasStartSlot key={slotEtapa.id} workflow={slotEtapa} /> : null;
 
   return (
     <CellCommitProvider queryKeys={TAREAS_CELL_KEYS}>

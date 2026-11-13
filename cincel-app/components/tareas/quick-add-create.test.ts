@@ -42,7 +42,7 @@ import { qk } from "@/lib/query/keys";
 const DRAFT: QuickAddDraft = {
   title: "  Revisar plafones ",
   projectId: "p-roble",
-  tramoId: "w-diseno",
+  etapaId: "w-diseno",
   assigneeId: "p-ana",
   dueDate: "2026-11-13",
   priority: "alta",
@@ -74,7 +74,7 @@ describe("quickAddTaskVars", () => {
 
   it("defaults: no fase without a catalog, no manager, no date, media", () => {
     const vars = quickAddTaskVars(
-      { ...DRAFT, tramoId: PRESALE.id, assigneeId: null, dueDate: null, priority: undefined as never, status: "en_proceso" },
+      { ...DRAFT, etapaId: PRESALE.id, assigneeId: null, dueDate: null, priority: undefined as never, status: "en_proceso" },
       WORKFLOWS,
     );
     expect(vars.input).toMatchObject({ workflowId: "w-presale", phaseId: null, managerId: null, deliveryDate: null, priority: "media" });
@@ -82,7 +82,7 @@ describe("quickAddTaskVars", () => {
   });
 
   it("falls back to the first etapa and rejects a draft without project", () => {
-    expect(quickAddTaskVars({ ...DRAFT, tramoId: null }, WORKFLOWS).input.workflowId).toBe(WORKFLOWS[0].id);
+    expect(quickAddTaskVars({ ...DRAFT, etapaId: null }, WORKFLOWS).input.workflowId).toBe(WORKFLOWS[0].id);
     expect(() => quickAddTaskVars({ ...DRAFT, projectId: null }, WORKFLOWS)).toThrow("INVALID");
   });
 });

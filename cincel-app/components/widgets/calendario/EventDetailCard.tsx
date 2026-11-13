@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import type { CalItem, DetailAction, MeetingDetail } from "@/lib/types/calendario";
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction } from "./event-detail-model";
-import { DetailActionButton, KindChip, TaskFacts, TramoBand } from "./EventDetailParts";
+import { DetailActionButton, KindChip, TaskFacts, EtapaBand } from "./EventDetailParts";
 import { MeetingDetailCard } from "./MeetingParts";
 
 export type EventDetailCardProps = {
@@ -46,7 +46,7 @@ function CardBody({ item, actions, onClose, headingId, showClose }: Pick<EventDe
   const done = findAction(shown, TASK_ACTION.complete, TASK_ACTION.reopen);
   return (
     <div className="flex flex-col gap-3 p-4">
-      <TramoBand tramo={item.tramo} />
+      <EtapaBand etapa={item.etapa} />
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-2">
           <KindChip item={item} />

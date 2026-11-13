@@ -58,8 +58,8 @@ describe("historyEventText", () => {
     );
   });
 
-  it("words a etapa move and booleans and hours", () => {
-    expect(historyEventText(change("tramo", "Diseño", "Construcción"))).toBe("Movió la tarea de Diseño a Construcción");
+  it("words an etapa move and booleans and hours", () => {
+    expect(historyEventText(change("etapa", "Diseño", "Construcción"))).toBe("Movió la tarea de Diseño a Construcción");
     expect(historyEventText(change("archived", "false", "true"))).toBe("Cambió archivada: No → Sí");
     expect(historyEventText(change("estimatedHours", "2", "4"))).toBe("Cambió horas estimadas: 2 h → 4 h");
   });

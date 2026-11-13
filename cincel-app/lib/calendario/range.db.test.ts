@@ -21,7 +21,7 @@ const FILTERS: CalendarioFilters = {
   mostrar: "todo",
   quien: "yo",
   proyectos: [],
-  tramo: null,
+  etapa: null,
   responsable: null,
   apoyo: true,
   ocultarCompletadas: false,

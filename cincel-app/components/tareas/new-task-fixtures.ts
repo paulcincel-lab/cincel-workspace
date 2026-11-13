@@ -68,7 +68,7 @@ export const STAFF: StaffOption[] = [
 
 /**
  * `catalog.projectOptions` rows: the active ones plus a paused project the
- * dialog must leave out. `currentWorkflowId` drives the default tramo.
+ * dialog must leave out. `currentWorkflowId` drives the default etapa.
  */
 export const PROJECT_OPTIONS = [
   { id: "p-roble", name: "Casa Roble", status: "activo", currentWorkflowId: "w-diseno" },

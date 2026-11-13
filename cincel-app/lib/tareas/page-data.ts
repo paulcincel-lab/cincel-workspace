@@ -30,13 +30,13 @@ export const TASK_LIST_PAGE_SIZE = 30;
 /** Rows per Lista page: the same first page as every other task list. */
 export const TAREAS_LIST_PAGE_SIZE = TASK_LIST_PAGE_SIZE;
 
-/** Chip counts and Proyecto options (`taskFacets`): they ignore the tramo and proyecto filters. */
+/** Chip counts and Proyecto options (`taskFacets`): they ignore the etapa and proyecto filters. */
 export type TareasFacets = {
-  /** "Todas": the tasks in the selected project, any tramo. */
+  /** "Todas": the tasks in the selected project, any etapa. */
   total: number;
-  /** Per tramo key: the tasks in the selected project. */
-  byTramo: Record<string, number>;
-  /** The projects with tasks in the selected tramo, by name (the selected one always). */
+  /** Per etapa key: the tasks in the selected project. */
+  byEtapa: Record<string, number>;
+  /** The projects with tasks in the selected etapa, by name (the selected one always). */
   projects: {
     id: string;
     name: string;
@@ -45,7 +45,7 @@ export type TareasFacets = {
     open?: number;
     overdue?: number;
   }[];
-  /** "Mostrar" counts in the selected tramo and project; they ignore `mostrar` itself. */
+  /** "Mostrar" counts in the selected etapa and project; they ignore `mostrar` itself. */
   mostrar?: Record<TareasMostrar, number>;
   /** Of those tasks, the ones the viewer manages. */
   mine?: number;
@@ -90,7 +90,7 @@ export type TareasStaffOption = { id: string; name: string };
 /** `getTareasPageData`: what one `/tareas` view needs, in one call. */
 export type TareasPageData = {
   facets: TareasFacets;
-  tramos: WorkflowRef[];
+  etapas: WorkflowRef[];
   staff: TareasStaffOption[];
   /** Lista: the first page. */
   list?: TareasRowsPage;
@@ -98,9 +98,9 @@ export type TareasPageData = {
   board?: TareasBoardData;
   /** Esencial: the cards per project. */
   byProject?: TareasByProject;
-  /** Analítico: the counts per project and tramo (`qk.tareas.summary(f)`). */
+  /** Analítico: the counts per project and etapa (`qk.tareas.summary(f)`). */
   summary?: TareasSummary;
-  /** Analítico: the first page of the first expanded tramo groups, keyed by their list filters (`tareasGroupFilters`). */
+  /** Analítico: the first page of the first expanded etapa groups, keyed by their list filters (`tareasGroupFilters`). */
   groups?: { filters: TareasListFilters; page: TareasRowsPage }[];
 };
 
@@ -196,8 +196,8 @@ export function moveBoardCard(
 export type TareasTrendKey = "abiertas" | "vencidas" | "en_proceso" | "completadas";
 export const TAREAS_TREND_KEYS: readonly TareasTrendKey[] = ["abiertas", "vencidas", "en_proceso", "completadas"];
 
-/** One day of the "Esta semana" strip: the open tasks due that day and the tramo most of them are in. */
-export type TareasTrendDay = { date: string; due: number; tramoKey: string | null };
+/** One day of the "Esta semana" strip: the open tasks due that day and the etapa most of them are in. */
+export type TareasTrendDay = { date: string; due: number; etapaKey: string | null };
 
 /**
  * `qk.tareas.trend(f)`: the KPI tiles (value, `series7`, `delta {value, good,

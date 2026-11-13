@@ -39,9 +39,9 @@ export function matchPhaseByName(
 
 /**
  * The fase a template is stored under: 1) `phaseId` when given; 2) the fase of
- * the tramo whose `nameKey` equals the old `phase` text (active fases first);
- * 3) the tramo's first fase in catalog order (first active one, else the first
- * one). Null only when the tramo has no fases at all.
+ * the etapa whose `nameKey` equals the old `phase` text (active fases first);
+ * 3) the etapa's first fase in catalog order (first active one, else the first
+ * one). Null only when the etapa has no fases at all.
  */
 export function resolveTemplatePhaseId(
   source: TemplatePhaseSource,

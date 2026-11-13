@@ -1,9 +1,9 @@
 // @vitest-environment node
 /**
  * `onboard_client` after #1037 / #1055: the project is created without a
- * tramo, the client is linked to it (project client for administrators,
+ * etapa, the client is linked to it (project client for administrators,
  * project contact otherwise), an existing client is reused, and the chosen
- * tramo starts with its managers.
+ * etapa starts with its managers.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,7 @@ const h = vi.hoisted(() => ({
   createProjectAction: vi.fn(),
   updateProjectAction: vi.fn(),
   setProjectContactsAction: vi.fn(),
-  startTramoAction: vi.fn(),
+  startEtapaAction: vi.fn(),
   fetchWorkflowsAction: vi.fn(),
   listViewerTasks: vi.fn(),
   requireCapabilityUser: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock("@/lib/actions/projects-actions", () => ({
   updateProjectAction: h.updateProjectAction,
   setProjectContactsAction: h.setProjectContactsAction,
 }));
-vi.mock("@/lib/actions/tramo-start-actions", () => ({ startTramoAction: h.startTramoAction }));
+vi.mock("@/lib/actions/etapa-start-actions", () => ({ startEtapaAction: h.startEtapaAction }));
 vi.mock("@/lib/actions/tasks-actions", () => ({ createUserTaskAction: vi.fn(), assignTaskAction: vi.fn(), mergeTasksAction: vi.fn() }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowsAction: h.fetchWorkflowsAction }));
 vi.mock("@/lib/actions/staff-actions", () => ({ fetchStaffAction: vi.fn().mockResolvedValue([]) }));
@@ -67,19 +67,19 @@ beforeEach(() => {
   h.createProjectAction.mockResolvedValue({ ok: true, data: { id: "p1", name: "Casa Acme" } });
   h.updateProjectAction.mockResolvedValue({ ok: true, data: { id: "p1" } });
   h.setProjectContactsAction.mockResolvedValue({ ok: true, data: undefined });
-  h.startTramoAction.mockResolvedValue({ ok: true, data: {} });
+  h.startEtapaAction.mockResolvedValue({ ok: true, data: {} });
   h.listViewerTasks.mockResolvedValue([{ id: "t1" }, { id: "t2" }]);
 });
 
 describe("onboard_client", () => {
-  it("an administrator: new client, project without a etapa, client set on the project, etapa started", async () => {
+  it("an administrator: new client, project without an etapa, client set on the project, etapa started", async () => {
     h.requireCapabilityUser.mockResolvedValue(userWith("Administrador"));
     const out = await run({ name: "Acme", projectName: "Casa Acme" });
 
     expect(h.createProjectAction).toHaveBeenCalledWith({ name: "Casa Acme", startWorkflowId: null });
     expect(h.updateProjectAction).toHaveBeenCalledWith("p1", { clientId: "c-new" });
     expect(h.setProjectContactsAction).not.toHaveBeenCalled();
-    expect(h.startTramoAction).toHaveBeenCalledWith({
+    expect(h.startEtapaAction).toHaveBeenCalledWith({
       projectId: "p1",
       workflowId: "w1",
       phaseIds: ["f1"],

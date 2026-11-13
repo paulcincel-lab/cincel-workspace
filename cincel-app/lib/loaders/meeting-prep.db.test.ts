@@ -186,7 +186,7 @@ describe.skipIf(!url)("meeting prep (test DB)", async () => {
   it("has empty KPIs without a project", async () => {
     const prep = await asViewer(viewer(ana), () => pageData.getMeetingPrep(noProjectEventId));
     expect(prep!.kpis.progressVsPlan).toBeNull();
-    expect(prep!.kpis.tramo).toBeNull();
+    expect(prep!.kpis.etapa).toBeNull();
     expect(prep!.kpis.lastMeeting).toBeNull();
   });
 

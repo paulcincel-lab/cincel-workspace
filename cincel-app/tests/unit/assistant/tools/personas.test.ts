@@ -258,7 +258,7 @@ describe("get_person", () => {
       person: { id: "s-2", name: "Luis Pérez", initials: "LP", open: 4, overdue: 1, activeProjects: 2, occupancyPct: 80, puesto: "Residente" },
       stats: [{ key: "abiertas", label: "Abiertas", value: 4 }],
       projects: [{ id: "p-1", label: "Casa Ruiz", sublabel: "responsable", real: 40 }],
-      tasks: [{ id: "t-1", title: "Plano", href: "/tareas?tarea=t-1", project: "Casa Ruiz", tramo: null, reason: "Vencida", tone: "danger", assignee: null, due: "2026-11-01", daysLate: 6 }],
+      tasks: [{ id: "t-1", title: "Plano", href: "/tareas?tarea=t-1", project: "Casa Ruiz", etapa: null, reason: "Vencida", tone: "danger", assignee: null, due: "2026-11-01", daysLate: 6 }],
       weekHours: null,
       availability: ["libre", "ocupado", "libre", "libre", "vacaciones"],
     });

@@ -28,14 +28,14 @@ import { HEAT_CELL_CLASS } from "@/components/widgets/record-table-format";
 import { createUserTaskAction } from "@/lib/actions/tasks-actions";
 import { deleteTargetOf, useDeleteTasks } from "@/components/tareas/use-delete-tasks";
 import { TaskBulkBar } from "@/components/tareas/TaskBulkBar";
-import { ProjectNoTramo } from "@/components/proyectos/ProjectNoTramo";
+import { ProjectNoEtapa } from "@/components/proyectos/ProjectNoEtapa";
 import { useTaskSelection } from "@/components/tareas/use-task-selection";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { computeSCurve } from "@/lib/cronograma/metrics";
 import {
   RESUMEN_SIN_FASE,
   dayMonthLong,
-  nextTramoHint,
+  nextEtapaHint,
   sCurveGapStart,
   shortDate,
   taskRowOf,
@@ -59,9 +59,9 @@ import { qk, type TareasListFilters } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
 import { proyectoAssigneeSuggestionOptions, proyectoResumenSummaryOptions } from "@/lib/query/options/proyectos";
 import { fetchAllTareasListRows, tareasListInfiniteOptions, taskPhasesKey } from "@/lib/query/options/tareas";
-import { parseQuickAdd, type QuickAddPerson, type QuickAddTramo } from "@/lib/quick-add/parse";
+import { parseQuickAdd, type QuickAddPerson, type QuickAddEtapa } from "@/lib/quick-add/parse";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type { TaskListRow, TaskPriority, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { SCurvePoint } from "@/lib/types/schedule";
 import type { RecordColumn } from "@/lib/types/widgets";
@@ -72,17 +72,17 @@ import { cn } from "@/lib/utils";
  * Proyecto · Resumen in Analítico (#997, frame `ProyectoResumen-Analitico`):
  * every number in tables grouped by domain. Top to bottom: the KPI strip,
  * the "Ir a" nav (section anchors, CSV export, expand / collapse both
- * tables), "Tramos y fases" (tramo → fase), a row with "Avance contra plan"
- * (S-curve) and "Carga del equipo", and "Tareas por tramo" (tramo → tarea)
+ * tables), "Etapas y fases" (etapa → fase), a row with "Avance contra plan"
+ * (S-curve) and "Carga del equipo", and "Tareas por etapa" (etapa → tarea)
  * whose groups end in a quick-add line.
  *
  * Every count comes from the server's task numbers
  * (`qk.proyectos.resumenSummary(id)`, #1051), never from the loaded rows.
- * Each "Tareas por tramo" group pages its rows through `qk.tareas.list(f)`
+ * Each "Tareas por etapa" group pages its rows through `qk.tareas.list(f)`
  * (30 a page, overdue first, "Cargar más (n restantes)"); the page
  * prefetches the first page of every group. Tarea, Fase, Responsable,
  * Apoyo, Estatus and Vence edit in place with the Tareas table rules
- * (#1026), patching the loaded pages. "Tramos y fases" is calculated from
+ * (#1026), patching the loaded pages. "Etapas y fases" is calculated from
  * the tasks (a fase has no schedule row of its own), so it stays inert.
  */
 export type ResumenAnaliticoLayoutProps = { data: ProjectSummaryInput };
@@ -145,14 +145,14 @@ function goToSection(event: MouseEvent<HTMLAnchorElement>, id: string) {
   section.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
 }
 
-function tramoColor(tramos: Map<string, WorkflowRef>, id: string): string | undefined {
-  const tramo = tramos.get(id);
-  return tramo ? tramoColorVar(tramo.key, tramo.sortOrder) : undefined;
+function etapaColor(etapas: Map<string, WorkflowRef>, id: string): string | undefined {
+  const etapa = etapas.get(id);
+  return etapa ? etapaColorVar(etapa.key, etapa.sortOrder) : undefined;
 }
 
-/** The fase a quick-added task lands in: the current fase when it is of that tramo, else the tramo's first. */
-function phaseForTramo(data: ProjectSummaryInput, tramoId: string): WorkflowPhaseRef | null {
-  const phases = [...(data.phasesByTramo[tramoId] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+/** The fase a quick-added task lands in: the current fase when it is of that etapa, else the etapa's first. */
+function phaseForEtapa(data: ProjectSummaryInput, etapaId: string): WorkflowPhaseRef | null {
+  const phases = [...(data.phasesByEtapa[etapaId] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const current = data.taskStats.currentPhaseId ? phases.find((p) => p.id === data.taskStats.currentPhaseId) : undefined;
   return current ?? phases[0] ?? null;
 }
@@ -167,17 +167,17 @@ const NEW_TASK_KEYS = (projectId: string) => [
   qk.shell.badges(),
 ];
 
-/** What the quick-add creates: a user task in the group's tramo. */
+/** What the quick-add creates: a user task in the group's etapa. */
 export type ResumenQuickAddDraft = {
   title: string;
-  tramoId: string;
+  etapaId: string;
   phaseId: string | null;
   assigneeId: string | null;
   dueDate: string | null;
   priority: TaskPriority;
 };
 
-/** A "Tareas por tramo" row and the task it stands for (cell edits, Apoyo, delete, subtasks). */
+/** A "Tareas por etapa" row and the task it stands for (cell edits, Apoyo, delete, subtasks). */
 export type ResumenTaskRow = TaskRow & { task: TaskListRow };
 
 const taskOfRow = (row: ResumenTaskRow) => row.task;
@@ -191,7 +191,7 @@ function sameState(a: GroupRowsState | undefined, b: GroupRowsState): boolean {
 }
 
 /**
- * One "Tareas por tramo" group's rows (`useInfiniteQuery(tareas.list(f))`,
+ * One "Tareas por etapa" group's rows (`useInfiniteQuery(tareas.list(f))`,
  * 30 a page, overdue first; the page prefetches the first page). Renders
  * nothing: it reports the rows to the layout. Mounted only while its group
  * is open and has tasks.
@@ -231,7 +231,7 @@ function GroupRowsLoader({
   return null;
 }
 
-/** A "Tareas por tramo" group's last rows: the hidden-completed line, then the quick-add (or error) row. */
+/** A "Tareas por etapa" group's last rows: the hidden-completed line, then the quick-add (or error) row. */
 function withHiddenCompleted(line: ReactNode, quickAdd: ReactNode): ReactNode {
   return (
     <>
@@ -263,22 +263,22 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
   const [created, setCreated] = useState<string[]>([]);
 
   const phaseTable = useMemo(
-    () => resumenPhaseGroups(summary, data.tramoCatalog, data.phasesByTramo, data.project, today),
-    [summary, data.tramoCatalog, data.phasesByTramo, data.project, today],
+    () => resumenPhaseGroups(summary, data.etapaCatalog, data.phasesByEtapa, data.project, today),
+    [summary, data.etapaCatalog, data.phasesByEtapa, data.project, today],
   );
-  // "Ocultar completadas" (#1039): only "Tareas por tramo" leaves them out (on the server); each group says how many.
+  // "Ocultar completadas" (#1039): only "Tareas por etapa" leaves them out (on the server); each group says how many.
   const [hideCompleted, setHideCompleted] = useHideCompletedTasks();
   const taskTable = useMemo(
-    () => resumenTaskGroups(summary, data.tramoCatalog, data.project, hideCompleted),
-    [summary, data.tramoCatalog, data.project, hideCompleted],
+    () => resumenTaskGroups(summary, data.etapaCatalog, data.project, hideCompleted),
+    [summary, data.etapaCatalog, data.project, hideCompleted],
   );
   const kpis = useMemo(() => resumenKpisOf(data, summary), [data, summary]);
   const team = useMemo(() => resumenTeamLoadRows(data, summary), [data, summary]);
-  // The "Tareas por tramo" header counts what its table lists.
+  // The "Tareas por etapa" header counts what its table lists.
   const openCount = taskTable.open;
   const overdueCount = taskTable.overdue;
 
-  const tramoById = useMemo(() => new Map(data.tramoCatalog.map((t) => [t.id, t])), [data.tramoCatalog]);
+  const etapaById = useMemo(() => new Map(data.etapaCatalog.map((t) => [t.id, t])), [data.etapaCatalog]);
 
   // ── Rows per open group (`qk.tareas.list`), only for groups with tasks.
   const groupFilters = useMemo(
@@ -286,7 +286,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       new Map(
         taskTable.groups.map((g) => [
           g.id,
-          resumenGroupListFilters(projectId, g.tramo?.key ?? null, { hideCompleted, includeAdmin: summary.includeAdmin }),
+          resumenGroupListFilters(projectId, g.etapa?.key ?? null, { hideCompleted, includeAdmin: summary.includeAdmin }),
         ]),
       ),
     [taskTable.groups, projectId, hideCompleted, summary.includeAdmin],
@@ -315,14 +315,14 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
     [data.staff],
   );
   // ── Editable cells (#1026): the Tareas table rules; a save patches the loaded `qk.tareas.list` pages.
-  // The Fase editor reads each tramo's fases: the Resumen already has them, so they need no read of their own.
+  // The Fase editor reads each etapa's fases: the Resumen already has them, so they need no read of their own.
   const qc = useQueryClient();
   useEffect(() => {
-    for (const [workflowId, phases] of Object.entries(data.phasesByTramo)) {
+    for (const [workflowId, phases] of Object.entries(data.phasesByEtapa)) {
       if (qc.getQueryData(taskPhasesKey(workflowId)) === undefined) qc.setQueryData(taskPhasesKey(workflowId), phases);
     }
-  }, [qc, data.phasesByTramo]);
-  const cells = useTaskCellEdits<ResumenTaskRow>({ taskOf: taskOfRow, tramos: data.tramoCatalog, staff: teamPeople });
+  }, [qc, data.phasesByEtapa]);
+  const cells = useTaskCellEdits<ResumenTaskRow>({ taskOf: taskOfRow, etapas: data.etapaCatalog, staff: teamPeople });
   const taskColumns = useMemo<RecordColumn<ResumenTaskRow>[]>(() => {
     const support = cells.support();
     const column = (key: string, label: string, field: Parameters<typeof cells.cell>[0], rest: Partial<RecordColumn<ResumenTaskRow>>) => ({
@@ -350,13 +350,13 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
     for (const row of team) byId.set(row.staffId, { id: row.staffId, name: row.name, openCount: row.here, overdueCount: row.overdueHere });
     return [...byId.values()];
   }, [team]);
-  const quickTramos = useMemo<QuickAddTramo[]>(() => data.tramoCatalog.map((t) => ({ id: t.id, key: t.key, name: t.name })), [data.tramoCatalog]);
+  const quickEtapas = useMemo<QuickAddEtapa[]>(() => data.etapaCatalog.map((t) => ({ id: t.id, key: t.key, name: t.name })), [data.etapaCatalog]);
 
   async function createTask(draft: ResumenQuickAddDraft): Promise<{ id: string }> {
     const task = await mutation.mutateAsync({
       projectId,
       title: draft.title,
-      workflowId: draft.tramoId,
+      workflowId: draft.etapaId,
       phaseId: draft.phaseId,
       managerId: draft.assigneeId,
       priority: draft.priority,
@@ -383,7 +383,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
         <QuickAddRow
           variant="row"
           colSpan={span}
-          context={{ ...subtaskQuickAddCopy(parent.title), projectId: parent.projectId, tramoId: parent.workflowId, parentTaskId: parent.id }}
+          context={{ ...subtaskQuickAddCopy(parent.title), projectId: parent.projectId, etapaId: parent.workflowId, parentTaskId: parent.id }}
           onCreate={onCreateSubtask}
         />
       ) : null,
@@ -392,20 +392,20 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
   const subtasks = useSubtaskRows<ResumenTaskRow>({ parents: loadedParents, toRow, taskOf: taskOfRow, isHidden, after: subtaskAdd });
 
   const phaseGroups = useMemo(
-    () => phaseTable.groups.map((group) => ({ ...group, id: `fase-${group.id}`, color: tramoColor(tramoById, group.id) })),
-    [phaseTable.groups, tramoById],
+    () => phaseTable.groups.map((group) => ({ ...group, id: `fase-${group.id}`, color: etapaColor(etapaById, group.id) })),
+    [phaseTable.groups, etapaById],
   );
   const taskGroups: Group<ResumenTaskRow>[] = taskTable.groups.map((group) => {
     const state = groupRows[group.id];
     const failed = state?.error === true;
-    const tramo = group.tramo ? (tramoById.get(group.tramo.id) ?? group.tramo) : undefined;
+    const etapa = group.etapa ? (etapaById.get(group.etapa.id) ?? group.etapa) : undefined;
     const loaded = state?.rows?.filter((row) => !isHidden(row.id, row.parentTaskId));
     return {
       id: `tareas-${group.id}`,
       label: group.label,
       caption: group.caption,
       metrics: group.metrics,
-      color: tramoColor(tramoById, group.id),
+      color: etapaColor(etapaById, group.id),
       rows: group.count === 0 || failed ? [] : loaded?.map(toRow),
       loading: group.count > 0 && !failed && (state?.loading ?? true),
       hasMore: state?.hasMore ?? false,
@@ -419,14 +419,14 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
               <ErrorState title={SECTION_ERROR_TITLE} onRetry={() => rowActions.current.get(group.id)?.retry()} />
             </td>
           </tr>
-        ) : canCreate && tramo ? (
+        ) : canCreate && etapa ? (
           <ResumenQuickAdd
-            key={tramo.id}
+            key={etapa.id}
             projectId={projectId}
-            tramo={tramo}
+            etapa={etapa}
             data={data}
             people={people}
-            tramos={quickTramos}
+            etapas={quickEtapas}
             meId={user?.member.id ?? null}
             team={team}
             canAssign={canAssign}
@@ -438,7 +438,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
     };
   });
 
-  // Row checkboxes and the bulk bar (#1040) on "Tareas por tramo"; "Ocultar completadas" clears the selection.
+  // Row checkboxes and the bulk bar (#1040) on "Tareas por etapa"; "Ocultar completadas" clears the selection.
   const shownRows = [
     ...taskGroups.flatMap((g) => (g.rows ?? []).flatMap((row) => [row, ...(subtasks.rowDetail.isOpen(row) ? (subtasks.rowDetail.rows?.(row) ?? []) : [])])),
   ];
@@ -541,9 +541,9 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
     }
   }
 
-  const tramoCount = phaseGroups.length;
-  const noTramo = data.project.tramos.length === 0;
-  const nextTramo = nextTramoHint(data.tramoCatalog, data.project);
+  const etapaCount = phaseGroups.length;
+  const noEtapa = data.project.etapas.length === 0;
+  const nextEtapa = nextEtapaHint(data.etapaCatalog, data.project);
   const phaseCount = phaseGroups.reduce((acc, g) => acc + (g.rows?.length ?? 0), 0);
   const phaseScope = phaseGroups.map((g) => g.id);
   const taskScope = taskGroups.map((g) => g.id);
@@ -555,7 +555,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
 
       <nav aria-label="Ir a sección" className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted-foreground">Ir a</span>
-        <a href="#s-tramos" onClick={(e) => goToSection(e, "s-tramos")} className={buttonVariants({ variant: "outline", size: "sm" })}>
+        <a href="#s-etapas" onClick={(e) => goToSection(e, "s-etapas")} className={buttonVariants({ variant: "outline", size: "sm" })}>
           Etapas y fases
         </a>
         <a href="#s-avance" onClick={(e) => goToSection(e, "s-avance")} className={buttonVariants({ variant: "outline", size: "sm" })}>
@@ -581,18 +581,18 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
         </Button>
       </nav>
 
-      <section id="s-tramos" aria-labelledby="s-tramos-title" className={SECTION}>
+      <section id="s-etapas" aria-labelledby="s-etapas-title" className={SECTION}>
         <header className={SECTION_HEADER}>
-          <h2 id="s-tramos-title" tabIndex={-1} className={SECTION_TITLE}>
+          <h2 id="s-etapas-title" tabIndex={-1} className={SECTION_TITLE}>
             Etapas y fases
           </h2>
           <span className={MONO_META}>
-            {tramoCount} {tramoCount === 1 ? "etapa" : "etapas"} · {phaseCount} {phaseCount === 1 ? "fase" : "fases"}
+            {etapaCount} {etapaCount === 1 ? "etapa" : "etapas"} · {phaseCount} {phaseCount === 1 ? "fase" : "fases"}
           </span>
         </header>
-        {noTramo ? (
-          // No started tramo (#1043): no suggested fases, the empty state with "Iniciar un tramo".
-          <ProjectNoTramo projectId={projectId} tramos={data.tramoCatalog} />
+        {noEtapa ? (
+          // No started etapa (#1043): no suggested fases, the empty state with "Iniciar una etapa".
+          <ProjectNoEtapa projectId={projectId} etapas={data.etapaCatalog} />
         ) : (
           <GroupedTable<PhaseRow>
             label="Etapas y fases"
@@ -617,9 +617,9 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
             error={tasksError}
           />
         )}
-        {nextTramo ? (
-          <p data-slot="tramo-next" className="px-4 py-2 text-[13px] text-muted-foreground">
-            Siguiente: {nextTramo.name}
+        {nextEtapa ? (
+          <p data-slot="etapa-next" className="px-4 py-2 text-[13px] text-muted-foreground">
+            Siguiente: {nextEtapa.name}
           </p>
         ) : null}
       </section>
@@ -821,10 +821,10 @@ function AvanceContraPlan({ data }: { data: ProjectSummaryInput }) {
 
 type ResumenQuickAddProps = {
   projectId: string;
-  tramo: WorkflowRef;
+  etapa: WorkflowRef;
   data: ProjectSummaryInput;
   people: QuickAddPerson[];
-  tramos: QuickAddTramo[];
+  etapas: QuickAddEtapa[];
   meId: string | null;
   team: TeamLoadRow[];
   canAssign: boolean;
@@ -839,14 +839,14 @@ const PRIORITY_CHIP: Record<TaskPriority, { label: string; variant: "warning" | 
 };
 
 /**
- * Last row of a "Tareas por tramo" group: write a task with `@persona`,
- * `#tramo` (prefilled to the group), a date and `!prioridad`. While typing it
+ * Last row of a "Tareas por etapa" group: write a task with `@persona`,
+ * `#etapa` (prefilled to the group), a date and `!prioridad`. While typing it
  * expands into a composer with the parsed tokens ("DETECTADO") and, when the
  * responsable is at 90 % load or more and someone else qualifies
  * (`suggestAssignee`), a status hint: Tab assigns the suggestion, Shift+Tab
  * moves to "Mantener a …", Enter creates, Esc closes.
  */
-function ResumenQuickAdd({ projectId, tramo, data, people, tramos, meId, team, canAssign, colSpan, onCreate }: ResumenQuickAddProps) {
+function ResumenQuickAdd({ projectId, etapa, data, people, etapas, meId, team, canAssign, colSpan, onCreate }: ResumenQuickAddProps) {
   const inputId = useId();
   const statusId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -857,12 +857,12 @@ function ResumenQuickAdd({ projectId, tramo, data, people, tramos, meId, team, c
   const [pending, setPending] = useState(false);
 
   const parsed = useMemo(
-    () => parseQuickAdd(text, { today: data.today, people, tramos, meId }),
-    [text, data.today, people, tramos, meId],
+    () => parseQuickAdd(text, { today: data.today, people, etapas, meId }),
+    [text, data.today, people, etapas, meId],
   );
-  const tramoId = parsed.tramoId ?? tramo.id;
-  const draftTramo = data.tramoCatalog.find((t) => t.id === tramoId) ?? tramo;
-  const phase = phaseForTramo(data, tramoId);
+  const etapaId = parsed.etapaId ?? etapa.id;
+  const draftEtapa = data.etapaCatalog.find((t) => t.id === etapaId) ?? etapa;
+  const phase = phaseForEtapa(data, etapaId);
   const parsedAssignee = parsed.assigneeId ?? null;
   const assigneeId = override?.id ?? parsedAssignee;
   const person = parsedAssignee ? (team.find((r) => r.staffId === parsedAssignee) ?? null) : null;
@@ -909,7 +909,7 @@ function ResumenQuickAdd({ projectId, tramo, data, people, tramos, meId, team, c
     if (!title || ambiguous || pending) return;
     const draft: ResumenQuickAddDraft = {
       title,
-      tramoId,
+      etapaId,
       phaseId: phase?.id ?? null,
       assigneeId,
       dueDate: parsed.dueDate ?? null,
@@ -942,8 +942,8 @@ function ResumenQuickAdd({ projectId, tramo, data, people, tramos, meId, team, c
     }
   }
 
-  const label = `Nueva tarea en ${tramo.name}`;
-  const tramoColor = tramoColorVar(draftTramo.key, draftTramo.sortOrder);
+  const label = `Nueva tarea en ${etapa.name}`;
+  const etapaColor = etapaColorVar(draftEtapa.key, draftEtapa.sortOrder);
 
   return (
     <tr className={cn(active && "anim-in")}>
@@ -981,8 +981,8 @@ function ResumenQuickAdd({ projectId, tramo, data, people, tramos, meId, team, c
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted-foreground">Detectado</span>
               <Badge variant="outline" data-chip="fase">
-                <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: tramoColor }} />
-                {phase ? `${draftTramo.name} › ${phase.name}` : draftTramo.name}
+                <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: etapaColor }} />
+                {phase ? `${draftEtapa.name} › ${phase.name}` : draftEtapa.name}
               </Badge>
               {personName ? (
                 <Badge variant="secondary" data-chip="persona">

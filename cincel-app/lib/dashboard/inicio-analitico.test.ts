@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TaskListItem } from "@/lib/types/core";
 
-import { averageDaysLateOn, tramoAssigneeRows } from "./inicio";
+import { averageDaysLateOn, etapaAssigneeRows } from "./inicio";
 import { todayAgendaItems } from "./inicio-today-agenda";
 
 const TODAY = "2026-11-09";
@@ -19,10 +19,10 @@ describe("averageDaysLateOn", () => {
   });
 });
 
-describe("tramoAssigneeRows", () => {
+describe("etapaAssigneeRows", () => {
   it("counts open, overdue and age per etapa and responsable, in etapa order", () => {
     const base = { kind: "usuario" as const, createdAt: "2026-11-04T18:00:00Z" };
-    const rows = tramoAssigneeRows(
+    const rows = etapaAssigneeRows(
       [
         { ...base, workflow: diseno, managerId: "ana", commitmentDate: "2026-11-01" },
         { ...base, workflow: diseno, managerId: "ana", commitmentDate: null },
@@ -32,9 +32,9 @@ describe("tramoAssigneeRows", () => {
       TODAY,
     );
     expect(rows).toEqual([
-      { tramo: "presale", assigneeId: "luis", open: 1, overdue: 0, ageDays: 5 },
-      { tramo: "diseno", assigneeId: "ana", open: 2, overdue: 1, ageDays: 10 },
-      { tramo: "sin-tramo", assigneeId: null, open: 1, overdue: 0, ageDays: 5 },
+      { etapa: "presale", assigneeId: "luis", open: 1, overdue: 0, ageDays: 5 },
+      { etapa: "diseno", assigneeId: "ana", open: 2, overdue: 1, ageDays: 10 },
+      { etapa: "sin-etapa", assigneeId: null, open: 1, overdue: 0, ageDays: 5 },
     ]);
   });
 });
@@ -75,7 +75,7 @@ describe("todayAgendaItems", () => {
         title: "Entrega de planos",
         start: TODAY,
         allDay: true,
-        tramo: "diseno",
+        etapa: "diseno",
         href: "/tareas?tarea=t1",
         assignee: { id: "ana", name: "Ana Ruiz", initials: "AR" },
       }),

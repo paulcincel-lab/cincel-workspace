@@ -31,7 +31,7 @@ async function requireWorkflowsCapabilities() {
   return resolveWorkflowsCapabilities(await requireCapabilityUser());
 }
 
-/** Signed-in user allowed to manage tramos, fases and templates; FORBIDDEN otherwise. */
+/** Signed-in user allowed to manage etapas, fases and templates; FORBIDDEN otherwise. */
 async function requireWorkflowsManager() {
   const user = await requireCapabilityUser();
   if (!resolveWorkflowsCapabilities(user).canManageWorkflows) throw flowError(FLOW_ERROR.FORBIDDEN);
@@ -39,7 +39,7 @@ async function requireWorkflowsManager() {
 }
 
 /**
- * Any staff session reads the active tramos, fases and templates (Actividades,
+ * Any staff session reads the active etapas, fases and templates (Actividades,
  * Proyectos, Equipo and Puestos all need them). An `includeInactive*` flag
  * requires `canManageWorkflows` (else FORBIDDEN).
  */
@@ -76,7 +76,7 @@ async function createWorkflowActionImpl(input: WorkflowInput): Promise<Workflow>
   return workflowsRepository.createWorkflow(input, user.member.id);
 }
 
-/** The tramo color picker: 1–5, or null for the derived color. */
+/** The etapa color picker: 1–5, or null for the derived color. */
 const ColorSlotSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).nullable();
 
 /** Partial patch; `colorSlot` is 1–5 or null (INVALID otherwise). Errors: FORBIDDEN, WORKFLOW_NOT_FOUND, INVALID. */
@@ -97,7 +97,7 @@ async function updateWorkflowActionImpl(id: string, patch: Partial<WorkflowInput
 }
 
 /**
- * Tramo order (Ajustes › Tramos y fases): `sort_order` = index in one
+ * Etapa order (Ajustes › Etapas y fases): `sort_order` = index in one
  * transaction. `canManageWorkflows`. Errors: FORBIDDEN, INVALID.
  */
 export async function reorderWorkflowsAction(
@@ -147,7 +147,7 @@ async function createTemplateActionImpl(
 }
 
 /**
- * Partial patch; `phaseId`, when sent, must be a fase of the template's tramo.
+ * Partial patch; `phaseId`, when sent, must be a fase of the template's etapa.
  * Errors: FORBIDDEN, NOT_FOUND, EMPTY, INVALID, PHASE_MISMATCH, NAME_TAKEN.
  */
 export async function updateTemplateAction(
@@ -199,12 +199,12 @@ async function reorderTemplatesActionImpl(workflowId: string, orderedIds: string
   await workflowsRepository.reorderTemplates(workflowId, orderedIds);
 }
 
-// ── Tramos y fases (project flow BE §7.1) ───────────────────────────────────
+// ── Etapas y fases (project flow BE §7.1) ───────────────────────────────────
 
-/** Active tramos for the sidebar and tabs (staff session). */
-export async function fetchTramosNavAction(): Promise<WorkflowRef[]> {
+/** Active etapas for the sidebar and tabs (staff session). */
+export async function fetchEtapasNavAction(): Promise<WorkflowRef[]> {
   await requireCapabilityUser();
-  return workflowsRepository.listTramosNav();
+  return workflowsRepository.listEtapasNav();
 }
 
 /** `canManageWorkflows`. Appended last. Errors: FORBIDDEN, NOT_FOUND, NAME_TAKEN, EMPTY. */
@@ -240,7 +240,7 @@ async function updateWorkflowPhaseActionImpl(
   return row;
 }
 
-/** `orderedIds` must be exactly the tramo's fase ids. Errors: FORBIDDEN, NOT_FOUND. */
+/** `orderedIds` must be exactly the etapa's fase ids. Errors: FORBIDDEN, NOT_FOUND. */
 export async function reorderWorkflowPhasesAction(
   ...args: Parameters<typeof reorderWorkflowPhasesActionImpl>
 ): Promise<ActionResult<Awaited<ReturnType<typeof reorderWorkflowPhasesActionImpl>>>> {
@@ -256,7 +256,7 @@ async function reorderWorkflowPhasesActionImpl(workflowId: string, orderedIds: s
 
 /**
  * The "Iniciar automáticamente" switch: `true` stores `on_create` for the
- * first active tramo and `on_ready` for the others, `false` stores `manual`.
+ * first active etapa and `on_ready` for the others, `false` stores `manual`.
  * Errors: FORBIDDEN, NOT_FOUND.
  */
 export async function setWorkflowAutoStartAction(

@@ -9,9 +9,9 @@ import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { PeopleTeamAnalitico, type PeopleTeamAnaliticoProps } from "@/components/widgets/PeopleTeamAnalitico";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import type { WidgetView } from "@/lib/stores/dashboard-store";
-import { tramoLabel } from "@/lib/tramos/compat";
+import { etapaLabel } from "@/lib/etapas/compat";
 import type { WorkflowRef } from "@/lib/types/core";
 import type { Availability, PersonDatum, RecordTableData } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,7 @@ export {
 
 /**
  * People in three styles (redesign FE §4.10.1, §15.3 "Personas"):
- * - Visual: availability grid + avatar cards (tramo chip, projects, load bar),
+ * - Visual: availability grid + avatar cards (etapa chip, projects, load bar),
  *   or compact rows with an inline availability strip (`layout="rows"`).
  * - Esencial: directory list; availability as a sentence ("Libre jue y vie.").
  * - Analítico: `RecordTable` (abiertas, vencidas, horas, % ocupación heat,
@@ -53,7 +53,7 @@ export type PeopleWidgetProps = {
   /** Dashboard override: "chart" = the Visual cards/rows, "table" = the Analítico tables. */
   view?: WidgetView;
   /**
-   * Personas · Equipo: with it, Analítico renders the grouped table tramo →
+   * Personas · Equipo: with it, Analítico renders the grouped table etapa →
    * persona → proyecto (`PeopleTeamAnalitico`) instead of the plain tables.
    */
   team?: Omit<PeopleTeamAnaliticoProps, "people" | "loading">;
@@ -167,7 +167,7 @@ export function buildPeopleTable(people: PersonDatum[], show: PeopleShow[]): Rec
   const columns: RecordTableData["columns"] = [
     { key: "name", label: "Persona" },
     { key: "puesto", label: "Puesto" },
-    { key: "tramo", label: "Etapa" },
+    { key: "etapa", label: "Etapa" },
     { key: "open", label: "Abiertas", align: "right", mono: true, format: "count" },
     { key: "overdue", label: "Vencidas", align: "right", mono: true, format: "count" },
   ];
@@ -181,7 +181,7 @@ export function buildPeopleTable(people: PersonDatum[], show: PeopleShow[]): Rec
     id: p.id,
     name: p.name,
     puesto: p.puesto ?? "—",
-    tramo: p.tramo ?? null,
+    etapa: p.etapa ?? null,
     open: p.open,
     overdue: p.overdue,
     weekHours: p.weekHours ?? null,
@@ -247,8 +247,8 @@ export function buildAvailabilityTable(people: PersonDatum[]): RecordTableData {
   return { columns, rows, totals };
 }
 
-function tramoRef(key: string): WorkflowRef {
-  return { id: key, key, name: tramoLabel(key), sortOrder: 0 };
+function etapaRef(key: string): WorkflowRef {
+  return { id: key, key, name: etapaLabel(key), sortOrder: 0 };
 }
 
 function openText(n: number): string {
@@ -448,9 +448,9 @@ function VisualCards({ people, show, actions }: ViewProps) {
                 subtitle={p.puesto ?? undefined}
                 size="lg"
               />
-              {p.tramo || withProjects ? (
+              {p.etapa || withProjects ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-                  {p.tramo ? <TramoBadge tramo={tramoRef(p.tramo)} variant="chip" /> : <span />}
+                  {p.etapa ? <EtapaBadge etapa={etapaRef(p.etapa)} variant="chip" /> : <span />}
                   {withProjects ? <span>{projectsText(p.activeProjects ?? 0)}</span> : null}
                 </div>
               ) : null}
@@ -483,7 +483,7 @@ function VisualRows({ people, show, actions }: ViewProps) {
             size="lg"
             className="min-w-48 flex-1"
           />
-          {p.tramo ? <TramoBadge tramo={tramoRef(p.tramo)} variant="chip" /> : null}
+          {p.etapa ? <EtapaBadge etapa={etapaRef(p.etapa)} variant="chip" /> : null}
           {show.includes("projects") ? (
             <span className="text-sm text-muted-foreground">{projectsText(p.activeProjects ?? 0)}</span>
           ) : null}
@@ -530,7 +530,7 @@ function EsencialList({ people, show, actions, layout }: ViewProps & { layout: "
           {people.map((p, i) => {
             const meta = [
               p.puesto ?? null,
-              p.tramo ? tramoLabel(p.tramo) : null,
+              p.etapa ? etapaLabel(p.etapa) : null,
               show.includes("projects") ? projectsText(p.activeProjects ?? 0) : null,
             ].filter((part): part is string => Boolean(part));
             const sentence = inlineAvailability ? availabilitySentence(p.availability) : null;
@@ -612,8 +612,8 @@ function AnaliticoTables({ people, show, actions }: ViewProps) {
         ) : (
           person.name
         );
-      case "tramo":
-        return person.tramo ? <TramoBadge tramo={tramoRef(person.tramo)} variant="dot" /> : "—";
+      case "etapa":
+        return person.etapa ? <EtapaBadge etapa={etapaRef(person.etapa)} variant="dot" /> : "—";
       case "overdue":
         return <span className={person.overdue > 0 ? "text-destructive" : undefined}>{person.overdue}</span>;
       case "weekHours":

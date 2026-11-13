@@ -129,8 +129,8 @@ export function displayName(name: string, lastName?: string | null): string {
   return [name, lastName].filter((part) => part && part.trim()).join(" ");
 }
 
-/** The most frequent tramo among the tasks (ties: first seen), null when none has one. */
-export function dominantTramo(keys: Array<string | null>): string | null {
+/** The most frequent etapa among the tasks (ties: first seen), null when none has one. */
+export function dominantEtapa(keys: Array<string | null>): string | null {
   const counts = new Map<string, number>();
   let best: string | null = null;
   for (const key of keys) {
@@ -146,7 +146,7 @@ export type OpenTaskRow = {
   id: string;
   title: string;
   projectName: string;
-  tramo: string | null;
+  etapa: string | null;
   status: string;
   due: string | null;
 };
@@ -201,7 +201,7 @@ export function toAttentionItems(
       title: task.title,
       href: `/tareas?tarea=${task.id}`,
       project: task.projectName,
-      tramo: task.tramo,
+      etapa: task.etapa,
       reason,
       tone,
       assignee,
@@ -232,12 +232,12 @@ export function loadWeekIndex(due: string | null, mondays: readonly string[]): n
   return due < (mondays[1] ?? addIsoDays(mondays[0]!, 7)) ? 0 : -1;
 }
 
-export type ProjectTaskRow = { projectId: string; projectName: string; tramo: string | null; due: string | null };
+export type ProjectTaskRow = { projectId: string; projectName: string; etapa: string | null; due: string | null };
 
 export type ProjectLoad = {
   projectId: string;
   name: string;
-  tramo: string | null;
+  etapa: string | null;
   open: number;
   overdue: number;
   weeks: [number, number, number, number];
@@ -246,25 +246,25 @@ export type ProjectLoad = {
 /**
  * A person's open tasks grouped per project (Personas Analítico): open,
  * overdue (`due < today`) and open tasks per load week (`loadWeekIndex`). The
- * project tramo is the most frequent task tramo. Sorted overdue desc, open
+ * project etapa is the most frequent task etapa. Sorted overdue desc, open
  * desc, then name.
  */
 export function projectLoads(tasks: readonly ProjectTaskRow[], today: string, mondays: readonly string[]): ProjectLoad[] {
-  const byProject = new Map<string, ProjectLoad & { tramos: Array<string | null> }>();
+  const byProject = new Map<string, ProjectLoad & { etapas: Array<string | null> }>();
   for (const task of tasks) {
     let entry = byProject.get(task.projectId);
     if (!entry) {
-      entry = { projectId: task.projectId, name: task.projectName, tramo: null, open: 0, overdue: 0, weeks: [0, 0, 0, 0], tramos: [] };
+      entry = { projectId: task.projectId, name: task.projectName, etapa: null, open: 0, overdue: 0, weeks: [0, 0, 0, 0], etapas: [] };
       byProject.set(task.projectId, entry);
     }
     entry.open += 1;
     if (task.due !== null && task.due < today) entry.overdue += 1;
     const week = loadWeekIndex(task.due, mondays);
     if (week >= 0 && week < 4) entry.weeks[week] += 1;
-    entry.tramos.push(task.tramo);
+    entry.etapas.push(task.etapa);
   }
   return [...byProject.values()]
-    .map(({ tramos, ...load }) => ({ ...load, tramo: dominantTramo(tramos) }))
+    .map(({ etapas, ...load }) => ({ ...load, etapa: dominantEtapa(etapas) }))
     .sort((a, b) => b.overdue - a.overdue || b.open - a.open || a.name.localeCompare(b.name, "es"));
 }
 

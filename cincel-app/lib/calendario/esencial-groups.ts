@@ -126,6 +126,6 @@ export function lineLabel(item: CalItem): string {
     const where = item.project?.name ?? item.location;
     return where ? `Reunión · ${where}` : "Reunión";
   }
-  const line = [item.project?.name, item.tramo?.name].filter(Boolean).join(" · ");
+  const line = [item.project?.name, item.etapa?.name].filter(Boolean).join(" · ");
   return line || "Tarea";
 }

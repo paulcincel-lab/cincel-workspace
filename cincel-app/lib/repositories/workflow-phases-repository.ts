@@ -1,5 +1,5 @@
 /**
- * Fases: the ordered catalog of each tramo (project flow BE §8.1). Changes
+ * Fases: the ordered catalog of each etapa (project flow BE §8.1). Changes
  * are recorded in `history_events` under entity `workflow` (field
  * `phase:<name>`), like template edits.
  */
@@ -14,7 +14,7 @@ import type { WorkflowPhase, WorkflowPhaseInput, WorkflowPhaseRef } from "@/lib/
 
 export type ListPhasesOptions = { includeInactive?: boolean };
 
-/** Fases of several tramos at once, in catalog order (`sort_order`, then name). Tramos without fases map to []. */
+/** Fases of several etapas at once, in catalog order (`sort_order`, then name). Etapas without fases map to []. */
 export async function listPhasesByWorkflow(
   workflowIds: string[],
   opts: ListPhasesOptions = {}
@@ -61,7 +61,7 @@ export async function listPhasesByWorkflow(
   return out;
 }
 
-/** One tramo's fases in catalog order. */
+/** One etapa's fases in catalog order. */
 export async function listPhases(workflowId: string, opts: ListPhasesOptions = {}): Promise<WorkflowPhase[]> {
   return (await listPhasesByWorkflow([workflowId], opts)).get(workflowId) ?? [];
 }
@@ -83,7 +83,7 @@ function cleanName(value: string): string {
   return name;
 }
 
-/** NAME_TAKEN when another fase of the tramo has the same nameKey (lower, no accents, collapsed spaces). */
+/** NAME_TAKEN when another fase of the etapa has the same nameKey (lower, no accents, collapsed spaces). */
 async function assertNameFree(executor: FlowExecutor, workflowId: string, name: string, exceptId?: string) {
   const rows = await executor
     .select({ name: workflowPhases.name })
@@ -129,7 +129,7 @@ async function recordPhaseChange(
   );
 }
 
-/** Appends a fase last. Errors: NOT_FOUND (tramo), NAME_TAKEN (lower(name) or nameKey), EMPTY. */
+/** Appends a fase last. Errors: NOT_FOUND (etapa), NAME_TAKEN (lower(name) or nameKey), EMPTY. */
 export async function createPhase(workflowId: string, input: WorkflowPhaseInput, actorId: string): Promise<WorkflowPhase> {
   const name = cleanName(input.name);
   try {
@@ -202,7 +202,7 @@ export async function updatePhase(
   }
 }
 
-/** One transaction, `sort_order` = index. `orderedIds` must be exactly the tramo's fase ids (else NOT_FOUND). */
+/** One transaction, `sort_order` = index. `orderedIds` must be exactly the etapa's fase ids (else NOT_FOUND). */
 export async function reorderPhases(workflowId: string, orderedIds: string[]): Promise<void> {
   await db.transaction(async (tx) => {
     const rows = await tx
@@ -233,7 +233,7 @@ export async function assertPhaseInWorkflow(tx: FlowExecutor, phaseId: string, w
   if (!row) throw new Error("PHASE_MISMATCH");
 }
 
-/** The fase with `workflow_phases.key = phaseKey` in the live tramo `workflowKey`, or null (readiness gates). */
+/** The fase with `workflow_phases.key = phaseKey` in the live etapa `workflowKey`, or null (readiness gates). */
 export async function resolveGatePhase(
   executor: FlowExecutor,
   workflowKey: string,

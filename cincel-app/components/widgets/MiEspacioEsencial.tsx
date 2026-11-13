@@ -22,7 +22,7 @@ import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { EsencialItemRow, type EsencialStatus } from "@/components/widgets/EsencialItemRow";
 import { PageHeader } from "@/components/widgets/PageHeader";
 import { QuickAddRow, type QuickAddCreated, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
-import { tramoBadgeModel } from "@/components/widgets/TramoBadge";
+import { etapaBadgeModel } from "@/components/widgets/EtapaBadge";
 import { IMPLEMENTED as GMAIL_IMPLEMENTED } from "@/lib/actions/gmail-actions.flags";
 import { IMPLEMENTED } from "@/lib/actions/my-space-actions.flags";
 import { IMPLEMENTED as NOTIFICATIONS_IMPLEMENTED } from "@/lib/actions/notifications-actions.flags";
@@ -313,12 +313,12 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
     },
   );
 
-  const createTask = useActionMutation<{ draft: QuickAddDraft; group: ProjectGroup; tramoId: string | null }, TaskDetail>(
-    ({ draft, group, tramoId }) =>
+  const createTask = useActionMutation<{ draft: QuickAddDraft; group: ProjectGroup; etapaId: string | null }, TaskDetail>(
+    ({ draft, group, etapaId }) =>
       createUserTaskAction({
         projectId: group.projectId,
         title: draft.title,
-        workflowId: draft.tramoId ?? tramoId,
+        workflowId: draft.etapaId ?? etapaId,
         managerId: draft.assigneeId ?? viewerId,
         priority: draft.priority,
         commitmentDate: draft.dueDate,
@@ -338,7 +338,7 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
     invalidate: (c) => newTaskInvalidations(c.projectId),
   });
 
-  function currentTramoOf(group: ProjectGroup, rows: readonly TaskListItem[]): string | null {
+  function currentEtapaOf(group: ProjectGroup, rows: readonly TaskListItem[]): string | null {
     const project = projectsQuery.data?.find((p) => p.id === group.projectId);
     return project?.currentWorkflowId ?? rows.find((t) => t.workflowId)?.workflowId ?? null;
   }
@@ -359,7 +359,7 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
   }
 
   async function onCreate(group: ProjectGroup, rows: readonly TaskListItem[], draft: QuickAddDraft): Promise<QuickAddCreated> {
-    const detail = await createTask.mutateAsync({ draft, group, tramoId: currentTramoOf(group, rows) });
+    const detail = await createTask.mutateAsync({ draft, group, etapaId: currentEtapaOf(group, rows) });
     const entry: Created = { id: detail.id, projectId: group.projectId, task: listItemOfDetail(detail) };
     setCreated((list) => [...list.filter((c) => c.id !== entry.id), entry]);
     timers.current.set(
@@ -420,7 +420,7 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
               const isNew = createdIds.has(task.id);
               const allowed = canChangeActivityStatus({ capabilities, task, viewerId });
               const href = taskSheetHref(pathname, search, task.id);
-              const tramo = task.workflow ? tramoBadgeModel(task.workflow) : null;
+              const etapa = task.workflow ? etapaBadgeModel(task.workflow) : null;
               return (
                 <li key={task.id} className={cn("border-b border-muted text-sm", isNew && "row-new")}>
                   <EsencialItemRow
@@ -439,7 +439,7 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
                       />
                     }
                     meta={
-                      tramo ? [{ key: "tramo", label: tramo.label, dot: tramo.slot ? `var(--chart-${tramo.slot})` : undefined }] : []
+                      etapa ? [{ key: "etapa", label: etapa.label, dot: etapa.slot ? `var(--chart-${etapa.slot})` : undefined }] : []
                     }
                     status={dueStatus(task, today)}
                     isNew={isNew}
@@ -472,7 +472,7 @@ function MyTasksCard({ announce }: { announce(text: string): void }) {
                       context={{
                         label: `Agregar tarea en ${group.name}`,
                         projectId: group.projectId,
-                        tramoId: currentTramoOf(group, rows),
+                        etapaId: currentEtapaOf(group, rows),
                         assigneeId: viewerId || null,
                         placeholder: "Escribe para agregar…",
                       }}

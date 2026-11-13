@@ -1,6 +1,6 @@
 import { unwrapActions } from "@/tests/helpers/action-result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TASK_TRAMO_CHANGE_FORBIDDEN } from "@/lib/project-flow/errors";
+import { TASK_ETAPA_CHANGE_FORBIDDEN } from "@/lib/project-flow/errors";
 import type { UserTaskInput } from "@/lib/types/core";
 
 const ACTOR = "33333333-3333-4333-8333-333333333333";
@@ -164,7 +164,7 @@ function checkTaskInput(
     spaceId?: string | null;
     managerId?: string | null;
   },
-  opts: { canMoveTramo?: boolean } = {}
+  opts: { canMoveEtapa?: boolean } = {}
 ) {
   if (row?.kind === "admin") {
     if (input.phaseId !== undefined || input.spaceId !== undefined || input.workflowId) throw new Error("ADMIN_TASK");
@@ -174,7 +174,7 @@ function checkTaskInput(
   if (row === null && !input.workflowId) throw new Error("INVALID: workflowId");
   if (row !== null && input.workflowId !== undefined && input.workflowId !== row.workflowId) {
     if (!input.workflowId || input.workflowId === UNKNOWN_WORKFLOW) throw new Error("INVALID: workflowId");
-    if (row.workflowId !== null && !opts.canMoveTramo) throw new Error(TASK_TRAMO_CHANGE_FORBIDDEN);
+    if (row.workflowId !== null && !opts.canMoveEtapa) throw new Error(TASK_ETAPA_CHANGE_FORBIDDEN);
   }
   if (input.phaseId === OTHER_PHASE) throw new Error("PHASE_MISMATCH");
   if (input.spaceId === OTHER_SPACE) throw new Error("SPACE_MISMATCH");
@@ -214,7 +214,7 @@ beforeEach(() => {
     }
   );
   repo.updateTask.mockImplementation(
-    async (id: string, patch: Parameters<typeof checkTaskInput>[1], _actor: string, opts?: { canMoveTramo?: boolean }) => {
+    async (id: string, patch: Parameters<typeof checkTaskInput>[1], _actor: string, opts?: { canMoveEtapa?: boolean }) => {
       checkTaskInput(rowFor(id), patch, opts);
       return detail({ ...rowFor(id), ...(patch as Partial<Row>) });
     }
@@ -309,7 +309,7 @@ describe("createUserTaskAction", () => {
     expect(row).toMatchObject({ workflowId: WORKFLOW, phaseId: PHASE, spaceId: SPACE });
   });
 
-  it("throws INVALID without a etapa", async () => {
+  it("throws INVALID without an etapa", async () => {
     await expect(createUserTaskAction({ projectId: PROJECT, title: "Medir muros" } as UserTaskInput)).rejects.toThrow(
       /^INVALID/
     );
@@ -347,10 +347,10 @@ describe("updateTaskAction", () => {
   describe("moving a task to another etapa", () => {
     it("is FORBIDDEN for a non-admin", async () => {
       await expect(updateTaskAction(TASK, { workflowId: OTHER_WORKFLOW })).rejects.toThrow(
-        TASK_TRAMO_CHANGE_FORBIDDEN
+        TASK_ETAPA_CHANGE_FORBIDDEN
       );
       expect(repo.updateTask).toHaveBeenCalledWith(TASK, { workflowId: OTHER_WORKFLOW }, ACTOR, {
-        canMoveTramo: false,
+        canMoveEtapa: false,
       });
     });
 
@@ -360,7 +360,7 @@ describe("updateTaskAction", () => {
         workflowId: OTHER_WORKFLOW,
       });
       expect(repo.updateTask).toHaveBeenCalledWith(TASK, { workflowId: OTHER_WORKFLOW }, ACTOR, {
-        canMoveTramo: true,
+        canMoveEtapa: true,
       });
       await runAfter();
       const pairs = hooks.onTaskClosingChanged.mock.calls.map((c) => (c as unknown[]).slice(1, 3));
@@ -410,7 +410,7 @@ describe("createSubtaskAction", () => {
   it("inherits the parent's etapa, fase and kind", async () => {
     const child = await createSubtaskAction(TASK, { title: "Medir muros" });
     expect(child).toMatchObject({ projectId: PROJECT, workflowId: WORKFLOW, phaseId: PHASE, kind: "usuario" });
-    // The child input carries no tramo or fase of its own: they come from the parent.
+    // The child input carries no etapa or fase of its own: they come from the parent.
     const [, input] = repo.createSubtask.mock.calls[0];
     expect(input).not.toHaveProperty("workflowId");
     expect(input).not.toHaveProperty("phaseId");

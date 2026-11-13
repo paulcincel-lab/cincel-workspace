@@ -45,10 +45,10 @@ type UpdateVars = { id: string; patch: Partial<ProjectInput> };
 
 /**
  * /proyectos in three styles: the Estilo picks the whole layout (ADR 0004,
- * `PageStyleLayout`). Visual is `ProjectsVisualLayout` (#992: tramo summary,
+ * `PageStyleLayout`). Visual is `ProjectsVisualLayout` (#992: etapa summary,
  * attention cards, portfolio board and delivery timeline), Esencial is
  * `ProjectsEsencialLayout` (#993) and Analítico is `ProjectsAnaliticoLayout`
- * (#994: KPI strip, filter card and the portfolio grouped by tramo). Every
+ * (#994: KPI strip, filter card and the portfolio grouped by etapa). Every
  * layout reads `qk.proyectos.list()` (prefetched by the page), so the first
  * render makes no client call. "Nuevo proyecto" (any layout) and `?nuevo=1`
  * open `NewProjectDialog`, whose admin options load only while it is open.
@@ -56,7 +56,7 @@ type UpdateVars = { id: string; patch: Partial<ProjectInput> };
 export function ProjectsPortfolio() {
   const { data } = useSuspenseQuery(proyectosPageOptions());
   const { canSeeAdminData, canCreateProject, presaleAutoStart } = data;
-  const canPickStartTramo = data.canPickStartTramo ?? false;
+  const canPickStartEtapa = data.canPickStartEtapa ?? false;
 
   const router = useRouter();
   const pathname = usePathname() ?? "/proyectos";
@@ -90,13 +90,13 @@ export function ProjectsPortfolio() {
     [canSeeAdminData, clientsQuery.data, staffQuery.data],
   );
 
-  // "Tramo inicial" options (#1034): only for staff who can start tramos, only while the dialog is open.
-  const startQuery = useQuery({ ...projectCreateStartOptions(), enabled: open && canPickStartTramo });
-  const startOptions = canPickStartTramo ? (startQuery.data ?? null) : null;
+  // "Etapa inicial" options (#1034): only for staff who can start etapas, only while the dialog is open.
+  const startQuery = useQuery({ ...projectCreateStartOptions(), enabled: open && canPickStartEtapa });
+  const startOptions = canPickStartEtapa ? (startQuery.data ?? null) : null;
 
   // The dialog shows create errors inline (its own copy), so the mutation shows no toast.
   const createProject = useActionMutation(submitProjectCreateAction, {
-    // The starting tramo's tasks show in Tareas.
+    // The starting etapa's tasks show in Tareas.
     invalidate: [qk.proyectos.list(), qk.catalog.projectOptions(), qk.inicio(), qk.tareas.all],
     onFormError: () => undefined,
   });

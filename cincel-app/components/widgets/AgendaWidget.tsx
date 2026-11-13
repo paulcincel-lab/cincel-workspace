@@ -12,7 +12,7 @@ import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { WidgetCard, type WidgetCardProps } from "@/components/widgets/WidgetCard";
 import { addDays, getWeekdayLabels, startOfWeek } from "@/lib/calendar/calendar-service";
-import { tramoColorSlot, tramoLabel, type TramoColorSlot } from "@/lib/tramos/compat";
+import { etapaColorSlot, etapaLabel, type EtapaColorSlot } from "@/lib/etapas/compat";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type { AgendaItem, RecordColumn, RecordTableData } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
@@ -27,10 +27,10 @@ import { cn } from "@/lib/utils";
  *
  * - Visual: tinted time blocks (day) / time grid 8:00–19:00 with an all-day row
  *   (week) / month grid with tinted blocks and "+n más" (month). Blocks carry
- *   the tramo color as a 3 px left border.
+ *   the etapa color as a 3 px left border.
  * - Esencial: list grouped by day (`groupBy="day"`, default) or one flat list
  *   (`groupBy="none"`), plain text.
- * - Analítico: `RecordTable` (Día, Hora, Duración, Evento, Proyecto, Tramo,
+ * - Analítico: `RecordTable` (Día, Hora, Duración, Evento, Proyecto, Etapa,
  *   Asistentes) with daily subtotals (`groupBy="day"`) and a total row; month
  *   adds the load heat table (events per day, > 45 % / > 60 % of the busiest
  *   day shaded) above it.
@@ -247,17 +247,17 @@ function sumMinutes(entries: AgendaEntry[]): number | null {
   return timed.length === 0 ? null : timed.reduce((sum, e) => sum + (e.minutes ?? 0), 0);
 }
 
-type TramoInfo = { slot: TramoColorSlot | null; label: string };
+type EtapaInfo = { slot: EtapaColorSlot | null; label: string };
 
-function tramoInfo(tramo: string | null | undefined): TramoInfo | null {
-  if (!tramo) return null;
-  return { slot: tramoColorSlot(tramo), label: tramoLabel(tramo) };
+function etapaInfo(etapa: string | null | undefined): EtapaInfo | null {
+  if (!etapa) return null;
+  return { slot: etapaColorSlot(etapa), label: etapaLabel(etapa) };
 }
 
-function metaText(entry: AgendaEntry, tramo: TramoInfo | null): string {
+function metaText(entry: AgendaEntry, etapa: EtapaInfo | null): string {
   const parts: string[] = [];
   if (entry.item.project) parts.push(entry.item.project);
-  if (tramo) parts.push(tramo.label);
+  if (etapa) parts.push(etapa.label);
   const attendees = entry.item.attendees?.length ?? 0;
   if (attendees > 0) parts.push(attendeesText(attendees));
   return parts.join(" · ");
@@ -271,7 +271,7 @@ const TABLE_COLUMNS: RecordColumn[] = [
   { key: "duracion", label: "Duración", align: "right", mono: true, format: "text" },
   { key: "evento", label: "Evento", format: "text" },
   { key: "proyecto", label: "Proyecto", format: "text" },
-  { key: "tramo", label: "Etapa", format: "text" },
+  { key: "etapa", label: "Etapa", format: "text" },
   { key: "asistentes", label: "Asistentes", align: "right", mono: true, format: "text" },
 ];
 
@@ -293,7 +293,7 @@ export function agendaTableData(entries: AgendaEntry[], groupBy: "day" | "none" 
       duracion: formatAgendaDuration(entry.minutes),
       evento: entry.item.title,
       proyecto: entry.item.project ?? DASH,
-      tramo: entry.item.tramo ? tramoLabel(entry.item.tramo) : DASH,
+      etapa: entry.item.etapa ? etapaLabel(entry.item.etapa) : DASH,
       asistentes: String(entry.item.attendees?.length ?? 0),
     };
   };
@@ -312,7 +312,7 @@ export function agendaTableData(entries: AgendaEntry[], groupBy: "day" | "none" 
     duracion: formatAgendaDuration(sumMinutes(list)),
     evento: agendaCountText(list.length),
     proyecto: "",
-    tramo: "",
+    etapa: "",
     asistentes: String(list.reduce((sum, e) => sum + (e.item.attendees?.length ?? 0), 0)),
   });
 
@@ -388,8 +388,8 @@ export function agendaLoadTableData(month: Date, entries: AgendaEntry[], today: 
 // Presentation
 // ---------------------------------------------------------------------------
 
-/** Tint (14 % light / 22 % dark), ink text and left border per tramo slot (FE §14.5). */
-const TRAMO_BLOCK: Record<TramoColorSlot, string> = {
+/** Tint (14 % light / 22 % dark), ink text and left border per etapa slot (FE §14.5). */
+const ETAPA_BLOCK: Record<EtapaColorSlot, string> = {
   1: "border-l-[color:var(--chart-1)] bg-[color-mix(in_oklab,var(--chart-1)_14%,var(--card))] text-[color:var(--chart-1-ink,var(--foreground))] dark:bg-[color-mix(in_oklab,var(--chart-1)_22%,var(--card))]",
   2: "border-l-[color:var(--chart-2)] bg-[color-mix(in_oklab,var(--chart-2)_14%,var(--card))] text-[color:var(--chart-2-ink,var(--foreground))] dark:bg-[color-mix(in_oklab,var(--chart-2)_22%,var(--card))]",
   3: "border-l-[color:var(--chart-3)] bg-[color-mix(in_oklab,var(--chart-3)_14%,var(--card))] text-[color:var(--chart-3-ink,var(--foreground))] dark:bg-[color-mix(in_oklab,var(--chart-3)_22%,var(--card))]",
@@ -397,7 +397,7 @@ const TRAMO_BLOCK: Record<TramoColorSlot, string> = {
 };
 const NEUTRAL_BLOCK = "border-l-[color:var(--border-strong,var(--border))] bg-muted text-foreground";
 
-const TRAMO_DOT: Record<TramoColorSlot, string> = {
+const ETAPA_DOT: Record<EtapaColorSlot, string> = {
   1: "bg-[color:var(--chart-1)]",
   2: "bg-[color:var(--chart-2)]",
   3: "bg-[color:var(--chart-3)]",
@@ -407,8 +407,8 @@ const TRAMO_DOT: Record<TramoColorSlot, string> = {
 const FOCUS = "rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none";
 const LINK = cn("underline-offset-4 hover:underline", FOCUS);
 
-function blockClass(tramo: TramoInfo | null): string {
-  return tramo?.slot ? TRAMO_BLOCK[tramo.slot] : NEUTRAL_BLOCK;
+function blockClass(etapa: EtapaInfo | null): string {
+  return etapa?.slot ? ETAPA_BLOCK[etapa.slot] : NEUTRAL_BLOCK;
 }
 
 function Title({ item, className }: { item: AgendaItem; className?: string }) {
@@ -453,7 +453,7 @@ function CuttoLink({ item, className }: { item: AgendaItem; className?: string }
 }
 
 function EventBlock({ entry, compact = false, style }: { entry: AgendaEntry; compact?: boolean; style?: CSSProperties }) {
-  const tramo = tramoInfo(entry.item.tramo);
+  const etapa = etapaInfo(entry.item.etapa);
   if (compact) {
     return (
       <li
@@ -461,19 +461,19 @@ function EventBlock({ entry, compact = false, style }: { entry: AgendaEntry; com
         data-event-id={entry.item.id}
         style={style}
         title={`${agendaTimeText(entry)} · ${entry.item.title}`}
-        className={cn("truncate rounded-sm border-l-3 px-1.5 py-0.5 text-[11.5px] leading-snug", blockClass(tramo))}
+        className={cn("truncate rounded-sm border-l-3 px-1.5 py-0.5 text-[11.5px] leading-snug", blockClass(etapa))}
       >
         <Title item={entry.item} />
       </li>
     );
   }
-  const meta = metaText(entry, tramo);
+  const meta = metaText(entry, etapa);
   return (
     <li
       data-slot="agenda-event"
       data-event-id={entry.item.id}
       style={style}
-      className={cn("flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md border-l-3 px-2.5 py-1.5", blockClass(tramo))}
+      className={cn("flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md border-l-3 px-2.5 py-1.5", blockClass(etapa))}
     >
       <span className="font-mono text-[11.5px] tabular-nums">{agendaTimeText(entry)}</span>
       <Title item={entry.item} className="truncate text-sm font-medium" />
@@ -693,8 +693,8 @@ function VisualMonth({ cells, month }: { cells: MonthCell<AgendaEntry>[]; month:
 }
 
 function EsencialRow({ entry, withDate }: { entry: AgendaEntry; withDate: boolean }) {
-  const tramo = tramoInfo(entry.item.tramo);
-  const meta = metaText(entry, tramo);
+  const etapa = etapaInfo(entry.item.etapa);
+  const meta = metaText(entry, etapa);
   return (
     <li
       data-slot="agenda-event"
@@ -778,16 +778,16 @@ function renderEventCell(byId: Map<string, AgendaEntry>) {
         </span>
       );
     }
-    if (columnKey === "tramo") {
-      const tramo = tramoInfo(entry.item.tramo);
-      if (!tramo) return DASH;
+    if (columnKey === "etapa") {
+      const etapa = etapaInfo(entry.item.etapa);
+      if (!etapa) return DASH;
       return (
         <span className="inline-flex items-center gap-1.5">
           <span
             aria-hidden="true"
-            className={cn("size-2 shrink-0 rounded-full", tramo.slot ? TRAMO_DOT[tramo.slot] : "bg-muted-foreground")}
+            className={cn("size-2 shrink-0 rounded-full", etapa.slot ? ETAPA_DOT[etapa.slot] : "bg-muted-foreground")}
           />
-          {tramo.label}
+          {etapa.label}
         </span>
       );
     }

@@ -21,7 +21,7 @@ vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
 }));
 vi.mock("@/lib/actions/workflows-actions", () => ({
   fetchWorkflowsAction: actions.fetchWorkflowsAction,
-  fetchTramosNavAction: vi.fn(async () => []),
+  fetchEtapasNavAction: vi.fn(async () => []),
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({
   createUserTaskAction: actions.createUserTaskAction,
@@ -49,7 +49,7 @@ const quickAdd = vi.hoisted(() => ({
   draft: {
     title: "Cotizar herrería",
     projectId: "p-1" as string | null,
-    tramoId: "wf-diseno" as string | null,
+    etapaId: "wf-diseno" as string | null,
     assigneeId: null as string | null,
     dueDate: "2026-11-12" as string | null,
     priority: "media" as const,
@@ -91,7 +91,7 @@ const attention = (over: Partial<AttentionItem> & { id: string }): AttentionItem
   title: over.id,
   href: `/tareas?tarea=${over.id}`,
   project: "Oficina Polanco",
-  tramo: "diseno",
+  etapa: "diseno",
   reason: "Vencida",
   tone: "critical",
   assignee: null,
@@ -105,10 +105,10 @@ const DATA: InicioData = {
   myAttention: 3,
   paceScope: "mine",
   myWeek: {
-    today: [{ id: "c-t-1", title: "Revisar planos", start: "2026-11-09T11:00", project: "Casa Lomas", tramo: "diseno", href: "/tareas?tarea=t-1" }],
+    today: [{ id: "c-t-1", title: "Revisar planos", start: "2026-11-09T11:00", project: "Casa Lomas", etapa: "diseno", href: "/tareas?tarea=t-1" }],
     week: [
-      { id: "c-t-2", title: "Entregar renders", start: "2026-11-11T09:00", project: "Casa Lomas", tramo: "diseno", href: "/tareas?tarea=t-2" },
-      { id: "c-t-3", title: "Cotizar acabados", start: "2026-11-13T09:00", project: "Depto Roma", tramo: "construccion", href: "/tareas?tarea=t-3" },
+      { id: "c-t-2", title: "Entregar renders", start: "2026-11-11T09:00", project: "Casa Lomas", etapa: "diseno", href: "/tareas?tarea=t-2" },
+      { id: "c-t-3", title: "Cotizar acabados", start: "2026-11-13T09:00", project: "Depto Roma", etapa: "construccion", href: "/tareas?tarea=t-3" },
     ],
     total: 3,
   },

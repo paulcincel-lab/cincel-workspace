@@ -8,7 +8,7 @@ import { loadCatalogProjectOptions, loadCatalogWorkflows } from "@/lib/loaders/c
 import { loadCalendarioList, loadCalendarioRange } from "@/lib/loaders/calendario";
 import { Hydrate } from "@/lib/query/hydrate";
 import { calendarioListInfiniteOptions, calendarioRangeOptions } from "@/lib/query/options/calendario";
-import { catalogProjectOptionsOptions, catalogTramosOptions } from "@/lib/query/options/catalog";
+import { catalogProjectOptionsOptions, catalogEtapasOptions } from "@/lib/query/options/catalog";
 import { getQueryClient, prefetch } from "@/lib/query/server";
 import { localDate } from "@/lib/time-tracking/local-time";
 import { DEFAULT_HIDE_COMPLETED_TASKS } from "@/lib/ui/preferences";
@@ -50,7 +50,7 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
   const qc = getQueryClient();
   await Promise.all([
     prefetch(qc, calendarioRangeOptions(input), () => loadCalendarioRange(user, input)),
-    prefetch(qc, catalogTramosOptions(), () => loadCatalogWorkflows()),
+    prefetch(qc, catalogEtapasOptions(), () => loadCatalogWorkflows()),
     prefetch(qc, catalogProjectOptionsOptions(), () => loadCatalogProjectOptions(user)),
     readsRowList(style)
       ? qc.prefetchInfiniteQuery({

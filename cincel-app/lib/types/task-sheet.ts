@@ -9,12 +9,12 @@ export type TaskSheetData = {
   task: TaskDetail;
   /** `catalog.taskStatuses`. */
   statuses: TaskStatusOption[];
-  /** `catalog.workflows`: active tramos (the Tramo select of a task without one). */
+  /** `catalog.workflows`: active etapas (the Etapa select of a task without one). */
   workflows: WorkflowRef[];
   /** `catalog.assignableStaff(task.workflowId)`: `{id,name,suggested}` only, never `Staff`. */
   assignable: CatalogAssignableStaffOption[];
   /** `catalog.projectSpaces(task.projectId)`; empty for an admin task (not seeded then). */
   spaces: ProjectSpace[];
-  /** The active fases of the task's tramo, by `sortOrder` (the Fase select); empty without a tramo. */
+  /** The active fases of the task's etapa, by `sortOrder` (the Fase select); empty without an etapa. */
   phases: WorkflowPhaseRef[];
 };

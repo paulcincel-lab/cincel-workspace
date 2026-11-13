@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { EsencialItemRow } from "@/components/widgets/EsencialItemRow";
-import { statusTone, tramoDot } from "@/components/widgets/esencial-tokens";
-import { STATUS_FIXTURE, TRAMO_FIXTURE } from "@/components/widgets/fixtures/status-adapters";
+import { statusTone, etapaDot } from "@/components/widgets/esencial-tokens";
+import { STATUS_FIXTURE, ETAPA_FIXTURE } from "@/components/widgets/fixtures/status-adapters";
 
 afterEach(cleanup);
 
@@ -21,7 +21,7 @@ describe("EsencialItemRow", () => {
         title="Revisión de planos eléctricos con Ana"
         href="/tareas/t-1"
         meta={[
-          { key: "tramo", label: "Diseño", dot: "var(--chart-2)" },
+          { key: "etapa", label: "Diseño", dot: "var(--chart-2)" },
           { key: "date", label: "5 nov", mono: true, tone: "destructive" },
         ]}
         status={{ kind: "task", value: STATUS_FIXTURE.enProceso }}
@@ -81,23 +81,23 @@ describe("EsencialItemRow", () => {
   });
 
   it("meta dot, mono and destructive tone", () => {
-    const dot = tramoDot(TRAMO_FIXTURE.diseno);
+    const dot = etapaDot(ETAPA_FIXTURE.diseno);
     const { container } = render(
       <EsencialItemRow
         title="Validar plano"
         status={null}
         meta={[
-          { key: "tramo", label: "Diseño", dot },
+          { key: "etapa", label: "Diseño", dot },
           { key: "date", label: "6 nov", mono: true, tone: "destructive" },
           { key: "time", label: "11:00", mono: true },
         ]}
       />,
     );
-    const [tramo, date, time] = Array.from(container.querySelectorAll<HTMLElement>('[data-slot="esencial-meta"]'));
-    expect(tramo.className).toContain("text-xs");
-    expect(tramo.className).toContain("text-muted-foreground");
-    expect(tramo.className).toContain("gap-[5px]");
-    const dotEl = tramo.querySelector('span[aria-hidden="true"]') as HTMLElement;
+    const [etapa, date, time] = Array.from(container.querySelectorAll<HTMLElement>('[data-slot="esencial-meta"]'));
+    expect(etapa.className).toContain("text-xs");
+    expect(etapa.className).toContain("text-muted-foreground");
+    expect(etapa.className).toContain("gap-[5px]");
+    const dotEl = etapa.querySelector('span[aria-hidden="true"]') as HTMLElement;
     expect(dotEl.className).toContain("size-[7px]");
     expect(dotEl.getAttribute("style")).toContain(dot);
     expect(date.className).toContain("font-mono");
@@ -222,9 +222,9 @@ describe("esencial-tokens", () => {
     expect(statusTone(STATUS_FIXTURE.bloqueado)).toEqual({ dot: "var(--destructive)", ink: "var(--destructive)" });
   });
 
-  it("tramoDot uses the etapa color and a neutral color without etapa", () => {
-    expect(tramoDot(TRAMO_FIXTURE.presale)).toBe("var(--chart-1)");
-    expect(tramoDot(TRAMO_FIXTURE.diseno)).toBe("var(--chart-2)");
-    expect(tramoDot(null)).toBe("var(--muted-foreground)");
+  it("etapaDot uses the etapa color and a neutral color without etapa", () => {
+    expect(etapaDot(ETAPA_FIXTURE.presale)).toBe("var(--chart-1)");
+    expect(etapaDot(ETAPA_FIXTURE.diseno)).toBe("var(--chart-2)");
+    expect(etapaDot(null)).toBe("var(--muted-foreground)");
   });
 });

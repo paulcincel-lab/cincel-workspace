@@ -149,22 +149,22 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
             </SidebarGroup>
           ) : null}
 
-          {nav.tramos.length > 0 ? (
+          {nav.etapas.length > 0 ? (
             <SidebarGroup>
-              <SidebarGroupLabel id="sidebar-tramos" className="h-auto px-2.5 pb-1 text-muted-foreground">
+              <SidebarGroupLabel id="sidebar-etapas" className="h-auto px-2.5 pb-1 text-muted-foreground">
                 Etapas
               </SidebarGroupLabel>
               <SidebarGroupContent>
-                <SidebarMenu aria-labelledby="sidebar-tramos">
-                  {nav.tramos.map((tramo) => (
-                    <SidebarMenuItem key={tramo.key}>
-                      <SidebarMenuButton className="h-8 gap-2.5 text-[13.5px]" render={<Link href={tramo.href} />}>
+                <SidebarMenu aria-labelledby="sidebar-etapas">
+                  {nav.etapas.map((etapa) => (
+                    <SidebarMenuItem key={etapa.key}>
+                      <SidebarMenuButton className="h-8 gap-2.5 text-[13.5px]" render={<Link href={etapa.href} />}>
                         <span
                           aria-hidden="true"
                           className="size-[9px] shrink-0 rounded-[3px]"
-                          style={{ background: tramo.colorVar }}
+                          style={{ background: etapa.colorVar }}
                         />
-                        <span>{tramo.name}</span>
+                        <span>{etapa.name}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}

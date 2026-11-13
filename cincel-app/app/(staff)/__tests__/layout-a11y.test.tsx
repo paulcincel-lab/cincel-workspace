@@ -19,7 +19,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/auth/session", () => ({ getSessionAccess: mocks.getSessionAccess }));
 vi.mock("@/lib/ui/preferences-server", () => ({ getResolvedAppearance: mocks.getResolvedAppearance }));
-vi.mock("@/lib/ui/nav", () => ({ buildNavModel: async () => ({ items: [], tramos: [], footer: [] }) }));
+vi.mock("@/lib/ui/nav", () => ({ buildNavModel: async () => ({ items: [], etapas: [], footer: [] }) }));
 vi.mock("@/lib/actions/time-tracking-actions", () => ({
   fetchMyTodayAction: async () => ({ enabled: false }),
 }));

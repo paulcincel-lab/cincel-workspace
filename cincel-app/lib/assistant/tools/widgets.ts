@@ -109,7 +109,7 @@ export const agendaItemSchema = z
     allDay: z.boolean().optional(),
     estimated: z.boolean().optional().describe("Fecha estimada (sin compromiso)"),
     project: z.string().trim().max(200).optional(),
-    tramo: z.string().trim().max(60).nullable().optional().describe("Clave de la etapa (workflows.key)"),
+    etapa: z.string().trim().max(60).nullable().optional().describe("Clave de la etapa (workflows.key)"),
     attendees: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
     href: z
       .string()

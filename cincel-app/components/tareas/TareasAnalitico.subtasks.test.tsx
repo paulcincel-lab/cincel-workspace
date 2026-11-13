@@ -52,7 +52,7 @@ import { TareasAnalitico } from "./TareasAnalitico";
 import {
   ANALITICO_FACETS,
   ANALITICO_SUMMARY,
-  ANALITICO_TRAMOS,
+  ANALITICO_ETAPAS,
   LOMAS_PRESALE_ROWS,
   analiticoTaskRow,
   seedAnalitico,
@@ -80,7 +80,7 @@ function renderAnalitico(seedChildren = true) {
       <TareasAnalitico
         query={DEFAULT_TAREAS_QUERY}
         facets={ANALITICO_FACETS}
-        tramos={ANALITICO_TRAMOS}
+        etapas={ANALITICO_ETAPAS}
         staff={[{ id: "s1", name: "Ana Ruiz" }]}
         actions={null}
         search=""
@@ -205,7 +205,7 @@ function renderAnaliticoWithContext() {
       <TareasAnalitico
         query={DEFAULT_TAREAS_QUERY}
         facets={ANALITICO_FACETS}
-        tramos={ANALITICO_TRAMOS}
+        etapas={ANALITICO_ETAPAS}
         staff={[{ id: "s1", name: "Ana Ruiz" }]}
         actions={null}
         search=""

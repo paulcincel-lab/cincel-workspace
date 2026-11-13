@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * Template writes against a real Postgres (project flow BE §7.1, §8.2): a
- * fase is required, a fase of another tramo is PHASE_MISMATCH and a repeated
+ * fase is required, a fase of another etapa is PHASE_MISMATCH and a repeated
  * title in the same fase is NAME_TAKEN. Runs only when TEST_DATABASE_URL
  * points at a migrated database; every row a test creates carries a per-run
  * marker and is deleted afterwards.
@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -47,7 +47,7 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();
@@ -59,8 +59,8 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
   const repo = await import("./workflows-repository");
 
   let actorId = "";
-  let tramoA = "";
-  let tramoB = "";
+  let etapaA = "";
+  let etapaB = "";
   let faseA1 = "";
   let faseA2 = "";
   let faseB1 = "";
@@ -78,73 +78,73 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
         { key: `test-b-${run}`, name: `Etapa B ${run}`, active: true, sortOrder: 901 },
       ])
       .returning({ id: schema.workflows.id });
-    tramoA = a.id;
-    tramoB = b.id;
+    etapaA = a.id;
+    etapaB = b.id;
     const phases = await db
       .insert(schema.workflowPhases)
       .values([
-        { workflowId: tramoA, name: "Fase 1", sortOrder: 0 },
-        { workflowId: tramoA, name: "Fase 2", sortOrder: 1 },
-        { workflowId: tramoB, name: "Fase 1", sortOrder: 0 },
+        { workflowId: etapaA, name: "Fase 1", sortOrder: 0 },
+        { workflowId: etapaA, name: "Fase 2", sortOrder: 1 },
+        { workflowId: etapaB, name: "Fase 1", sortOrder: 0 },
       ])
       .returning({ id: schema.workflowPhases.id });
     [faseA1, faseA2, faseB1] = phases.map((p) => p.id);
   });
 
   afterAll(async () => {
-    const tramos = [tramoA, tramoB].filter(Boolean);
-    if (tramos.length) {
-      await db.delete(schema.workflowTaskTemplates).where(inArray(schema.workflowTaskTemplates.workflowId, tramos));
-      await db.delete(schema.workflowPhases).where(inArray(schema.workflowPhases.workflowId, tramos));
-      await db.delete(schema.historyEvents).where(inArray(schema.historyEvents.entityId, tramos));
-      await db.delete(schema.workflows).where(inArray(schema.workflows.id, tramos));
+    const etapas = [etapaA, etapaB].filter(Boolean);
+    if (etapas.length) {
+      await db.delete(schema.workflowTaskTemplates).where(inArray(schema.workflowTaskTemplates.workflowId, etapas));
+      await db.delete(schema.workflowPhases).where(inArray(schema.workflowPhases.workflowId, etapas));
+      await db.delete(schema.historyEvents).where(inArray(schema.historyEvents.entityId, etapas));
+      await db.delete(schema.workflows).where(inArray(schema.workflows.id, etapas));
     }
     if (actorId) await db.delete(schema.staff).where(eq(schema.staff.id, actorId));
   });
 
   it("creates a template in a fase of its etapa and returns the fase name", async () => {
-    const row = await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Levantamiento" }, actorId);
-    expect(row).toMatchObject({ workflowId: tramoA, phaseId: faseA1, phaseName: "Fase 1", title: "Levantamiento" });
+    const row = await repo.createTemplate(etapaA, { phaseId: faseA1, title: "Levantamiento" }, actorId);
+    expect(row).toMatchObject({ workflowId: etapaA, phaseId: faseA1, phaseName: "Fase 1", title: "Levantamiento" });
     expect(row).not.toHaveProperty("phase");
   });
 
   it("requires a fase", async () => {
     await expect(
-      repo.createTemplate(tramoA, { phaseId: "", title: "Sin fase" }, actorId)
+      repo.createTemplate(etapaA, { phaseId: "", title: "Sin fase" }, actorId)
     ).rejects.toThrow("INVALID: phaseId");
   });
 
   it("rejects a fase of another etapa with PHASE_MISMATCH", async () => {
     await expect(
-      repo.createTemplate(tramoA, { phaseId: faseB1, title: "Ajena" }, actorId)
+      repo.createTemplate(etapaA, { phaseId: faseB1, title: "Ajena" }, actorId)
     ).rejects.toThrow(/^PHASE_MISMATCH/);
-    const existing = await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Mover" }, actorId);
+    const existing = await repo.createTemplate(etapaA, { phaseId: faseA1, title: "Mover" }, actorId);
     await expect(repo.updateTemplate(existing.id, { phaseId: faseB1 }, actorId)).rejects.toThrow(/^PHASE_MISMATCH/);
   });
 
   it("rejects a repeated title in the same fase with NAME_TAKEN, case-insensitively", async () => {
-    await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Planos" }, actorId);
+    await repo.createTemplate(etapaA, { phaseId: faseA1, title: "Planos" }, actorId);
     await expect(
-      repo.createTemplate(tramoA, { phaseId: faseA1, title: "  planos " }, actorId)
+      repo.createTemplate(etapaA, { phaseId: faseA1, title: "  planos " }, actorId)
     ).rejects.toThrow(/^NAME_TAKEN/);
   });
 
   it("allows the same title in another fase of the same etapa", async () => {
-    await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Garantías" }, actorId);
-    const other = await repo.createTemplate(tramoA, { phaseId: faseA2, title: "Garantías" }, actorId);
+    await repo.createTemplate(etapaA, { phaseId: faseA1, title: "Garantías" }, actorId);
+    const other = await repo.createTemplate(etapaA, { phaseId: faseA2, title: "Garantías" }, actorId);
     expect(other.phaseId).toBe(faseA2);
   });
 
   it("rejects moving or renaming onto a taken title with NAME_TAKEN", async () => {
-    await repo.createTemplate(tramoA, { phaseId: faseA2, title: "Fachadas" }, actorId);
-    const moving = await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Fachadas" }, actorId);
+    await repo.createTemplate(etapaA, { phaseId: faseA2, title: "Fachadas" }, actorId);
+    const moving = await repo.createTemplate(etapaA, { phaseId: faseA1, title: "Fachadas" }, actorId);
     await expect(repo.updateTemplate(moving.id, { phaseId: faseA2 }, actorId)).rejects.toThrow(/^NAME_TAKEN/);
-    const renaming = await repo.createTemplate(tramoA, { phaseId: faseA2, title: "Alzados" }, actorId);
+    const renaming = await repo.createTemplate(etapaA, { phaseId: faseA2, title: "Alzados" }, actorId);
     await expect(repo.updateTemplate(renaming.id, { title: "FACHADAS" }, actorId)).rejects.toThrow(/^NAME_TAKEN/);
   });
 
   it("keeps the fase on a partial update and moves it within the etapa", async () => {
-    const row = await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Volumetría" }, actorId);
+    const row = await repo.createTemplate(etapaA, { phaseId: faseA1, title: "Volumetría" }, actorId);
     const deactivated = await repo.deactivateTemplate(row.id, actorId);
     expect(deactivated).toMatchObject({ active: false, phaseId: faseA1 });
     const moved = await repo.updateTemplate(row.id, { phaseId: faseA2 }, actorId);

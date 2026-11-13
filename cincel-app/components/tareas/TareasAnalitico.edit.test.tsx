@@ -106,7 +106,7 @@ import { tareasGroupFilters } from "@/lib/tareas/summary";
 import type { TaskListRow } from "@/lib/types/core";
 
 import { TareasAnalitico } from "./TareasAnalitico";
-import { ANALITICO_FACETS, ANALITICO_SUMMARY, ANALITICO_TRAMOS, seedAnalitico } from "./fixtures/analitico-summary";
+import { ANALITICO_FACETS, ANALITICO_SUMMARY, ANALITICO_ETAPAS, seedAnalitico } from "./fixtures/analitico-summary";
 import { DISENO, PRESALE } from "./fixtures/lista-tasks";
 
 const PLANOS_FASE = { id: "f-planos", name: "Planos ejecutivos", sortOrder: 1 };
@@ -142,7 +142,7 @@ function renderAnalitico() {
     <TareasAnalitico
       query={query}
       facets={ANALITICO_FACETS}
-      tramos={ANALITICO_TRAMOS}
+      etapas={ANALITICO_ETAPAS}
       staff={[
         { id: "s1", name: "Ana Ruiz" },
         { id: "s2", name: "Luis Pérez" },
@@ -167,12 +167,12 @@ function cell(rowId: string, column: string): HTMLElement {
   return el;
 }
 
-/** The ids of the rows in one tramo group, by its toggle label. */
-function groupRows(project: string, tramo: string): string[] {
+/** The ids of the rows in one etapa group, by its toggle label. */
+function groupRows(project: string, etapa: string): string[] {
   const region = screen.getByRole("region", { name: project });
   const toggle = within(region)
     .getAllByRole("button")
-    .find((b) => b.hasAttribute("aria-expanded") && b.textContent?.startsWith(tramo));
+    .find((b) => b.hasAttribute("aria-expanded") && b.textContent?.startsWith(etapa));
   const body = document.getElementById(toggle?.getAttribute("aria-controls") ?? "");
   return [...(body?.querySelectorAll<HTMLElement>("[data-row-id]") ?? [])].map((r) => r.dataset.rowId ?? "");
 }
@@ -195,12 +195,12 @@ describe("TareasAnalitico editable cells", () => {
   it("shows Etapa and Fase columns and keeps Subtareas and Días de retraso calculated", () => {
     signIn("Administrador");
     renderAnalitico();
-    expect(cell("t3", "tramo").textContent).toBe("Diseño");
+    expect(cell("t3", "etapa").textContent).toBe("Diseño");
     expect(cell("t3", "fase").textContent).toBe("Planos ejecutivos");
     expect(cell("t4", "fase").textContent).toBe("Sin fase");
     expect(cell("t3", "subtareas").dataset.cellState).toBe("inert");
     expect(cell("t3", "diasRetraso").dataset.cellState).toBe("inert");
-    for (const column of ["tarea", "tramo", "fase", "responsable", "estatus", "vence", "prioridad"]) {
+    for (const column of ["tarea", "etapa", "fase", "responsable", "estatus", "vence", "prioridad"]) {
       expect(cell("t3", column).dataset.cellState).toBe("editable");
     }
   });
@@ -225,7 +225,7 @@ describe("TareasAnalitico editable cells", () => {
     renderAnalitico();
     expect(groupRows("Casa Lomas", "Diseño")).toEqual(["t3", "t4"]);
 
-    fireEvent.click(cell("t3", "tramo"));
+    fireEvent.click(cell("t3", "etapa"));
     const editor = screen.getByRole("dialog", { name: "Editor Etapa" });
     expect(within(editor).getAllByRole("button").map((b) => b.textContent)).toEqual(["Presale", "Diseño"]);
     await act(async () => {
@@ -236,7 +236,7 @@ describe("TareasAnalitico editable cells", () => {
     await waitFor(() => expect(groupRows("Casa Lomas", "Presale")).toEqual(["t3", "t1", "t2"]));
     expect(groupRows("Casa Lomas", "Diseño")).toEqual(["t4"]);
     expect(cell("t3", "fase").textContent).toBe("Sin fase");
-    // The fase was cleared: its editor opens with the new tramo's fases.
+    // The fase was cleared: its editor opens with the new etapa's fases.
     const fase = await screen.findByRole("dialog", { name: "Editor Fase" });
     expect(within(fase).getAllByRole("button").map((b) => b.textContent)).toEqual(["Contrato"]);
   });
@@ -245,7 +245,7 @@ describe("TareasAnalitico editable cells", () => {
     signIn("Administrador");
     actions.updateTaskAction.mockResolvedValue({ ok: false, error: "FORBIDDEN: task etapa change" });
     renderAnalitico();
-    fireEvent.click(cell("t3", "tramo"));
+    fireEvent.click(cell("t3", "etapa"));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Presale" }));
     });
@@ -257,9 +257,9 @@ describe("TareasAnalitico editable cells", () => {
   it("colaborador sees the Etapa and Responsable locks with their reasons", () => {
     signIn("Colaborador");
     renderAnalitico();
-    expect(cell("t3", "tramo").dataset.cellState).toBe("locked");
-    fireEvent.click(cell("t3", "tramo"));
-    expect(screen.getByRole("dialog", { name: "Editor Etapa" }).textContent).toBe(LOCK_REASON.tramo);
+    expect(cell("t3", "etapa").dataset.cellState).toBe("locked");
+    fireEvent.click(cell("t3", "etapa"));
+    expect(screen.getByRole("dialog", { name: "Editor Etapa" }).textContent).toBe(LOCK_REASON.etapa);
     expect(cell("t3", "responsable").dataset.cellState).toBe("locked");
     expect(cell("t3", "estatus").dataset.cellState).toBe("editable");
     expect(cell("t3", "fase").dataset.cellState).toBe("editable");

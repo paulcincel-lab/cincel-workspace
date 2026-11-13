@@ -39,7 +39,7 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "addProjectLinkAction",
     "removeProjectLinkAction",
     "addProjectCommentAction",
-    "setProjectCurrentTramoAction",
+    "setProjectCurrentEtapaAction",
     "createProjectSpaceAction",
     "renameProjectSpaceAction",
     "reorderProjectSpacesAction",
@@ -117,7 +117,7 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "deleteWorkflowAction",
   ],
   "preferences-actions": ["updateMyPreferencesAction"],
-  "tramo-start-actions": ["startTramoAction", "undoStartTramoAction"],
+  "etapa-start-actions": ["startEtapaAction", "undoStartEtapaAction"],
   "vacations-actions": [
     "requestVacationAction",
     "cancelVacationRequestAction",

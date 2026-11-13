@@ -6,7 +6,7 @@
  */
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 import { DEFAULT_WORKFLOWS, ensureDefaultWorkflows } from "@/scripts/default-workflows.mjs";
 
@@ -73,7 +73,7 @@ describe.skipIf(!url)("ensureDefaultWorkflows (test DB)", () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();

@@ -10,7 +10,7 @@ import { unwrapActions } from "@/tests/helpers/action-result";
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -44,7 +44,7 @@ describe.skipIf(!url)("puestos (test DB)", async () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();
@@ -317,7 +317,7 @@ describe.skipIf(!url)("puestos (test DB)", async () => {
       expect(list.findIndex((s) => s.id === suggestedId)).toBeLessThan(firstUnsuggested);
       expect(list.slice(firstUnsuggested).every((s) => !s.suggested)).toBe(true);
 
-      // Without a tramo nobody is suggested.
+      // Without an etapa nobody is suggested.
       const all = await staffRepo.listAssignableStaff({ workflowId: null });
       expect(all.find((s) => s.id === suggestedId)?.suggested).toBe(false);
     });

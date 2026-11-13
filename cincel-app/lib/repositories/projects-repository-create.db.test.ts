@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -21,7 +21,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();
@@ -115,7 +115,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     if (projectIds.length > 0) {
       await db.delete(schema.historyEvents).where(inArray(schema.historyEvents.entityId, projectIds));
       await db.delete(schema.tasks).where(inArray(schema.tasks.projectId, projectIds));
-      await db.delete(schema.tramoStartBatches).where(inArray(schema.tramoStartBatches.projectId, projectIds));
+      await db.delete(schema.etapaStartBatches).where(inArray(schema.etapaStartBatches.projectId, projectIds));
       await db.delete(schema.projects).where(inArray(schema.projects.id, projectIds));
     }
     await db.delete(schema.contacts).where(eq(schema.contacts.id, contactId));
@@ -128,7 +128,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     const project = await create(`Casa Flujo ${run}`);
 
     expect(project.client).toBeNull();
-    expect(project.tramos.map((t) => t.id)).toEqual([firstWorkflow!.id]);
+    expect(project.etapas.map((t) => t.id)).toEqual([firstWorkflow!.id]);
     expect(project.currentWorkflow?.id).toBe(firstWorkflow!.id);
 
     const templates = await db
@@ -164,8 +164,8 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
   it("does not start the first etapa when its auto-start is off", async () => {
     await setFirstAutoStart("manual");
     const project = await create(`Casa Manual ${run}`);
-    expect(project.tramos).toEqual([]);
-    expect(project.needsTramo).toBe(true);
+    expect(project.etapas).toEqual([]);
+    expect(project.needsEtapa).toBe(true);
     const workflowTasks = await db
       .select({ id: schema.tasks.id })
       .from(schema.tasks)
@@ -279,9 +279,9 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     expect(tasks.every((t) => t.workflowId === diseno.id && checked.includes(t.phaseId!))).toBe(true);
     expect(tasks.every((t) => t.managerId === null)).toBe(true);
     const [batch] = await db
-      .select({ trigger: schema.tramoStartBatches.trigger })
-      .from(schema.tramoStartBatches)
-      .where(eq(schema.tramoStartBatches.projectId, project.id));
+      .select({ trigger: schema.etapaStartBatches.trigger })
+      .from(schema.etapaStartBatches)
+      .where(eq(schema.etapaStartBatches.projectId, project.id));
     expect(batch?.trigger).toBe("on_create");
     expect(await assignClientTasks(project.id)).toHaveLength(1);
   });
@@ -315,7 +315,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     projectIds.push(project.id);
     expect(await stagesOf(project.id)).toEqual([]);
     expect(project.currentWorkflow).toBeNull();
-    expect(project.needsTramo).toBe(true);
+    expect(project.needsEtapa).toBe(true);
     expect(await workflowTasksOf(project.id)).toHaveLength(0);
     expect(await assignClientTasks(project.id)).toHaveLength(1);
   });

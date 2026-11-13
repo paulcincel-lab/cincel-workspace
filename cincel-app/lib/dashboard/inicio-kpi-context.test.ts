@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   KPI_CONTEXT,
   nextReviewLine,
-  projectTramoGroup,
-  taskTramoGroup,
-  tramoConcentrationLine,
-  tramoCountsLine,
+  projectEtapaGroup,
+  taskEtapaGroup,
+  etapaConcentrationLine,
+  etapaCountsLine,
 } from "./inicio";
 
 const TODAY = "2026-11-07";
@@ -17,11 +17,11 @@ const DISENO = wf("diseno", "Diseño", 2);
 const CONSTRUCCION = wf("construccion", "Construcción", 3);
 const DECORACION = wf("decoracion", "Decoración", 4);
 
-type TaskLike = Parameters<typeof taskTramoGroup>[0];
+type TaskLike = Parameters<typeof taskEtapaGroup>[0];
 const task = (workflow: TaskLike["workflow"], kind: TaskLike["kind"] = "workflow"): TaskLike => ({ kind, workflow });
-const project = (currentWorkflow: Parameters<typeof projectTramoGroup>[0]["currentWorkflow"]) => ({ currentWorkflow });
+const project = (currentWorkflow: Parameters<typeof projectEtapaGroup>[0]["currentWorkflow"]) => ({ currentWorkflow });
 
-describe("tramoCountsLine (Proyectos activos)", () => {
+describe("etapaCountsLine (Proyectos activos)", () => {
   it("lists the count per área in etapa order, as in the canvas", () => {
     const projects = [
       project(CONSTRUCCION),
@@ -31,23 +31,23 @@ describe("tramoCountsLine (Proyectos activos)", () => {
       project(PRESALE),
       project(CONSTRUCCION),
     ];
-    expect(tramoCountsLine(projects, projectTramoGroup, KPI_CONTEXT.noActiveProjects)).toBe(
+    expect(etapaCountsLine(projects, projectEtapaGroup, KPI_CONTEXT.noActiveProjects)).toBe(
       "Por área: Presale 2 · Diseño 1 · Construcción 2 · Decoración 1",
     );
   });
 
-  it("puts projects without a etapa last", () => {
-    expect(tramoCountsLine([project(null), project(DISENO)], projectTramoGroup, KPI_CONTEXT.noActiveProjects)).toBe(
+  it("puts projects without an etapa last", () => {
+    expect(etapaCountsLine([project(null), project(DISENO)], projectEtapaGroup, KPI_CONTEXT.noActiveProjects)).toBe(
       "Por área: Diseño 1 · Sin etapa 1",
     );
   });
 
   it("reads the empty copy without projects", () => {
-    expect(tramoCountsLine([], projectTramoGroup, KPI_CONTEXT.noActiveProjects)).toBe("Sin proyectos activos");
+    expect(etapaCountsLine([], projectEtapaGroup, KPI_CONTEXT.noActiveProjects)).toBe("Sin proyectos activos");
   });
 });
 
-describe("tramoConcentrationLine (Vencidas, Bloqueadas)", () => {
+describe("etapaConcentrationLine (Vencidas, Bloqueadas)", () => {
   it("names the área with the most items out of the total", () => {
     const tasks = [
       ...Array.from({ length: 5 }, () => task(PRESALE)),
@@ -55,19 +55,19 @@ describe("tramoConcentrationLine (Vencidas, Bloqueadas)", () => {
       ...Array.from({ length: 14 }, () => task(CONSTRUCCION)),
       ...Array.from({ length: 4 }, () => task(DECORACION)),
     ];
-    expect(tramoConcentrationLine(tasks, taskTramoGroup, KPI_CONTEXT.noOverdue)).toBe(
+    expect(etapaConcentrationLine(tasks, taskEtapaGroup, KPI_CONTEXT.noOverdue)).toBe(
       "Construcción concentra 14 de 31",
     );
   });
 
   it("breaks ties by etapa order and counts tasks without etapa in the total", () => {
     const tasks = [task(DISENO), task(PRESALE), task(null), task(null, "admin")];
-    expect(tramoConcentrationLine(tasks, taskTramoGroup, KPI_CONTEXT.noBlocked)).toBe("Presale concentra 1 de 4");
+    expect(etapaConcentrationLine(tasks, taskEtapaGroup, KPI_CONTEXT.noBlocked)).toBe("Presale concentra 1 de 4");
   });
 
   it("reads the empty copy with nothing to count", () => {
-    expect(tramoConcentrationLine([], taskTramoGroup, KPI_CONTEXT.noBlocked)).toBe("Nada bloqueado hoy");
-    expect(tramoConcentrationLine([], taskTramoGroup, KPI_CONTEXT.noOverdue)).toBe("Nada vencido hoy");
+    expect(etapaConcentrationLine([], taskEtapaGroup, KPI_CONTEXT.noBlocked)).toBe("Nada bloqueado hoy");
+    expect(etapaConcentrationLine([], taskEtapaGroup, KPI_CONTEXT.noOverdue)).toBe("Nada vencido hoy");
   });
 });
 

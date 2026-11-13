@@ -1224,7 +1224,7 @@ export function canDecideVacations(user: AuthenticatedUser | null): boolean {
 }
 
 /**
- * Admin-only project flow data (client, origin, admin tasks, "Asignar tramo",
+ * Admin-only project flow data (client, origin, admin tasks, "Asignar etapa",
  * the auto-start checkbox): access "Administrador" only; "Dirección" doesn't
  * count (FE §8, RD-3). Server actions and DTOs enforce the same rule.
  */

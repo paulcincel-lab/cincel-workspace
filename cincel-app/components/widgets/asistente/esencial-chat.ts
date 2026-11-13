@@ -58,7 +58,7 @@ export type EsencialTaskRow = {
   key: string;
   title: string;
   href?: string;
-  tramo: { key: string; name: string; sortOrder: number } | null;
+  etapa: { key: string; name: string; sortOrder: number } | null;
   /** Trailing label: "12 d tarde" or the short due date. */
   trailing: { label: string; tone: LateTone } | null;
 };
@@ -109,7 +109,7 @@ export function taskListOf(output: unknown, today: string = todayIso()): Esencia
         : card.dueDate
           ? { label: shortDate(card.dueDate), tone: "muted" as const }
           : null;
-    return { key: id ?? `${index}-${card.title}`, title: card.title, href, tramo: card.tramo, trailing };
+    return { key: id ?? `${index}-${card.title}`, title: card.title, href, etapa: card.etapa, trailing };
   });
   const value = unwrapOutput(output);
   const count = value && typeof value === "object" ? (value as { count?: unknown }).count : undefined;

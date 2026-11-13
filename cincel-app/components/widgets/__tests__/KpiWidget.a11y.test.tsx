@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import axe from "axe-core";
 
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   const slots: Record<string, number> = { presale: 1, diseno: 2, construccion: 3 };
   return {
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
   };
 });
 
@@ -25,7 +25,7 @@ const MODES = ["light", "dark"] as const;
 
 /**
  * Token pairs of `CONTRAST_PAIRS` the widget paints: value and label inks on
- * `card`, the delta inks (good / bad), the tramo split segments (non-text)
+ * `card`, the delta inks (good / bad), the etapa split segments (non-text)
  * and the focus ring.
  */
 const KPI_WIDGET_PAIRS = new Set([

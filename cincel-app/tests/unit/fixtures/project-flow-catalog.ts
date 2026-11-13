@@ -5,10 +5,10 @@
  */
 
 export type ExpectedPhase = { key: string; name: string; titles: string[] };
-export type ExpectedTramo = { workflowKey: string; phases: ExpectedPhase[] };
+export type ExpectedEtapa = { workflowKey: string; phases: ExpectedPhase[] };
 
 /** BE §5.1 fases and §5.2 template titles, in seed order. */
-export const EXPECTED_CATALOG: ExpectedTramo[] = [
+export const EXPECTED_CATALOG: ExpectedEtapa[] = [
   {
     workflowKey: "presale",
     phases: [

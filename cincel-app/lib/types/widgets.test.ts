@@ -22,7 +22,7 @@ import type {
 describe("widget shapes", () => {
   it("compose InicioData", () => {
     expectTypeOf<InicioData["kpis"]>().toEqualTypeOf<KpiDatum[]>();
-    expectTypeOf<InicioData["tasksByTramo"]>().toEqualTypeOf<DistributionSegment[]>();
+    expectTypeOf<InicioData["tasksByEtapa"]>().toEqualTypeOf<DistributionSegment[]>();
     expectTypeOf<InicioData["attention"]>().toEqualTypeOf<AttentionItem[]>();
     expectTypeOf<InicioData["myDay"]>().toEqualTypeOf<AgendaItem[]>();
     expectTypeOf<InicioData["projectsProgress"]>().toEqualTypeOf<ProgressItem[]>();

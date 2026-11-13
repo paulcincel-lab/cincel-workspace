@@ -31,14 +31,14 @@ export const ESENCIAL_AGENDA_LABEL = "Agenda";
 export const ESENCIAL_AGENDA_EMPTY = "Tu agenda está libre.";
 export const ESENCIAL_SEE_ALL = "Ver todas";
 
-function tramoColor(item: CalItem): string {
-  const slot = item.tramo?.colorSlot;
+function etapaColor(item: CalItem): string {
+  const slot = item.etapa?.colorSlot;
   return slot ? `var(--chart-${slot})` : "var(--muted-foreground)";
 }
 
-/** Tramo ring of a task (one tap completes) or the tinted clock disc of a meeting. */
+/** Etapa ring of a task (one tap completes) or the tinted clock disc of a meeting. */
 function Leading({ item, onComplete }: { item: CalItem; onComplete?(taskId: string): void }): ReactNode {
-  const color = tramoColor(item);
+  const color = etapaColor(item);
   if (item.kind === "event") {
     return (
       <span className="flex size-11 items-center justify-center" aria-hidden="true">

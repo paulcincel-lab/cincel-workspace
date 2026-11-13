@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toPortalTramosDTO, type PortalTramoRow } from "@/lib/portal/dto";
+import { toPortalEtapasDTO, type PortalEtapaRow } from "@/lib/portal/dto";
 import {
   buildPortalDocumentos,
   buildPortalEntregas,
@@ -18,7 +18,7 @@ import {
   portalFileType,
   portalScheduleHasRealDates,
 } from "@/lib/portal/overview";
-import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
+import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalEtapaDTO } from "@/lib/types/portal";
 import type { AgendaItem } from "@/lib/types/widgets";
 
 const project: PortalProjectDTO = {
@@ -52,8 +52,8 @@ const file = (over: Partial<PortalFileDTO>): PortalFileDTO => ({
   ...over,
 });
 
-describe("toPortalTramosDTO", () => {
-  const rows: PortalTramoRow[] = [
+describe("toPortalEtapasDTO", () => {
+  const rows: PortalEtapaRow[] = [
     { id: "w3", key: "construccion", name: "Construcción", active: true, sortOrder: 3, startedAt: null, closedAt: null },
     { id: "w1", key: "presale", name: "Presale", active: true, sortOrder: 1, startedAt: new Date(), closedAt: new Date() },
     { id: "w2", key: "diseno", name: "Diseño", active: true, sortOrder: 2, startedAt: new Date(), closedAt: null },
@@ -61,7 +61,7 @@ describe("toPortalTramosDTO", () => {
   ];
 
   it("orders the catalog and maps the project's state, dropping inactive etapas never started", () => {
-    expect(toPortalTramosDTO(rows, "w2").map(({ key, name, state }) => ({ key, name, state }))).toEqual([
+    expect(toPortalEtapasDTO(rows, "w2").map(({ key, name, state }) => ({ key, name, state }))).toEqual([
       { key: "presale", name: "Presale", state: "completado" },
       { key: "diseno", name: "Diseño", state: "en_curso" },
       { key: "construccion", name: "Construcción", state: "por_iniciar" },
@@ -69,7 +69,7 @@ describe("toPortalTramosDTO", () => {
   });
 
   it("copies only key, name, state, progressPct and startMonth", () => {
-    for (const t of toPortalTramosDTO(rows, null)) {
+    for (const t of toPortalEtapasDTO(rows, null)) {
       expect(Object.keys(t).sort()).toEqual(["key", "name", "progressPct", "startMonth", "state"]);
     }
   });
@@ -86,12 +86,12 @@ describe("toPortalTramosDTO", () => {
       { workflowId: "w3", total: 3, done: 3 },
       { workflowId: null, total: 9, done: 9 },
     ];
-    expect(toPortalTramosDTO(started, "w2", progress).map((t) => [t.key, t.progressPct, t.startMonth])).toEqual([
+    expect(toPortalEtapasDTO(started, "w2", progress).map((t) => [t.key, t.progressPct, t.startMonth])).toEqual([
       ["presale", 100, "2026-01"],
       ["diseno", 63, "2026-06"],
       ["construccion", 0, null],
     ]);
-    expect(toPortalTramosDTO(started, "w2", []).find((t) => t.key === "diseno")?.progressPct).toBe(0);
+    expect(toPortalEtapasDTO(started, "w2", []).find((t) => t.key === "diseno")?.progressPct).toBe(0);
   });
 });
 
@@ -163,35 +163,35 @@ describe("buildPortalDocumentos", () => {
 
 describe("buildPortalOverview", () => {
   it("has no field for approvals, messages or payments (no portal data today)", () => {
-    const data = buildPortalOverview({ project, schedule, tramos: [], files: null, today: "2026-11-07" });
+    const data = buildPortalOverview({ project, schedule, etapas: [], files: null, today: "2026-11-07" });
     for (const key of Object.keys(data)) expect(key).not.toMatch(/aprob|approval|mensaje|message|pago|payment/i);
-    expect(data).toMatchObject({ heroTramo: null, tramosActive: 0, recentFiles: [], team: [] });
+    expect(data).toMatchObject({ heroEtapa: null, etapasActive: 0, recentFiles: [], team: [] });
   });
 
-  const t = (key: string, name: string, state: PortalTramoDTO["state"]): PortalTramoDTO => ({
+  const t = (key: string, name: string, state: PortalEtapaDTO["state"]): PortalEtapaDTO => ({
     key,
     name,
     state,
     progressPct: state === "completado" ? 100 : 0,
     startMonth: null,
   });
-  const visualTramos = [t("presale", "Presale", "completado"), t("diseno", "Diseño", "en_curso"), t("construccion", "Construcción", "por_iniciar")];
+  const visualEtapas = [t("presale", "Presale", "completado"), t("diseno", "Diseño", "en_curso"), t("construccion", "Construcción", "por_iniciar")];
 
-  it("heroTramo is the en_curso etapa", () => {
-    const data = buildPortalOverview({ project, schedule, tramos: visualTramos, files: null, today: "2026-11-07" });
-    expect(data.heroTramo?.key).toBe("diseno");
-    expect(buildPortalOverview({ project, schedule, tramos: [t("a", "A", "completado")], files: null, today: "2026-11-07" }).heroTramo).toBeNull();
+  it("heroEtapa is the en_curso etapa", () => {
+    const data = buildPortalOverview({ project, schedule, etapas: visualEtapas, files: null, today: "2026-11-07" });
+    expect(data.heroEtapa?.key).toBe("diseno");
+    expect(buildPortalOverview({ project, schedule, etapas: [t("a", "A", "completado")], files: null, today: "2026-11-07" }).heroEtapa).toBeNull();
   });
 
-  it("tramosActive counts completado and en_curso", () => {
-    expect(buildPortalOverview({ project, schedule, tramos: visualTramos, files: null, today: "2026-11-07" }).tramosActive).toBe(2);
+  it("etapasActive counts completado and en_curso", () => {
+    expect(buildPortalOverview({ project, schedule, etapas: visualEtapas, files: null, today: "2026-11-07" }).etapasActive).toBe(2);
   });
 
   it("nextEntrega is the first open section", () => {
-    const data = buildPortalOverview({ project, schedule, tramos: [], files: null, today: "2026-11-07" });
+    const data = buildPortalOverview({ project, schedule, etapas: [], files: null, today: "2026-11-07" });
     expect(data.nextEntrega).toEqual(data.entregas[0]);
     expect(data.nextEntrega?.title).toBe("Losa");
-    expect(buildPortalOverview({ project, schedule: null, tramos: [], files: null, today: "2026-11-07" }).nextEntrega).toBeNull();
+    expect(buildPortalOverview({ project, schedule: null, etapas: [], files: null, today: "2026-11-07" }).nextEntrega).toBeNull();
   });
 
   it("recentFiles are the 4 newest across folders with folder name", () => {
@@ -211,7 +211,7 @@ describe("buildPortalOverview", () => {
         files: [file({ id: "r1", modifiedAt: "2026-11-03T00:00:00Z" }), file({ id: "r2", modifiedAt: "2026-10-20T00:00:00Z" })],
       },
     ];
-    const data = buildPortalOverview({ project, schedule, tramos: [], files: [], folders, today: "2026-11-07" });
+    const data = buildPortalOverview({ project, schedule, etapas: [], files: [], folders, today: "2026-11-07" });
     expect(data.recentFiles.map((f) => [f.id, f.folder])).toEqual([
       ["p1", "Planos"],
       ["r1", "Renders"],
@@ -222,18 +222,18 @@ describe("buildPortalOverview", () => {
 
   it("recentFiles fall back to the top of the client folder as General, files only", () => {
     const files = [file({ id: "a", modifiedAt: "2026-10-02T00:00:00Z" }), file({ id: "dir", kind: "folder" })];
-    const data = buildPortalOverview({ project, schedule, tramos: [], files, today: "2026-11-07" });
+    const data = buildPortalOverview({ project, schedule, etapas: [], files, today: "2026-11-07" });
     expect(data.recentFiles.map((f) => [f.id, f.folder])).toEqual([["a", "General"]]);
   });
 
   it("passes the team through, manager first", () => {
     const team = [{ name: "Laura Pérez", role: "Responsable del proyecto", email: "laura@cincel.mx" }, { name: "Ana Ruiz", role: null, email: null }];
-    expect(buildPortalOverview({ project, schedule, tramos: [], files: null, team, today: "2026-11-07" }).team).toEqual(team);
+    expect(buildPortalOverview({ project, schedule, etapas: [], files: null, team, today: "2026-11-07" }).team).toEqual(team);
   });
 });
 
 describe("buildPortalStatusSentence", () => {
-  const tramo = (key: string, name: string, state: PortalTramoDTO["state"], progressPct: number): PortalTramoDTO => ({
+  const etapa = (key: string, name: string, state: PortalEtapaDTO["state"], progressPct: number): PortalEtapaDTO => ({
     key,
     name,
     state,
@@ -243,10 +243,10 @@ describe("buildPortalStatusSentence", () => {
   const next: AgendaItem = { id: "PB::Muros", title: "Muros", start: "2026-11-14", allDay: true };
 
   it("status sentence en curso with next delivery", () => {
-    const tramos = [tramo("presale", "Presale", "completado", 100), tramo("diseno", "Diseño", "en_curso", 62)];
-    expect(buildPortalStatusSentence(tramos, next, 41)).toEqual({
+    const etapas = [etapa("presale", "Presale", "completado", 100), etapa("diseno", "Diseño", "en_curso", 62)];
+    expect(buildPortalStatusSentence(etapas, next, 41)).toEqual({
       kind: "en_curso",
-      tramo: "Diseño",
+      etapa: "Diseño",
       slot: 2,
       pct: 62,
       next: "2026-11-14",
@@ -254,26 +254,26 @@ describe("buildPortalStatusSentence", () => {
   });
 
   it("status sentence en curso without next delivery", () => {
-    const tramos = [tramo("presale", "Presale", "en_curso", 30.4)];
-    expect(buildPortalStatusSentence(tramos, null, 10)).toEqual({ kind: "en_curso", tramo: "Presale", slot: 1, pct: 30, next: null });
+    const etapas = [etapa("presale", "Presale", "en_curso", 30.4)];
+    expect(buildPortalStatusSentence(etapas, null, 10)).toEqual({ kind: "en_curso", etapa: "Presale", slot: 1, pct: 30, next: null });
   });
 
   it("status sentence terminado", () => {
-    const tramos = [tramo("presale", "Presale", "completado", 100), tramo("diseno", "Diseño", "completado", 100)];
-    expect(buildPortalStatusSentence(tramos, next, 100)).toEqual({ kind: "terminado" });
+    const etapas = [etapa("presale", "Presale", "completado", 100), etapa("diseno", "Diseño", "completado", 100)];
+    expect(buildPortalStatusSentence(etapas, next, 100)).toEqual({ kind: "terminado" });
   });
 
   it("status sentence por iniciar", () => {
-    const tramos = [tramo("presale", "Presale", "por_iniciar", 0), tramo("diseno", "Diseño", "por_iniciar", 0)];
-    expect(buildPortalStatusSentence(tramos, next, 0)).toEqual({ kind: "por_iniciar", next: "2026-11-14" });
-    expect(buildPortalStatusSentence(tramos, null)).toEqual({ kind: "por_iniciar", next: null });
+    const etapas = [etapa("presale", "Presale", "por_iniciar", 0), etapa("diseno", "Diseño", "por_iniciar", 0)];
+    expect(buildPortalStatusSentence(etapas, next, 0)).toEqual({ kind: "por_iniciar", next: "2026-11-14" });
+    expect(buildPortalStatusSentence(etapas, null)).toEqual({ kind: "por_iniciar", next: null });
   });
 
   it("status sentence falls back to project progress when etapa pct missing", () => {
-    const legacy = { key: "diseno", name: "Diseño", state: "en_curso" } as unknown as PortalTramoDTO;
+    const legacy = { key: "diseno", name: "Diseño", state: "en_curso" } as unknown as PortalEtapaDTO;
     expect(buildPortalStatusSentence([legacy], next, 41.6)).toEqual({
       kind: "en_curso",
-      tramo: "Diseño",
+      etapa: "Diseño",
       slot: 2,
       pct: 42,
       next: "2026-11-14",
@@ -282,12 +282,12 @@ describe("buildPortalStatusSentence", () => {
   });
 
   it("status sentence without etapas uses the project progress", () => {
-    expect(buildPortalStatusSentence([], null, 41.6)).toEqual({ kind: "sin_tramos", pct: 42, next: null });
+    expect(buildPortalStatusSentence([], null, 41.6)).toEqual({ kind: "sin_etapas", pct: 42, next: null });
   });
 
   it("status sentence between etapas stands on the last one finished", () => {
-    const tramos = [tramo("presale", "Presale", "completado", 100), tramo("diseno", "Diseño", "por_iniciar", 0)];
-    expect(buildPortalStatusSentence(tramos, null, 30)).toMatchObject({ kind: "en_curso", tramo: "Presale", pct: 100 });
+    const etapas = [etapa("presale", "Presale", "completado", 100), etapa("diseno", "Diseño", "por_iniciar", 0)];
+    expect(buildPortalStatusSentence(etapas, null, 30)).toMatchObject({ kind: "en_curso", etapa: "Presale", pct: 100 });
   });
 });
 
@@ -299,7 +299,7 @@ describe("Analítico builders", () => {
     { key: "PA::Losa", planta: "PA", seccion: "Losa", start: "2026-12-08", end: "2026-11-30", progressPct: 0 },
   ];
   const analiticoSchedule: PortalScheduleDTO = { sections };
-  const tramosNow: PortalTramoDTO[] = [
+  const etapasNow: PortalEtapaDTO[] = [
     { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
     { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 62, startMonth: "2026-03" },
   ];
@@ -309,7 +309,7 @@ describe("Analítico builders", () => {
       {
         project,
         schedule: analiticoSchedule,
-        tramos: tramosNow,
+        etapas: etapasNow,
         documents: null,
         documentFolders: [
           {
@@ -327,7 +327,7 @@ describe("Analítico builders", () => {
     );
     expect(kpis.avance).toBe(42);
     expect(kpis.avanceDelta).toBeNull();
-    expect(kpis.tramo).toEqual({ name: "Diseño", pct: 62, slot: 2 });
+    expect(kpis.etapa).toEqual({ name: "Diseño", pct: 62, slot: 2 });
     expect(kpis.entregables).toEqual({ done: 1, total: 3 });
     expect(kpis.desvio).toBeNull();
     expect(kpis.documentos).toEqual({ total: 3, nuevosSemana: 2 });
@@ -370,7 +370,7 @@ describe("Analítico builders", () => {
 
   it("Real and Desvío stay hidden while every emitted real date is null", () => {
     const emptyReal: PortalScheduleDTO = {
-      sections: sections.map((s) => ({ ...s, actualStart: null, actualEnd: null, tramoKey: null })),
+      sections: sections.map((s) => ({ ...s, actualStart: null, actualEnd: null, etapaKey: null })),
     };
     expect(portalScheduleHasRealDates(emptyReal)).toBe(false);
     expect(buildPortalPhaseTable(emptyReal, today).flatMap((g) => g.rows ?? []).every((r) => r.desvio === null)).toBe(true);
@@ -379,7 +379,7 @@ describe("Analítico builders", () => {
 
   it("buildPortalEntregables orders by end", () => {
     const rows = buildPortalEntregables(analiticoSchedule, today);
-    expect(rows.map((r) => [r.entregable, r.tramo, r.fechaPlan, r.estado, r.fechaReal, r.desvio])).toEqual([
+    expect(rows.map((r) => [r.entregable, r.etapa, r.fechaPlan, r.estado, r.fechaReal, r.desvio])).toEqual([
       ["Cimentación", "PB", "17 oct", "Entregado", null, null],
       ["Muros", "PB", "20 nov", "En curso", null, null],
       ["Losa", "PA", "30 nov", "Por iniciar", null, null],

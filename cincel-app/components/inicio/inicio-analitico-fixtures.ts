@@ -1,8 +1,8 @@
 /**
  * `InicioData` for the Inicio Analítico tests (#991), shaped like the frame
  * `Inicio-Analitico`: two projects in Atención (Oficina Polanco with 3
- * overdue tasks over two tramos plus one blocked, Depto Roma with 1), 12
- * weeks of pace, three people (one saturated), three tramos and today's
+ * overdue tasks over two etapas plus one blocked, Depto Roma with 1), 12
+ * weeks of pace, three people (one saturated), three etapas and today's
  * agenda (two events, one delivery).
  */
 import type { InicioData } from "@/lib/types/redesign";
@@ -19,7 +19,7 @@ function task(
   title: string,
   projectId: string,
   project: string,
-  tramo: string,
+  etapa: string,
   assignee: AttentionItem["assignee"],
   daysLate: number | null,
   status: NonNullable<AttentionItem["status"]>,
@@ -30,7 +30,7 @@ function task(
     href: `/tareas?tarea=${id}`,
     project,
     projectId,
-    tramo,
+    etapa,
     reason: daysLate === null ? "Bloqueada" : "Vencida",
     tone: daysLate === null ? "warn" : "critical",
     assignee,
@@ -66,7 +66,7 @@ export const ANALITICO_DATA: InicioData = {
       visibleIn: ["analitico"],
     },
   ],
-  tasksByTramo: [
+  tasksByEtapa: [
     { key: "presale", label: "Presale", value: 6, colorVar: "var(--chart-1)", secondary: 1, extra: { diasProm: 4 } },
     { key: "diseno", label: "Diseño", value: 10, colorVar: "var(--chart-2)", secondary: 4, extra: { diasProm: 7 } },
     { key: "construccion", label: "Construcción", value: 7, colorVar: "var(--chart-3)", secondary: 2, extra: { diasProm: 9 } },
@@ -89,16 +89,16 @@ export const ANALITICO_DATA: InicioData = {
     { id: LUIS.id, name: LUIS.name, initials: LUIS.initials, open: 7, overdue: 1, occupancyPct: 70, inProgress: 2, avgDaysLate: 9 },
     { id: MARTA.id, name: MARTA.name, initials: MARTA.initials, open: 6, overdue: 2, occupancyPct: 60, inProgress: 1, avgDaysLate: null },
   ],
-  tasksByTramoAssignee: [
-    { tramo: "presale", assigneeId: LUIS.id, open: 6, overdue: 1, ageDays: 24 },
-    { tramo: "diseno", assigneeId: ANA.id, open: 10, overdue: 4, ageDays: 70 },
-    { tramo: "construccion", assigneeId: MARTA.id, open: 6, overdue: 2, ageDays: 54 },
-    { tramo: "construccion", assigneeId: LUIS.id, open: 1, overdue: 0, ageDays: 9 },
+  tasksByEtapaAssignee: [
+    { etapa: "presale", assigneeId: LUIS.id, open: 6, overdue: 1, ageDays: 24 },
+    { etapa: "diseno", assigneeId: ANA.id, open: 10, overdue: 4, ageDays: 70 },
+    { etapa: "construccion", assigneeId: MARTA.id, open: 6, overdue: 2, ageDays: 54 },
+    { etapa: "construccion", assigneeId: LUIS.id, open: 1, overdue: 0, ageDays: 9 },
   ],
   todayAgenda: [
-    { id: "d-1", title: "Entrega de planos", start: "2026-11-09", allDay: true, project: "Oficina Polanco", tramo: "diseno", kind: "entrega", assignee: ANA },
-    { id: "e-2", title: "Visita de obra", start: "2026-11-09T12:00", project: "Depto Roma", tramo: "construccion", kind: "evento", assignee: MARTA },
-    { id: "e-1", title: "Junta de diseño", start: "2026-11-09T10:30", project: "Oficina Polanco", tramo: "diseno", kind: "evento", assignee: LUIS },
+    { id: "d-1", title: "Entrega de planos", start: "2026-11-09", allDay: true, project: "Oficina Polanco", etapa: "diseno", kind: "entrega", assignee: ANA },
+    { id: "e-2", title: "Visita de obra", start: "2026-11-09T12:00", project: "Depto Roma", etapa: "construccion", kind: "evento", assignee: MARTA },
+    { id: "e-1", title: "Junta de diseño", start: "2026-11-09T10:30", project: "Oficina Polanco", etapa: "diseno", kind: "evento", assignee: LUIS },
   ],
   sections: { showTeamWorkload: true, showProjectRisk: true },
 };

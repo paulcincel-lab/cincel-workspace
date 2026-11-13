@@ -1,13 +1,13 @@
 /**
  * Volume fixture for the Tareas page tests (Query Migration 4a, #955): about
- * 2,900 live tasks over a few projects and two tramos of their own, close to
+ * 2,900 live tasks over a few projects and two etapas of their own, close to
  * the measured production backlog. Same shape as `scripts/seed-volume.ts`
  * (weighted statuses and priorities, dates around today, chunked inserts),
- * but deterministic and self-contained: it creates its own staff, tramos,
+ * but deterministic and self-contained: it creates its own staff, etapas,
  * custom status and projects, all tagged with `run`, and returns their ids so
  * the test deletes exactly what it made (projects first: tasks cascade).
  *
- * Mixed in on purpose: tasks without a tramo, archived and deleted ones, admin
+ * Mixed in on purpose: tasks without an etapa, archived and deleted ones, admin
  * tasks, a custom status column, support rows, null and repeated sort keys
  * (the keyset's tie-breaks) and long notes (never in list rows).
  */

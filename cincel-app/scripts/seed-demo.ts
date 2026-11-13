@@ -214,7 +214,7 @@ async function seedContacts(): Promise<{ clients: Map<string, string>; providers
 
 // ── Projects ────────────────────────────────────────────────────────────────
 
-type TramoKey = "presale" | "diseno" | "construccion";
+type EtapaKey = "presale" | "diseno" | "construccion";
 
 const PROJECTS: ReadonlyArray<{
   name: string;
@@ -222,7 +222,7 @@ const PROJECTS: ReadonlyArray<{
   projectType: string;
   city: string;
   /** Decoración was retired as an etapa (migration 0010); the canvas's Madrid 22 runs in Construcción. */
-  tramo: TramoKey;
+  etapa: EtapaKey;
   progress: number;
   start: number;
   end: number;
@@ -231,21 +231,21 @@ const PROJECTS: ReadonlyArray<{
   contractors: string[];
   status?: "activo" | "pausado";
 }> = [
-  { name: "Local Espinopapa", code: "ESP-01", projectType: "Local comercial", city: "CDMX", tramo: "construccion", progress: 82, start: -120, end: 20, manager: "PL", members: ["PL", "AR"], contractors: ["Albañilería Hernández", "Instalaciones Eléctricas Rivas"] },
-  { name: "Guadalajara 83", code: "GDL-83", projectType: "Departamento", city: "Condesa", tramo: "diseno", progress: 58, start: -75, end: 45, manager: "PL", members: ["PL", "MG"], contractors: ["Estudio de Render"] },
-  { name: "Madrid 22", code: "MD-22", projectType: "Casa", city: "Juárez", tramo: "construccion", progress: 91, start: -160, end: 13, manager: "AR", members: ["AR", "LR"], contractors: ["Pisos y Acabados Luna"] },
-  { name: "Salim Ortopedia", code: "SAL-01", projectType: "Consultorio", city: "Polanco", tramo: "presale", progress: 24, start: -30, end: 90, manager: "AR", members: ["AR"], contractors: [] },
-  { name: "Casa Lomas", code: "LOM-01", projectType: "Residencia", city: "Lomas", tramo: "construccion", progress: 40, start: -90, end: 120, manager: "PL", members: ["PL", "LR", "MG"], contractors: ["Albañilería Hernández", "Hidráulica Torres"] },
-  { name: "Oficinas Roma", code: "ROM-01", projectType: "Oficinas", city: "Roma Norte", tramo: "presale", progress: 12, start: -14, end: 150, manager: "AR", members: ["AR", "MG", "SC"], contractors: ["Cancelería Moderna"] },
-  { name: "Workspace", code: "WS-00", projectType: "Interno", city: "Cincel", tramo: "presale", progress: 0, start: -60, end: 60, manager: "AR", members: ["AR"], contractors: [], status: "pausado" },
+  { name: "Local Espinopapa", code: "ESP-01", projectType: "Local comercial", city: "CDMX", etapa: "construccion", progress: 82, start: -120, end: 20, manager: "PL", members: ["PL", "AR"], contractors: ["Albañilería Hernández", "Instalaciones Eléctricas Rivas"] },
+  { name: "Guadalajara 83", code: "GDL-83", projectType: "Departamento", city: "Condesa", etapa: "diseno", progress: 58, start: -75, end: 45, manager: "PL", members: ["PL", "MG"], contractors: ["Estudio de Render"] },
+  { name: "Madrid 22", code: "MD-22", projectType: "Casa", city: "Juárez", etapa: "construccion", progress: 91, start: -160, end: 13, manager: "AR", members: ["AR", "LR"], contractors: ["Pisos y Acabados Luna"] },
+  { name: "Salim Ortopedia", code: "SAL-01", projectType: "Consultorio", city: "Polanco", etapa: "presale", progress: 24, start: -30, end: 90, manager: "AR", members: ["AR"], contractors: [] },
+  { name: "Casa Lomas", code: "LOM-01", projectType: "Residencia", city: "Lomas", etapa: "construccion", progress: 40, start: -90, end: 120, manager: "PL", members: ["PL", "LR", "MG"], contractors: ["Albañilería Hernández", "Hidráulica Torres"] },
+  { name: "Oficinas Roma", code: "ROM-01", projectType: "Oficinas", city: "Roma Norte", etapa: "presale", progress: 12, start: -14, end: 150, manager: "AR", members: ["AR", "MG", "SC"], contractors: ["Cancelería Moderna"] },
+  { name: "Workspace", code: "WS-00", projectType: "Interno", city: "Cincel", etapa: "presale", progress: 0, start: -60, end: 60, manager: "AR", members: ["AR"], contractors: [], status: "pausado" },
 ];
 
-async function workflowIds(): Promise<Map<TramoKey, string>> {
+async function workflowIds(): Promise<Map<EtapaKey, string>> {
   const rows = await db
     .select({ id: schema.workflows.id, key: schema.workflows.key })
     .from(schema.workflows)
     .where(isNull(schema.workflows.deletedAt));
-  const ids = new Map<TramoKey, string>();
+  const ids = new Map<EtapaKey, string>();
   for (const r of rows) {
     if (r.key === "presale" || r.key === "diseno" || r.key === "construccion") ids.set(r.key, r.id);
   }
@@ -257,14 +257,14 @@ async function workflowIds(): Promise<Map<TramoKey, string>> {
 
 async function seedProjects(
   people: Map<PersonKey, string>,
-  workflows: Map<TramoKey, string>,
+  workflows: Map<EtapaKey, string>,
   clients: Map<string, string>,
   providers: Map<string, string>,
   ownerId: string
 ): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
   for (const p of PROJECTS) {
-    const workflowId = workflows.get(p.tramo)!;
+    const workflowId = workflows.get(p.etapa)!;
     const values = {
       code: p.code,
       name: p.name,
@@ -330,7 +330,7 @@ type TaskSeed = {
   title: string;
   project: string;
   /** null = General (no etapa). */
-  tramo: TramoKey | null;
+  etapa: EtapaKey | null;
   manager: PersonKey | null;
   support?: PersonKey[];
   status: "pendiente" | "en_proceso" | "completado" | "bloqueado";
@@ -346,44 +346,44 @@ type TaskSeed = {
 
 const TASKS: ReadonlyArray<TaskSeed> = [
   // ── Pendiente ──
-  { title: "No muestra los errores al llenar la tarea", project: "Workspace", tramo: null, manager: "AR", status: "pendiente", priority: "media", due: 0 },
-  { title: "No sirve el botón de Área en tablas", project: "Workspace", tramo: null, manager: "AR", status: "pendiente", priority: "media", due: 2, checklist: [0, 1] },
-  { title: "Carpeta de proyecto terminado", project: "Local Espinopapa", tramo: "construccion", manager: null, status: "pendiente", priority: "alta", due: -35 },
-  { title: "Plano de acabados", project: "Salim Ortopedia", tramo: "presale", manager: "AR", support: ["PL"], status: "pendiente", priority: "alta", due: -2, review: 0, checklist: [2, 5] },
-  { title: "Organizar carpetas y tiempos de entrega", project: "Guadalajara 83", tramo: "diseno", manager: "PL", status: "pendiente", priority: "media", due: -23, checklist: [1, 4] },
-  { title: "Cotización de cancelería", project: "Oficinas Roma", tramo: "presale", manager: "SC", status: "pendiente", priority: "baja", due: 11, checklist: [0, 2] },
-  { title: "Firma de contrato", project: "Salim Ortopedia", tramo: "presale", manager: "AR", status: "pendiente", priority: "alta", due: 18 },
-  { title: "Propuesta Roma", project: "Oficinas Roma", tramo: "presale", manager: "SC", support: ["AR"], status: "pendiente", priority: "media", due: -3 },
-  { title: "Levantamiento del sitio", project: "Oficinas Roma", tramo: "presale", manager: "MG", status: "pendiente", priority: "media", due: 4 },
-  { title: "Instalación hidráulica", project: "Casa Lomas", tramo: "construccion", manager: "PL", status: "pendiente", priority: "alta", due: -11 },
-  { title: "Revisar acabados", project: "Local Espinopapa", tramo: "construccion", manager: "PL", status: "pendiente", priority: "media", due: -10 },
-  { title: "Ajuste de planos", project: "Guadalajara 83", tramo: "diseno", manager: "MG", status: "pendiente", priority: "media", due: -10 },
-  { title: "Presentación cliente", project: "Guadalajara 83", tramo: "diseno", manager: "MG", support: ["PL"], status: "pendiente", priority: "alta", due: -7 },
-  { title: "Montar escaparate", project: "Local Espinopapa", tramo: "construccion", manager: "LR", status: "pendiente", priority: "media", due: -4 },
-  { title: "Anexo 05", project: "Madrid 22", tramo: "construccion", manager: "AR", status: "pendiente", priority: "baja", due: -3 },
-  { title: "Compra de mobiliario", project: "Madrid 22", tramo: "construccion", manager: "LR", status: "pendiente", priority: "media", due: 7 },
-  { title: "Visita de obra", project: "Casa Lomas", tramo: "construccion", manager: "PL", status: "pendiente", priority: "media", due: 4 },
-  { title: "Falta pasillo en planta baja", project: "Casa Lomas", tramo: "construccion", manager: "MG", status: "pendiente", priority: "media", due: -1 },
-  { title: "Programa arquitectónico", project: "Salim Ortopedia", tramo: "presale", manager: "SC", status: "pendiente", priority: "media", due: 9 },
+  { title: "No muestra los errores al llenar la tarea", project: "Workspace", etapa: null, manager: "AR", status: "pendiente", priority: "media", due: 0 },
+  { title: "No sirve el botón de Área en tablas", project: "Workspace", etapa: null, manager: "AR", status: "pendiente", priority: "media", due: 2, checklist: [0, 1] },
+  { title: "Carpeta de proyecto terminado", project: "Local Espinopapa", etapa: "construccion", manager: null, status: "pendiente", priority: "alta", due: -35 },
+  { title: "Plano de acabados", project: "Salim Ortopedia", etapa: "presale", manager: "AR", support: ["PL"], status: "pendiente", priority: "alta", due: -2, review: 0, checklist: [2, 5] },
+  { title: "Organizar carpetas y tiempos de entrega", project: "Guadalajara 83", etapa: "diseno", manager: "PL", status: "pendiente", priority: "media", due: -23, checklist: [1, 4] },
+  { title: "Cotización de cancelería", project: "Oficinas Roma", etapa: "presale", manager: "SC", status: "pendiente", priority: "baja", due: 11, checklist: [0, 2] },
+  { title: "Firma de contrato", project: "Salim Ortopedia", etapa: "presale", manager: "AR", status: "pendiente", priority: "alta", due: 18 },
+  { title: "Propuesta Roma", project: "Oficinas Roma", etapa: "presale", manager: "SC", support: ["AR"], status: "pendiente", priority: "media", due: -3 },
+  { title: "Levantamiento del sitio", project: "Oficinas Roma", etapa: "presale", manager: "MG", status: "pendiente", priority: "media", due: 4 },
+  { title: "Instalación hidráulica", project: "Casa Lomas", etapa: "construccion", manager: "PL", status: "pendiente", priority: "alta", due: -11 },
+  { title: "Revisar acabados", project: "Local Espinopapa", etapa: "construccion", manager: "PL", status: "pendiente", priority: "media", due: -10 },
+  { title: "Ajuste de planos", project: "Guadalajara 83", etapa: "diseno", manager: "MG", status: "pendiente", priority: "media", due: -10 },
+  { title: "Presentación cliente", project: "Guadalajara 83", etapa: "diseno", manager: "MG", support: ["PL"], status: "pendiente", priority: "alta", due: -7 },
+  { title: "Montar escaparate", project: "Local Espinopapa", etapa: "construccion", manager: "LR", status: "pendiente", priority: "media", due: -4 },
+  { title: "Anexo 05", project: "Madrid 22", etapa: "construccion", manager: "AR", status: "pendiente", priority: "baja", due: -3 },
+  { title: "Compra de mobiliario", project: "Madrid 22", etapa: "construccion", manager: "LR", status: "pendiente", priority: "media", due: 7 },
+  { title: "Visita de obra", project: "Casa Lomas", etapa: "construccion", manager: "PL", status: "pendiente", priority: "media", due: 4 },
+  { title: "Falta pasillo en planta baja", project: "Casa Lomas", etapa: "construccion", manager: "MG", status: "pendiente", priority: "media", due: -1 },
+  { title: "Programa arquitectónico", project: "Salim Ortopedia", etapa: "presale", manager: "SC", status: "pendiente", priority: "media", due: 9 },
   // ── En proceso ──
-  { title: "Cambiar tapas a WC por unas con rosca metálica", project: "Local Espinopapa", tramo: "construccion", manager: "PL", status: "en_proceso", priority: "media", due: -38, checklist: [1, 3] },
-  { title: "Producción de renders", project: "Guadalajara 83", tramo: "diseno", manager: "PL", support: ["MG"], status: "en_proceso", priority: "media", due: 6, review: 0, checklist: [3, 4] },
-  { title: "Cierre de trabajos", project: "Madrid 22", tramo: "construccion", manager: "LR", support: ["AR"], status: "en_proceso", priority: "alta", due: 13, review: 0, checklist: [4, 6] },
-  { title: "Colado de losa", project: "Casa Lomas", tramo: "construccion", manager: "PL", status: "en_proceso", priority: "alta", due: 11, checklist: [0, 3] },
-  { title: "Reunión de arranque", project: "Oficinas Roma", tramo: "presale", manager: "AR", status: "en_proceso", priority: "media", due: -4 },
-  { title: "Revisión de obra", project: "Local Espinopapa", tramo: "construccion", manager: "PL", support: ["AR"], status: "en_proceso", priority: "alta", due: -2 },
-  { title: "Actualizar renders", project: "Guadalajara 83", tramo: "diseno", manager: "MG", status: "en_proceso", priority: "media", due: -1 },
-  { title: "Entrega de renders", project: "Guadalajara 83", tramo: "diseno", manager: "MG", status: "en_proceso", priority: "alta", due: 6 },
-  { title: "Instalación eléctrica", project: "Local Espinopapa", tramo: "construccion", manager: "PL", status: "en_proceso", priority: "media", due: -14 },
-  { title: "Selección de pisos", project: "Madrid 22", tramo: "construccion", manager: "LR", status: "en_proceso", priority: "media", due: -6 },
-  { title: "Cimentación", project: "Casa Lomas", tramo: "construccion", manager: "PL", status: "en_proceso", priority: "alta", due: -8 },
+  { title: "Cambiar tapas a WC por unas con rosca metálica", project: "Local Espinopapa", etapa: "construccion", manager: "PL", status: "en_proceso", priority: "media", due: -38, checklist: [1, 3] },
+  { title: "Producción de renders", project: "Guadalajara 83", etapa: "diseno", manager: "PL", support: ["MG"], status: "en_proceso", priority: "media", due: 6, review: 0, checklist: [3, 4] },
+  { title: "Cierre de trabajos", project: "Madrid 22", etapa: "construccion", manager: "LR", support: ["AR"], status: "en_proceso", priority: "alta", due: 13, review: 0, checklist: [4, 6] },
+  { title: "Colado de losa", project: "Casa Lomas", etapa: "construccion", manager: "PL", status: "en_proceso", priority: "alta", due: 11, checklist: [0, 3] },
+  { title: "Reunión de arranque", project: "Oficinas Roma", etapa: "presale", manager: "AR", status: "en_proceso", priority: "media", due: -4 },
+  { title: "Revisión de obra", project: "Local Espinopapa", etapa: "construccion", manager: "PL", support: ["AR"], status: "en_proceso", priority: "alta", due: -2 },
+  { title: "Actualizar renders", project: "Guadalajara 83", etapa: "diseno", manager: "MG", status: "en_proceso", priority: "media", due: -1 },
+  { title: "Entrega de renders", project: "Guadalajara 83", etapa: "diseno", manager: "MG", status: "en_proceso", priority: "alta", due: 6 },
+  { title: "Instalación eléctrica", project: "Local Espinopapa", etapa: "construccion", manager: "PL", status: "en_proceso", priority: "media", due: -14 },
+  { title: "Selección de pisos", project: "Madrid 22", etapa: "construccion", manager: "LR", status: "en_proceso", priority: "media", due: -6 },
+  { title: "Cimentación", project: "Casa Lomas", etapa: "construccion", manager: "PL", status: "en_proceso", priority: "alta", due: -8 },
   // ── Completado (Ritmo semanal, Completadas) ──
-  { title: "Levantamiento fotográfico", project: "Local Espinopapa", tramo: "construccion", manager: "PL", status: "completado", priority: "media", due: -30, closed: 28 },
-  { title: "Anteproyecto", project: "Guadalajara 83", tramo: "diseno", manager: "MG", status: "completado", priority: "alta", due: -21, closed: 20 },
-  { title: "Demolición", project: "Madrid 22", tramo: "construccion", manager: "LR", status: "completado", priority: "media", due: -15, closed: 13 },
-  { title: "Brief del cliente", project: "Salim Ortopedia", tramo: "presale", manager: "AR", status: "completado", priority: "media", due: -9, closed: 8 },
-  { title: "Trazo y nivelación", project: "Casa Lomas", tramo: "construccion", manager: "PL", status: "completado", priority: "alta", due: -5, closed: 4 },
-  { title: "Contrato de diseño", project: "Oficinas Roma", tramo: "presale", manager: "SC", status: "completado", priority: "media", due: -2, closed: 1 },
+  { title: "Levantamiento fotográfico", project: "Local Espinopapa", etapa: "construccion", manager: "PL", status: "completado", priority: "media", due: -30, closed: 28 },
+  { title: "Anteproyecto", project: "Guadalajara 83", etapa: "diseno", manager: "MG", status: "completado", priority: "alta", due: -21, closed: 20 },
+  { title: "Demolición", project: "Madrid 22", etapa: "construccion", manager: "LR", status: "completado", priority: "media", due: -15, closed: 13 },
+  { title: "Brief del cliente", project: "Salim Ortopedia", etapa: "presale", manager: "AR", status: "completado", priority: "media", due: -9, closed: 8 },
+  { title: "Trazo y nivelación", project: "Casa Lomas", etapa: "construccion", manager: "PL", status: "completado", priority: "alta", due: -5, closed: 4 },
+  { title: "Contrato de diseño", project: "Oficinas Roma", etapa: "presale", manager: "SC", status: "completado", priority: "media", due: -2, closed: 1 },
 ];
 
 const CHECKLIST_TITLES = [
@@ -397,7 +397,7 @@ const CHECKLIST_TITLES = [
 
 async function seedTasks(
   people: Map<PersonKey, string>,
-  workflows: Map<TramoKey, string>,
+  workflows: Map<EtapaKey, string>,
   projects: Map<string, string>,
   ownerId: string
 ): Promise<Map<string, string>> {
@@ -430,7 +430,7 @@ async function seedTasks(
       .values({
         projectId: projects.get(t.project)!,
         kind: "usuario",
-        workflowId: t.tramo ? workflows.get(t.tramo)! : null,
+        workflowId: t.etapa ? workflows.get(t.etapa)! : null,
         title: t.title,
         createdById: ownerId,
         managerId: t.manager ? people.get(t.manager)! : null,
@@ -457,7 +457,7 @@ async function seedTasks(
           projectId: projects.get(t.project)!,
           parentTaskId: row.id,
           kind: "usuario" as const,
-          workflowId: t.tramo ? workflows.get(t.tramo)! : null,
+          workflowId: t.etapa ? workflows.get(t.etapa)! : null,
           title: CHECKLIST_TITLES[n % CHECKLIST_TITLES.length],
           createdById: ownerId,
           status: n < done ? ("completado" as const) : ("pendiente" as const),

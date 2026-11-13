@@ -25,7 +25,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { positionPhases, positions, staff, staffPositions, workflowPhases } from "@/lib/db/schema";
 import { FLOW_ERROR, flowError, flowErrorCode } from "@/lib/project-flow/errors";
-import { tramoBoard } from "@/lib/project-flow/readiness";
+import { etapaBoard } from "@/lib/project-flow/readiness";
 import type { StartSlotCandidate, TareasStartSlotData } from "@/lib/types/tareas-start-slot";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
@@ -37,7 +37,7 @@ import * as workflowsRepository from "@/lib/repositories/workflows-repository";
 import type { TaskFilters, TaskListRow, TaskRef } from "@/lib/types/core";
 import { esencialResponsable } from "@/lib/tareas/query";
 import { TAREAS_FIRST_PAGES_MAX } from "@/lib/tareas/page-input";
-import { EMPTY_TAREAS_SUMMARY, SIN_TRAMO_KEY, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
+import { EMPTY_TAREAS_SUMMARY, SIN_ETAPA_KEY, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
 import {
   currentTaskStatus,
   inMemoryCounter,
@@ -63,13 +63,13 @@ import {
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
 
 /**
- * Active staff `{id,name,suggested}` for the Iniciar tramo sheet, in one
+ * Active staff `{id,name,suggested}` for the Iniciar etapa sheet, in one
  * query: `suggested` when a live puesto of theirs covers an active fase of the
- * tramo. Same rows and order as `fetchAssignableStaffAction(workflowId)`
+ * etapa. Same rows and order as `fetchAssignableStaffAction(workflowId)`
  * (suggested first, then by nombre), without the full `Staff` row.
  */
 export async function loadStartSlotCandidates(workflowId: string): Promise<StartSlotCandidate[]> {
-  const coversTramo = db
+  const coversEtapa = db
     .select({ one: sql`1` })
     .from(staffPositions)
     .innerJoin(positions, eq(positions.id, staffPositions.positionId))
@@ -89,7 +89,7 @@ export async function loadStartSlotCandidates(workflowId: string): Promise<Start
       id: staff.id,
       name: staff.name,
       lastName: staff.lastName,
-      suggested: sql<boolean>`exists (${coversTramo})`.mapWith(Boolean),
+      suggested: sql<boolean>`exists (${coversEtapa})`.mapWith(Boolean),
     })
     .from(staff)
     .where(and(isNull(staff.deletedAt), eq(staff.active, true)))
@@ -100,25 +100,25 @@ export async function loadStartSlotCandidates(workflowId: string): Promise<Start
 }
 
 /**
- * `tareas.startSlot(tramoId)` loader: `(user, input) => data`.
+ * `tareas.startSlot(etapaId)` loader: `(user, input) => data`.
  * `getTareasStartSlotData` calls it after the session check and parsing; a
  * server prefetch calls it directly. FORBIDDEN without the Tareas capability
- * (`canViewActivities`); null when the tramo is missing or inactive. The
+ * (`canViewActivities`); null when the etapa is missing or inactive. The
  * board and the candidates load in parallel (≤ 5 statements together).
  * Read-only.
  */
 export async function loadTareasStartSlot(
   user: AuthenticatedUser,
-  input: { tramoId: string },
+  input: { etapaId: string },
 ): Promise<TareasStartSlotData | null> {
   const caps = resolveActivitiesCapabilities(user);
   if (!caps.canViewActivities) throw flowError(FLOW_ERROR.FORBIDDEN, "tareas");
   const [board, candidates] = await Promise.all([
-    tramoBoard(db, input.tramoId, viewerScopeOf(user)).catch((err: unknown) => {
+    etapaBoard(db, input.etapaId, viewerScopeOf(user)).catch((err: unknown) => {
       if (flowErrorCode(err) === FLOW_ERROR.NOT_FOUND) return null;
       throw err;
     }),
-    loadStartSlotCandidates(input.tramoId),
+    loadStartSlotCandidates(input.etapaId),
   ]);
   if (!board) return null;
   return { board, candidates, canStart: caps.canCreateActivity };
@@ -186,13 +186,13 @@ function requireTareasView(user: AuthenticatedUser): void {
 
 const ALL_KINDS_FOR_ADMIN: TaskKind[] = ["workflow", "usuario", "admin"];
 
-/** Live tramos with a key, by `sortOrder` (`listTramos` without the action round trip). */
-async function loadTareasTramos(): Promise<WorkflowRef[]> {
-  return (await workflowsRepository.listTramosNav()).filter((t) => t.key.trim() !== "");
+/** Live etapas with a key, by `sortOrder` (`listEtapas` without the action round trip). */
+async function loadTareasEtapas(): Promise<WorkflowRef[]> {
+  return (await workflowsRepository.listEtapasNav()).filter((t) => t.key.trim() !== "");
 }
 
 /**
- * The filters every view shares minus tramo and proyecto (they feed the chip
+ * The filters every view shares minus etapa and proyecto (they feed the chip
  * counts and the Proyecto options). "Responsable: Yo" is Mis tareas: the
  * viewer's own tasks, an administrator's own admin tasks included
  * (`fetchMyTasksAction`); everyone else never gets admin tasks (the default kinds).
@@ -221,20 +221,20 @@ function tareasBaseFilters(user: AuthenticatedUser, viewer: ViewerScope, filters
   return out;
 }
 
-/** Every filter applied; null when the tramo key matches no live tramo (the view loads nothing). */
+/** Every filter applied; null when the etapa key matches no live etapa (the view loads nothing). */
 function tareasViewFilters(
   user: AuthenticatedUser,
   viewer: ViewerScope,
   filters: TareasListFilters,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
 ): TaskFilters | null {
   const out = tareasBaseFilters(user, viewer, filters);
-  if (filters.tramo === SIN_TRAMO_KEY) {
+  if (filters.etapa === SIN_ETAPA_KEY) {
     out.withoutWorkflow = true;
-  } else if (filters.tramo) {
-    const tramo = tramos.find((t) => t.key === filters.tramo);
-    if (!tramo) return null;
-    out.workflowId = tramo.id;
+  } else if (filters.etapa) {
+    const etapa = etapas.find((t) => t.key === filters.etapa);
+    if (!etapa) return null;
+    out.workflowId = etapa.id;
   }
   if (filters.proyecto) out.projectId = filters.proyecto;
   if (filters.proyectos && filters.proyectos.length > 0) out.projectIds = filters.proyectos;
@@ -275,7 +275,7 @@ async function tareasFacets(
   filters: TareasListFilters,
 ): Promise<TareasFacets> {
   return tasksRepository.taskFacets(tareasBaseFilters(user, viewer, filters), viewer, {
-    workflowKey: filters.tramo,
+    workflowKey: filters.etapa,
     projectId: filters.proyecto,
     ...(filters.proyectos && filters.proyectos.length > 0 ? { projectIds: filters.proyectos } : {}),
   });
@@ -305,7 +305,7 @@ async function tareasBoard(
 export async function loadTareasBoard(user: AuthenticatedUser, input: { filters: TareasListFilters }): Promise<TareasBoardData> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
-  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasEtapas());
   return tareasBoard(user, viewer, filters);
 }
 
@@ -318,7 +318,7 @@ export async function loadTareasListPage(
 ): Promise<TareasRowsPage> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
-  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasEtapas());
   if (!filters) return EMPTY_PAGE;
   return tasksRepository.listTasksPage(filters, viewer, {
     cursor: input.cursor,
@@ -331,7 +331,7 @@ export async function loadTareasListPage(
 /**
  * The first page of several task lists in one request (#1051): "Expandir
  * todo" in Proyectos · Analítico seeds every project's `qk.tareas.list(f)`
- * with it instead of one request per project. The tramos are read once.
+ * with it instead of one request per project. The etapas are read once.
  * FORBIDDEN without the Tareas capability.
  */
 export async function loadTareasListFirstPages(
@@ -340,10 +340,10 @@ export async function loadTareasListFirstPages(
 ): Promise<TareasRowsPage[]> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
-  const tramos = await loadTareasTramos();
+  const etapas = await loadTareasEtapas();
   return Promise.all(
     input.lists.slice(0, TAREAS_FIRST_PAGES_MAX).map((f) => {
-      const filters = tareasViewFilters(user, viewer, f, tramos);
+      const filters = tareasViewFilters(user, viewer, f, etapas);
       if (!filters) return EMPTY_PAGE;
       return tasksRepository.listTasksPage(filters, viewer, {
         cursor: null,
@@ -389,7 +389,7 @@ export async function loadTareasBoardColumn(
 ): Promise<TareasBoardColumn> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
-  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasEtapas());
   if (!filters) return { rows: [], total: 0, nextCursor: null };
   return tasksRepository.listTasksPage(
     { ...filters, archived: false },
@@ -400,12 +400,12 @@ export async function loadTareasBoardColumn(
 
 // ── Analítico (Estilos, #988) ────────────────────────────────────────────────
 
-/** Expanded tramo groups whose first page the Analítico bundle seeds. */
+/** Expanded etapa groups whose first page the Analítico bundle seeds. */
 export const TAREAS_ANALITICO_SEEDED_GROUPS = 3;
 
 /**
  * `qk.tareas.summary(f)` loader (`getTareasSummary`): the Analítico counts
- * over every task the filters match, per project and tramo, per project and
+ * over every task the filters match, per project and etapa, per project and
  * in total, plus the same filters without `mostrar`. One grouping-sets
  * statement (and one more with `mostrar`). Overdue is
  * `coalesce(commitment, delivery)` before today in America/Mexico_City.
@@ -419,14 +419,14 @@ export async function loadTareasSummary(
 ): Promise<TareasSummary> {
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
-  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasEtapas());
   if (!filters) return EMPTY_TAREAS_SUMMARY;
   return tasksRepository.taskSummary(filters, viewer, todayInAppTimeZone(now));
 }
 
 /**
  * The Analítico part of the page bundle: the summary, then the first page
- * ("retraso" order) of the first `TAREAS_ANALITICO_SEEDED_GROUPS` tramo
+ * ("retraso" order) of the first `TAREAS_ANALITICO_SEEDED_GROUPS` etapa
  * groups in display order (every group starts expanded).
  */
 async function analiticoBundle(
@@ -434,18 +434,18 @@ async function analiticoBundle(
   viewer: ViewerScope,
   filters: TareasListFilters,
   viewFilters: TaskFilters | null,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
 ): Promise<{ summary: TareasSummary; groups: { filters: TareasListFilters; page: TareasRowsPage }[] }> {
   if (!viewFilters) return { summary: EMPTY_TAREAS_SUMMARY, groups: [] };
   const today = todayInAppTimeZone();
   const summary = await tasksRepository.taskSummary(viewFilters, viewer, today);
   const first = summary.projects
-    .flatMap((p) => p.tramos.map((t) => ({ projectId: p.project.id, tramo: t.tramo })))
+    .flatMap((p) => p.etapas.map((t) => ({ projectId: p.project.id, etapa: t.etapa })))
     .slice(0, TAREAS_ANALITICO_SEEDED_GROUPS);
   const groups = await Promise.all(
-    first.map(async ({ projectId, tramo }) => {
-      const groupFilters = tareasGroupFilters(filters, projectId, tramo.key);
-      const repoFilters = tareasViewFilters(user, viewer, groupFilters, tramos);
+    first.map(async ({ projectId, etapa }) => {
+      const groupFilters = tareasGroupFilters(filters, projectId, etapa.key);
+      const repoFilters = tareasViewFilters(user, viewer, groupFilters, etapas);
       const page = repoFilters
         ? await tasksRepository.listTasksPage({ ...repoFilters, today }, viewer, {
             cursor: null,
@@ -465,9 +465,9 @@ async function analiticoBundle(
  * through it directly. FORBIDDEN without the Tareas capability.
  *
  * One call per layout (the resolved style), in ≤ 6 statements (7 for
- * Analítico): the tramos, then at once the staff options, the facets and
+ * Analítico): the etapas, then at once the staff options, the facets and
  * every board column plus the status catalog (Visual), the cards per project
- * (Esencial) or the summary and the first page of the first 3 tramo groups
+ * (Esencial) or the summary and the first page of the first 3 etapa groups
  * (Analítico). Rows are slim (`TaskListRow`), scoped by the
  * repository: admin tasks only in an administrator's "Responsable: Yo",
  * client names only for administrators. Staff are `{id,name}`.
@@ -479,7 +479,7 @@ export async function loadTareasPage(
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
   const filters: TareasListFilters = {
-    tramo: input.tramo,
+    etapa: input.etapa,
     proyecto: input.proyecto,
     // Esencial reads a missing responsable as "yo" (Solo mías on by default).
     responsable: input.estilo === "esencial" ? esencialResponsable(input.responsable) : input.responsable,
@@ -489,16 +489,16 @@ export async function loadTareasPage(
     ...(input.proyectos && input.proyectos.length > 0 ? { proyectos: input.proyectos } : {}),
     ...(input.apoyo === false ? { apoyo: false as const } : {}),
   };
-  const tramos = await loadTareasTramos();
-  const viewFilters = tareasViewFilters(user, viewer, filters, tramos);
+  const etapas = await loadTareasEtapas();
+  const viewFilters = tareasViewFilters(user, viewer, filters, etapas);
   const [staffOptions, facets, analitico, board, byProject] = await Promise.all([
     loadTareasStaffOptions(),
     tareasFacets(user, viewer, filters),
-    input.estilo === "analitico" ? analiticoBundle(user, viewer, filters, viewFilters, tramos) : Promise.resolve(undefined),
+    input.estilo === "analitico" ? analiticoBundle(user, viewer, filters, viewFilters, etapas) : Promise.resolve(undefined),
     input.estilo === "visual" ? tareasBoard(user, viewer, viewFilters) : Promise.resolve(undefined),
     input.estilo === "esencial" ? loadTareasByProject(user, { filters }) : Promise.resolve(undefined),
   ]);
-  const data: TareasPageData = { facets, tramos, staff: staffOptions };
+  const data: TareasPageData = { facets, etapas, staff: staffOptions };
   if (analitico) {
     data.summary = analitico.summary;
     data.groups = analitico.groups;
@@ -548,10 +548,10 @@ function trendKpi(
   return kpi;
 }
 
-/** The trend of a filter that matches nothing (an unknown tramo key): no tiles, an empty week. */
+/** The trend of a filter that matches nothing (an unknown etapa key): no tiles, an empty week. */
 function emptyTrend(monday: string): TareasTrend {
   const sunday = shiftIsoDate(monday, 6);
-  const days = isoDateRange(monday, sunday).map((date) => ({ date, due: 0, tramoKey: null }));
+  const days = isoDateRange(monday, sunday).map((date) => ({ date, due: 0, etapaKey: null }));
   return { kpis: [], activeAssignees: 0, week: { from: monday, to: sunday, total: 0, days } };
 }
 
@@ -567,7 +567,7 @@ function emptyTrend(monday: string): TareasTrend {
  * - Completadas: tasks moved to completado per day; the value is Monday to
  *   today, compared with the same span last week.
  * - `activeAssignees`: distinct responsables of the tasks en proceso.
- * - `week`: open tasks due per day, Monday to Sunday, with the dominant tramo.
+ * - `week`: open tasks due per day, Monday to Sunday, with the dominant etapa.
  */
 export async function loadTareasTrend(
   user: AuthenticatedUser,
@@ -580,7 +580,7 @@ export async function loadTareasTrend(
   const today = localIsoDate(now, tz);
   const monday = mondayOf(today);
   const sunday = shiftIsoDate(monday, 6);
-  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasEtapas());
   if (!filters) return emptyTrend(monday);
 
   const firstDay = shiftIsoDate(today, -(TREND_DAYS - 1));
@@ -654,7 +654,7 @@ export async function loadTareasTrend(
   const days = isoDateRange(monday, sunday).map((date) => ({
     date,
     due: byDay.get(date)?.due ?? 0,
-    tramoKey: byDay.get(date)?.tramoKey ?? null,
+    etapaKey: byDay.get(date)?.etapaKey ?? null,
   }));
   return {
     kpis,
@@ -715,7 +715,7 @@ export async function loadTareasByProject(
   requireTareasView(user);
   const viewer = viewerScopeOf(user);
   const today = todayInAppTimeZone(now);
-  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasTramos());
+  const filters = tareasViewFilters(user, viewer, input.filters, await loadTareasEtapas());
   if (!filters) return { groups: [], truncated: false };
   const mostrar = input.filters.mostrar ?? "todas";
   const openFilters: TaskFilters = { ...filters, mostrar: mostrar === "en_retraso" ? "en_retraso" : "abiertas", today };

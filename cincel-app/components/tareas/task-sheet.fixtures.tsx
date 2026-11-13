@@ -28,7 +28,7 @@ export const STAFF = [
   { id: "s-3", name: "Paul Langarica", active: true, suggested: false },
 ];
 
-/** A tramo with (or without) a fase catalog, as `fetchWorkflowsAction` returns it. */
+/** An etapa with (or without) a fase catalog, as `fetchWorkflowsAction` returns it. */
 export function makeWorkflow(phases = PHASES): WorkflowDetail {
   return {
     ...DISENO_REF,

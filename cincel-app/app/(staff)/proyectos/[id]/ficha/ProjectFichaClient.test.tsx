@@ -13,7 +13,7 @@ const actions = vi.hoisted(() => ({
   setProjectContactsAction: vi.fn(),
   addProjectLinkAction: vi.fn(),
   removeProjectLinkAction: vi.fn(),
-  setProjectCurrentTramoAction: vi.fn(),
+  setProjectCurrentEtapaAction: vi.fn(),
   addProjectCommentAction: vi.fn(),
   createProjectSpaceAction: vi.fn(),
   renameProjectSpaceAction: vi.fn(),
@@ -86,8 +86,8 @@ function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
     updatedAt: "2026-01-01",
     client: null,
     currentWorkflow: null,
-    tramos: [],
-    needsTramo: true,
+    etapas: [],
+    needsEtapa: true,
     stages: [],
     manager: null,
     coordinator: null,
@@ -181,7 +181,7 @@ async function renderFicha(opts: { admin?: boolean; editor?: boolean; tasks?: Ta
     if (editor || opts.admin) {
       server.setQueryData(qk.catalog.staff(), STAFF);
       server.setQueryData(qk.catalog.contacts(), CONTACTS);
-      server.setQueryData(qk.catalog.tramos(), []);
+      server.setQueryData(qk.catalog.etapas(), []);
     }
   });
   const invalidate = vi.spyOn(client, "invalidateQueries");

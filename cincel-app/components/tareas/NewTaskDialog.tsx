@@ -29,9 +29,9 @@ import {
   resolveWorkflowId,
   toSubtaskInputs,
   toUserTaskInput,
-  tramoFases,
+  etapaFases,
   suggestedFirst,
-  tramoTemplateTitles,
+  etapaTemplateTitles,
   validateDraft,
   type DraftErrors,
   type NewTaskDefaults,
@@ -62,9 +62,9 @@ export { createTaskWithExtras, newTaskInvalidations, newTaskWorkflowsKey } from 
 
 /**
  * New task dialog (redesign FE §3.4, frame `NuevaTarea`),
- * on `FormDialog`. Título, Proyecto, Tramo, Fase (the tramo's
+ * on `FormDialog`. Título, Proyecto, Etapa, Fase (the etapa's
  * catalog; hidden when it has none), Responsable, Fecha de entrega, Prioridad,
- * Descripción and Subtareas ("Usar plantilla del tramo"). The catalogs are
+ * Descripción and Subtareas ("Usar plantilla de la etapa"). The catalogs are
  * shared queries (`catalog.projectOptions`, the `catalog.workflows` detail,
  * `catalog.assignableStaff(workflowId)`), loaded while open and once per
  * session. "Crear tarea" runs one `useActionMutation` (create → status →
@@ -73,7 +73,7 @@ export { createTaskWithExtras, newTaskInvalidations, newTaskWorkflowsKey } from 
 export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogProps) {
   const ids = useId();
   const [draft, setDraft] = useState<NewTaskDraft>(() => draftFromDefaults(defaults));
-  const [tramoPicked, setTramoPicked] = useState(false);
+  const [etapaPicked, setEtapaPicked] = useState(false);
   const [wasOpen, setWasOpen] = useState(open);
   const [errors, setErrors] = useState<DraftErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
     setWasOpen(open);
     if (open) {
       setDraft(draftFromDefaults(defaults));
-      setTramoPicked(false);
+      setEtapaPicked(false);
       setErrors({});
       setSubmitError(null);
     }
@@ -110,15 +110,15 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
   const projectId = resolveProjectId(draft.projectId, projects);
   const project = projects.find((p) => p.id === projectId) ?? null;
   const workflowId = resolveWorkflowId(draft.workflowId, workflows, {
-    tramoKey: tramoPicked ? undefined : defaults?.tramoKey,
+    etapaKey: etapaPicked ? undefined : defaults?.etapaKey,
     project,
   });
   const workflow = workflows.find((w) => w.id === workflowId) ?? null;
-  const fases = useMemo(() => tramoFases(workflow), [workflow]);
+  const fases = useMemo(() => etapaFases(workflow), [workflow]);
   const phaseId = resolvePhaseId(draft.phaseId, fases);
-  const templateTitles = tramoTemplateTitles(workflow, fases.length > 0 ? phaseId : null);
+  const templateTitles = etapaTemplateTitles(workflow, fases.length > 0 ? phaseId : null);
 
-  // Responsables for the selected tramo, suggested first.
+  // Responsables for the selected etapa, suggested first.
   const staffQuery = useQuery({
     queryKey: qk.catalog.assignableStaff(workflowId),
     queryFn: () => runAction(fetchCatalogAssignableStaff, { workflowId }),
@@ -220,7 +220,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
                 items={Object.fromEntries(projects.map((p) => [p.id, p.name]))}
                 value={projectId}
                 onValueChange={(v) =>
-                  update({ projectId: (v as string) ?? "", ...(tramoPicked ? {} : { workflowId: null, phaseId: null }) })
+                  update({ projectId: (v as string) ?? "", ...(etapaPicked ? {} : { workflowId: null, phaseId: null }) })
                 }
                 disabled={!catalogReady}
               >
@@ -244,7 +244,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
               items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
               value={workflowId ?? ""}
               onValueChange={(v) => {
-                setTramoPicked(true);
+                setEtapaPicked(true);
                 update({ workflowId: (v as string) || null, phaseId: null });
               }}
               disabled={!catalogReady}

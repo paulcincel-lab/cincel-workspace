@@ -126,7 +126,7 @@ describe.skipIf(!url)("subtasks and mergeTasks (test DB)", () => {
   }
 
   describe("createSubtask", () => {
-    it("creates a usuario child with the parent's project, fase and tramo", async () => {
+    it("creates a usuario child with the parent's project, fase and etapa", async () => {
       await inTx(async (tx, ctx) => {
         const [fase] = await tx
           .insert(schema.workflowPhases)

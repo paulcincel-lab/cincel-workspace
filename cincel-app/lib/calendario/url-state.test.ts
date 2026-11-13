@@ -30,7 +30,7 @@ describe("parseCalendarioQuery", () => {
       mostrar: "reuniones",
       quien: "todos",
       proyectos: [ID, OTHER].sort(),
-      tramo: ID,
+      etapa: ID,
       responsable: OTHER,
       apoyo: false,
       ocultarCompletadas: true,

@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { createResourceLinkAction, deleteResourceLinkAction, recordResourceOpenAction } from "@/lib/actions/resources-actions";
 import {
   TIPO_LABEL,
-  TRAMO_FILTER_LABEL,
+  ETAPA_FILTER_LABEL,
   favoriteFor,
   filterSectionLinks,
   recurso,
@@ -21,7 +21,7 @@ import {
   sectionTable,
   type BibliotecaSectionSlug,
   type TipoFilter,
-  type TramoFilter,
+  type EtapaFilter,
 } from "@/lib/biblioteca/catalog";
 import type { BibliotecaData } from "@/lib/biblioteca/load";
 import { useDriveStatus } from "@/lib/google/use-drive-status";
@@ -33,9 +33,9 @@ import type { ActionResult } from "@/lib/types/schedule";
 
 export type BibliotecaSectionProps = {
   section: BibliotecaSectionSlug;
-  /** Active filters from the URL (`?tipo=`, `?tramo=`). */
+  /** Active filters from the URL (`?tipo=`, `?etapa=`). */
   tipo?: TipoFilter | null;
-  tramo?: TramoFilter | null;
+  etapa?: EtapaFilter | null;
 };
 
 const NO_LINKS: ResourceLink[] = [];
@@ -92,10 +92,10 @@ function patchLinks(client: QueryClient, section: BibliotecaSectionSlug, update:
   );
 }
 
-function filterHref(section: ResourceSection, next: { tipo: TipoFilter | null; tramo: TramoFilter | null }): string {
+function filterHref(section: ResourceSection, next: { tipo: TipoFilter | null; etapa: EtapaFilter | null }): string {
   const params = new URLSearchParams();
   if (next.tipo) params.set("tipo", next.tipo);
-  if (next.tramo) params.set("etapa", next.tramo);
+  if (next.etapa) params.set("etapa", next.etapa);
   const qs = params.toString();
   return `/biblioteca/${section}${qs ? `?${qs}` : ""}`;
 }
@@ -103,7 +103,7 @@ function filterHref(section: ResourceSection, next: { tipo: TipoFilter | null; t
 /**
  * `/biblioteca/[seccion]` (redesign FE §3.7, frames `BibliotecaSeccion` +
  * variants): evolves the Recursos workspace section view onto `ListPage` +
- * `RecordTable`. Breadcrumb, filters (tipo, tramo, search), and per row the
+ * `RecordTable`. Breadcrumb, filters (tipo, etapa, search), and per row the
  * favorite toggle (a "Mis favoritos" link of the viewer, created or removed
  * with the resource actions, optimistic on `biblioteca.links(section)`), open
  * (the workspace viewer in a sheet) and download (Drive files through the
@@ -111,7 +111,7 @@ function filterHref(section: ResourceSection, next: { tipo: TipoFilter | null; t
  * come from `biblioteca.links(section)` (this section plus the viewer's
  * favorites, prefetched by the page); Drive from `useDriveStatus()`.
  */
-export function BibliotecaSection({ section, tipo = null, tramo = null }: BibliotecaSectionProps) {
+export function BibliotecaSection({ section, tipo = null, etapa = null }: BibliotecaSectionProps) {
   const { data } = useQuery(bibliotecaLinksOptions(section));
   const items = data?.links ?? NO_LINKS;
   const viewerId = data?.viewerId ?? null;
@@ -157,7 +157,7 @@ export function BibliotecaSection({ section, tipo = null, tramo = null }: Biblio
   const label = meta?.title ?? section;
   const canFavorite = canManageFavorites && viewerId !== null;
 
-  const rows = useMemo(() => filterSectionLinks(items, section, { tipo, tramo, query }), [items, section, tipo, tramo, query]);
+  const rows = useMemo(() => filterSectionLinks(items, section, { tipo, etapa, query }), [items, section, tipo, etapa, query]);
   const byId = useMemo(() => new Map(rows.map((link) => [link.id, link])), [rows]);
   const favoriteIds = useMemo(
     () => new Set(rows.filter((link) => favoriteFor(link, items) !== null).map((link) => link.id)),
@@ -231,26 +231,26 @@ export function BibliotecaSection({ section, tipo = null, tramo = null }: Biblio
   };
 
   const tipoChips = [
-    { key: "tipo-todos", label: "Todos", pressed: tipo === null, href: filterHref(section, { tipo: null, tramo }) },
+    { key: "tipo-todos", label: "Todos", pressed: tipo === null, href: filterHref(section, { tipo: null, etapa }) },
     ...(Object.keys(TIPO_LABEL) as TipoFilter[]).map((key) => ({
       key: `tipo-${key}`,
       label: TIPO_LABEL[key],
       pressed: tipo === key,
-      href: filterHref(section, { tipo: key, tramo }),
+      href: filterHref(section, { tipo: key, etapa }),
     })),
   ];
-  const tramoChips = [
-    { key: "tramo-todos", label: "Todas las etapas", pressed: tramo === null, href: filterHref(section, { tipo, tramo: null }) },
-    ...(Object.keys(TRAMO_FILTER_LABEL) as TramoFilter[]).map((key) => ({
-      key: `tramo-${key}`,
-      label: TRAMO_FILTER_LABEL[key],
-      pressed: tramo === key,
-      href: filterHref(section, { tipo, tramo: key }),
+  const etapaChips = [
+    { key: "etapa-todos", label: "Todas las etapas", pressed: etapa === null, href: filterHref(section, { tipo, etapa: null }) },
+    ...(Object.keys(ETAPA_FILTER_LABEL) as EtapaFilter[]).map((key) => ({
+      key: `etapa-${key}`,
+      label: ETAPA_FILTER_LABEL[key],
+      pressed: etapa === key,
+      href: filterHref(section, { tipo, etapa: key }),
     })),
   ];
 
   const previewDownload = preview ? resourceDownload(preview, driveEnabled) : null;
-  const filtered = tipo !== null || tramo !== null || query.trim().length > 0;
+  const filtered = tipo !== null || etapa !== null || query.trim().length > 0;
 
   return (
     <>
@@ -263,7 +263,7 @@ export function BibliotecaSection({ section, tipo = null, tramo = null }: Biblio
         filters={
           <div className="flex flex-col gap-2">
             <FiltersBar chips={tipoChips} search={{ value: query, placeholder: "Buscar documento", onChange: setQuery }} />
-            <FiltersBar chips={tramoChips} />
+            <FiltersBar chips={etapaChips} />
             {error ? (
               <p role="alert" className="text-sm text-destructive">
                 {error}

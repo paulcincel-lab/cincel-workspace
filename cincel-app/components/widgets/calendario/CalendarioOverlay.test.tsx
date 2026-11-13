@@ -34,7 +34,7 @@ const proposal: Proposal = {
 const day = (date: string, hours: number, label: CalDay["loadLabel"]): CalDay => ({ date, tasks: 1, events: 0, shown: 1, hours, workday: 6, loadLabel: label, overlaps: 0 }) as CalDay;
 
 const task: CalTaskItem = {
-  kind: "task", id: "t:1", taskId: "1", title: "Ingenierías", date: "2026-11-09", dateField: "commitmentDate", project: null, tramo: null, phase: null,
+  kind: "task", id: "t:1", taskId: "1", title: "Ingenierías", date: "2026-11-09", dateField: "commitmentDate", project: null, etapa: null, phase: null,
   status: "en_proceso", statusLabel: "En progreso", priority: "media", manager: null, support: [], overdue: false, completed: false, blocked: false,
   hours: 2, hoursSource: "task", parentTaskId: null, canEdit: true,
 } as CalTaskItem;

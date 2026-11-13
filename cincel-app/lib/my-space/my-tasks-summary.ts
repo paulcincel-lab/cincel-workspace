@@ -13,17 +13,17 @@
  *   Después: later or undated.
  */
 import type { Group } from "@/components/widgets/GroupedTable";
-import { SIN_TRAMO_KEY } from "@/lib/tareas/summary";
+import { SIN_ETAPA_KEY } from "@/lib/tareas/summary";
 import { TASK_LIST_PAGE_SIZE } from "@/lib/tareas/page-data";
 import { addDays } from "@/lib/time-tracking/local-time";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorVar } from "@/lib/etapas/etapa-color";
 
-import { SIN_TRAMO, sundayOf, tramoGroupId, type MyTaskBucket, type TaskRow } from "./my-tasks";
+import { SIN_ETAPA, sundayOf, etapaGroupId, type MyTaskBucket, type TaskRow } from "./my-tasks";
 
-/** The Analítico filters the summary narrows by (the URL's `?tramo=`, `?q=`, `?estado=retraso`). */
+/** The Analítico filters the summary narrows by (the URL's `?etapa=`, `?q=`, `?estado=retraso`). */
 export type MyTasksSummaryInput = {
-  /** A tramo key; null = every tramo. */
-  tramo: string | null;
+  /** An etapa key; null = every etapa. */
+  etapa: string | null;
   /** The search, trimmed; null = none. */
   q: string | null;
   /** `?estado=retraso`: overdue tasks only. Left out otherwise. */
@@ -44,14 +44,14 @@ export type MyTasksCounts = {
   closed: number;
 };
 
-export type MyTasksSummaryTramo = MyTasksCounts & {
-  /** `id: null` = "Sin tramo", sorted last. */
-  tramo: { id: string | null; key: string | null; name: string; sortOrder: number };
+export type MyTasksSummaryEtapa = MyTasksCounts & {
+  /** `id: null` = "Sin etapa", sorted last. */
+  etapa: { id: string | null; key: string | null; name: string; sortOrder: number };
 };
 
 export type MyTasksSummaryProject = MyTasksCounts & {
   project: { id: string; name: string };
-  tramos: MyTasksSummaryTramo[];
+  etapas: MyTasksSummaryEtapa[];
 };
 
 export type MyTasksSummary = {
@@ -67,13 +67,13 @@ export type MyTasksSummary = {
     buckets: Record<MyTaskBucket, number>;
     projects: number;
   };
-  /** The Tramo chips: every tramo of my open tasks with how many, by sort order. */
-  tramos: { id: string; key: string; name: string; sortOrder: number; open: number }[];
+  /** The Etapa chips: every etapa of my open tasks with how many, by sort order. */
+  etapas: { id: string; key: string; name: string; sortOrder: number; open: number }[];
   /** What the filters match: the Mis tareas header and footer. */
   shown: MyTasksCounts & { projects: number };
   /**
    * Analítico groups: the projects with a matching task (open or closed),
-   * overdue first, then by name; tramos by sort order, "Sin tramo" last.
+   * overdue first, then by name; etapas by sort order, "Sin etapa" last.
    */
   projects: MyTasksSummaryProject[];
   /**
@@ -88,19 +88,19 @@ export const EMPTY_MY_TASKS_COUNTS: MyTasksCounts = { open: 0, overdue: 0, block
 export const EMPTY_MY_TASKS_SUMMARY: MyTasksSummary = {
   today: "",
   all: { open: 0, overdue: 0, dueToday: 0, buckets: { hoy: 0, semana: 0, despues: 0 }, projects: 0 },
-  tramos: [],
+  etapas: [],
   shown: { ...EMPTY_MY_TASKS_COUNTS, projects: 0 },
   projects: [],
   esencial: [],
 };
 
 /** No filter: what Visual and Esencial count (and Analítico without filters). */
-export const MY_TASKS_ALL: MyTasksSummaryInput = { tramo: null, q: null };
+export const MY_TASKS_ALL: MyTasksSummaryInput = { etapa: null, q: null };
 
 /** The summary input of the Analítico filters. */
-export function myTasksSummaryInput(f: { tramo: string | null; q: string; retraso: boolean }): MyTasksSummaryInput {
+export function myTasksSummaryInput(f: { etapa: string | null; q: string; retraso: boolean }): MyTasksSummaryInput {
   const q = f.q.trim();
-  return { tramo: f.tramo, q: q === "" ? null : q, ...(f.retraso ? { retraso: true as const } : {}) };
+  return { etapa: f.etapa, q: q === "" ? null : q, ...(f.retraso ? { retraso: true as const } : {}) };
 }
 
 // ── Lists ────────────────────────────────────────────────────────────────────
@@ -112,8 +112,8 @@ export function myTasksSummaryInput(f: { tramo: string | null; q: string; retras
  */
 export type MeTasksListFilters = {
   proyecto?: string;
-  /** A tramo key, or `SIN_TRAMO_KEY` for the tasks without a tramo. */
-  tramo?: string;
+  /** An etapa key, or `SIN_ETAPA_KEY` for the tasks without an etapa. */
+  etapa?: string;
   q?: string;
   /** Overdue only (`?estado=retraso`). */
   retraso?: true;
@@ -131,26 +131,26 @@ export const ME_TASKS_PAGE_SIZE = TASK_LIST_PAGE_SIZE;
 export const ME_BOARD_FIRST_PAGE = 5;
 /** Esencial: project cards shown, and the rows of each card before "Ver más". */
 export const ME_ESENCIAL_LIMITS = { projects: 3, perProject: 4 } as const;
-/** Analítico tramo groups whose first page the server seeds (as Tareas does). */
+/** Analítico etapa groups whose first page the server seeds (as Tareas does). */
 export const ME_ANALITICO_SEEDED_GROUPS = 3;
 
 /** The first page's size of a list: a board column or an Esencial card show fewer rows first. */
 export function meTasksFirstPageSize(f: MeTasksListFilters): number {
   if (f.vence) return ME_BOARD_FIRST_PAGE;
-  if (f.proyecto && !f.tramo) return ME_ESENCIAL_LIMITS.perProject;
+  if (f.proyecto && !f.etapa) return ME_ESENCIAL_LIMITS.perProject;
   return ME_TASKS_PAGE_SIZE;
 }
 
-/** An Analítico tramo group's list: the summary filters narrowed to the project and the tramo. */
+/** An Analítico etapa group's list: the summary filters narrowed to the project and the etapa. */
 export function meTasksGroupFilters(
   input: MyTasksSummaryInput,
   projectId: string,
-  tramoKey: string | null,
+  etapaKey: string | null,
   withClosed: boolean,
 ): MeTasksListFilters {
   return {
     proyecto: projectId,
-    tramo: tramoKey ?? SIN_TRAMO_KEY,
+    etapa: etapaKey ?? SIN_ETAPA_KEY,
     ...(input.q ? { q: input.q } : {}),
     ...(input.retraso ? { retraso: true as const } : {}),
     ...(withClosed && !input.retraso ? { cerradas: true as const } : {}),
@@ -183,7 +183,7 @@ export function meTasksCommitmentWindow(
 
 /**
  * Whether a row belongs in a list by the fields the client can check (a
- * task created or reopened here): project, tramo and board column. The
+ * task created or reopened here): project, etapa and board column. The
  * search and En retraso are left to the refetch.
  */
 export function rowFitsMeList(
@@ -193,7 +193,7 @@ export function rowFitsMeList(
 ): boolean {
   if (f.retraso || f.q) return false;
   if (f.proyecto && row.projectId !== f.proyecto) return false;
-  if (f.tramo && (f.tramo === SIN_TRAMO_KEY ? row.workflow !== null : row.workflow?.key !== f.tramo)) return false;
+  if (f.etapa && (f.etapa === SIN_ETAPA_KEY ? row.workflow !== null : row.workflow?.key !== f.etapa)) return false;
   if (f.vence) {
     const due = row.commitmentDate ? row.commitmentDate.slice(0, 10) : null;
     const sunday = sundayOf(today);
@@ -215,10 +215,10 @@ export function groupRowCount(c: Pick<MyTasksCounts, "open" | "closed">, withClo
 }
 
 /**
- * The Analítico project → tramo groups from the summary, with the loaded
- * rows of each tramo group (`rowsOf`, undefined while it loads). Captions
+ * The Analítico project → etapa groups from the summary, with the loaded
+ * rows of each etapa group (`rowsOf`, undefined while it loads). Captions
  * and metrics count every matching task, not only the loaded rows: project
- * "{n} tareas" and "{k} vencidas · {max} d"; tramo "{n} · {k} vencidas"
+ * "{n} tareas" and "{k} vencidas · {max} d"; etapa "{n} · {k} vencidas"
  * (+ " · bloqueada" when one is blocked).
  */
 export function myTasksSummaryGroups(
@@ -232,16 +232,16 @@ export function myTasksSummaryGroups(
   return summary.projects
     .filter((p) => groupRowCount(p, withClosed) > 0)
     .map((p) => {
-      const children: Group<TaskRow>[] = p.tramos
+      const children: Group<TaskRow>[] = p.etapas
         .filter((t) => groupRowCount(t, withClosed) > 0)
         .map((t) => {
-          const id = tramoGroupId(p.project.id, t.tramo.id);
+          const id = etapaGroupId(p.project.id, t.etapa.id);
           const rows = opts.rowsOf(id);
           const total = groupRowCount(t, withClosed);
           return {
             id,
-            label: t.tramo.id ? t.tramo.name : SIN_TRAMO,
-            color: t.tramo.key ? tramoColorVar({ key: t.tramo.key, sortOrder: t.tramo.sortOrder }) : undefined,
+            label: t.etapa.id ? t.etapa.name : SIN_ETAPA,
+            color: t.etapa.key ? etapaColorVar({ key: t.etapa.key, sortOrder: t.etapa.sortOrder }) : undefined,
             caption: `${total} · ${plural(t.overdue, "vencida", "vencidas")}${t.blocked > 0 ? " · bloqueada" : ""}`,
             metrics: [],
             rows: rows ?? [],

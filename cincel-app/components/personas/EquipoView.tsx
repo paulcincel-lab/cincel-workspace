@@ -32,8 +32,8 @@ export type EquipoViewProps = {
   canAssign: boolean;
   /** `activities.canCreateActivity`, resolved on the server (the create re-checks it). */
   canCreateTask: boolean;
-  /** Active tramos in order ("Personas por tramo" in Visual). */
-  tramos?: WorkflowRef[];
+  /** Active etapas in order ("Personas por etapa" in Visual). */
+  etapas?: WorkflowRef[];
 };
 
 export const PERSONAS_TITLE = "Personas";
@@ -69,7 +69,7 @@ export function PersonasEquipoScreen() {
  * "Agregar persona" opens the existing collaborator editor, which saves with
  * one mutation and reads the puestos catalog only while it is open.
  */
-export function EquipoView({ people, emails, counts, canCreate, canAssign, canCreateTask, tramos }: EquipoViewProps) {
+export function EquipoView({ people, emails, counts, canCreate, canAssign, canCreateTask, etapas }: EquipoViewProps) {
   const authenticatedUser = useSessionStore(selectCurrentUser);
   const editor = useMemberEditor({ authenticatedUser });
   const isAdministrator = authenticatedUser?.access === SYSTEM_ADMIN_ROLE;
@@ -105,7 +105,7 @@ export function EquipoView({ people, emails, counts, canCreate, canAssign, canCr
           page(PERSONAS_VISUAL_DESCRIPTION, () => (
             <PeopleLoadBoard
               people={people}
-              tramos={tramos}
+              etapas={etapas}
               canAssign={canAssign}
               actions={(person) => <TeamMemberActions person={person} email={emails[person.id] ?? null} />}
             />

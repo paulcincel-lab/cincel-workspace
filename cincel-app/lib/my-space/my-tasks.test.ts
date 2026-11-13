@@ -95,7 +95,7 @@ describe("Analítico: Mis tareas tables", () => {
     const planos = taskRow(TASKS[0]!, TODAY);
     expect(planos).toMatchObject({ estatus: "Bloqueado", vence: "4 nov", overdue: true, retraso: 5, subtareas: "1/3" });
     expect(taskRow(TASKS[3]!, TODAY)).toMatchObject({ vence: "hoy", overdue: false, prioridad: "Alta", subtareas: "—" });
-    expect(taskRow(TASKS[2]!, TODAY)).toMatchObject({ vence: "—", tramoName: "Presale" });
+    expect(taskRow(TASKS[2]!, TODAY)).toMatchObject({ vence: "—", etapaName: "Presale" });
   });
 
   it("checklistMetrics sums items and averages percents", () => {

@@ -31,13 +31,13 @@ import type {
   ProjectLinkInput,
   ProjectListItem,
   ProjectStatus,
-  ProjectTramo,
+  ProjectEtapa,
   StaffRef,
   ViewerScope,
   WorkflowPhaseRef,
   WorkflowRef,
 } from "@/lib/types/core";
-import { startTramo } from "@/lib/project-flow/start-tramo";
+import { startEtapa } from "@/lib/project-flow/start-etapa";
 import { UNSCOPED_VIEWER, scopeProjectDto } from "@/lib/auth/viewer-scope";
 import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import { closeAssignClientTask, ensureAssignClientTask } from "@/lib/project-flow/admin-tasks";
@@ -109,7 +109,7 @@ const PROJECT_TRACKED_FIELDS = [
 
 type StageRow = WorkflowRef & { startedAt: Date; closedAt: Date | null };
 
-/** Every started tramo of each project, in workflow order (Presale → Diseño → …). */
+/** Every started etapa of each project, in workflow order (Presale → Diseño → …). */
 async function loadStageRows(projectIds: string[]): Promise<Map<string, StageRow[]>> {
   const out = new Map<string, StageRow[]>();
   if (projectIds.length === 0) return out;
@@ -155,8 +155,8 @@ async function loadMemberRefs(projectIds: string[]): Promise<Map<string, StaffRe
 
 const stageRef = (r: StageRow): WorkflowRef => ({ id: r.id, key: r.key, name: r.name, sortOrder: r.sortOrder });
 
-/** `ProjectTramo`s from stage rows; `current` = the project's `current_workflow_id`. */
-function toTramos(rows: StageRow[] | undefined, currentWorkflowId: string | null): ProjectTramo[] {
+/** `ProjectEtapa`s from stage rows; `current` = the project's `current_workflow_id`. */
+function toEtapas(rows: StageRow[] | undefined, currentWorkflowId: string | null): ProjectEtapa[] {
   return (rows ?? []).map((r) => ({
     ...stageRef(r),
     startedAt: r.startedAt.toISOString(),
@@ -208,7 +208,7 @@ export async function listProjects(filters: ProjectFilters, viewer: ViewerScope)
       totalTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false${countedKinds})::int`,
       openTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status <> 'completado'${countedKinds})::int`,
       blockedTasks: sql<number>`(select count(*) from core.tasks t where t.project_id = ${projects.id} and t.deleted_at is null and t.archived = false and t.status = 'bloqueado'${countedKinds})::int`,
-      // First catalog fase of the current tramo with an open, live, unarchived task.
+      // First catalog fase of the current etapa with an open, live, unarchived task.
       activePhase: sql<WorkflowPhaseRef | null>`(select json_build_object('id', p.id, 'name', p.name, 'sortOrder', p.sort_order) from core.workflow_phases p where p.workflow_id = ${projects.currentWorkflowId} and exists (select 1 from core.tasks t where t.project_id = ${projects.id} and t.phase_id = p.id and t.deleted_at is null and t.archived = false and t.status <> 'completado') order by p.sort_order, p.name limit 1)`,
     })
     .from(projects)
@@ -247,9 +247,9 @@ export async function listProjects(filters: ProjectFilters, viewer: ViewerScope)
     currentWorkflow: r.workflowId
       ? { id: r.workflowId, key: r.workflowKey!, name: r.workflowName!, sortOrder: r.workflowSortOrder! }
       : null,
-    tramos: toTramos(stagesByProject.get(r.project.id), r.project.currentWorkflowId),
+    etapas: toEtapas(stagesByProject.get(r.project.id), r.project.currentWorkflowId),
     activePhase: r.activePhase ?? null,
-    needsTramo: r.project.currentWorkflowId === null,
+    needsEtapa: r.project.currentWorkflowId === null,
     stages: (stagesByProject.get(r.project.id) ?? []).map(stageRef),
     manager: r.managerId ? { id: r.managerId, name: r.managerName! } : null,
     coordinator: r.coordinatorId ? { id: r.coordinatorId, name: r.coordinatorName! } : null,
@@ -307,8 +307,8 @@ export async function getProject(id: string, viewer: ViewerScope): Promise<Proje
           sortOrder: row.currentWorkflow.sortOrder,
         }
       : null,
-    tramos: toTramos(stageRows, row.currentWorkflowId),
-    needsTramo: row.currentWorkflowId === null,
+    etapas: toEtapas(stageRows, row.currentWorkflowId),
+    needsEtapa: row.currentWorkflowId === null,
     stages: (stageRows ?? []).map(stageRef),
     manager: row.manager ? { id: row.manager.id, name: row.manager.name } : null,
     coordinator: row.coordinator ? { id: row.coordinator.id, name: row.coordinator.name } : null,
@@ -411,10 +411,10 @@ export function isProjectNameTaken(err: unknown): boolean {
 
 /**
  * Create a project with only a name (BE §9.4), in one transaction: the row
- * (no client), the admin task "Asignar cliente y origen", the starting tramo
+ * (no client), the admin task "Asignar cliente y origen", the starting etapa
  * and the history `created` change. Without `startWorkflowId` the first
- * tramo starts when its auto-start is on; `null` starts none; an id starts
- * that tramo with `phaseIds` (#1034). Drive folders are the action's
+ * etapa starts when its auto-start is on; `null` starts none; an id starts
+ * that etapa with `phaseIds` (#1034). Drive folders are the action's
  * `after()` work. Errors: EMPTY, INVALID, NAME_TAKEN, PHASE_MISMATCH,
  * NO_PHASES.
  */
@@ -525,8 +525,8 @@ export async function updateProject(
   return (await getProject(id, viewer))!;
 }
 
-/** The live project's current tramo and whether `workflowId` has a stage row on it. */
-async function loadTramoState(
+/** The live project's current etapa and whether `workflowId` has a stage row on it. */
+async function loadEtapaState(
   id: string,
   workflowId: string
 ): Promise<{ currentWorkflowId: string | null; started: boolean } | null> {
@@ -542,12 +542,12 @@ async function loadTramoState(
 }
 
 /**
- * Sets the current tramo (BE §8.5), replacing the old stage setters:
+ * Sets the current etapa (BE §8.5), replacing the old stage setters:
  * requires a `project_stages` row (NOT_STARTED) and records the history change.
- * Errors: NOT_FOUND (project or tramo), NOT_STARTED.
+ * Errors: NOT_FOUND (project or etapa), NOT_STARTED.
  */
-export async function setProjectCurrentTramo(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
-  const state = await loadTramoState(id, workflowId);
+export async function setProjectCurrentEtapa(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
+  const state = await loadEtapaState(id, workflowId);
   if (!state) throw flowError("NOT_FOUND");
   if (!state.started) throw flowError("NOT_STARTED");
   if (state.currentWorkflowId !== workflowId) {
@@ -570,17 +570,17 @@ export async function setProjectCurrentTramo(id: string, workflowId: string, act
 }
 
 /**
- * Admin "Asignar tramo" (BE §7.3): on a project without a current tramo, opens
- * the stage of `workflowId` and makes it current through `startTramo` with
- * `stageOnly` (no fases, no tasks), so only `startTramo` writes stages.
- * Errors: NOT_FOUND, NOT_STARTED (the project already has a current tramo).
+ * Admin "Asignar etapa" (BE §7.3): on a project without a current etapa, opens
+ * the stage of `workflowId` and makes it current through `startEtapa` with
+ * `stageOnly` (no fases, no tasks), so only `startEtapa` writes stages.
+ * Errors: NOT_FOUND, NOT_STARTED (the project already has a current etapa).
  */
-export async function assignProjectTramo(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
-  const state = await loadTramoState(id, workflowId);
+export async function assignProjectEtapa(id: string, workflowId: string, actorId: string): Promise<ProjectDetail> {
+  const state = await loadEtapaState(id, workflowId);
   if (!state) throw flowError("NOT_FOUND");
   if (state.currentWorkflowId !== null) throw flowError("NOT_STARTED");
   await db.transaction((tx) =>
-    startTramo(tx, {
+    startEtapa(tx, {
       projectId: id,
       workflowId,
       phaseIds: [],

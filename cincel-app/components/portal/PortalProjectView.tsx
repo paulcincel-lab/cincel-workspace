@@ -99,7 +99,7 @@ export default function PortalProjectView({ projectId }: { projectId: string }) 
             data={buildPortalOverview({
               project: data.project,
               schedule: data.schedule,
-              tramos: data.tramos,
+              etapas: data.etapas,
               files: data.documents,
               folders: data.documentFolders,
               team: data.team,

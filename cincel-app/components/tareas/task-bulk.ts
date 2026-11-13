@@ -133,18 +133,18 @@ export function bulkInvalidations(tasks: readonly TaskBulkTask[]): QueryKey[] {
 }
 
 /**
- * The Fase options for the selected tasks: the fases of their tramos (tasks
- * of another tramo are skipped by the server). With several tramos each
- * option says its tramo.
+ * The Fase options for the selected tasks: the fases of their etapas (tasks
+ * of another etapa are skipped by the server). With several etapas each
+ * option says its etapa.
  */
 export function bulkPhaseOptions(
   tasks: readonly TaskBulkTask[],
   phasesOf: (workflowId: string) => readonly WorkflowPhaseRef[],
 ): CellOption[] {
-  const tramos = new Map<string, string>();
-  for (const task of tasks) if (task.workflowId) tramos.set(task.workflowId, task.workflow?.name ?? "");
-  const several = tramos.size > 1;
-  return [...tramos].flatMap(([id, name]) =>
+  const etapas = new Map<string, string>();
+  for (const task of tasks) if (task.workflowId) etapas.set(task.workflowId, task.workflow?.name ?? "");
+  const several = etapas.size > 1;
+  return [...etapas].flatMap(([id, name]) =>
     phasesOf(id).map((phase) => ({ value: phase.id, label: several && name ? `${name} · ${phase.name}` : phase.name })),
   );
 }

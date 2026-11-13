@@ -199,8 +199,8 @@ export const clientStats = core.view("client_stats").as((qb) =>
 );
 
 /**
- * Every tramo a project has started (#435; project flow BE §3.7). Only
- * `startTramo` writes rows. `projects.current_workflow_id`, when set, must
+ * Every etapa a project has started (#435; project flow BE §3.7). Only
+ * `startEtapa` writes rows. `projects.current_workflow_id`, when set, must
  * have a row here (enforced by the repositories).
  */
 export const projectStages = core.table(
@@ -214,7 +214,7 @@ export const projectStages = core.table(
       .references(() => workflows.id, { onDelete: "cascade" }),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     startedById: uuid("started_by_id").references(() => staff.id, { onDelete: "set null" }),
-    /** Set when every live, unarchived task of this tramo on the project is closed; cleared when one reopens or is added. */
+    /** Set when every live, unarchived task of this etapa on the project is closed; cleared when one reopens or is added. */
     closedAt: timestamp("closed_at", { withTimezone: true }),
     ...stamps,
   },
@@ -246,10 +246,12 @@ export const projectSpaces = core.table(
 );
 
 /**
- * One "Iniciar tramo" run that created tasks (BE §3.9), for undo. Written only
+ * One "Iniciar etapa" run that created tasks (BE §3.9), for undo. Written only
  * when at least one task was created.
  */
-export const tramoStartBatches = core.table(
+// Compatibility: the SQL names (table, indexes, checks) keep `tramo_*` until the database rename (#1130);
+// only the TypeScript export is `etapa*`.
+export const etapaStartBatches = core.table(
   "tramo_start_batches",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -306,9 +308,9 @@ export const projectSpacesRelations = relations(projectSpaces, ({ one }) => ({
   project: one(projects, { fields: [projectSpaces.projectId], references: [projects.id] }),
 }));
 
-export const tramoStartBatchesRelations = relations(tramoStartBatches, ({ one }) => ({
-  project: one(projects, { fields: [tramoStartBatches.projectId], references: [projects.id] }),
-  workflow: one(workflows, { fields: [tramoStartBatches.workflowId], references: [workflows.id] }),
+export const etapaStartBatchesRelations = relations(etapaStartBatches, ({ one }) => ({
+  project: one(projects, { fields: [etapaStartBatches.projectId], references: [projects.id] }),
+  workflow: one(workflows, { fields: [etapaStartBatches.workflowId], references: [workflows.id] }),
 }));
 
 export const projectStagesRelations = relations(projectStages, ({ one }) => ({

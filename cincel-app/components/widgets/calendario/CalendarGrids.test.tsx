@@ -27,7 +27,7 @@ const task = (over: Partial<CalTaskItem> = {}): CalTaskItem => ({
   date: "2026-11-11",
   dateField: "commitmentDate",
   project: null,
-  tramo: null,
+  etapa: null,
   phase: null,
   status: "pendiente",
   statusLabel: "Pendiente",

@@ -185,11 +185,11 @@ describe.skipIf(!url)("portal page data (test DB)", async () => {
 
   it("reads only what the tab shows", async () => {
     const archivos = await getPortalProjectData({ id: p.granted, tab: "archivos" });
-    expect(archivos).toMatchObject({ schedule: null, tramos: [], documents: null });
+    expect(archivos).toMatchObject({ schedule: null, etapas: [], documents: null });
 
     const cronograma = await getPortalProjectData({ id: p.granted, tab: "cronograma" });
     expect(cronograma?.schedule?.sections).toHaveLength(1);
-    expect(cronograma?.tramos).toEqual([]);
+    expect(cronograma?.etapas).toEqual([]);
   });
 
   it("the home data lists only the visible projects", async () => {

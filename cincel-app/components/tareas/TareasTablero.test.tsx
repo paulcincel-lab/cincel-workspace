@@ -156,7 +156,7 @@ const TOTAL = 4;
 
 const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY };
 const F = tareasListFiltersOf(QUERY);
-const PAGE: TareasPageData = { facets: { total: TOTAL, byTramo: {}, projects: [] }, tramos: [], staff: [] };
+const PAGE: TareasPageData = { facets: { total: TOTAL, byEtapa: {}, projects: [] }, etapas: [], staff: [] };
 
 /** A client seeded as `/tareas` hydrates it: the page bundle and the board it seeded. */
 function seededClient(board: TareasBoardData = boardData()): QueryClient {

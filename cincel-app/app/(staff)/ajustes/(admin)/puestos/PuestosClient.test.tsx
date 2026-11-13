@@ -241,7 +241,7 @@ describe("PuestosClient editor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Nuevo puesto" }));
     const panel = await editor("Nuevo puesto");
-    // Fases grouped under their tramo legend.
+    // Fases grouped under their etapa legend.
     expect(within(panel).getByRole("group", { name: "Diseño" })).toBeTruthy();
 
     fireEvent.change(within(panel).getByLabelText("Nombre"), { target: { value: "  Dibujante " } });

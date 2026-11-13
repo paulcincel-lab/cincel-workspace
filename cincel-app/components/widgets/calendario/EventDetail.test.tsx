@@ -17,7 +17,7 @@ const base: CalTaskItem = {
   date: "2026-11-13",
   dateField: "commitmentDate",
   project: { id: "p1", name: "Madrid 22" },
-  tramo: { id: "w1", key: "diseno", name: "Diseño", colorSlot: 2 },
+  etapa: { id: "w1", key: "diseno", name: "Diseño", colorSlot: 2 },
   phase: { id: "f1", name: "Anteproyecto" },
   status: "pendiente",
   statusLabel: "Pendiente",

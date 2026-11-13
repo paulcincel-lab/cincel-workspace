@@ -17,7 +17,7 @@ export type AjustesAdminSegment =
   | "general"
   | "tema"
   | "horario"
-  | "tramos"
+  | "etapas"
   | "puestos"
   | "estatus"
   | "permisos"
@@ -29,7 +29,7 @@ export const AJUSTES_ADMIN_SEGMENTS: readonly AjustesAdminSegment[] = [
   "general",
   "tema",
   "horario",
-  "tramos",
+  "etapas",
   "puestos",
   "estatus",
   "permisos",
@@ -46,12 +46,12 @@ export function isSettingsAdministrator(user: AuthenticatedUser | null): boolean
 }
 
 /**
- * Project Flow's settings pages ("Tramos y fases", "Puestos", FE §21.2). They
- * exist on this branch (`app/configuracion/tramos`, `app/configuracion/puestos`);
+ * Project Flow's settings pages ("Etapas y fases", "Puestos", FE §21.2). They
+ * exist on this branch (`app/configuracion/etapas`, `app/configuracion/puestos`);
  * a page set to false 404s under `/ajustes` and is hidden from `AjustesNav`.
  */
-export const PROJECT_FLOW_SETTINGS_PAGES: Readonly<Record<"tramos" | "puestos", boolean>> = {
-  tramos: true,
+export const PROJECT_FLOW_SETTINGS_PAGES: Readonly<Record<"etapas" | "puestos", boolean>> = {
+  etapas: true,
   puestos: true,
 };
 
@@ -62,7 +62,7 @@ export const AJUSTES_SEGMENT_CAPABILITY: Readonly<Record<AjustesAdminSegment, Aj
   // The settings sections need canManageTimeTracking and the report canViewTeamHours;
   // the segment admits either and each section checks its own capability.
   horario: (user) => canManageTimeTracking(user) || canViewTeamHours(user),
-  tramos: (user) => PROJECT_FLOW_SETTINGS_PAGES.tramos && isSettingsAdministrator(user),
+  etapas: (user) => PROJECT_FLOW_SETTINGS_PAGES.etapas && isSettingsAdministrator(user),
   puestos: (user) => PROJECT_FLOW_SETTINGS_PAGES.puestos && isSettingsAdministrator(user),
   estatus: (user) => isSettingsAdministrator(user),
   permisos: (user) => isSettingsAdministrator(user),

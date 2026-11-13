@@ -79,9 +79,9 @@ export async function fetchTaskAction(id: string): Promise<TaskDetail | null> {
 }
 
 /**
- * A user task in a tramo. Errors: INVALID (no `workflowId` or not a live
- * tramo), PHASE_MISMATCH (fase not of that tramo), SPACE_MISMATCH (espacio not
- * of the project). Never starts the tramo: no `project_stages` row is written.
+ * A user task in an etapa. Errors: INVALID (no `workflowId` or not a live
+ * etapa), PHASE_MISMATCH (fase not of that etapa), SPACE_MISMATCH (espacio not
+ * of the project). Never starts the etapa: no `project_stages` row is written.
  */
 export async function createUserTaskAction(
   ...args: Parameters<typeof createUserTaskActionImpl>
@@ -108,7 +108,7 @@ const SUBTASK_ERRORS: Record<string, string> = {
 };
 
 /**
- * Creates a `usuario` child task with the parent's project, tramo and fase.
+ * Creates a `usuario` child task with the parent's project, etapa and fase.
  * Same permission as creating a task. Throws FORBIDDEN, NOT_FOUND, NESTED
  * (the parent is already a subtask) or SPACE_MISMATCH.
  */
@@ -140,12 +140,12 @@ export async function listSubtasksAction(parentId: string): Promise<TaskRef[]> {
 }
 
 /**
- * `phaseId` within the task's tramo (PHASE_MISMATCH), `spaceId` of its project
+ * `phaseId` within the task's etapa (PHASE_MISMATCH), `spaceId` of its project
  * (SPACE_MISMATCH), neither on an admin task (ADMIN_TASK). `workflowId` sets a
- * tramo on a task without one; changing an existing tramo is admins only
- * (`FORBIDDEN: task tramo change`), clears a fase that isn't in the new tramo
+ * etapa on a task without one; changing an existing etapa is admins only
+ * (`FORBIDDEN: task etapa change`), clears a fase that isn't in the new etapa
  * and moves the subtasks along (#1022). Admin tasks reject it (ADMIN_TASK);
- * an unknown tramo is INVALID.
+ * an unknown etapa is INVALID.
  */
 export async function updateTaskAction(
   ...args: Parameters<typeof updateTaskActionImpl>
@@ -165,13 +165,13 @@ async function updateTaskActionImpl(id: string, patch: TaskPatch): Promise<TaskD
   if (!caps.canCreateActivity) {
     throw new Error("FORBIDDEN: task edit");
   }
-  const fromTramo = patch.workflowId !== undefined ? await tasksRepository.taskWorkflowId(id) : null;
-  const row = await tasksRepository.updateTask(id, patch, user.member.id, { canMoveTramo: viewer.isAdmin });
-  // A move changes whether both tramos' stages are closed on the project.
-  const moved = fromTramo !== null && fromTramo !== row.workflowId;
+  const fromEtapa = patch.workflowId !== undefined ? await tasksRepository.taskWorkflowId(id) : null;
+  const row = await tasksRepository.updateTask(id, patch, user.member.id, { canMoveEtapa: viewer.isAdmin });
+  // A move changes whether both etapas' stages are closed on the project.
+  const moved = fromEtapa !== null && fromEtapa !== row.workflowId;
   if (patch.status !== undefined || moved) {
     await scheduleTaskClosingHook(
-      moved ? [row, { projectId: row.projectId, workflowId: fromTramo }] : row,
+      moved ? [row, { projectId: row.projectId, workflowId: fromEtapa }] : row,
       user.member.id
     );
   }

@@ -2,7 +2,7 @@
 /**
  * `<NewTaskDialogHost/>` (zustand.md §2.3): renders the one `NewTaskDialog`
  * from `useNewTaskUi`, gated by `canCreateActivity`; `?nueva=1` opens it with
- * the URL's `proyecto`/`tramo` defaults and strips the param with
+ * the URL's `proyecto`/`etapa` defaults and strips the param with
  * `history.replaceState` (no `router.replace`, so no server re-render).
  */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -82,7 +82,7 @@ describe("NewTaskDialogHost", () => {
     nav.search = "estilo=analitico&proyecto=p-roble&etapa=diseno&nueva=1";
     render(<NewTaskDialogHost />);
 
-    expect(dialogDefaults()).toEqual({ projectId: "p-roble", tramoKey: "diseno" });
+    expect(dialogDefaults()).toEqual({ projectId: "p-roble", etapaKey: "diseno" });
     expect(useNewTaskUi.getState().source).toBe("url");
     expect(replaceState).toHaveBeenCalledWith(null, "", "/tareas?estilo=analitico&proyecto=p-roble&etapa=diseno");
     expect(nav.router.replace).not.toHaveBeenCalled();

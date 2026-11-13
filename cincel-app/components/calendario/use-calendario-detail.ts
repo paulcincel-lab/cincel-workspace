@@ -56,7 +56,7 @@ export function taskItemFromDetail(task: TaskDetail, today: string = todayKey())
     date,
     dateField,
     project: { id: task.project.id, name: task.project.name },
-    tramo: task.workflow ? { id: task.workflow.id, key: task.workflow.key, name: task.workflow.name, colorSlot: task.workflow.colorSlot ?? null } : null,
+    etapa: task.workflow ? { id: task.workflow.id, key: task.workflow.key, name: task.workflow.name, colorSlot: task.workflow.colorSlot ?? null } : null,
     phase: task.phase ? { id: task.phase.id, name: task.phase.name } : null,
     status: task.status,
     statusLabel: task.customStatus?.name ?? BASE_STATUS_LABEL[task.status],

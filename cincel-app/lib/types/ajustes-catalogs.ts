@@ -1,6 +1,6 @@
 /**
  * Page data of the Ajustes catalog segments (Query Migration 9b, #964):
- * `qk.ajustes.page('estatus' | 'puestos' | 'tramos' | 'permisos')`.
+ * `qk.ajustes.page('estatus' | 'puestos' | 'etapas' | 'permisos')`.
  * Client-safe: type-only imports.
  */
 import type { PermissionsState } from "@/lib/auth/permissionsState";
@@ -16,15 +16,15 @@ export type AjustesEstatusPageData = {
 };
 
 /**
- * `workflows`: the active tramos with their active fases, for the candidate
+ * `workflows`: the active etapas with their active fases, for the candidate
  * fase picker; `templates` is `[]` and `readiness` is `null`
  * (`listWorkflowPhaseTree`).
  */
 export type AjustesPuestosPageData = { positions: Position[]; workflows: WorkflowDetail[] };
 
-export type AjustesTramosPageData = {
+export type AjustesEtapasPageData = {
   workflows: WorkflowDetail[];
-  /** workflowId → live active projects whose current tramo it is. */
+  /** workflowId → live active projects whose current etapa it is. */
   activeProjects: Record<string, number>;
   /** phaseId → live tasks in that fase. */
   phaseTaskCounts: Record<string, number>;

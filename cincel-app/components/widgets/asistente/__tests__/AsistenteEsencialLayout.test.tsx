@@ -53,8 +53,8 @@ const TASKS_OUTPUT = {
   ok: true,
   count: 2,
   tasks: [
-    { id: "a1", title: "Plano de cortes", tramo: "Diseño", commitmentDate: "2026-10-20", url: "/tareas?tarea=a1" },
-    { id: "a2", title: "Render del lobby", tramo: "Construcción", commitmentDate: "2026-11-06", url: "/tareas?tarea=a2" },
+    { id: "a1", title: "Plano de cortes", etapa: "Diseño", commitmentDate: "2026-10-20", url: "/tareas?tarea=a1" },
+    { id: "a2", title: "Render del lobby", etapa: "Construcción", commitmentDate: "2026-11-06", url: "/tareas?tarea=a2" },
   ],
 };
 

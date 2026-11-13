@@ -5,13 +5,13 @@
  * Every row it creates carries a per-run marker and is deleted afterwards.
  *
  * - `loadTareasStartSlot` runs ≤ 5 statements (`countQueries`).
- * - It equals today's reads: `fetchTramoBoardAction` for the board and
+ * - It equals today's reads: `fetchEtapaBoardAction` for the board and
  *   `fetchAssignableStaffAction` mapped to `{id,name,suggested}` for the
  *   candidates (same rows, same order).
  * - The started list keeps its batch and `canUndo` (`isBatchTouched`).
  * - A viewer without the Tareas capability gets FORBIDDEN; so does a guest.
- *   An unknown tramo is null.
- * - `previewStartTramoAction` for a project the viewer can't see (no
+ *   An unknown etapa is null.
+ * - `previewStartEtapaAction` for a project the viewer can't see (no
  *   `canViewProjects`) is FORBIDDEN, and the preview only reads.
  */
 import { randomUUID } from "node:crypto";
@@ -54,9 +54,9 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
   const { countQueries } = await import("../helpers/count-queries");
   const { getTareasStartSlotData } = await import("@/lib/actions/page-data/tareas-actions");
   const { loadTareasStartSlot } = await import("@/lib/loaders/tareas");
-  const { fetchTramoBoardAction, previewStartTramoAction } = await import("@/lib/actions/tramo-start-actions");
+  const { fetchEtapaBoardAction, previewStartEtapaAction } = await import("@/lib/actions/etapa-start-actions");
   const { fetchAssignableStaffAction } = await import("@/lib/actions/staff-actions");
-  const { isBatchTouched } = await import("@/lib/project-flow/start-tramo");
+  const { isBatchTouched } = await import("@/lib/project-flow/start-etapa");
 
   const ids = { projects: [] as string[], staff: [] as string[], positions: [] as string[] };
   let workflowId = "";
@@ -82,7 +82,7 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
     suggestedId = members[1].id;
     ids.staff.push(...members.map((m) => m.id));
 
-    // A tramo of its own (no readiness rule): every live active project not started in it is "ready".
+    // An etapa of its own (no readiness rule): every live active project not started in it is "ready".
     const [workflow] = await db
       .insert(schema.workflows)
       .values({ key: `slot-${run}`, name: `Slot ${run}`, sortOrder: 900 })
@@ -113,9 +113,9 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
 
     await db.insert(schema.projectStages).values({ projectId: startedProject, workflowId, startedById: viewerId });
     const [batch] = await db
-      .insert(schema.tramoStartBatches)
+      .insert(schema.etapaStartBatches)
       .values({ projectId: startedProject, workflowId, startedById: viewerId, assignmentMode: "none", createdCount: 2 })
-      .returning({ id: schema.tramoStartBatches.id });
+      .returning({ id: schema.etapaStartBatches.id });
     batchId = batch.id;
   });
 
@@ -137,14 +137,14 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
 
   it("runs ≤ 5 statements", async () => {
     const user = await asViewer(admin(), () => requireCapabilityUser());
-    const { result, count } = await countQueries(() => loadTareasStartSlot(user, { tramoId: workflowId }));
+    const { result, count } = await countQueries(() => loadTareasStartSlot(user, { etapaId: workflowId }));
     expect(result).not.toBeNull();
     expect(count).toBeLessThanOrEqual(5);
   });
 
-  it("equals today's fetchTramoBoardAction + fetchAssignableStaffAction (mapped to {id,name,suggested})", async () => {
-    const slot = await asViewer(admin(), () => getTareasStartSlotData({ tramoId: workflowId }));
-    const board = await asViewer(admin(), () => fetchTramoBoardAction(workflowId));
+  it("equals today's fetchEtapaBoardAction + fetchAssignableStaffAction (mapped to {id,name,suggested})", async () => {
+    const slot = await asViewer(admin(), () => getTareasStartSlotData({ etapaId: workflowId }));
+    const board = await asViewer(admin(), () => fetchEtapaBoardAction(workflowId));
     const staff = await asViewer(admin(), () => fetchAssignableStaffAction(workflowId));
 
     expect(slot?.board).toEqual(board);
@@ -158,14 +158,14 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
   });
 
   it("keeps the started project's latest batch and canUndo", async () => {
-    const slot = await asViewer(admin(), () => getTareasStartSlotData({ tramoId: workflowId }));
+    const slot = await asViewer(admin(), () => getTareasStartSlotData({ etapaId: workflowId }));
     const started = slot?.board.started.find((s) => s.projectId === startedProject);
     expect(started).toEqual({ projectId: startedProject, batchId, createdCount: 2, canUndo: !(await isBatchTouched(db, batchId)) });
     expect(started?.canUndo).toBe(true);
   });
 
   it("sends candidates as {id,name,suggested} only: active staff, puesto suggestions first", async () => {
-    const slot = await asViewer(admin(), () => getTareasStartSlotData({ tramoId: workflowId }));
+    const slot = await asViewer(admin(), () => getTareasStartSlotData({ etapaId: workflowId }));
     const candidates = slot?.candidates ?? [];
     for (const row of candidates) expect(Object.keys(row).sort()).toEqual(["id", "name", "suggested"]);
     expect(candidates.find((c) => c.id === suggestedId)).toEqual({
@@ -180,34 +180,34 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
   });
 
   it("is null for an unknown etapa", async () => {
-    expect(await asViewer(admin(), () => getTareasStartSlotData({ tramoId: randomUUID() }))).toBeNull();
+    expect(await asViewer(admin(), () => getTareasStartSlotData({ etapaId: randomUUID() }))).toBeNull();
   });
 
   it("a viewer without the Tareas capability gets FORBIDDEN", async () => {
     perms.noActivities = true;
-    await expect(asViewer(colaborador(), () => getTareasStartSlotData({ tramoId: workflowId }))).rejects.toThrow(
+    await expect(asViewer(colaborador(), () => getTareasStartSlotData({ etapaId: workflowId }))).rejects.toThrow(
       "FORBIDDEN",
     );
   });
 
   it("a guest gets FORBIDDEN", async () => {
-    await expect(asViewer(null, () => getTareasStartSlotData({ tramoId: workflowId }))).rejects.toThrow("FORBIDDEN");
+    await expect(asViewer(null, () => getTareasStartSlotData({ etapaId: workflowId }))).rejects.toThrow("FORBIDDEN");
   });
 
   it("rejects a malformed etapa id", async () => {
-    await expect(asViewer(admin(), () => getTareasStartSlotData({ tramoId: "nope" }))).rejects.toThrow("INVALID");
+    await expect(asViewer(admin(), () => getTareasStartSlotData({ etapaId: "nope" }))).rejects.toThrow("INVALID");
   });
 
-  it("previewStartTramoAction for a project the viewer can't see is FORBIDDEN", async () => {
+  it("previewStartEtapaAction for a project the viewer can't see is FORBIDDEN", async () => {
     perms.noProjects = true;
-    await expect(asViewer(colaborador(), () => previewStartTramoAction(readyProject, workflowId))).rejects.toThrow(
+    await expect(asViewer(colaborador(), () => previewStartEtapaAction(readyProject, workflowId))).rejects.toThrow(
       "FORBIDDEN",
     );
   });
 
-  it("previewStartTramoAction only reads", async () => {
+  it("previewStartEtapaAction only reads", async () => {
     const { result, statements } = await countQueries(() =>
-      asViewer(admin(), () => previewStartTramoAction(readyProject, workflowId)),
+      asViewer(admin(), () => previewStartEtapaAction(readyProject, workflowId)),
     );
     expect(result.project.id).toBe(readyProject);
     expect(statements.length).toBeGreaterThan(0);

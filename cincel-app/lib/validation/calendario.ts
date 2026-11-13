@@ -24,8 +24,8 @@ export const CalendarioFiltersSchema = z.object({
   mostrar: CalMostrarSchema,
   quien: z.enum(["yo", "todos"]),
   proyectos: z.array(UuidSchema).max(50),
-  /** Workflow id, or "none" for sin tramo. */
-  tramo: z.union([UuidSchema, z.literal("none")]).nullable(),
+  /** Workflow id, or "none" for sin etapa. */
+  etapa: z.union([UuidSchema, z.literal("none")]).nullable(),
   responsable: UuidSchema.nullable(),
   apoyo: z.boolean(),
   ocultarCompletadas: z.boolean(),
@@ -132,7 +132,7 @@ export const ProposalChangeSchema = z.discriminatedUnion("type", [
       projectId: UuidSchema,
       managerId: UuidSchema.nullable(),
       commitmentDate: DateSchema.nullable(),
-      tramoId: UuidSchema.nullable(),
+      etapaId: UuidSchema.nullable(),
       sourceText: z.string().max(2000),
     }),
   }),

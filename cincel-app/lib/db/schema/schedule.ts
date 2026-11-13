@@ -70,7 +70,7 @@ export const scheduleTasks = core.table(
     startedOn: date("started_on"),
     /** Real end: set the day the status reaches `done`; cleared when it leaves `done`. */
     finishedOn: date("finished_on"),
-    /** The tramo this row belongs to (portal "Fases por tramo"); null until staff link it. */
+    /** The etapa this row belongs to (portal "Fases por etapa"); null until staff link it. */
     workflowId: uuid("workflow_id").references(() => workflows.id, { onDelete: "set null" }),
     sortOrder: integer("sort_order").notNull(),
     ...stamps,

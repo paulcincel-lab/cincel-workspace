@@ -56,7 +56,7 @@ import { seedSessionUser } from "@/tests/helpers/session-user";
 import { EquipoView, PersonasEquipoScreen } from "./EquipoView";
 import { PERSONAS_COUNTS } from "./personas-contacts.fixtures";
 
-const PEOPLE = [{ id: "s1", name: "Ana Ruiz", initials: "AR", puesto: null, tramo: null, open: 0, overdue: 0, weekHours: null, href: "/personas/equipo/s1" }];
+const PEOPLE = [{ id: "s1", name: "Ana Ruiz", initials: "AR", puesto: null, etapa: null, open: 0, overdue: 0, weekHours: null, href: "/personas/equipo/s1" }];
 
 beforeEach(() => {
   resetSessionStoreForTests();

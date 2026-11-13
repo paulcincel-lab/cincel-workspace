@@ -22,19 +22,19 @@ import {
   plusDays,
   roundedAverage,
   shortDay,
-  SIN_TRAMO,
+  SIN_ETAPA,
   suggestAssignee,
   teamFilterCounts,
   teamWeekStarts,
   TEAM_ANALITICO_DEFAULT_FILTERS,
-  tramoGroups,
+  etapaGroups,
   weekLabel,
   type LoadBucket,
   type PersonRow,
 } from "@/lib/personas/team";
 import type { AnaliticoTeamUrlState } from "@/lib/personas/url-state";
 import { parseQuickAdd, type QuickAddParseContext } from "@/lib/quick-add/parse";
-import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import type { WorkflowRef } from "@/lib/types/core";
 import type { PersonProjectLoad } from "@/lib/types/redesign";
 import type { PersonDatum } from "@/lib/types/widgets";
@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Personas · Analítico (frame `Personas-Analitico`): filter card with real
- * counts, KPI strip, "Ir a" anchors and one grouped table tramo → persona →
+ * counts, KPI strip, "Ir a" anchors and one grouped table etapa → persona →
  * proyecto with the 4-week capacity, quick assign and totals. Carga is a task
  * count (`open ÷ capacity`), never hours. The filters and expanded state come
  * from `state` (kept in the URL by the caller).
@@ -50,8 +50,8 @@ import { cn } from "@/lib/utils";
 export type PeopleTeamAnaliticoProps = {
   /** The whole loaded team; filters apply here. */
   people: PersonDatum[];
-  /** Active tramos in order. */
-  tramos: WorkflowRef[];
+  /** Active etapas in order. */
+  etapas: WorkflowRef[];
   /** `YYYY-MM-DD`, org time zone. */
   today: string;
   state: AnaliticoTeamUrlState;
@@ -83,7 +83,7 @@ function firstName(name: string): string {
 
 /** The 5 KPI tiles over the filtered rows. */
 export function teamAnaliticoKpis(rows: PersonDatum[], today: string): KpiStripItem[] {
-  const areas = new Set(rows.flatMap((p) => (p.tramo ? [p.tramo] : []))).size;
+  const areas = new Set(rows.flatMap((p) => (p.etapa ? [p.etapa] : []))).size;
   const avg = roundedAverage(rows.map((p) => p.occupancyPct ?? 0));
   const zeroCapacity = rows.filter((p) => p.capacity === 0).length;
   const overloaded = rows.filter(isOverloaded).length;
@@ -365,7 +365,7 @@ function PersonTableRow({ person, today, expanded, controls, onToggle }: PersonR
 }
 
 function ProjectTableRow({ id, project, newCount }: { id: string; project: PersonProjectLoad; newCount: number }) {
-  const color = project.tramo ? tramoColorVar(project.tramo) : undefined;
+  const color = project.etapa ? etapaColorVar(project.etapa) : undefined;
   return (
     <tr id={id} className={cn("bg-sidebar", newCount > 0 && "row-new")}>
       <td className={cn(TD, "sticky left-0 z-[1] bg-sidebar pl-10")}>
@@ -379,7 +379,7 @@ function ProjectTableRow({ id, project, newCount }: { id: string; project: Perso
           ) : null}
         </span>
       </td>
-      <td className={cn(TD, "text-muted-foreground")}>{project.tramo ? tramoLabel(project.tramo) : "Sin etapa"}</td>
+      <td className={cn(TD, "text-muted-foreground")}>{project.etapa ? etapaLabel(project.etapa) : "Sin etapa"}</td>
       <td className={cn(TD, NUM)}>{project.open}</td>
       <td className={cn(TD, NUM, project.overdue > 0 && "text-destructive")}>{project.overdue}</td>
       <td className={cn(TD, NUM)}>{plural(project.open, "tarea", "tareas")}</td>
@@ -397,7 +397,7 @@ function ProjectTableRow({ id, project, newCount }: { id: string; project: Perso
 
 export function PeopleTeamAnalitico({
   people,
-  tramos,
+  etapas,
   today,
   state,
   onStateChange,
@@ -411,23 +411,23 @@ export function PeopleTeamAnalitico({
   const [newTasks, setNewTasks] = useState<Record<string, number>>({});
   const [assigning, setAssigning] = useState(false);
 
-  const orderedTramos = useMemo(
-    () => [...tramos].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es")),
-    [tramos],
+  const orderedEtapas = useMemo(
+    () => [...etapas].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es")),
+    [etapas],
   );
   const filtered = useMemo(() => filterTeamAnalitico(people, state, today), [people, state, today]);
   const counts = useMemo(() => teamFilterCounts(people, state, today), [people, state, today]);
-  const groups = useMemo(() => tramoGroups(filtered, orderedTramos), [filtered, orderedTramos]);
+  const groups = useMemo(() => etapaGroups(filtered, orderedEtapas), [filtered, orderedEtapas]);
   const weekStarts = useMemo(() => teamWeekStarts(people, today), [people, today]);
   const expandedGroups = new Set(state.abiertos ?? groups.map((g) => g.id));
   const parseContext: QuickAddParseContext = useMemo(
     () => ({
       today,
       people: people.map((p) => ({ id: p.id, name: p.name })),
-      tramos: orderedTramos.map((t) => ({ id: t.id, key: t.key, name: t.name })),
+      etapas: orderedEtapas.map((t) => ({ id: t.id, key: t.key, name: t.name })),
       meId: null,
     }),
-    [people, orderedTramos, today],
+    [people, orderedEtapas, today],
   );
 
   const filterGroups: FilterGroup[] = [
@@ -442,19 +442,19 @@ export function PeopleTeamAnalitico({
       ],
     },
     {
-      id: "tramo",
+      id: "etapa",
       label: "Etapa",
-      value: state.tramo ?? "todos",
+      value: state.etapa ?? "todos",
       options: [
-        { value: "todos", label: "Todos", count: counts.tramo.todos ?? 0 },
-        ...orderedTramos.map((t) => ({
+        { value: "todos", label: "Todos", count: counts.etapa.todos ?? 0 },
+        ...orderedEtapas.map((t) => ({
           value: t.key,
           label: t.name,
-          count: counts.tramo[t.key] ?? 0,
-          color: tramoColorVar(t.key, t.sortOrder),
+          count: counts.etapa[t.key] ?? 0,
+          color: etapaColorVar(t.key, t.sortOrder),
         })),
-        ...((counts.tramo[SIN_TRAMO] ?? 0) > 0 || state.tramo === SIN_TRAMO
-          ? [{ value: SIN_TRAMO, label: "Sin etapa", count: counts.tramo[SIN_TRAMO] ?? 0 }]
+        ...((counts.etapa[SIN_ETAPA] ?? 0) > 0 || state.etapa === SIN_ETAPA
+          ? [{ value: SIN_ETAPA, label: "Sin etapa", count: counts.etapa[SIN_ETAPA] ?? 0 }]
           : []),
       ],
     },
@@ -471,7 +471,7 @@ export function PeopleTeamAnalitico({
 
   function onFilterChange(groupId: string, value: string) {
     if (groupId === "estado") onStateChange({ estado: value as AnaliticoTeamUrlState["estado"] });
-    else if (groupId === "tramo") onStateChange({ tramo: value === "todos" ? null : value });
+    else if (groupId === "etapa") onStateChange({ etapa: value === "todos" ? null : value });
     else if (groupId === "alcance") onStateChange({ alcance: value === "mi-equipo" ? "mi-equipo" : "todo" });
   }
 
@@ -549,7 +549,7 @@ export function PeopleTeamAnalitico({
   function quickAssignRows(person: PersonRow, rowIds: string[]): ReactNode {
     if (!canCreateTask || !onCreateTask) return null;
     const project = person.projects[0];
-    const tramoId = project?.tramo ? (orderedTramos.find((t) => t.key === project.tramo)?.id ?? null) : null;
+    const etapaId = project?.etapa ? (orderedEtapas.find((t) => t.key === project.etapa)?.id ?? null) : null;
     const text = draft?.personId === person.id ? draft.text : "";
     const parsed = text.trim() && !text.trim().startsWith("/") ? parseQuickAdd(text, parseContext) : null;
     const dueDate = parsed?.dueDate ?? null;
@@ -559,7 +559,7 @@ export function PeopleTeamAnalitico({
     const draftFor = (assigneeId: string): QuickAddDraft => ({
       title: parsed?.title ?? text.trim(),
       projectId: project?.projectId ?? null,
-      tramoId: parsed?.tramoId ?? tramoId,
+      etapaId: parsed?.etapaId ?? etapaId,
       assigneeId,
       dueDate,
       priority: parsed?.priority ?? "media",
@@ -586,7 +586,7 @@ export function PeopleTeamAnalitico({
           context={{
             label: `Asignar tarea a ${person.name}`,
             projectId: project?.projectId ?? null,
-            tramoId,
+            etapaId,
             assigneeId: person.id,
           }}
           onCreate={async (value) => {
@@ -628,7 +628,7 @@ export function PeopleTeamAnalitico({
 
   const footer = teamFooter(filtered);
   const hasFilters =
-    state.estado !== "todas" || state.tramo !== null || state.alcance !== "todo" || state.q.trim() !== "";
+    state.estado !== "todas" || state.etapa !== null || state.alcance !== "todo" || state.q.trim() !== "";
 
   return (
     <div className="flex flex-col gap-4">
@@ -708,7 +708,7 @@ export function PeopleTeamAnalitico({
                         onClick={() =>
                           onStateChange({
                             estado: TEAM_ANALITICO_DEFAULT_FILTERS.estado,
-                            tramo: TEAM_ANALITICO_DEFAULT_FILTERS.tramo,
+                            etapa: TEAM_ANALITICO_DEFAULT_FILTERS.etapa,
                             alcance: TEAM_ANALITICO_DEFAULT_FILTERS.alcance,
                             q: TEAM_ANALITICO_DEFAULT_FILTERS.q,
                           })

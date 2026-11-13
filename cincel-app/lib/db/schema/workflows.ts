@@ -15,13 +15,13 @@ import {
 import { core, soft, stamps, taskPriority } from "./_schema";
 
 /**
- * When a tramo starts by itself (project flow, BE §3.2): `on_create` (first
- * tramo, on project create), `on_ready` (later tramos, when the gate fase is
+ * When an etapa starts by itself (project flow, BE §3.2): `on_create` (first
+ * etapa, on project create), `on_ready` (later etapas, when the gate fase is
  * done) or `manual`. The first/later rule is enforced in `setWorkflowAutoStart`.
  */
 export const workflowAutoStart = core.enum("workflow_auto_start", ["on_create", "on_ready", "manual"]);
 
-/** Tramos: Presale, Diseño, Construcción (Part C.3; ADR 0003). Decoración was retired (migration 0010). */
+/** Etapas: Presale, Diseño, Construcción (Part C.3; ADR 0003). Decoración was retired (migration 0010). */
 export const workflows = core.table(
   "workflows",
   {
@@ -32,7 +32,7 @@ export const workflows = core.table(
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     autoStart: workflowAutoStart("auto_start").notNull().default("manual"),
-    /** Chart color slot an admin chose (1–5, `--chart-N`); null = derived from key / sortOrder (`tramoColorSlot`). */
+    /** Chart color slot an admin chose (1–5, `--chart-N`); null = derived from key / sortOrder (`etapaColorSlot`). */
     colorSlot: smallint("color_slot"),
     ...stamps,
     ...soft,
@@ -44,7 +44,7 @@ export const workflows = core.table(
 );
 
 /**
- * Fases: the ordered catalog of a tramo (BE §3.3). Never deleted; deactivating
+ * Fases: the ordered catalog of an etapa (BE §3.3). Never deleted; deactivating
  * hides a fase from selects and keeps it on tasks.
  */
 export const workflowPhases = core.table(
@@ -62,7 +62,7 @@ export const workflowPhases = core.table(
     ...stamps,
   },
   (t) => [
-    // Target of the composite FKs (tasks, templates): a fase always belongs to the row's tramo.
+    // Target of the composite FKs (tasks, templates): a fase always belongs to the row's etapa.
     unique("workflow_phases_id_workflow_uq").on(t.id, t.workflowId),
     uniqueIndex("workflow_phases_name_lower_uq").on(t.workflowId, sql`lower(${t.name})`),
     uniqueIndex("workflow_phases_key_uq").on(t.workflowId, t.key).where(sql`${t.key} is not null`),
@@ -71,7 +71,7 @@ export const workflowPhases = core.table(
   ]
 );
 
-/** One predefined task in a tramo, ordered, in one of its fases. */
+/** One predefined task in an etapa, ordered, in one of its fases. */
 export const workflowTaskTemplates = core.table(
   "workflow_task_templates",
   {
@@ -79,7 +79,7 @@ export const workflowTaskTemplates = core.table(
     workflowId: uuid("workflow_id")
       .notNull()
       .references(() => workflows.id, { onDelete: "cascade" }),
-    /** Fase of the template's tramo (`workflow_task_templates_phase_fk`). */
+    /** Fase of the template's etapa (`workflow_task_templates_phase_fk`). */
     phaseId: uuid("phase_id").notNull(),
     title: text("title").notNull(),
     notes: text("notes"),
@@ -88,7 +88,7 @@ export const workflowTaskTemplates = core.table(
     commitmentOffsetDays: integer("commitment_offset_days"),
     reviewOffsetDays: integer("review_offset_days"),
     deliveryOffsetDays: integer("delivery_offset_days"),
-    /** Planned hours a task stamped from this template starts with (Calendario BE §3.5); copied at tramo start. */
+    /** Planned hours a task stamped from this template starts with (Calendario BE §3.5); copied at etapa start. */
     defaultEstimatedHours: numeric("default_estimated_hours", { precision: 5, scale: 2, mode: "number" }),
     sortOrder: integer("sort_order").notNull().default(0),
     active: boolean("active").notNull().default(true),
@@ -97,14 +97,14 @@ export const workflowTaskTemplates = core.table(
   (t) => [
     // Lets tasks FK to (template, workflow) — rule 2.
     unique("workflow_task_templates_id_workflow_uq").on(t.id, t.workflowId),
-    // A template's fase belongs to the template's tramo.
+    // A template's fase belongs to the template's etapa.
     foreignKey({
       name: "workflow_task_templates_phase_fk",
       columns: [t.phaseId, t.workflowId],
       foreignColumns: [workflowPhases.id, workflowPhases.workflowId],
     }).onDelete("restrict"),
     // Only active templates compete for a title, per fase: the seed has the
-    // same title in two fases of one tramo ("Fachadas y alzados", "Garantías").
+    // same title in two fases of one etapa ("Fachadas y alzados", "Garantías").
     uniqueIndex("workflow_task_templates_title_lower_uq")
       .on(t.workflowId, t.phaseId, sql`lower(${t.title})`)
       .where(sql`${t.active} = true`),

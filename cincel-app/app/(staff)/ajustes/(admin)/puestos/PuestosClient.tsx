@@ -44,7 +44,7 @@ import { useActionMutation } from "@/lib/query/mutation";
 import { ajustesPuestosOptions, type AjustesPuestosPageData } from "@/lib/query/options/ajustes";
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
 import { resolvePositionsCapabilities } from "@/lib/auth/permissions";
-import { tramoColorClass } from "@/lib/tramos/tramo-color";
+import { etapaColorClass } from "@/lib/etapas/etapa-color";
 import type { Position, WorkflowDetail } from "@/lib/types/core";
 import { cn } from "@/lib/utils";
 
@@ -93,7 +93,7 @@ export function puestosTotals(positions: readonly Position[]): { puestos: number
 /**
  * What a puesto change makes stale (plan §3, Positions): this page, the
  * Personas team view (puestos per person), the assignee pickers (suggested
- * staff per tramo) and Ajustes › Google (the puestos a mapping can use).
+ * staff per etapa) and Ajustes › Google (the puestos a mapping can use).
  */
 export const POSITION_INVALIDATIONS = [
   qk.ajustes.page("puestos"),
@@ -136,11 +136,11 @@ async function savePosition({ id, name, weeklyCapacityHours, phaseIds, onSaved }
   return setPositionPhasesAction(saved.id, phaseIds);
 }
 
-/** A candidate fase chip (12 px, pill) with its tramo's color dot. */
-function PhaseChip({ label, tramo }: { label: string; tramo: WorkflowDetail | undefined }) {
+/** A candidate fase chip (12 px, pill) with its etapa's color dot. */
+function PhaseChip({ label, etapa }: { label: string; etapa: WorkflowDetail | undefined }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
-      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", tramoColorClass(tramo ?? null))} />
+      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", etapaColorClass(etapa ?? null))} />
       {label}
     </span>
   );
@@ -300,7 +300,7 @@ export function PuestosClient() {
                 <PhaseChip
                   key={phase.id}
                   label={`${phase.workflowName} · ${phase.name}`}
-                  tramo={workflowsById.get(phase.workflowId)}
+                  etapa={workflowsById.get(phase.workflowId)}
                 />
               ))}
               {rest > 0 ? (

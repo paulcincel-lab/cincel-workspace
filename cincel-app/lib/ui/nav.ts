@@ -9,7 +9,7 @@
 import type { LucideIcon } from "lucide-react";
 
 import { NAV_ITEM_SOURCES } from "@/lib/shell/nav-items";
-import { listTramos, tramoColorVar } from "@/lib/tramos/compat";
+import { listEtapas, etapaColorVar } from "@/lib/etapas/compat";
 
 export type NavItemKey =
   | "inicio"
@@ -26,7 +26,7 @@ export type NavItem = { key: NavItemKey; label: string; href: string; icon: Luci
 
 export type NavModel = {
   items: NavItem[];
-  tramos: { key: string; name: string; colorVar: string; href: string }[];
+  etapas: { key: string; name: string; colorVar: string; href: string }[];
   footer: NavItem[];
 };
 
@@ -46,11 +46,11 @@ export type NavItemSource = {
   resolve(session: NavSession): Promise<NavItem | null>;
 };
 
-/** Color of a tramo whose key has no chart slot. */
-export const NEUTRAL_TRAMO_COLOR = "var(--muted-foreground)";
+/** Color of an etapa whose key has no chart slot. */
+export const NEUTRAL_ETAPA_COLOR = "var(--muted-foreground)";
 
-/** The nav item whose page the Tramos links open; the Tramos list follows its visibility. */
-const TRAMOS_TARGET: NavItemKey = "tareas";
+/** The nav item whose page the Etapas links open; the Etapas list follows its visibility. */
+const ETAPAS_TARGET: NavItemKey = "tareas";
 
 async function resolveSource(source: NavItemSource, session: NavSession): Promise<NavItem | null> {
   if (source.adminOnly && !session.isAdmin) return null;
@@ -67,18 +67,18 @@ async function resolveSource(source: NavItemSource, session: NavSession): Promis
 }
 
 function colorVarOf(key: string, sortOrder: number, colorSlot?: number | null): string {
-  // The color an admin chose in Ajustes › Tramos y fases wins over the key / sortOrder rule.
+  // The color an admin chose in Ajustes › Etapas y fases wins over the key / sortOrder rule.
   if (typeof colorSlot === "number" && colorSlot >= 1 && colorSlot <= 5) return `var(--chart-${colorSlot})`;
   try {
-    return tramoColorVar(key, sortOrder) || NEUTRAL_TRAMO_COLOR;
+    return etapaColorVar(key, sortOrder) || NEUTRAL_ETAPA_COLOR;
   } catch {
-    return NEUTRAL_TRAMO_COLOR;
+    return NEUTRAL_ETAPA_COLOR;
   }
 }
 
-async function loadTramos(): Promise<NavModel["tramos"]> {
+async function loadEtapas(): Promise<NavModel["etapas"]> {
   try {
-    const rows = await listTramos();
+    const rows = await listEtapas();
     return [...rows]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((row) => ({
@@ -93,10 +93,10 @@ async function loadTramos(): Promise<NavModel["tramos"]> {
 }
 
 /**
- * Collects every nav item source plus the Tramos list (from `listTramos`).
+ * Collects every nav item source plus the Etapas list (from `listEtapas`).
  * Items are ordered by `order` within their section; a source that resolves
  * null or fails is left out; admin-only sources are skipped for non-admins;
- * the Tramos list is shown only while the Tareas item it links into is.
+ * the Etapas list is shown only while the Tareas item it links into is.
  */
 export async function buildNavModel(
   session: NavSession,
@@ -116,6 +116,6 @@ export async function buildNavModel(
     (source.section === "footer" ? footer : items).push(item);
   }
 
-  const tramos = seen.has(TRAMOS_TARGET) ? await loadTramos() : [];
-  return { items, tramos, footer };
+  const etapas = seen.has(ETAPAS_TARGET) ? await loadEtapas() : [];
+  return { items, etapas, footer };
 }

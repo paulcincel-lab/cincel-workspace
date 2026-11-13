@@ -9,7 +9,7 @@ import { DEFAULT_CALENDARIO_FILTERS } from "@/lib/calendario/url-state";
 import { qk, type TareasListFilters } from "@/lib/query/keys";
 
 const CAL_FILTERS = DEFAULT_CALENDARIO_FILTERS;
-const F: TareasListFilters = { tramo: "diseno", proyecto: null, responsable: "yo", estado: "pendiente", q: null };
+const F: TareasListFilters = { etapa: "diseno", proyecto: null, responsable: "yo", estado: "pendiente", q: null };
 
 function shapes() {
   return {
@@ -19,8 +19,8 @@ function shapes() {
     "me.weekHours": qk.me.weekHours(),
     "me.weekHours(w)": qk.me.weekHours("2026-11-02"),
     "me.tasks": qk.me.tasks(),
-    "me.tasksSummary": qk.me.tasksSummary({ tramo: "diseno", q: null }),
-    "me.tasksList": qk.me.tasksList({ proyecto: "p1", tramo: "diseno", orderBy: "retraso" }),
+    "me.tasksSummary": qk.me.tasksSummary({ etapa: "diseno", q: null }),
+    "me.tasksList": qk.me.tasksList({ proyecto: "p1", etapa: "diseno", orderBy: "retraso" }),
     "me.preferences": qk.me.preferences(),
     "me.profile": qk.me.profile(),
     "me.notifications": qk.me.notifications({ unreadOnly: true, kinds: ["task"] }),
@@ -98,7 +98,7 @@ function shapes() {
     "monday.positionSuggestion": qk.monday.positionSuggestion("r1", "u1"),
     "google.driveStatus": qk.google.driveStatus(),
     "google.driveList": qk.google.driveList("f1", ""),
-    "catalog.tramos": qk.catalog.tramos(),
+    "catalog.etapas": qk.catalog.etapas(),
     "catalog.workflows": qk.catalog.workflows(),
     "catalog.taskStatuses": qk.catalog.taskStatuses(),
     "catalog.staff": qk.catalog.staff(),

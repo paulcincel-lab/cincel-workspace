@@ -144,8 +144,8 @@ describe.skipIf(!url)("loadPeopleOverview projects and sharesProjectWithViewer (
     const manager = rows.find((r) => r.staffId === ids.manager)!;
     expect(manager.open).toBe(6);
     expect(manager.projects).toEqual([
-      { projectId: projectA, name: `Analitico ${run} A`, tramo: null, open: 5, overdue: 1, weeks: [2, 1, 0, 1] },
-      { projectId: projectC, name: `Analitico ${run} C`, tramo: null, open: 1, overdue: 0, weeks: [0, 0, 1, 0] },
+      { projectId: projectA, name: `Analitico ${run} A`, etapa: null, open: 5, overdue: 1, weeks: [2, 1, 0, 1] },
+      { projectId: projectC, name: `Analitico ${run} C`, etapa: null, open: 1, overdue: 0, weeks: [0, 0, 1, 0] },
     ]);
     expect(rows.find((r) => r.staffId === ids.solo)!.projects).toEqual([]);
   });

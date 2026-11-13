@@ -38,8 +38,8 @@ import type { StaffRef, TaskListRow, WorkflowRef } from "@/lib/types/core";
  * The open tasks of one project, under its row in Proyectos · Analítico
  * (#1042). Same columns, cells and behaviour as the Tareas · Analítico table
  * (`ANALITICO_COLUMNS`, `useTaskCellEdits`, Apoyo, selection with
- * `TaskBulkBar`, delete) without the Tramo column: the project row already
- * says its tramo. Mounted on the row's first expand, it reads
+ * `TaskBulkBar`, delete) without the Etapa column: the project row already
+ * says its etapa. Mounted on the row's first expand, it reads
  * `qk.tareas.list({ proyecto, mostrar: "abiertas", orderBy: "vence" })`
  * (completed tasks stay out), sorted by due date on the server, 30 rows a
  * page with "Cargar más (n restantes)", and ends with "Ver todas en el
@@ -48,16 +48,16 @@ import type { StaffRef, TaskListRow, WorkflowRef } from "@/lib/types/core";
  */
 export type ProjectAnaliticoTasksProps = {
   project: { id: string; name: string };
-  /** Every tramo of the catalog (the Fase editor's lists). */
-  tramos: WorkflowRef[];
+  /** Every etapa of the catalog (the Fase editor's lists). */
+  etapas: WorkflowRef[];
   /** Responsable and Apoyo options. */
   staff: StaffRef[];
   /** The project's overdue open tasks, from the portfolio row (the loaded rows may be only the first page). */
   overdue?: number;
 };
 
-/** The project row's columns: the Tareas ones without Tramo. */
-export const PROJECT_TASK_COLUMNS = ANALITICO_COLUMNS.filter((column) => column.key !== "tramo");
+/** The project row's columns: the Tareas ones without Etapa. */
+export const PROJECT_TASK_COLUMNS = ANALITICO_COLUMNS.filter((column) => column.key !== "etapa");
 
 /** Keys a save here refreshes: the Tareas tables and the portfolio's counts. */
 const COMMIT_KEYS = [...TAREAS_CELL_KEYS, qk.proyectos.list()];
@@ -70,7 +70,7 @@ const PROJECT_TASKS_SORT: TaskSort = { orderBy: "vence", orderDir: "asc" };
 /** Every column with a server sort (#1044). */
 const PROJECT_TASKS_SORTABLE = PROJECT_TASK_COLUMNS.map((c) => c.key).filter((key) => key in TASK_TABLE_SORT_KEYS);
 
-export function ProjectAnaliticoTasks({ project, tramos, staff, overdue: overdueProp }: ProjectAnaliticoTasksProps): ReactNode {
+export function ProjectAnaliticoTasks({ project, etapas, staff, overdue: overdueProp }: ProjectAnaliticoTasksProps): ReactNode {
   const router = useRouter();
   // Header sort (#1044), on the server. The default keeps the `projectOpenTasksFilters` key
   // that "Expandir todo" seeds.
@@ -116,7 +116,7 @@ export function ProjectAnaliticoTasks({ project, tramos, staff, overdue: overdue
   const visibleIds = useMemo(() => shown.map((row) => row.id), [shown]);
   const selection = useTaskSelection({ visibleIds });
 
-  const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, tramos, staff });
+  const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, etapas, staff });
   const columns = useMemo(() => cells.withEdits(PROJECT_TASK_COLUMNS), [cells]);
 
   const openTask = (id: string) => router.push(`/tareas?tarea=${encodeURIComponent(id)}`);

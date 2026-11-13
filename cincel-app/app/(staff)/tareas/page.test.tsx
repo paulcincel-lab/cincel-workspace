@@ -42,7 +42,7 @@ const run = (searchParams: Record<string, string> = {}) => TareasPage({ searchPa
 /** The style of the bundle the page prefetched. */
 const loadedStyle = () => (m.loadTareasPage.mock.calls.at(-1)?.[1] as { estilo: string }).estilo;
 
-const BUNDLE = { facets: { total: 0, byTramo: {}, projects: [] }, tramos: [], staff: [] };
+const BUNDLE = { facets: { total: 0, byEtapa: {}, projects: [] }, etapas: [], staff: [] };
 
 beforeEach(() => {
   m.notFound.mockClear();
@@ -83,8 +83,8 @@ describe("/tareas", () => {
   });
 
   it("keys the bundle by the filters only: the old view params pick nothing", async () => {
-    await run({ vista: "lista", cal: "dia", fecha: "2026-11-06", tramo: "diseno" });
+    await run({ vista: "lista", cal: "dia", fecha: "2026-11-06", etapa: "diseno" });
     const key = m.loadTareasPage.mock.calls.at(-1)?.[1];
-    expect(key).toEqual({ estilo: "esencial", tramo: "diseno", proyecto: null, responsable: null, estado: null, q: null });
+    expect(key).toEqual({ estilo: "esencial", etapa: "diseno", proyecto: null, responsable: null, estado: null, q: null });
   });
 });

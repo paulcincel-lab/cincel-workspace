@@ -27,7 +27,7 @@ import { ToolSteps } from "@/components/widgets/ToolSteps";
 import { renderWithQueryClient } from "@/lib/query/test-utils";
 import { parseQuickAdd, type QuickAddParseContext } from "@/lib/quick-add/parse";
 
-const CTX: QuickAddParseContext = { today: "2026-11-09", people: [], tramos: [], meId: null };
+const CTX: QuickAddParseContext = { today: "2026-11-09", people: [], etapas: [], meId: null };
 
 type Row = { name: string; hours: number };
 
@@ -133,7 +133,7 @@ describe("Estilos contracts", () => {
     expect(onCreate).toHaveBeenCalledWith({
       title: "Revisar",
       projectId: "p1",
-      tramoId: null,
+      etapaId: null,
       assigneeId: null,
       dueDate: null,
       priority: "media",

@@ -11,7 +11,7 @@ import type { TaskPriority, WorkflowPhaseRef } from "@/lib/types/core";
 
 export interface TemplateDraft {
   title: string;
-  /** Required: a template always has a fase of its tramo. */
+  /** Required: a template always has a fase of its etapa. */
   phaseId: string;
   notes: string;
   defaultPriority: TaskPriority;
@@ -46,7 +46,7 @@ interface TemplateTaskDrawerProps {
   onClose: () => void;
   editingId: string | null;
   workflowName: string;
-  /** The tramo's active fases, in catalog order. */
+  /** The etapa's active fases, in catalog order. */
   phases: WorkflowPhaseRef[];
   draft: TemplateDraft;
   onChangeDraft: React.Dispatch<React.SetStateAction<TemplateDraft>>;
@@ -56,7 +56,7 @@ interface TemplateTaskDrawerProps {
   isSaving?: boolean;
 }
 
-/** Slide-in form for adding or editing a tramo's template task. */
+/** Slide-in form for adding or editing an etapa's template task. */
 export function TemplateTaskDrawer({
   show,
   onClose,

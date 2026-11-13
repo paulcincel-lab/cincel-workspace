@@ -8,7 +8,7 @@ import { EntityCardGrid } from "@/components/widgets/EntityCardGrid";
 import { KpiWidget } from "@/components/widgets/KpiWidget";
 import { ProgressListWidget } from "@/components/widgets/ProgressListWidget";
 import { RecordTable } from "@/components/widgets/RecordTable";
-import { TramoStepperWidget } from "@/components/widgets/TramoStepperWidget";
+import { EtapaStepperWidget } from "@/components/widgets/EtapaStepperWidget";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { buildProjectSummary, type ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 
@@ -33,7 +33,7 @@ function renderContactCell(columnKey: string, row: Record<string, unknown>) {
 
 /**
  * The Resumen as one composition of library widgets fed the same data
- * (redesign FE §3.5, §4.10.2): tramos (`TramoStepperWidget`), avance and
+ * (redesign FE §3.5, §4.10.2): etapas (`EtapaStepperWidget`), avance and
  * presupuesto (`ProgressListWidget`), indicators (`KpiWidget`), partidas,
  * recent files (`EntityCardGrid`), ficha and contacts (`RecordTable`). The
  * budget is absent without `showBudget`; "Cliente y contactos" is absent
@@ -49,7 +49,7 @@ export function ProjectSummaryWidgets({ data: input }: { data: ProjectSummaryInp
 
   return (
     <div className="flex flex-col gap-4">
-      <TramoStepperWidget title="Etapas" steps={data.tramos} />
+      <EtapaStepperWidget title="Etapas" steps={data.etapas} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <ProgressListWidget title="Avance" items={data.avance} variant="rings" />

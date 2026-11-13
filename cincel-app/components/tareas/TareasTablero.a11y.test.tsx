@@ -107,8 +107,8 @@ function seededClient() {
   const client = createTestQueryClient();
   // The bundle is keyed by the style; seed it for every one the tests render.
   const page = {
-    facets: { total: 4, byTramo: {}, projects: [] },
-    tramos: [],
+    facets: { total: 4, byEtapa: {}, projects: [] },
+    etapas: [],
     staff: [],
   };
   for (const estilo of ["visual", "esencial", "analitico"] as const) {

@@ -2,12 +2,12 @@
 /**
  * `useProyectosDashboard` (zustand.md §2.5, issues #969, #992): the
  * instance's storage key (`v2`, so stale per-widget views are dropped) and
- * defaults, the tramo toggle, what is persisted (never the tramo selection),
+ * defaults, the etapa toggle, what is persisted (never the etapa selection),
  * rehydration and the logout reset.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { NO_TRAMO_KEY } from "@/components/proyectos/projects-portfolio-data";
+import { NO_ETAPA_KEY } from "@/components/proyectos/projects-portfolio-data";
 import { resetClientState } from "@/lib/query/reset-client-state";
 import { createTestQueryClient } from "@/lib/query/test-utils";
 
@@ -15,8 +15,8 @@ import * as storeModule from "./proyectos-dashboard-store";
 import {
   PROYECTOS_DASHBOARD_INITIAL,
   resetProyectosDashboard,
-  selectSelectedTramo,
-  selectTramoStripCollapsed,
+  selectSelectedEtapa,
+  selectEtapaStripCollapsed,
   useProyectosDashboard,
 } from "./proyectos-dashboard-store";
 
@@ -49,25 +49,25 @@ describe("useProyectosDashboard", () => {
 
   it("starts with no etapa selected and nothing collapsed", () => {
     expect(PROYECTOS_DASHBOARD_INITIAL).toMatchObject({ selectedKpi: null, collapsed: {} });
-    expect(selectSelectedTramo(state())).toBeNull();
-    expect(selectTramoStripCollapsed(state())).toBe(false);
+    expect(selectSelectedEtapa(state())).toBeNull();
+    expect(selectEtapaStripCollapsed(state())).toBe(false);
   });
 
   it("toggles the etapa; the same key again clears it, Sin etapa included", () => {
     state().toggleKpi("diseno");
-    expect(selectSelectedTramo(state())).toBe("diseno");
-    state().toggleKpi(NO_TRAMO_KEY);
-    expect(selectSelectedTramo(state())).toBe(NO_TRAMO_KEY);
-    state().toggleKpi(NO_TRAMO_KEY);
-    expect(selectSelectedTramo(state())).toBeNull();
+    expect(selectSelectedEtapa(state())).toBe("diseno");
+    state().toggleKpi(NO_ETAPA_KEY);
+    expect(selectSelectedEtapa(state())).toBe(NO_ETAPA_KEY);
+    state().toggleKpi(NO_ETAPA_KEY);
+    expect(selectSelectedEtapa(state())).toBeNull();
   });
 
   it("persists collapsed but never the etapa", () => {
     state().toggleKpi("presale");
-    state().toggleCollapsed("tramoStrip");
+    state().toggleCollapsed("etapaStrip");
     const stored = persisted();
     expect(stored).not.toBeNull();
-    expect(stored!.collapsed).toEqual({ tramoStrip: true });
+    expect(stored!.collapsed).toEqual({ etapaStrip: true });
     expect(JSON.stringify(stored)).not.toContain("presale");
   });
 
@@ -75,23 +75,33 @@ describe("useProyectosDashboard", () => {
     localStorage.setItem(
       OLD_KEY,
       JSON.stringify({
-        state: { range: "8w", collapsed: { tramoStrip: true }, views: { visual: { portfolio: "table" } }, hiddenSeries: {} },
+        state: { range: "8w", collapsed: { etapaStrip: true }, views: { visual: { portfolio: "table" } }, hiddenSeries: {} },
         version: 1,
       }),
     );
     await useProyectosDashboard.persist.rehydrate();
-    expect(selectTramoStripCollapsed(state())).toBe(false);
+    expect(selectEtapaStripCollapsed(state())).toBe(false);
     expect(state().views).toEqual({});
   });
 
-  it("rehydrates collapsed from v2 (dropping unknown widgets) but never a etapa", async () => {
+  it("reads a collapsed strip saved under the old name tramoStrip", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ state: { range: "8w", collapsed: { tramoStrip: true }, views: {}, hiddenSeries: {} }, version: 1 }),
+    );
+    await useProyectosDashboard.persist.rehydrate();
+    expect(selectEtapaStripCollapsed(state())).toBe(true);
+    expect(state().collapsed).toEqual({ etapaStrip: true });
+  });
+
+  it("rehydrates collapsed from v2 (dropping unknown widgets) but never an etapa", async () => {
     localStorage.setItem(
       KEY,
       JSON.stringify({
         state: {
           selectedKpi: "diseno",
           range: "8w",
-          collapsed: { tramoStrip: true, weeklyPace: true },
+          collapsed: { etapaStrip: true, weeklyPace: true },
           views: {},
           hiddenSeries: {},
         },
@@ -99,20 +109,20 @@ describe("useProyectosDashboard", () => {
       }),
     );
     await useProyectosDashboard.persist.rehydrate();
-    expect(selectTramoStripCollapsed(state())).toBe(true);
-    expect(state().collapsed).toEqual({ tramoStrip: true });
-    expect(selectSelectedTramo(state())).toBeNull();
+    expect(selectEtapaStripCollapsed(state())).toBe(true);
+    expect(state().collapsed).toEqual({ etapaStrip: true });
+    expect(selectSelectedEtapa(state())).toBeNull();
   });
 
   it("goes back to the defaults on reset and on logout (resetClientState)", () => {
     state().toggleKpi("diseno");
-    state().toggleCollapsed("tramoStrip");
+    state().toggleCollapsed("etapaStrip");
     resetProyectosDashboard();
-    expect(selectSelectedTramo(state())).toBeNull();
-    expect(selectTramoStripCollapsed(state())).toBe(false);
+    expect(selectSelectedEtapa(state())).toBeNull();
+    expect(selectEtapaStripCollapsed(state())).toBe(false);
 
     state().toggleKpi("diseno");
     resetClientState(createTestQueryClient());
-    expect(selectSelectedTramo(state())).toBeNull();
+    expect(selectSelectedEtapa(state())).toBeNull();
   });
 });

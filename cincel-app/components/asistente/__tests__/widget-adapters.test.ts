@@ -63,7 +63,7 @@ describe("assistant widget adapters", () => {
         title: "Planos",
         href: "",
         project: "",
-        tramo: null,
+        etapa: null,
         reason: "",
         tone: "default",
         assignee: null,

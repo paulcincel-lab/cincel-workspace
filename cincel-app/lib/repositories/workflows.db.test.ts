@@ -1,9 +1,9 @@
 // @vitest-environment node
 /**
- * Tramos color, order and counts against a real Postgres (#1016): an explicit
+ * Etapas color, order and counts against a real Postgres (#1016): an explicit
  * `color_slot` wins over the derived slot, `reorderWorkflowsAction` writes
- * `sort_order` in order, and the Tramos page counts active projects per
- * current tramo and tasks per fase. Runs only when TEST_DATABASE_URL points
+ * `sort_order` in order, and the Etapas page counts active projects per
+ * current etapa and tasks per fase. Runs only when TEST_DATABASE_URL points
  * at a migrated database; every row a test creates carries a per-run marker
  * and is deleted afterwards.
  */
@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 import { unwrapActions } from "@/tests/helpers/action-result";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -46,7 +46,7 @@ describe.skipIf(!url)("etapas color, order and counts (test DB)", async () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
 
   const { eq, inArray, sql } = await import("drizzle-orm");
@@ -55,7 +55,7 @@ describe.skipIf(!url)("etapas color, order and counts (test DB)", async () => {
   const repo = await import("./workflows-repository");
   const actions = await import("@/lib/actions/workflows-actions");
   const { reorderWorkflowsAction, updateWorkflowAction } = unwrapActions(actions);
-  const { tramoColorSlot } = await import("@/lib/tramos/tramo-color");
+  const { etapaColorSlot } = await import("@/lib/etapas/etapa-color");
 
   let adminId = "";
   const workflowIds: string[] = [];
@@ -116,12 +116,12 @@ describe.skipIf(!url)("etapas color, order and counts (test DB)", async () => {
     const before = (await repo.listWorkflows({ includeInactive: true })).find((w) => w.id === id)!;
     expect(before.colorSlot).toBeNull();
     // Derived: sortOrder 2 → slot 2.
-    expect(tramoColorSlot(before)).toBe(2);
+    expect(etapaColorSlot(before)).toBe(2);
 
     const saved = await updateWorkflowAction(id, { colorSlot: 5 });
     expect(saved.colorSlot).toBe(5);
-    expect(tramoColorSlot(saved)).toBe(5);
-    const nav = (await repo.listTramosNav()).find((w) => w.id === id);
+    expect(etapaColorSlot(saved)).toBe(5);
+    const nav = (await repo.listEtapasNav()).find((w) => w.id === id);
     expect(nav?.colorSlot).toBe(5);
 
     await expect(updateWorkflowAction(id, { colorSlot: 6 as never })).rejects.toThrow(/INVALID/);
@@ -131,7 +131,7 @@ describe.skipIf(!url)("etapas color, order and counts (test DB)", async () => {
 
     const cleared = await updateWorkflowAction(id, { colorSlot: null });
     expect(cleared.colorSlot).toBeNull();
-    expect(tramoColorSlot(cleared)).toBe(2);
+    expect(etapaColorSlot(cleared)).toBe(2);
   });
 
   it("reorder workflows", async () => {
@@ -142,7 +142,7 @@ describe.skipIf(!url)("etapas color, order and counts (test DB)", async () => {
       .from(schema.workflows)
       .where(inArray(schema.workflows.id, workflowIds));
     expect(Object.fromEntries(rows.map((r) => [r.id, r.sortOrder]))).toEqual({ [c!]: 0, [a!]: 1, [b!]: 2 });
-    // Put them back at the end so other files see the firm's tramos first.
+    // Put them back at the end so other files see the firm's etapas first.
     await db.update(schema.workflows).set({ sortOrder: sql`${schema.workflows.sortOrder} + 950` }).where(inArray(schema.workflows.id, workflowIds));
   });
 

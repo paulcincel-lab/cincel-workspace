@@ -39,7 +39,7 @@ async function requireProjectsCapabilities() {
   return resolveProjectsCapabilities(await requireCapabilityUser());
 }
 
-/** Changes that move a project between tramos also show on Inicio (BE §7.3). Tareas reads `qk.tareas.*` (Phase 4). */
+/** Changes that move a project between etapas also show on Inicio (BE §7.3). Tareas reads `qk.tareas.*` (Phase 4). */
 function revalidateProjectFlow() {
   revalidateInicioScreen();
 }
@@ -70,9 +70,9 @@ const viewerOf = (user: AuthenticatedUser): ViewerScope => ({ staffId: user.memb
 /**
  * Creates a project with only a name (BE §9.4). Older callers may still pass
  * a full `ProjectInput`; only `name`, `startWorkflowId` and `phaseIds` are
- * read. `canCreateProject`; choosing the starting tramo (sending
+ * read. `canCreateProject`; choosing the starting etapa (sending
  * `startWorkflowId` or `phaseIds`) also needs `activities.canCreateActivity`,
- * the Iniciar tramo sheet's capability (#1034). Errors: FORBIDDEN, EMPTY,
+ * the Iniciar etapa sheet's capability (#1034). Errors: FORBIDDEN, EMPTY,
  * NAME_TAKEN, INVALID, PHASE_MISMATCH, NO_PHASES.
  */
 export async function createProjectAction(
@@ -87,12 +87,12 @@ async function createProjectActionImpl(input: ProjectCreateInput | ProjectInput)
     throw new Error("FORBIDDEN: project create");
   }
   const { startWorkflowId, phaseIds } = (input ?? {}) as ProjectCreateInput;
-  const picksTramo = startWorkflowId !== undefined || phaseIds !== undefined;
-  if (picksTramo && !resolveActivitiesCapabilities(user).canCreateActivity) {
+  const picksEtapa = startWorkflowId !== undefined || phaseIds !== undefined;
+  if (picksEtapa && !resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: start etapa");
   }
   const row = await projectsRepository.createProject(
-    picksTramo ? { name: input?.name, startWorkflowId, phaseIds } : { name: input?.name },
+    picksEtapa ? { name: input?.name, startWorkflowId, phaseIds } : { name: input?.name },
     user.member.id
   );
   // Drive runs after the response; no client yet, so only the internal folders.
@@ -342,34 +342,34 @@ async function addProjectCommentActionImpl(projectId: string, text: string): Pro
   await projectsRepository.addProjectComment(projectId, comment, user.member.id);
 }
 
-// ── Current tramo and espacios (project flow BE §7.3) ───────────────────────
+// ── Current etapa and espacios (project flow BE §7.3) ───────────────────────
 
 const isUuid = (value: unknown): value is string => typeof value === "string" && UUID_RE.test(value);
 
 /**
- * Makes an already started tramo the project's current one (BE §7.3).
- * `canChangeProjectStage`. A tramo with no stage row gives NOT_STARTED, except
- * for an admin on a project without a current tramo ("Asignar tramo"): that
- * opens the stage through `startTramo` with `stageOnly` (no fases, no tasks).
+ * Makes an already started etapa the project's current one (BE §7.3).
+ * `canChangeProjectStage`. An etapa with no stage row gives NOT_STARTED, except
+ * for an admin on a project without a current etapa ("Asignar etapa"): that
+ * opens the stage through `startEtapa` with `stageOnly` (no fases, no tasks).
  * Errors: FORBIDDEN, NOT_FOUND, NOT_STARTED.
  */
-export async function setProjectCurrentTramoAction(
-  ...args: Parameters<typeof setProjectCurrentTramoActionImpl>
-): Promise<ActionResult<Awaited<ReturnType<typeof setProjectCurrentTramoActionImpl>>>> {
-  return toActionResult(() => setProjectCurrentTramoActionImpl(...args));
+export async function setProjectCurrentEtapaAction(
+  ...args: Parameters<typeof setProjectCurrentEtapaActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof setProjectCurrentEtapaActionImpl>>>> {
+  return toActionResult(() => setProjectCurrentEtapaActionImpl(...args));
 }
 
-async function setProjectCurrentTramoActionImpl(id: string, workflowId: string): Promise<ProjectDetail> {
+async function setProjectCurrentEtapaActionImpl(id: string, workflowId: string): Promise<ProjectDetail> {
   const user = await requireCapabilityUser();
   if (!resolveProjectsCapabilities(user).canChangeProjectStage) throw new Error("FORBIDDEN");
   if (!isUuid(id) || !isUuid(workflowId)) throw new Error("NOT_FOUND");
 
   let row: ProjectDetail;
   try {
-    row = await projectsRepository.setProjectCurrentTramo(id, workflowId, user.member.id);
+    row = await projectsRepository.setProjectCurrentEtapa(id, workflowId, user.member.id);
   } catch (err) {
     if (!(err instanceof Error && err.message === "NOT_STARTED" && canSeeAdminData(user))) throw err;
-    row = await projectsRepository.assignProjectTramo(id, workflowId, user.member.id);
+    row = await projectsRepository.assignProjectEtapa(id, workflowId, user.member.id);
   }
   revalidateProjectFlow();
   return scopeProjectDto(row, viewerScopeOf(user));

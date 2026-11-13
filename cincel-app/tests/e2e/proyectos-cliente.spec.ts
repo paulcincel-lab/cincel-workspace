@@ -5,7 +5,7 @@
  * "Asignar cliente y origen". Setting the client from the ficha closes that
  * task. Non-admins never see the client, the origin or admin tasks (B2).
  *
- * The create flow itself (Presale with 10 unassigned tasks, Tramo column,
+ * The create flow itself (Presale with 10 unassigned tasks, Etapa column,
  * NAME_TAKEN) is covered by `proyectos.spec.ts`.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).

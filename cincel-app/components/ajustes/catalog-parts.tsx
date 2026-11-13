@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/shadcn/
 import { cn } from "@/lib/utils";
 
 /**
- * Shared parts of the Ajustes catalogs (Estatus, Puestos, Tramos y fases):
+ * Shared parts of the Ajustes catalogs (Estatus, Puestos, Etapas y fases):
  * the list header, the "•••" row menu, the inline add row, the "Nuevo" pill
  * and the editor footer. One layout for every presentation style.
  */

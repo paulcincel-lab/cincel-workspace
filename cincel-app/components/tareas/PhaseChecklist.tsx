@@ -23,7 +23,7 @@ export interface PhaseChecklistProps {
   onToggle: (phaseId: string, checked: boolean) => void;
 }
 
-/** The fase checkboxes of the Iniciar tramo sheet, also used by "Tramo inicial" in Nuevo proyecto (#1034). */
+/** The fase checkboxes of the Iniciar etapa sheet, also used by "Etapa inicial" in Nuevo proyecto (#1034). */
 export function PhaseChecklist({ idPrefix, phases, checkedIds, onToggle }: PhaseChecklistProps) {
   return (
     <ul className="space-y-3">

@@ -100,9 +100,9 @@ function makeProject(overrides: Partial<ProjectListItem> = {}): ProjectListItem 
     updatedAt: "2026-01-01T00:00:00.000Z",
     client: null,
     currentWorkflow: DISENO,
-    tramos: [],
+    etapas: [],
     activePhase: null,
-    needsTramo: false,
+    needsEtapa: false,
     stages: [],
     manager: null,
     coordinator: null,
@@ -170,13 +170,13 @@ describe("toDistribution", () => {
 
   it("sums secondary and numeric extras, keeps the first text extra", () => {
     const rows = [
-      { tramo: "diseno", overdue: 1, days: 3, owner: "Ana" },
-      { tramo: "diseno", overdue: 0, days: 5, owner: "Beto" },
-      { tramo: "obra", overdue: 2, days: 1, owner: "Ciro" },
+      { etapa: "diseno", overdue: 1, days: 3, owner: "Ana" },
+      { etapa: "diseno", overdue: 0, days: 5, owner: "Beto" },
+      { etapa: "obra", overdue: 2, days: 1, owner: "Ciro" },
     ];
     const segments = toDistribution(rows, {
-      keyOf: (r) => r.tramo,
-      labelOf: (r) => r.tramo,
+      keyOf: (r) => r.etapa,
+      labelOf: (r) => r.etapa,
       colorVarOf: () => "var(--chart-1)",
       secondaryOf: (r) => r.overdue,
       extraOf: (r) => ({ days: r.days, owner: r.owner }),
@@ -287,7 +287,7 @@ describe("toAttentionItems", () => {
       title: "Planos",
       href: "/tareas?tarea=x",
       project: "Casa Roble",
-      tramo: "diseno",
+      etapa: "diseno",
       reason: "Vencida",
       tone: "critical",
       assignee: { id: "s2", name: "Ana María López", initials: "AL" },
@@ -306,7 +306,7 @@ describe("toAttentionItems", () => {
       ],
       now,
     );
-    expect(items.map((i) => [i.id, i.daysLate, i.tramo])).toEqual([
+    expect(items.map((i) => [i.id, i.daysLate, i.etapa])).toEqual([
       ["b", 17, null],
       ["a", 2, "diseno"],
     ]);
@@ -329,7 +329,7 @@ describe("toAgendaItems", () => {
       title: "Revisión",
       estimated: true,
       project: "Casa Roble",
-      tramo: "diseno",
+      etapa: "diseno",
       attendees: ["Ana María López"],
       href: "/tareas?tarea=t9",
     });
@@ -338,7 +338,7 @@ describe("toAgendaItems", () => {
     expect(items.every((i) => i.meetingUrl === undefined)).toBe(true);
   });
 
-  it("maps calendar events and drops non-tramo keys", () => {
+  it("maps calendar events and drops non-etapa keys", () => {
     const event: CalendarEvent = {
       id: "c-admin-t1-2026-11-10",
       taskId: "t1",
@@ -347,8 +347,8 @@ describe("toAgendaItems", () => {
       title: "Pago",
       project: "Casa Roble",
       responsible: "Sin responsable",
-      tramo: "admin",
-      tramoLabel: "Administración",
+      etapa: "admin",
+      etapaLabel: "Administración",
       phaseId: null,
       phaseLabel: "",
       type: "Compromiso",
@@ -361,7 +361,7 @@ describe("toAgendaItems", () => {
         start: "2026-11-10T09:15",
         estimated: true,
         project: "Casa Roble",
-        tramo: null,
+        etapa: null,
         href: "/tareas?tarea=t1",
       },
     ]);
@@ -440,7 +440,7 @@ describe("toPersonDatum", () => {
       name: "Ana López",
       initials: "AL",
       puesto: "Arquitecta",
-      tramo: null,
+      etapa: null,
       open: 6,
       overdue: 2,
       activeProjects: 3,
@@ -476,9 +476,9 @@ describe("initialsOf", () => {
 
 describe("toEntityCards", () => {
   it("maps each item", () => {
-    const cards = toEntityCards([makeProject()], (p) => ({ id: p.id, title: p.name, tramo: p.currentWorkflow?.key ?? null }));
+    const cards = toEntityCards([makeProject()], (p) => ({ id: p.id, title: p.name, etapa: p.currentWorkflow?.key ?? null }));
     expectTypeOf(cards).toEqualTypeOf<EntityCard[]>();
-    expect(cards).toEqual([{ id: "p1", title: "Casa Roble", tramo: "diseno" }]);
+    expect(cards).toEqual([{ id: "p1", title: "Casa Roble", etapa: "diseno" }]);
     expect(toEntityCards([], (x: string) => ({ id: x, title: x }))).toEqual([]);
   });
 });

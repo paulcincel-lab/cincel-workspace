@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { bytea, core, foldedTrgm, soft, stamps, taskKind, taskPriority, taskStatus } from "./_schema";
 import { staff } from "./people";
-import { projects, projectSpaces, tramoStartBatches } from "./projects";
+import { projects, projectSpaces, etapaStartBatches } from "./projects";
 import { workflowPhases, workflows, workflowTaskTemplates } from "./workflows";
 
 /**
@@ -47,7 +47,7 @@ export const taskStatuses = core.table(
 
 /**
  * Workflow task, user task or admin task; always on a project (Part C.4,
- * rules 2–5; project flow BE §3.5). A task's fase belongs to its tramo and its
+ * rules 2–5; project flow BE §3.5). A task's fase belongs to its etapa and its
  * espacio to its project (composite FKs).
  */
 export const tasks = core.table(
@@ -62,7 +62,7 @@ export const tasks = core.table(
     // `restrict`, not `set null`: nulling it would violate tasks_kind_check on
     // workflow tasks. Workflows are soft-deleted anyway.
     workflowId: uuid("workflow_id").references(() => workflows.id, { onDelete: "restrict" }),
-    /** Fase of the task's tramo (`tasks_phase_fk`); null = "Sin fase · revisar". */
+    /** Fase of the task's etapa (`tasks_phase_fk`); null = "Sin fase · revisar". */
     phaseId: uuid("phase_id"),
     /** Optional espacio of the task's project (`tasks_space_fk`). */
     spaceId: uuid("space_id"),
@@ -70,8 +70,8 @@ export const tasks = core.table(
     closedAt: timestamp("closed_at", { withTimezone: true }),
     /** Marks system-made tasks, e.g. 'assign_client' for "Asignar cliente y origen". */
     systemKey: text("system_key"),
-    /** The "Iniciar tramo" batch that created the task (undo). */
-    startBatchId: uuid("start_batch_id").references(() => tramoStartBatches.id, { onDelete: "set null" }),
+    /** The "Iniciar etapa" batch that created the task (undo). */
+    startBatchId: uuid("start_batch_id").references(() => etapaStartBatches.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     notes: text("notes"),
     createdById: uuid("created_by_id")
@@ -108,7 +108,7 @@ export const tasks = core.table(
       columns: [t.templateId, t.workflowId],
       foreignColumns: [workflowTaskTemplates.id, workflowTaskTemplates.workflowId],
     }).onDelete("restrict"),
-    // A task's fase belongs to the task's tramo.
+    // A task's fase belongs to the task's etapa.
     foreignKey({
       name: "tasks_phase_fk",
       columns: [t.phaseId, t.workflowId],
@@ -121,7 +121,7 @@ export const tasks = core.table(
       columns: [t.spaceId, t.projectId],
       foreignColumns: [projectSpaces.id, projectSpaces.projectId],
     }).onDelete("restrict"),
-    // MATCH SIMPLE skips a composite FK when any column is null: a fase without a tramo would slip through.
+    // MATCH SIMPLE skips a composite FK when any column is null: a fase without an etapa would slip through.
     check("tasks_estimated_hours_check", sql`${t.estimatedHours} is null or (${t.estimatedHours} > 0 and ${t.estimatedHours} <= 80)`),
     check("tasks_phase_needs_workflow_check", sql`${t.phaseId} is null or ${t.workflowId} is not null`),
     // Rule 4: a workflow task, a user task or an admin task. Compares kind::text:
@@ -305,7 +305,7 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   workflow: one(workflows, { fields: [tasks.workflowId], references: [workflows.id] }),
   phaseRow: one(workflowPhases, { fields: [tasks.phaseId], references: [workflowPhases.id] }),
   space: one(projectSpaces, { fields: [tasks.spaceId], references: [projectSpaces.id] }),
-  startBatch: one(tramoStartBatches, { fields: [tasks.startBatchId], references: [tramoStartBatches.id] }),
+  startBatch: one(etapaStartBatches, { fields: [tasks.startBatchId], references: [etapaStartBatches.id] }),
   createdBy: one(staff, {
     fields: [tasks.createdById],
     references: [staff.id],

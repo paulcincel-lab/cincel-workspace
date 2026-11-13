@@ -8,7 +8,7 @@ export type AccordionPanelGroup = {
   id: string;
   title: string;
   count: number;
-  /** Optional non-interactive content shown after the count (e.g. tramo chips). */
+  /** Optional non-interactive content shown after the count (e.g. etapa chips). */
   badges?: ReactNode;
   /** Optional buttons at the right of the header, outside the toggle (e.g. "Agregar fases"). */
   actions?: ReactNode;

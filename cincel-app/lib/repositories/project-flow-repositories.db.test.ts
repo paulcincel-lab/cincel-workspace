@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * Fases, espacios and puestos repositories against a real Postgres (BE §8.1,
- * §8.3, §8.4): a task's fase must belong to its tramo (`tasks_phase_fk`),
+ * §8.3, §8.4): a task's fase must belong to its etapa (`tasks_phase_fk`),
  * names are unique by nameKey, deleting an espacio frees its tasks, and
  * candidates come sorted by open tasks. Runs only when TEST_DATABASE_URL
  * points at a migrated database. Every row a test creates carries a per-run
@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -23,7 +23,7 @@ describe.skipIf(!url)("project flow repositories (test DB)", async () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();
@@ -107,7 +107,7 @@ describe.skipIf(!url)("project flow repositories (test DB)", async () => {
       await expect(newTask({ workflowId: workflowA, phaseId: phaseA })).resolves.toBeTruthy();
     });
 
-    it("rejects a fase without a etapa", async () => {
+    it("rejects a fase without an etapa", async () => {
       await expect(newTask({ workflowId: null, phaseId: phaseA })).rejects.toThrow();
     });
 
@@ -121,7 +121,7 @@ describe.skipIf(!url)("project flow repositories (test DB)", async () => {
         "NAME_TAKEN"
       );
       await expect(phasesRepo.createPhase(workflowA, { name: "   " }, actorId)).rejects.toThrow("EMPTY");
-      // The same name in another tramo is fine ("Minutas" in Presale and Diseño).
+      // The same name in another etapa is fine ("Minutas" in Presale and Diseño).
       const other = await phasesRepo.createPhase(workflowB, { name: "Anteproyecto" }, actorId);
       expect(other.workflowId).toBe(workflowB);
     });

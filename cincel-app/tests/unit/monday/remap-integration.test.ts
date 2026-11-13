@@ -21,7 +21,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 import * as schema from "@/lib/db/schema";
 import type { ImportDb } from "@/lib/import/refs";
@@ -62,7 +62,7 @@ describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_
   // It finds or creates the default tramos by key: one catalog-changing file at a time (tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();

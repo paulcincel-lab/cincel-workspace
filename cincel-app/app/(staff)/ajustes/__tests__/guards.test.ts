@@ -76,7 +76,7 @@ import AjustesPage from "../page";
 import AjustesGeneralLayout from "../(admin)/general/layout";
 import AjustesTemaLayout from "../(admin)/tema/layout";
 import AjustesHorarioLayout from "../(admin)/horario/layout";
-import AjustesTramosLayout from "../(admin)/etapas/layout";
+import AjustesEtapasLayout from "../(admin)/etapas/layout";
 import AjustesPuestosLayout from "../(admin)/puestos/layout";
 import AjustesEstatusLayout from "../(admin)/estatus/layout";
 import AjustesPermisosLayout from "../(admin)/permisos/layout";
@@ -89,7 +89,7 @@ const SEGMENTS: Record<string, SegmentLayout> = {
   general: AjustesGeneralLayout,
   tema: AjustesTemaLayout,
   horario: AjustesHorarioLayout,
-  tramos: AjustesTramosLayout,
+  etapas: AjustesEtapasLayout,
   puestos: AjustesPuestosLayout,
   estatus: AjustesEstatusLayout,
   permisos: AjustesPermisosLayout,
@@ -133,7 +133,7 @@ describe("/ajustes segment guards", () => {
     expect(navigation.notFound).not.toHaveBeenCalled();
   });
 
-  it.each(["permisos", "estatus", "monday", "google", "tramos", "puestos"])(
+  it.each(["permisos", "estatus", "monday", "google", "etapas", "puestos"])(
     "keeps /ajustes/%s for Administrador only (Dirección gets 404)",
     async (segment) => {
       as("Dirección", "Dirección");
