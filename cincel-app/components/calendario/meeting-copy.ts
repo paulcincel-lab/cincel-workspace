@@ -84,6 +84,12 @@ export const GOOGLE_STATE_COPY = {
   GONE: "Ya no está en Google Calendar.",
   NOT_ORGANIZER: "Solo quien organiza puede actualizar Google Calendar. El cambio quedó en Cincel.",
 } as const;
+/** Same notes when nobody but the organizer is invited: no invitation went out. */
+export const GOOGLE_STATE_COPY_ALONE = {
+  NO_GRANT: "Esta reunión solo está en Cincel.",
+  UNAVAILABLE: "Google Calendar no respondió; la agregaré a Google en cuanto responda.",
+  RATE_LIMITED: "Google Calendar no respondió; la agregaré a Google en cuanto responda.",
+} as const;
 export const GOOGLE_STATE_ACTION = {
   NO_GRANT: "Conectar y crear en Google",
   UNAVAILABLE: "Reintentar ahora",

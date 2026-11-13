@@ -1,5 +1,5 @@
 /** Pure formatting and rules of meetings (FE §5, §6.2). Client-safe. */
-import { GOOGLE_STATE_ACTION, GOOGLE_STATE_COPY } from "@/components/calendario/meeting-copy";
+import { GOOGLE_STATE_ACTION, GOOGLE_STATE_COPY, GOOGLE_STATE_COPY_ALONE } from "@/components/calendario/meeting-copy";
 import type { CalEventItem, GoogleSyncError } from "@/lib/types/calendario";
 
 const DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -57,10 +57,23 @@ export type GoogleState = {
 };
 
 /** Google state of a meeting (FE §6.2): the note and its one action. */
-export function googleStateOf(item: Pick<CalEventItem, "source" | "syncError" | "canEdit">): GoogleState {
+/**
+ * Whether anyone besides the organizer is on the meeting. Without the
+ * attendee list (older callers) it assumes there is someone.
+ */
+export function invitesOthers(item: Partial<Pick<CalEventItem, "attendees" | "organizer">>): boolean {
+  if (!item.attendees) return true;
+  const organizerId = item.organizer?.id ?? null;
+  return item.attendees.some((a) => !(organizerId && a.staffId === organizerId));
+}
+
+export function googleStateOf(
+  item: Pick<CalEventItem, "source" | "syncError" | "canEdit"> & Partial<Pick<CalEventItem, "attendees" | "organizer">>,
+): GoogleState {
   if (item.source !== "cincel" || !item.syncError) return { note: null, action: null };
   const code = item.syncError as GoogleSyncError;
-  const note = GOOGLE_STATE_COPY[code as keyof typeof GOOGLE_STATE_COPY] ?? null;
+  const alone = invitesOthers(item) ? null : GOOGLE_STATE_COPY_ALONE[code as keyof typeof GOOGLE_STATE_COPY_ALONE];
+  const note = alone ?? GOOGLE_STATE_COPY[code as keyof typeof GOOGLE_STATE_COPY] ?? null;
   if (!note) return { note: null, action: null };
   const label = GOOGLE_STATE_ACTION[code as keyof typeof GOOGLE_STATE_ACTION];
   if (!label || !item.canEdit) return { note, action: null };
