@@ -43,7 +43,7 @@ const TABLE = {
 const TIMELINE = {
   title: "Esta semana",
   items: [
-    { id: "t-1", title: "Entrega de planos", start: "2026-11-10", allDay: true, project: "Casa Ensenada", tramo: "diseno" },
+    { id: "t-1", title: "Entrega de planos", start: "2026-11-10", allDay: true, project: "Casa Ensenada", etapa: "diseno" },
     {
       id: "e-1",
       title: "Visita de obra",
@@ -52,7 +52,7 @@ const TIMELINE = {
       attendees: ["Luis", "Marta"],
       href: "/calendario?evento=e-1",
     },
-    { id: "t-2", title: "Colado", start: "2026-11-13", estimated: true, tramo: null },
+    { id: "t-2", title: "Colado", start: "2026-11-13", estimated: true, etapa: null },
   ],
 };
 
@@ -73,7 +73,7 @@ describe("render_table schema (RecordTableData + title)", () => {
     ["an unknown format", { ...TABLE, columns: [{ key: "a", label: "A", format: "usd" }] }],
     ["an unknown presentation style", { ...TABLE, columns: [{ key: "a", label: "A", hideOn: ["compacto"] }] }],
     ["a repeated column key", { ...TABLE, columns: [{ key: "a", label: "A" }, { key: "a", label: "B" }] }],
-    ["groupBy that is not a column", { ...TABLE, groupBy: "tramo" }],
+    ["groupBy that is not a column", { ...TABLE, groupBy: "etapa" }],
     ["heat on a missing column", { ...TABLE, heat: [{ key: "nope", warnAt: 1, critAt: 2 }] }],
     ["an object cell", { ...TABLE, rows: [{ name: { first: "Luis" } }] }],
     ["totals that are neither auto nor a map", { ...TABLE, totals: "sum" }],

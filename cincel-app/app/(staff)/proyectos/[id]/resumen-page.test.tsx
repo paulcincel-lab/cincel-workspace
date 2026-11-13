@@ -101,16 +101,16 @@ import ProjectPage from "./page";
 
 const SHELL = {
   detail: { id: PID },
-  project: { id: PID, name: "Local Espinopapa", tramo: null },
+  project: { id: PID, name: "Local Espinopapa", etapa: null },
   counts: { tareas: 1, archivos: 0, clientes: 0 },
   canManagePortal: false,
 };
 const RESUMEN = {
-  project: { id: PID, name: "Local Espinopapa", tramos: [] },
-  tramoCatalog: [],
+  project: { id: PID, name: "Local Espinopapa", etapas: [] },
+  etapaCatalog: [],
   files: [{ id: "f1" }, { id: "f2" }],
 };
-/** One admin task: "Tareas por tramo" has one group ("Administración"). */
+/** One admin task: "Tareas por etapa" has one group ("Administración"). */
 const SUMMARY = vi.hoisted(() => ({
   canViewTasks: true,
   includeAdmin: true,
@@ -189,7 +189,7 @@ describe("/proyectos/[id]", () => {
     await renderPage();
     expect(loaders.loadTareasListFirstPages).toHaveBeenCalledTimes(1);
     expect(loaders.loadTareasListFirstPages).toHaveBeenCalledWith(state.user, {
-      lists: [expect.objectContaining({ proyecto: PID, tramo: "__sin_tramo", orderBy: "retraso", incluirAdmin: true })],
+      lists: [expect.objectContaining({ proyecto: PID, etapa: "__sin_etapa", orderBy: "retraso", incluirAdmin: true })],
     });
     cleanup();
     vi.clearAllMocks();

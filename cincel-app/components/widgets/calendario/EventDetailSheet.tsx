@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import type { CalItem, DetailAction, MeetingDetail } from "@/lib/types/calendario";
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction } from "./event-detail-model";
-import { DetailActionButton, KindChip, TaskFacts, TramoBand } from "./EventDetailParts";
+import { DetailActionButton, KindChip, TaskFacts, EtapaBand } from "./EventDetailParts";
 import { MeetingDetailSheet } from "./MeetingParts";
 
 export type EventDetailSheetProps = {
@@ -38,7 +38,7 @@ function TaskDetailSheet({ item, actions, onClose }: EventDetailSheetProps) {
       >
         <span aria-hidden data-slot="drag-handle" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/40" />
         <div className="flex flex-col gap-3 p-4">
-          <TramoBand tramo={item.tramo} />
+          <EtapaBand etapa={item.etapa} />
           <KindChip item={item} />
           <SheetTitle tabIndex={-1} className="text-2xl leading-tight font-semibold outline-none">
             {item.title}

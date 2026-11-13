@@ -6,7 +6,7 @@ export function hasActiveCalendarioFilters(filters: CalendarioFilters): boolean 
     filters.mostrar !== "todo" ||
     filters.quien !== "yo" ||
     filters.proyectos.length > 0 ||
-    Boolean(filters.tramo) ||
+    Boolean(filters.etapa) ||
     Boolean(filters.responsable) ||
     !filters.apoyo ||
     filters.ocultarCompletadas

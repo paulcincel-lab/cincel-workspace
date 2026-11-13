@@ -22,7 +22,7 @@ const MODES = ["light", "dark"] as const;
 
 /**
  * Token pairs of `CONTRAST_PAIRS` the widget paints: titles, subtitles and
- * meta on `card`, ink on the tramo / icon tints (`chart-1..3`), destructive,
+ * meta on `card`, ink on the etapa / icon tints (`chart-1..3`), destructive,
  * success and warning badges, the ring fills, borders and the focus ring.
  */
 const ENTITY_GRID_PAIRS = new Set([

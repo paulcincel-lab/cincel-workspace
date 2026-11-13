@@ -114,7 +114,7 @@ describe("Sidebar accessibility", () => {
   it("has no serious or critical axe violations for a non-admin with an empty nav", async () => {
     applyAppearance("azul", "light");
     const { container } = render(
-      <AppShellClient nav={{ items: [], tramos: [], footer: [] }} session={STAFF_SESSION} today={null}>
+      <AppShellClient nav={{ items: [], etapas: [], footer: [] }} session={STAFF_SESSION} today={null}>
         <h1>Proyectos</h1>
       </AppShellClient>,
     );

@@ -42,12 +42,12 @@ function uuid(r: Rand): string {
   return `${part(8)}-${part(4)}-${part(4)}-${part(4)}-${part(12)}`;
 }
 
-const TRAMO_KEYS = ["presale", "diseno", "construccion", "decoracion", "tramo_2", "a-b"];
+const ETAPA_KEYS = ["presale", "diseno", "construccion", "decoracion", "etapa_2", "a-b"];
 const SEARCHES = ["plano", "Cambiar tapas", "niño & café", "a+b=c", "100%", "¿qué?", "?q=1&x=2", "línea #3"];
 
 function randomQuery(r: Rand): TareasQuery {
   return {
-    tramo: maybe(r, () => oneOf(r, TRAMO_KEYS)),
+    etapa: maybe(r, () => oneOf(r, ETAPA_KEYS)),
     responsable: maybe(r, () => (r() < 0.5 ? "yo" : uuid(r))),
     // One project in `proyecto`, two or more in `proyectos` (#1045).
     ...proyectosPatch(r() < 0.25 ? [uuid(r), uuid(r)] : r() < 0.5 ? [uuid(r)] : []),
@@ -84,7 +84,7 @@ describe("parseTareasQuery / toTareasSearch", () => {
   it("round trips each field on its own", () => {
     const id = "0b9c1f7e-3a4d-4c2b-9e8f-1a2b3c4d5e6f";
     const cases: Partial<TareasQuery>[] = [
-      { tramo: "diseno" },
+      { etapa: "diseno" },
       { responsable: "yo" },
       { responsable: id },
       { proyecto: id },
@@ -108,7 +108,7 @@ describe("parseTareasQuery / toTareasSearch", () => {
 
   it("falls back to the defaults for unknown or malformed values", () => {
     const sp = new URLSearchParams({
-      tramo: "dise no!",
+      etapa: "dise no!",
       responsable: "alguien",
       proyecto: "123",
       estado: "cancelado",
@@ -120,8 +120,8 @@ describe("parseTareasQuery / toTareasSearch", () => {
   });
 
   it("keeps the valid fields when others are malformed", () => {
-    const sp = new URLSearchParams({ tramo: "presale", estado: "nope", mostrar: "x" });
-    expect(parseTareasQuery(sp)).toEqual({ ...DEFAULT_TAREAS_QUERY, tramo: "presale" });
+    const sp = new URLSearchParams({ etapa: "presale", estado: "nope", mostrar: "x" });
+    expect(parseTareasQuery(sp)).toEqual({ ...DEFAULT_TAREAS_QUERY, etapa: "presale" });
   });
 
   it("trims and caps the search text", () => {
@@ -135,27 +135,27 @@ describe("parseTareasQuery / toTareasSearch", () => {
   });
 
   it("writes params in a fixed order with a leading ?", () => {
-    expect(toTareasSearch({ q: "a b", tramo: "presale", responsable: "yo" })).toBe("?etapa=presale&responsable=yo&q=a+b");
+    expect(toTareasSearch({ q: "a b", etapa: "presale", responsable: "yo" })).toBe("?etapa=presale&responsable=yo&q=a+b");
   });
 
   it("ignores the params of the removed view switch and Calendario view", () => {
-    const sp = new URLSearchParams({ vista: "calendario", cal: "semana", fecha: "2026-11-06", tramo: "presale" });
+    const sp = new URLSearchParams({ vista: "calendario", cal: "semana", fecha: "2026-11-06", etapa: "presale" });
     const query = parseTareasQuery(sp);
-    expect(query).toEqual({ ...DEFAULT_TAREAS_QUERY, tramo: "presale" });
+    expect(query).toEqual({ ...DEFAULT_TAREAS_QUERY, etapa: "presale" });
     expect(toTareasSearch(query)).toBe("?etapa=presale");
   });
 });
 
 describe("helpers", () => {
   it("toUrlSearchParams keeps the first of repeated values and skips undefined", () => {
-    const sp = toUrlSearchParams({ estado: ["pendiente", "bloqueado"], tramo: "presale", q: undefined });
+    const sp = toUrlSearchParams({ estado: ["pendiente", "bloqueado"], etapa: "presale", q: undefined });
     expect(sp.get("estado")).toBe("pendiente");
-    expect(sp.get("tramo")).toBe("presale");
+    expect(sp.get("etapa")).toBe("presale");
     expect(sp.has("q")).toBe(false);
   });
 
   it("hasTareasFilters / clearTareasFilters drop every filter", () => {
-    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo: "presale", q: "x" };
+    const q: TareasQuery = { ...DEFAULT_TAREAS_QUERY, etapa: "presale", q: "x" };
     expect(hasTareasFilters(q)).toBe(true);
     const cleared = clearTareasFilters();
     expect(cleared).toEqual(DEFAULT_TAREAS_QUERY);

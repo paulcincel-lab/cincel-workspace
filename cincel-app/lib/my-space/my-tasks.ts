@@ -239,11 +239,11 @@ export type TaskRow = {
   title: string;
   projectId: string;
   projectName: string;
-  /** The task's tramo (workflow); null = "Sin tramo". */
-  tramoId: string | null;
-  tramoKey: string | null;
-  tramoName: string;
-  tramoSortOrder: number;
+  /** The task's etapa (workflow); null = "Sin etapa". */
+  etapaId: string | null;
+  etapaKey: string | null;
+  etapaName: string;
+  etapaSortOrder: number;
   status: TaskListItem["status"];
   customStatus: TaskListItem["customStatus"];
   /** The Responsable (can't also be apoyo). */
@@ -265,7 +265,7 @@ export type TaskRow = {
   retraso: number;
 };
 
-export const SIN_TRAMO = "Sin etapa";
+export const SIN_ETAPA = "Sin etapa";
 
 const PRIORITY_LABEL: Record<TaskListItem["priority"], string> = { alta: "Alta", media: "Media", baja: "Baja" };
 
@@ -282,10 +282,10 @@ export function taskRow(task: TaskListItem, today: string): TaskRow {
     title: task.title,
     projectId: task.project?.id ?? task.projectId,
     projectName: task.project?.name ?? "",
-    tramoId: workflow?.id ?? null,
-    tramoKey: workflow?.key ?? null,
-    tramoName: workflow?.name ?? SIN_TRAMO,
-    tramoSortOrder: workflow?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+    etapaId: workflow?.id ?? null,
+    etapaKey: workflow?.key ?? null,
+    etapaName: workflow?.name ?? SIN_ETAPA,
+    etapaSortOrder: workflow?.sortOrder ?? Number.MAX_SAFE_INTEGER,
     status: task.status,
     customStatus: task.customStatus,
     managerId: task.managerId,
@@ -301,9 +301,9 @@ export function taskRow(task: TaskListItem, today: string): TaskRow {
   };
 }
 
-/** Id of a tramo group inside its project group. */
-export function tramoGroupId(projectId: string, tramoId: string | null): string {
-  return `${projectId}:${tramoId ?? "sin-tramo"}`;
+/** Id of an etapa group inside its project group. */
+export function etapaGroupId(projectId: string, etapaId: string | null): string {
+  return `${projectId}:${etapaId ?? "sin-etapa"}`;
 }
 
 export type ChecklistMetrics = {
@@ -368,7 +368,7 @@ export function miEspacioCsv(rows: readonly TaskRow[]): string {
     [...MI_ESPACIO_CSV_HEADER],
     ...rows.map((row) => [
       row.projectName,
-      row.tramoName,
+      row.etapaName,
       row.title,
       row.estatus,
       row.due ?? "",

@@ -47,7 +47,7 @@ export const NAV_LABELS: Record<NavItemKey, string> = {
 };
 
 export type ClientNavItem = Omit<NavItem, "icon">;
-export type ClientNavModel = { items: ClientNavItem[]; tramos: NavModel["tramos"]; footer: ClientNavItem[] };
+export type ClientNavModel = { items: ClientNavItem[]; etapas: NavModel["etapas"]; footer: ClientNavItem[] };
 
 function stripIcon({ key, label, href, badge }: NavItem): ClientNavItem {
   return badge === undefined ? { key, label, href } : { key, label, href, badge };
@@ -57,7 +57,7 @@ function stripIcon({ key, label, href, badge }: NavItem): ClientNavItem {
 export function toClientNavModel(nav: NavModel): ClientNavModel {
   return {
     items: nav.items.map(stripIcon),
-    tramos: nav.tramos.map((t) => ({ ...t })),
+    etapas: nav.etapas.map((t) => ({ ...t })),
     footer: nav.footer.map(stripIcon),
   };
 }
@@ -65,7 +65,7 @@ export function toClientNavModel(nav: NavModel): ClientNavModel {
 /** The nav model with each item's icon restored from `NAV_ICONS`. */
 export function withNavIcons(nav: ClientNavModel): NavModel {
   const attach = (item: ClientNavItem): NavItem => ({ ...item, icon: NAV_ICONS[item.key] });
-  return { items: nav.items.map(attach), tramos: nav.tramos, footer: nav.footer.map(attach) };
+  return { items: nav.items.map(attach), etapas: nav.etapas, footer: nav.footer.map(attach) };
 }
 
 function pathOf(href: string): string {

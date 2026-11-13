@@ -11,7 +11,7 @@ import { availabilityRows, buildTeamPeople } from "@/lib/personas/team";
 import { usePersonasDashboard } from "@/lib/stores/personas-dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import { EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_STAFF, EQUIPO_TRAMOS } from "./fixtures/equipo";
+import { EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_STAFF, EQUIPO_ETAPAS } from "./fixtures/equipo";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
@@ -84,12 +84,12 @@ afterEach(cleanup);
 
 describe("Equipo data", () => {
   it("shows puesto from the positions, never the access role", () => {
-    const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+    const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_ETAPAS);
     expect(people.map((p) => p.puesto)).toEqual(["Arquitecta proyectista", "Residente de obra", null]);
     for (const person of people) {
       expect(["Administrador", "Colaborador", "Dirección"]).not.toContain(person.puesto);
     }
-    expect(people.map((p) => p.tramo)).toEqual(["diseno", "construccion", null]);
+    expect(people.map((p) => p.etapa)).toEqual(["diseno", "construccion", null]);
     expect(people[0].href).toBe(`/personas/equipo/${EQUIPO_STAFF[0].id}`);
   });
 
@@ -108,14 +108,14 @@ describe("Equipo data", () => {
 
 describe("TeamGrid hours", () => {
   it("leaves the hours column out when weekHours is null for all rows", () => {
-    const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+    const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_ETAPAS);
     render(<TeamGrid people={people} />);
     expect(calls.widget).toHaveLength(1);
     for (const props of calls.widget) expect(props.show).not.toContain("hours");
   });
 
   it("shows the hours column when the server returned hours, even if they are all zero", () => {
-    const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+    const { people } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_ETAPAS);
     render(<TeamGrid people={people} />);
     for (const props of calls.widget) expect(props.show).toContain("hours");
   });
@@ -123,7 +123,7 @@ describe("TeamGrid hours", () => {
 
 describe("TeamGrid styles", () => {
   it.each(STYLES)("hands the widget the same people and show list in %s", (style) => {
-    const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+    const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_ETAPAS);
     render(
       <StyleProvider style={style} scope="staff">
         <TeamGrid people={people} emails={emails} />
@@ -136,7 +136,7 @@ describe("TeamGrid styles", () => {
   });
 
   it("renders Ver tareas, correo and the Cutto chat as links; Cutto opens in a new tab", () => {
-    const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+    const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_ETAPAS);
     render(<TeamGrid people={people} emails={emails} />);
     const ana = within(screen.getByText("Ana Ruiz").closest("li") as HTMLElement);
     expect(ana.getByRole("link", { name: /Ver tareas/ }).getAttribute("href")).toBe(
@@ -183,7 +183,7 @@ describe("AvailabilityWeek", () => {
 });
 
 describe("Personas dashboard: availability filter", () => {
-  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_ETAPAS);
 
   function Equipo() {
     return (
@@ -248,7 +248,7 @@ describe("Personas dashboard: availability filter", () => {
 });
 
 describe("Personas dashboard: collapse", () => {
-  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_TRAMOS);
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_NO_HOURS, EQUIPO_ETAPAS);
 
   it("collapses Disponibilidad esta semana and persists the choice", () => {
     render(<AvailabilityWeek rows={availabilityRows(people)} />);

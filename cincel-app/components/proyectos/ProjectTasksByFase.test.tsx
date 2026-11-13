@@ -107,7 +107,7 @@ const FASE_TASKS: TaskListItem[] = [
   task("t7", { kind: "admin", workflow: null, workflowId: null, title: "Asignar cliente y origen" }),
 ];
 
-const TRAMO_TASKS: TaskListItem[] = [
+const ETAPA_TASKS: TaskListItem[] = [
   task("a1", { workflow: PRESALE, workflowId: PRESALE.id, status: "completado", title: "Levantamiento" }),
   task("a2", { workflow: PRESALE, workflowId: PRESALE.id, title: "Cotización" }),
   task("a3", { title: "Obra negra" }),
@@ -153,7 +153,7 @@ describe("groupProjectTasks", () => {
     expect(instalaciones.inProgress).toBe(1);
     expect(instalaciones.pending).toBe(1);
     expect(instalaciones.lateOrBlocked).toBe(1);
-    expect(instalaciones.tramo?.key).toBe("construccion");
+    expect(instalaciones.etapa?.key).toBe("construccion");
   });
 
   it("lists subtareas on their parent, not as rows", () => {
@@ -163,12 +163,12 @@ describe("groupProjectTasks", () => {
   });
 
   it("falls back to etapa groups when no task has a fase", () => {
-    const { mode, groups } = groupProjectTasks(TRAMO_TASKS, { includeAdmin: false, today: TODAY });
-    expect(mode).toBe("tramo");
+    const { mode, groups } = groupProjectTasks(ETAPA_TASKS, { includeAdmin: false, today: TODAY });
+    expect(mode).toBe("etapa");
     expect(groups.map((g) => [g.label, g.kind, g.total, g.progressPct])).toEqual([
-      ["Presale", "tramo", 2, 50],
-      ["Construcción", "tramo", 1, 0],
-      ["Sin etapa", "sin_tramo", 1, 0],
+      ["Presale", "etapa", 2, 50],
+      ["Construcción", "etapa", 1, 0],
+      ["Sin etapa", "sin_etapa", 1, 0],
     ]);
     expect(groups.every((g) => g.phase === null)).toBe(true);
   });
@@ -192,7 +192,7 @@ describe("groupProjectTasks", () => {
 
   it("does not turn admin fases into fase mode for non-admins", () => {
     const tasks = [task("a", { kind: "admin", phase: DEMOLICIONES }), task("b")];
-    expect(groupProjectTasks(tasks, { includeAdmin: false, today: TODAY }).mode).toBe("tramo");
+    expect(groupProjectTasks(tasks, { includeAdmin: false, today: TODAY }).mode).toBe("etapa");
   });
 });
 
@@ -233,7 +233,7 @@ describe("table data", () => {
     expect(data.totals).toMatchObject({ nombre: "Total", total: 5, completadas: 3, avance: 60 });
     const analiticoOnly = data.columns.filter((c) => c.hideOn?.includes("visual")).map((c) => c.key);
     expect(analiticoOnly).toEqual(["completadas", "enProceso", "pendientes", "vencidas"]);
-    expect(buildGroupsTable([], "tramo").columns[0].label).toBe("Etapa");
+    expect(buildGroupsTable([], "etapa").columns[0].label).toBe("Etapa");
   });
 
   it("formats dates and days in es-MX lowercase", () => {
@@ -297,7 +297,7 @@ describe("ProjectTasksByFase", () => {
   );
 
   it("groups by etapa when the project has no fase data", () => {
-    renderTab("visual", { tasks: TRAMO_TASKS });
+    renderTab("visual", { tasks: ETAPA_TASKS });
     expect(screen.getByRole("heading", { name: "Avance por etapa" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Avance por fase" })).toBeNull();
     expect(screen.getByRole("button", { name: "Agregar tarea a Presale" })).toBeTruthy();
@@ -321,11 +321,11 @@ describe("ProjectTasksByFase", () => {
     const openNewTask = vi.spyOn(useNewTaskUi.getState(), "openNewTask");
     renderTab("visual");
     fireEvent.click(screen.getByRole("button", { name: "Agregar tarea a Instalaciones" }));
-    expect(openNewTask).toHaveBeenCalledWith({ projectId: "p1", tramoKey: "construccion" }, "proyecto");
+    expect(openNewTask).toHaveBeenCalledWith({ projectId: "p1", etapaKey: "construccion" }, "proyecto");
     expect(useNewTaskUi.getState()).toMatchObject({
       open: true,
       source: "proyecto",
-      defaults: { projectId: "p1", tramoKey: "construccion" },
+      defaults: { projectId: "p1", etapaKey: "construccion" },
     });
     // No dialog of its own, and closing it never refreshes the route.
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -445,7 +445,7 @@ describe("ProjectTareasTab", () => {
 
 describe("paged rows (#1051)", () => {
   it("maps the estado chip, Responsable, search and Ocultar completadas to server filters", () => {
-    const base = { tramo: null, proyecto: "p1" };
+    const base = { etapa: null, proyecto: "p1" };
     const q = (patch: Partial<ProjectTasksQuery>): ProjectTasksQuery => ({ estado: "todas", responsable: null, q: "", ...patch });
     const opts = { hideCompleted: false, includeAdmin: false };
     expect(projectTasksListFilters("p1", q({}), opts)).toEqual({ ...base, responsable: null, estado: null, q: null });

@@ -79,7 +79,7 @@ export type { ToolPreviewRow };
 
 export type ToolStepState = "running" | "needs-confirmation" | "confirmed" | "done" | "error" | "denied";
 
-/** Tramo / chart slot tint of the step dot. */
+/** Etapa / chart slot tint of the step dot. */
 export type ToolStepTone = 1 | 2 | 3 | 4 | 5 | "warning";
 
 /** One parameter chip, Spanish key ("proyecto", "estado", "al", "responsable"). */
@@ -188,7 +188,8 @@ const PARAM_KEYS: Record<string, string> = {
   name: "nombre",
   client: "cliente",
   workflow: "etapa",
-  tramo: "etapa",
+  etapa: "etapa",
+  tramo: "etapa", // calls and results stored before the rename
   stage: "etapa",
   priority: "prioridad",
   range: "periodo",
@@ -230,7 +231,7 @@ function paramValue(key: string, value: unknown): string | null {
   if (typeof value === "string") {
     const clean = value.replace(/\s+/g, " ").trim();
     if (!clean) return null;
-    if (key === "workflow" || key === "tramo") return WORKFLOW_NAMES[clean] ?? clean;
+    if (key === "workflow" || key === "etapa" || key === "tramo") return WORKFLOW_NAMES[clean] ?? clean;
     if (key === "status") return taskStatusLabel(clean).toLowerCase();
     if (key === "due") return DUE_WORDS[clean] ?? clean;
     if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return formatDueDate(clean);
@@ -337,10 +338,10 @@ export function rowsOf(output: unknown): number | null {
   return null;
 }
 
-/** A task-list result as cards: title, tramo, person, due date and days late. */
+/** A task-list result as cards: title, etapa, person, due date and days late. */
 export type ToolTaskCard = {
   title: string;
-  tramo: { key: string; name: string; sortOrder: number } | null;
+  etapa: { key: string; name: string; sortOrder: number } | null;
   person: string | null;
   dueDate: string | null;
   daysLate: number | null;
@@ -382,13 +383,13 @@ export function taskCardsOf(output: unknown, today: string = todayIso()): ToolTa
     if (!("commitmentDate" in item)) return null;
     const title = str(item, "title") || str(item, "description");
     if (!title) return null;
-    const tramoName = str(item, "tramo") || str(item, "workflow");
-    const key = fold(tramoName);
+    const etapaName = str(item, "etapa") || str(item, "tramo") || str(item, "workflow");
+    const key = fold(etapaName);
     const dueDate = str(item, "commitmentDate") || null;
     const late = dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? daysBetween(dueDate, today) : null;
     cards.push({
       title,
-      tramo: tramoName ? { key, name: tramoName, sortOrder: 0 } : null,
+      etapa: etapaName ? { key, name: etapaName, sortOrder: 0 } : null,
       person: str(item, "manager") || null,
       dueDate,
       daysLate: late !== null && late > 0 ? late : null,

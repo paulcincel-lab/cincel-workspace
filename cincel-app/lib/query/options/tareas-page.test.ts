@@ -14,7 +14,7 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/page-data/tareas-actions", () => actions);
 vi.mock("@/lib/actions/tasks-actions", () => ({ listSubtasksAction: vi.fn(), listTaskDependenciesAction: vi.fn() }));
-vi.mock("@/lib/actions/tramo-start-actions", () => ({ previewStartTramoAction: vi.fn() }));
+vi.mock("@/lib/actions/etapa-start-actions", () => ({ previewStartEtapaAction: vi.fn() }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowAction: vi.fn() }));
 
 import { qk } from "@/lib/query/keys";
@@ -34,12 +34,12 @@ import {
   tareasSummaryOptions,
 } from "./tareas";
 
-const FILTERS = { tramo: "diseno", proyecto: null, responsable: "yo" as const, estado: null, q: "plano" };
+const FILTERS = { etapa: "diseno", proyecto: null, responsable: "yo" as const, estado: null, q: "plano" };
 const KEY = { estilo: "visual" as const, ...FILTERS };
 
 const PAGE: TareasPageData = {
-  facets: { total: 3, byTramo: { diseno: 3 }, projects: [] },
-  tramos: [{ id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 }],
+  facets: { total: 3, byEtapa: { diseno: 3 }, projects: [] },
+  etapas: [{ id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 }],
   staff: [{ id: "s1", name: "Ana Ruiz" }],
   board: { columns: { pendiente: { rows: [], total: 0, nextCursor: null } }, statuses: [] },
   list: { rows: [], nextCursor: "n1", total: 70 },
@@ -67,7 +67,7 @@ describe("seedTareasPage / tareasPageOptions", () => {
   it("seeds the facets, the board and the first Lista page, and keeps the bundle without the rows", () => {
     const client = createTestQueryClient();
     const kept = seedTareasPage(client, KEY, PAGE);
-    expect(kept).toEqual({ facets: PAGE.facets, tramos: PAGE.tramos, staff: PAGE.staff });
+    expect(kept).toEqual({ facets: PAGE.facets, etapas: PAGE.etapas, staff: PAGE.staff });
     expect(client.getQueryData(qk.tareas.facets(FILTERS))).toEqual(PAGE.facets);
     expect(client.getQueryData(qk.tareas.board(FILTERS))).toEqual(PAGE.board);
     expect(client.getQueryData(qk.tareas.list(FILTERS))).toEqual({ pages: [PAGE.list], pageParams: [null] });
@@ -174,8 +174,8 @@ describe("Analítico (#988)", () => {
       unfiltered: { projects: 0, total: 0 },
     };
     seedTareasPage(client, { ...FILTERS, estilo: "analitico" }, {
-      facets: { total: 0, byTramo: {}, projects: [] },
-      tramos: [],
+      facets: { total: 0, byEtapa: {}, projects: [] },
+      etapas: [],
       staff: [],
       summary,
       groups: [{ filters: group, page }],

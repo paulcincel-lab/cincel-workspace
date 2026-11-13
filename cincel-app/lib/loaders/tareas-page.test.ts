@@ -21,15 +21,15 @@ vi.mock("@/lib/db/client", () => {
   return { db: chain };
 });
 
-/** Three projects; the first has a tramo group and a "Sin tramo" one. */
+/** Three projects; the first has an etapa group and a "Sin etapa" one. */
 const summary = vi.hoisted(() => {
   const c = { total: 1, open: 1, overdue: 0, blocked: 0, daysLateSum: 0 };
   const diseno = { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 };
   const none = { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 };
-  const project = (id: string, tramos: (typeof diseno | typeof none)[]) => ({
+  const project = (id: string, etapas: (typeof diseno | typeof none)[]) => ({
     project: { id, name: id },
     ...c,
-    tramos: tramos.map((tramo) => ({ tramo, ...c })),
+    etapas: etapas.map((etapa) => ({ etapa, ...c })),
   });
   return {
     projects: [project("p1", [diseno, none]), project("p2", [diseno]), project("p3", [diseno])],
@@ -40,14 +40,14 @@ const summary = vi.hoisted(() => {
 
 const repo = vi.hoisted(() => ({
   taskSummary: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => summary),
-  taskFacets: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({ total: 0, byTramo: {}, projects: [] })),
+  taskFacets: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({ total: 0, byEtapa: {}, projects: [] })),
   listBoardColumns: vi.fn(async () => ({})),
   listTasksPage: vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({ rows: [], nextCursor: null, total: 0 })),
   listTaskRows: vi.fn(async () => []),
 }));
 vi.mock("@/lib/repositories/tasks-repository", () => repo);
 vi.mock("@/lib/repositories/workflows-repository", () => ({
-  listTramosNav: vi.fn(async () => [
+  listEtapasNav: vi.fn(async () => [
     { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 },
     { id: "w2", key: " ", name: "Sin clave", sortOrder: 2 },
   ]),
@@ -67,7 +67,7 @@ import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 
 import { loadTareasBoardColumn, loadTareasListPage, loadTareasPage } from "./tareas";
 
-const NO_FILTERS = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+const NO_FILTERS = { etapa: null, proyecto: null, responsable: null, estado: null, q: null };
 
 function user(access: AuthenticatedUser["access"]): AuthenticatedUser {
   return {
@@ -104,7 +104,7 @@ describe("loadTareasPage", () => {
 
   it("keeps the etapas with a key", async () => {
     const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS });
-    expect(data.tramos.map((t) => t.key)).toEqual(["diseno"]);
+    expect(data.etapas.map((t) => t.key)).toEqual(["diseno"]);
   });
 
   it("Tablero: every catalog column, the first rows per column; no Lista page", async () => {
@@ -138,9 +138,9 @@ describe("loadTareasPage", () => {
       expect(call[2]).toEqual({ cursor: null, limit: 30, orderBy: "retraso" });
     }
     // Each page is keyed by the group's list filters (`tareasGroupFilters`).
-    expect(data.groups?.map((g) => [g.filters.proyecto, g.filters.tramo, g.filters.orderBy])).toEqual([
+    expect(data.groups?.map((g) => [g.filters.proyecto, g.filters.etapa, g.filters.orderBy])).toEqual([
       ["p1", "diseno", "retraso"],
-      ["p1", "__sin_tramo", "retraso"],
+      ["p1", "__sin_etapa", "retraso"],
       ["p2", "diseno", "retraso"],
     ]);
     expect(repo.listBoardColumns).not.toHaveBeenCalled();
@@ -151,7 +151,7 @@ describe("loadTareasPage", () => {
   it("maps the filters: etapa key → workflow id, Yo → the viewer (admin kinds for an admin only)", async () => {
     await loadTareasPage(user("Administrador"), {
       estilo: "analitico",
-      tramo: "diseno",
+      etapa: "diseno",
       proyecto: "p1",
       responsable: "yo",
       estado: "pendiente",
@@ -166,7 +166,7 @@ describe("loadTareasPage", () => {
       workflowId: "w1",
       projectId: "p1",
     });
-    // The facets ignore tramo and proyecto (the chips and the Proyecto options).
+    // The facets ignore etapa and proyecto (the chips and the Proyecto options).
     expect(repo.taskFacets.mock.calls[0][0]).toEqual({
       topLevelOnly: true,
       search: "plano",
@@ -182,7 +182,7 @@ describe("loadTareasPage", () => {
   });
 
   it("an unknown etapa loads no rows", async () => {
-    const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS, tramo: "otro" });
+    const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS, etapa: "otro" });
     expect(repo.listTasksPage).not.toHaveBeenCalled();
     expect(repo.taskSummary).not.toHaveBeenCalled();
     expect(data.summary?.projects).toEqual([]);

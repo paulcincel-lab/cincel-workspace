@@ -5,12 +5,12 @@ import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "re
 import { FileText } from "lucide-react";
 
 import { EmptyState } from "@/components/shell/EmptyState";
-import { ProjectNoTramo } from "@/components/proyectos/ProjectNoTramo";
+import { ProjectNoEtapa } from "@/components/proyectos/ProjectNoEtapa";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Button } from "@/components/ui/shadcn/button";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { QuickAddRow, type QuickAddCreated, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
-import { NEUTRAL_TONE, ringOffset, tramoTone, type TramoTone } from "@/components/widgets/resumen-tones";
+import { NEUTRAL_TONE, ringOffset, etapaTone, type EtapaTone } from "@/components/widgets/resumen-tones";
 import { SCurveWidget } from "@/components/widgets/SCurveWidget";
 import { StatusDonutWidget } from "@/components/widgets/StatusDonutWidget";
 import { TeamLoadWidget } from "@/components/widgets/TeamLoadWidget";
@@ -18,21 +18,21 @@ import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
 import {
   activityItems,
   fileTypeLabel,
-  nextTramoHint,
-  RESUMEN_NO_TRAMO,
+  nextEtapaHint,
+  RESUMEN_NO_ETAPA,
   shortDate,
   TEAM_LOAD_MAX,
   type ActivityItem,
   type NextTask,
   type ProjectSummaryInput,
-  type TramoProgress,
+  type EtapaProgress,
 } from "@/lib/proyectos/project-summary";
 import {
   resumenHeroCounts,
   resumenNextCards,
   resumenStatusCounts,
   resumenTeamLoadCards,
-  resumenTramoProgress,
+  resumenEtapaProgress,
   type ResumenTareasSummary,
 } from "@/lib/proyectos/resumen-summary";
 import type { HistoryEvent } from "@/lib/types/core";
@@ -43,10 +43,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Proyecto · Resumen, Visual style (frame `ProyectoResumen-Visual`): charts
- * and motion. In order: the progress hero (ring, current tramo, tramo track,
- * chips), three cards (tareas por estatus, avance por tramo, equipo y carga),
+ * and motion. In order: the progress hero (ring, current etapa, etapa track,
+ * chips), three cards (tareas por estatus, avance por etapa, equipo y carga),
  * the S-curve against plan, "Lo que sigue" with the quick-add and "Actividad
- * reciente", and the recent Drive files. The counts, tramo bars and next
+ * reciente", and the recent Drive files. The counts, etapa bars and next
  * tasks come from the server's task numbers (`qk.proyectos.resumenSummary(id)`,
  * #1051), which a quick-add refreshes. Budget data is never
  * rendered here. Every chart has `role="img"`, a label and a visually hidden
@@ -60,7 +60,7 @@ export type ResumenVisualHistory = {
 
 export type ResumenVisualLayoutProps = {
   data: ProjectSummaryInput;
-  /** The task numbers (`qk.proyectos.resumenSummary(id)`): counts, tramo bars, team, next tasks. */
+  /** The task numbers (`qk.proyectos.resumenSummary(id)`): counts, etapa bars, team, next tasks. */
   summary: ResumenTareasSummary;
   history: ResumenVisualHistory;
   /** `activities.canCreateActivity`: "Nueva tarea" and the quick-add. */
@@ -93,7 +93,7 @@ function lowerFirst(text: string): string {
   return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 }
 
-function tramoLine(step: TramoProgress): string {
+function etapaLine(step: EtapaProgress): string {
   if (step.state === "done") return `${step.pct} %${step.open > 0 ? ` · ${plural(step.open, "pendiente", "pendientes")}` : ""}`;
   if (step.state === "current") return `${step.pct} % · en curso`;
   return step.startsOn ? `Inicia ${shortDate(step.startsOn)}` : "Sin iniciar";
@@ -108,15 +108,15 @@ function Hero({
   counts,
 }: {
   data: ProjectSummaryInput;
-  progress: TramoProgress[];
-  tone: TramoTone;
+  progress: EtapaProgress[];
+  tone: EtapaTone;
   counts: { open: number; overdue: number; blocked: number };
 }) {
-  const { project, portfolio, taskStats, schedule, tramoCatalog } = data;
+  const { project, portfolio, taskStats, schedule, etapaCatalog } = data;
   const real = Math.max(0, Math.min(100, Math.round(portfolio?.real ?? project.progress)));
   const plan = schedule && portfolio?.plan != null ? Math.round(portfolio.plan) : null;
   const current = progress.find((step) => step.state === "current") ?? null;
-  const nextTramo = nextTramoHint(tramoCatalog, project);
+  const nextEtapa = nextEtapaHint(etapaCatalog, project);
   const next = portfolio?.nextDelivery ?? null;
   const chipBase = "inline-flex items-center rounded-full px-3 py-[5px] text-[13px] font-medium";
 
@@ -164,16 +164,16 @@ function Hero({
             </span>
           </div>
         ) : (
-          // No started tramo (#1043): no suggested track, the empty state with "Iniciar un tramo".
-          <ProjectNoTramo projectId={project.id} tramos={tramoCatalog} />
+          // No started etapa (#1043): no suggested track, the empty state with "Iniciar una etapa".
+          <ProjectNoEtapa projectId={project.id} etapas={etapaCatalog} />
         )}
 
         {progress.length > 0 ? (
           <ol className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {progress.map((step) => {
-              const stepTone = tramoTone(step.key, tramoCatalog);
+              const stepTone = etapaTone(step.key, etapaCatalog);
               return (
-                <li key={step.tramoId} className="flex min-w-0 flex-col gap-1.5">
+                <li key={step.etapaId} className="flex min-w-0 flex-col gap-1.5">
                   <span
                     aria-hidden="true"
                     className={cn("block h-2 overflow-hidden rounded-full", step.state === "next" && "bg-muted")}
@@ -198,13 +198,13 @@ function Hero({
                   >
                     {step.label}
                   </span>
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{tramoLine(step)}</span>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{etapaLine(step)}</span>
                 </li>
               );
             })}
-            {nextTramo ? (
-              <li data-slot="tramo-next" className="flex min-w-0 flex-col justify-end gap-1.5">
-                <span className="truncate text-[13px] text-muted-foreground">Siguiente: {nextTramo.name}</span>
+            {nextEtapa ? (
+              <li data-slot="etapa-next" className="flex min-w-0 flex-col justify-end gap-1.5">
+                <span className="truncate text-[13px] text-muted-foreground">Siguiente: {nextEtapa.name}</span>
               </li>
             ) : null}
           </ol>
@@ -231,17 +231,17 @@ function Hero({
   );
 }
 
-// ── Tramo bars ──────────────────────────────────────────────────────────────
+// ── Etapa bars ──────────────────────────────────────────────────────────────
 
-function TramoBars({ progress, data }: { progress: TramoProgress[]; data: ProjectSummaryInput }) {
+function EtapaBars({ progress, data }: { progress: EtapaProgress[]; data: ProjectSummaryInput }) {
   const label = `Avance por etapa: ${progress.map((step) => `${step.label} ${step.pct} %`).join(", ")}`;
   return (
     <>
       <div role="img" aria-label={label} className="flex flex-col gap-3.5">
         {progress.map((step, index) => {
-          const tone = tramoTone(step.key, data.tramoCatalog);
+          const tone = etapaTone(step.key, data.etapaCatalog);
           return (
-            <div key={step.tramoId} aria-hidden="true" className="flex flex-col gap-1.5">
+            <div key={step.etapaId} aria-hidden="true" className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2 text-[13px]">
                 <span className="truncate text-foreground">{step.label}</span>
                 <span className="font-mono tabular-nums text-foreground">{step.pct} %</span>
@@ -267,7 +267,7 @@ function TramoBars({ progress, data }: { progress: TramoProgress[]; data: Projec
         </thead>
         <tbody>
           {progress.map((step) => (
-            <tr key={step.tramoId}>
+            <tr key={step.etapaId}>
               <th scope="row">{step.label}</th>
               <td>{step.pct} %</td>
               <td>{step.total}</td>
@@ -312,7 +312,7 @@ function dueText(task: NextTask): string | null {
   return task.daysLate > 0 ? `${shortDate(task.dueDate)} · ${task.daysLate} d` : shortDate(task.dueDate);
 }
 
-function NextTaskCard({ task, tone, isNew }: { task: NextTask; tone: TramoTone; isNew: boolean }) {
+function NextTaskCard({ task, tone, isNew }: { task: NextTask; tone: EtapaTone; isNew: boolean }) {
   const due = dueText(task);
   const pct = task.subtasks.total > 0 ? Math.round((task.subtasks.done / task.subtasks.total) * 100) : 0;
   return (
@@ -389,7 +389,7 @@ function ActivityList({ items, history, data }: { items: ActivityItem[]; history
   return (
     <ol className="flex flex-col">
       {items.map((item) => {
-        const objectTone = item.objectTone === "tramo" ? tramoTone(item.tramoKey ?? null, data.tramoCatalog) : NEUTRAL_TONE;
+        const objectTone = item.objectTone === "etapa" ? etapaTone(item.etapaKey ?? null, data.etapaCatalog) : NEUTRAL_TONE;
         const actor = item.actor?.name ?? "Sistema";
         return (
           <li key={item.id} className="flex gap-3 border-b border-muted py-2.5 last:border-b-0">
@@ -407,7 +407,7 @@ function ActivityList({ items, history, data }: { items: ActivityItem[]; history
                     {" "}
                     <strong
                       className={cn("font-semibold", item.objectTone === "destructive" && "text-destructive")}
-                      style={item.objectTone === "tramo" ? { color: objectTone.ink } : undefined}
+                      style={item.objectTone === "etapa" ? { color: objectTone.ink } : undefined}
                     >
                       {item.object}
                     </strong>
@@ -415,7 +415,7 @@ function ActivityList({ items, history, data }: { items: ActivityItem[]; history
                 ) : null}
               </span>
               <span className="font-mono text-[11.5px] text-muted-foreground">
-                {[item.when, item.tramoLabel].filter(Boolean).join(" · ")}
+                {[item.when, item.etapaLabel].filter(Boolean).join(" · ")}
               </span>
             </span>
           </li>
@@ -561,15 +561,15 @@ export function ResumenVisualLayout({
 }: ResumenVisualLayoutProps): ReactNode {
   const [firstRender] = useState(() => new Date());
   const now = nowProp ?? firstRender;
-  const { project, today, tramoCatalog } = data;
+  const { project, today, etapaCatalog } = data;
 
-  const progress = useMemo(() => resumenTramoProgress(summary, tramoCatalog, project), [summary, tramoCatalog, project]);
+  const progress = useMemo(() => resumenEtapaProgress(summary, etapaCatalog, project), [summary, etapaCatalog, project]);
   const counts = useMemo(() => resumenStatusCounts(summary), [summary]);
   const team = useMemo(() => resumenTeamLoadCards(data, summary), [data, summary]);
-  const activity = useMemo(() => activityItems(history.events, tramoCatalog, now, ACTIVITY_ITEMS), [history.events, tramoCatalog, now]);
+  const activity = useMemo(() => activityItems(history.events, etapaCatalog, now, ACTIVITY_ITEMS), [history.events, etapaCatalog, now]);
 
   const current = progress.find((step) => step.state === "current") ?? null;
-  const tone = current ? tramoTone(current.key, tramoCatalog) : NEUTRAL_TONE;
+  const tone = current ? etapaTone(current.key, etapaCatalog) : NEUTRAL_TONE;
   const heroCounts = resumenHeroCounts(summary);
 
   // Just-created tasks first (with `row-new`), then the urgency order.
@@ -601,14 +601,14 @@ export function ResumenVisualLayout({
         </SectionCard>
         <SectionCard title="Avance por etapa" index={2}>
           {progress.length > 0 ? (
-            <TramoBars progress={progress} data={data} />
+            <EtapaBars progress={progress} data={data} />
           ) : (
-            <p className="text-sm text-muted-foreground">{RESUMEN_NO_TRAMO}</p>
+            <p className="text-sm text-muted-foreground">{RESUMEN_NO_ETAPA}</p>
           )}
         </SectionCard>
         <SectionCard title="Equipo y carga" index={3}>
           {team.length > 0 ? (
-            <TeamLoadWidget people={team} tramoCatalog={tramoCatalog} max={TEAM_LOAD_MAX} moreHref={`${projectHref}/ficha`} />
+            <TeamLoadWidget people={team} etapaCatalog={etapaCatalog} max={TEAM_LOAD_MAX} moreHref={`${projectHref}/ficha`} />
           ) : (
             <p className="text-sm text-muted-foreground">Este proyecto aún no tiene equipo</p>
           )}
@@ -632,7 +632,7 @@ export function ResumenVisualLayout({
           {next.length > 0 ? (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {next.map((task) => (
-                <NextTaskCard key={task.id} task={task} tone={tramoTone(task.tramoKey, tramoCatalog)} isNew={recent.has(task.id)} />
+                <NextTaskCard key={task.id} task={task} tone={etapaTone(task.etapaKey, etapaCatalog)} isNew={recent.has(task.id)} />
               ))}
             </ul>
           ) : canCreate ? null : (

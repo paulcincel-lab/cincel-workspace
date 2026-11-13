@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Checkbox } from "@/components/ui/shadcn/checkbox";
 import { Input } from "@/components/ui/shadcn/input";
 import { Label } from "@/components/ui/shadcn/label";
-import { tramoColorClass } from "@/lib/tramos/tramo-color";
+import { etapaColorClass } from "@/lib/etapas/etapa-color";
 import type { Position, WorkflowDetail } from "@/lib/types/core";
 import { cn } from "@/lib/utils";
 
@@ -27,8 +27,8 @@ export function parseCapacity(raw: string): number | null | undefined {
   return value;
 }
 
-/** Tramos in `sortOrder`, each with its active fases in catalog order; tramos without fases are left out. */
-export function groupPhasesByTramo(workflows: WorkflowDetail[]) {
+/** Etapas in `sortOrder`, each with its active fases in catalog order; etapas without fases are left out. */
+export function groupPhasesByEtapa(workflows: WorkflowDetail[]) {
   return [...workflows]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((workflow) => ({
@@ -62,7 +62,7 @@ interface PositionEditorDrawerProps {
 
 /**
  * Editor of a puesto (Ajustes › Puestos, frame `Ajustes-Puestos`): its name,
- * weekly capacity, candidate fases grouped by tramo and its members
+ * weekly capacity, candidate fases grouped by etapa and its members
  * (read-only). Inline next to the list from 1024 px, a `Sheet` below.
  */
 export function PositionEditorDrawer({ show, onClose, position, returnFocus, onDelete, ...rest }: PositionEditorDrawerProps) {
@@ -129,7 +129,7 @@ function PositionEditorForm({
       : String(position.weeklyCapacityHours),
   );
   const [phaseIds, setPhaseIds] = useState<string[]>(() => position?.phases.map((phase) => phase.id) ?? []);
-  const groups = groupPhasesByTramo(workflows);
+  const groups = groupPhasesByEtapa(workflows);
   const members = position?.members ?? [];
   const capacityInvalid = parseCapacity(capacity) === undefined;
 
@@ -199,7 +199,7 @@ function PositionEditorForm({
           groups.map((group) => (
             <fieldset key={group.id} className="flex flex-col gap-2">
               <legend className="mb-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", tramoColorClass(group))} />
+                <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", etapaColorClass(group))} />
                 {group.name}
               </legend>
               {group.phases.map((phase) => {

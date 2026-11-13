@@ -83,7 +83,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
     context,
     onCreate,
   }: {
-    context: { label: string; projectId: string | null; status?: string; tramoId?: string | null };
+    context: { label: string; projectId: string | null; status?: string; etapaId?: string | null };
     onCreate(d: unknown): Promise<unknown>;
   }) => (
     <input
@@ -93,7 +93,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
         void onCreate({
           title: (e.target as HTMLInputElement).value,
           projectId: context.projectId,
-          tramoId: context.tramoId ?? null,
+          etapaId: context.etapaId ?? null,
           assigneeId: null,
           dueDate: null,
           priority: "media",
@@ -213,29 +213,29 @@ const TREND: TareasTrend = {
     to: "2026-11-15",
     total: 9,
     days: [
-      { date: "2026-11-09", due: 1, tramoKey: "presale" },
-      { date: "2026-11-10", due: 0, tramoKey: null },
-      { date: "2026-11-11", due: 2, tramoKey: "diseno" },
-      { date: "2026-11-12", due: 3, tramoKey: "construccion" },
-      { date: "2026-11-13", due: 3, tramoKey: "presale" },
-      { date: "2026-11-14", due: 0, tramoKey: null },
-      { date: "2026-11-15", due: 0, tramoKey: null },
+      { date: "2026-11-09", due: 1, etapaKey: "presale" },
+      { date: "2026-11-10", due: 0, etapaKey: null },
+      { date: "2026-11-11", due: 2, etapaKey: "diseno" },
+      { date: "2026-11-12", due: 3, etapaKey: "construccion" },
+      { date: "2026-11-13", due: 3, etapaKey: "presale" },
+      { date: "2026-11-14", due: 0, etapaKey: null },
+      { date: "2026-11-15", due: 0, etapaKey: null },
     ],
   },
 };
 
 const FACETS: TareasFacets = {
   total: 48,
-  byTramo: { presale: 48 },
+  byEtapa: { presale: 48 },
   projects: [],
   mostrar: { todas: 48, abiertas: 36, en_retraso: 8 },
   mine: 7,
 };
-const TRAMOS = [{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }];
+const ETAPAS = [{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }];
 
 const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY };
 const F = tareasListFiltersOf(QUERY);
-const PAGE: TareasPageData = { facets: FACETS, tramos: TRAMOS, staff: [] };
+const PAGE: TareasPageData = { facets: FACETS, etapas: ETAPAS, staff: [] };
 
 function seededClient(board: TareasBoardData = boardData()): QueryClient {
   const client = createTestQueryClient();
@@ -253,7 +253,7 @@ function renderVisual(client: QueryClient = seededClient()) {
       <TareasVisual
         query={QUERY}
         facets={FACETS}
-        tramos={TRAMOS}
+        etapas={ETAPAS}
         actions={null}
         search=""
         onSearch={vi.fn()}
@@ -361,11 +361,11 @@ describe("TareasVisual · filters", () => {
     fireEvent.click(within(group).getByRole("button", { name: /^Abiertas/ }));
     expect(onQuery).toHaveBeenLastCalledWith({ mostrar: "abiertas" });
     fireEvent.click(within(group).getByRole("button", { name: /^Presale/ }));
-    expect(onQuery).toHaveBeenLastCalledWith({ tramo: "presale" });
+    expect(onQuery).toHaveBeenLastCalledWith({ etapa: "presale" });
     fireEvent.click(within(group).getByRole("button", { name: /^Solo mías/ }));
     expect(onQuery).toHaveBeenLastCalledWith({ responsable: "yo" });
     fireEvent.click(todas);
-    expect(onQuery).toHaveBeenLastCalledWith({ mostrar: "todas", tramo: null });
+    expect(onQuery).toHaveBeenLastCalledWith({ mostrar: "todas", etapa: null });
   });
 });
 

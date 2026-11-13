@@ -1,6 +1,6 @@
 /**
  * Pure form logic of `NewTaskDialog` (redesign FE §3.4): defaults, the fase
- * catalog of the selected tramo, "Usar plantilla del tramo", validation and
+ * catalog of the selected etapa, "Usar plantilla de la etapa", validation and
  * the `createUserTaskAction` / `createSubtaskAction` inputs. Client-safe.
  */
 import { actionErrorText } from "@/lib/errors";
@@ -25,7 +25,7 @@ export type NewTaskDraft = {
   title: string;
   /** "" until the projects load or when none is picked. */
   projectId: string;
-  /** Null: follow the default tramo (`defaults.tramoKey`, then the project's current tramo). */
+  /** Null: follow the default etapa (`defaults.etapaKey`, then the project's current etapa). */
   workflowId: string | null;
   phaseId: string | null;
   managerId: string | null;
@@ -39,7 +39,7 @@ export type NewTaskDraft = {
 
 export type NewTaskDefaults = {
   projectId?: string;
-  tramoKey?: string;
+  etapaKey?: string;
   title?: string;
   description?: string;
   /**
@@ -47,7 +47,7 @@ export type NewTaskDefaults = {
    * (`pendiente`, …) or `custom:<id>`. Applied right after the task is created.
    */
   status?: string;
-  /** Responsable preselected (quick-add `@persona`, Mi espacio: me); null = "Sin responsable". Kept only when the tramo allows them. */
+  /** Responsable preselected (quick-add `@persona`, Mi espacio: me); null = "Sin responsable". Kept only when the etapa allows them. */
   managerId?: string | null;
   /** `YYYY-MM-DD` (quick-add date). */
   deliveryDate?: string | null;
@@ -70,12 +70,12 @@ export function draftFromDefaults(defaults: NewTaskDefaults = {}): NewTaskDraft 
 
 type ProjectChoice = Pick<ProjectListItem, "id" | "name" | "currentWorkflowId">;
 
-/** The active tramos in catalog order (the `select` of the tramo catalog query). */
+/** The active etapas in catalog order (the `select` of the etapa catalog query). */
 export function activeWorkflowsInOrder(rows: readonly WorkflowDetail[]): WorkflowDetail[] {
   return rows.filter((w) => w.active).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-/** Responsables suggested for the tramo first (the `select` of `catalog.assignableStaff`). */
+/** Responsables suggested for the etapa first (the `select` of `catalog.assignableStaff`). */
 export function suggestedFirst<T extends { suggested: boolean }>(list: readonly T[]): T[] {
   return [...list].sort((a, b) => Number(b.suggested) - Number(a.suggested));
 }
@@ -86,24 +86,24 @@ export function resolveProjectId(projectId: string, projects: readonly ProjectCh
 }
 
 /**
- * The tramo to show: the picked one while it's live, else the `defaults`
- * tramo key, else the project's current tramo, else the first tramo.
+ * The etapa to show: the picked one while it's live, else the `defaults`
+ * etapa key, else the project's current etapa, else the first etapa.
  */
 export function resolveWorkflowId(
   workflowId: string | null,
   workflows: readonly Pick<WorkflowDetail, "id" | "key">[],
-  options: { tramoKey?: string; project?: ProjectChoice | null } = {}
+  options: { etapaKey?: string; project?: ProjectChoice | null } = {}
 ): string | null {
   if (workflowId && workflows.some((w) => w.id === workflowId)) return workflowId;
-  const byKey = options.tramoKey ? workflows.find((w) => w.key === options.tramoKey) : undefined;
+  const byKey = options.etapaKey ? workflows.find((w) => w.key === options.etapaKey) : undefined;
   if (byKey) return byKey.id;
   const current = options.project?.currentWorkflowId;
   if (current && workflows.some((w) => w.id === current)) return current;
   return workflows[0]?.id ?? null;
 }
 
-/** The tramo's active fase catalog in catalog order; empty when it has none (the Fase field hides). */
-export function tramoFases(workflow: Pick<WorkflowDetail, "phases"> | null | undefined): WorkflowPhaseRef[] {
+/** The etapa's active fase catalog in catalog order; empty when it has none (the Fase field hides). */
+export function etapaFases(workflow: Pick<WorkflowDetail, "phases"> | null | undefined): WorkflowPhaseRef[] {
   if (!workflow) return [];
   return workflow.phases
     .filter((p) => p.active)
@@ -112,20 +112,20 @@ export function tramoFases(workflow: Pick<WorkflowDetail, "phases"> | null | und
 }
 
 /**
- * The fase to save: the picked one while it's still in the tramo's catalog,
+ * The fase to save: the picked one while it's still in the etapa's catalog,
  * else the first catalog fase (the catalog can change under an open form);
- * null when the tramo has no fases.
+ * null when the etapa has no fases.
  */
 export function resolvePhaseId(phaseId: string | null, phases: readonly WorkflowPhaseRef[]): string | null {
   return phaseId && phases.some((p) => p.id === phaseId) ? phaseId : (phases[0]?.id ?? null);
 }
 
 /**
- * Titles of the tramo's active task templates in catalog order: those of the
- * selected fase, or every template of the tramo (fase order, then template
+ * Titles of the etapa's active task templates in catalog order: those of the
+ * selected fase, or every template of the etapa (fase order, then template
  * order) when no fase is selected.
  */
-export function tramoTemplateTitles(
+export function etapaTemplateTitles(
   workflow: Pick<WorkflowDetail, "templates" | "phases"> | null | undefined,
   phaseId: string | null
 ): string[] {
@@ -159,7 +159,7 @@ export type DraftErrors = { title?: string; form?: string };
 
 /**
  * Client-side checks before calling the action (FE §9 copy): an empty title
- * (`EMPTY`), and no project, no tramo or no fase while the tramo has a
+ * (`EMPTY`), and no project, no etapa or no fase while the etapa has a
  * catalog (`INVALID`).
  */
 export function validateDraft(draft: ResolvedDraft, fases: readonly WorkflowPhaseRef[]): DraftErrors {

@@ -14,18 +14,18 @@ import { UiStoresHydrator } from "@/components/shell/UiStoresHydrator";
 
 import { createDashboardStore, dashboardStorageKey, selectCollapsed, useWidgetView } from "./dashboard-store";
 
-type W = "weeklyPace" | "tramoDonut";
+type W = "weeklyPace" | "etapaDonut";
 type K = "overdue";
 
 /** Created at module load, before any hydrator mounts (like a page's instance on the first load). */
-const useSsrDashboard = createDashboardStore<W, K>("proyectos", { widgets: ["weeklyPace", "tramoDonut"] });
+const useSsrDashboard = createDashboardStore<W, K>("proyectos", { widgets: ["weeklyPace", "etapaDonut"] });
 
 const FALLBACK = { visual: "chart", esencial: "chart", analitico: "table" } as const;
 
 function Dashboard() {
   const range = useSsrDashboard((s) => s.range);
   const collapsed = useSsrDashboard(selectCollapsed<W>("weeklyPace"));
-  const view = useWidgetView(useSsrDashboard, "tramoDonut", FALLBACK);
+  const view = useWidgetView(useSsrDashboard, "etapaDonut", FALLBACK);
   return <p data-testid="dash">{`${range}/${String(collapsed)}/${view}`}</p>;
 }
 
@@ -51,7 +51,7 @@ describe("createDashboardStore SSR", () => {
     window.localStorage.setItem(
       dashboardStorageKey("proyectos"),
       JSON.stringify({
-        state: { range: "4w", collapsed: { weeklyPace: true }, views: { visual: { tramoDonut: "table" } }, hiddenSeries: {} },
+        state: { range: "4w", collapsed: { weeklyPace: true }, views: { visual: { etapaDonut: "table" } }, hiddenSeries: {} },
         version: 1,
       }),
     );

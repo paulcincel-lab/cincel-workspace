@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { LOCK_REASON } from "@/components/widgets/editable-cell";
 import type { TareasListPages } from "@/lib/query/options/tareas";
-import { SIN_TRAMO_KEY } from "@/lib/tareas/summary";
+import { SIN_ETAPA_KEY } from "@/lib/tareas/summary";
 import type { TaskListRow } from "@/lib/types/core";
 
 import { analiticoTaskRow } from "./fixtures/analitico-summary";
 import { DISENO, PRESALE } from "./fixtures/lista-tasks";
 import {
-  matchesTramoFilter,
+  matchesEtapaFilter,
   patchTaskListPages,
   taskCellAction,
   taskCellLock,
@@ -38,7 +38,7 @@ const PLANOS_FASE = { id: "f-planos", name: "Planos", sortOrder: 1 };
 const CONTRATO_FASE = { id: "f-contrato", name: "Contrato", sortOrder: 1 };
 
 const CATALOGS: TaskCellCatalogs = {
-  tramos: [DISENO, PRESALE],
+  etapas: [DISENO, PRESALE],
   phasesOf: (id) => (id === DISENO.id ? [PLANOS_FASE] : id === PRESALE.id ? [CONTRATO_FASE] : []),
   statuses: [{ id: "cs1", name: "En revisión cliente", closes: false, countsAsCompleted: false, sortOrder: 1 }],
   staff: [
@@ -63,20 +63,20 @@ const task = analiticoTaskRow({
 });
 
 describe("taskCellLock", () => {
-  const fields: TaskCellField[] = ["tarea", "tramo", "fase", "estatus", "responsable", "prioridad", "vence", "espacio"];
+  const fields: TaskCellField[] = ["tarea", "etapa", "fase", "estatus", "responsable", "prioridad", "vence", "espacio"];
 
   it("lets an admin edit every cell", () => {
     for (const field of fields) expect(taskCellLock(task, field, ADMIN)).toBe(true);
   });
 
   it("locks the Etapa move and Responsable for a colaborador, with the reason", () => {
-    expect(taskCellLock(task, "tramo", COLABORADOR)).toBe(LOCK_REASON.tramo);
+    expect(taskCellLock(task, "etapa", COLABORADOR)).toBe(LOCK_REASON.etapa);
     expect(taskCellLock(task, "responsable", COLABORADOR)).toBe(LOCK_REASON.responsible);
     for (const field of ["tarea", "fase", "estatus", "prioridad", "vence"] as const) {
       expect(taskCellLock(task, field, COLABORADOR)).toBe(true);
     }
-    // A task without tramo gets one from any task writer.
-    expect(taskCellLock({ ...task, workflowId: null, workflow: null }, "tramo", COLABORADOR)).toBe(true);
+    // A task without etapa gets one from any task writer.
+    expect(taskCellLock({ ...task, workflowId: null, workflow: null }, "etapa", COLABORADOR)).toBe(true);
   });
 
   it("locks everything without the activity capabilities", () => {
@@ -88,7 +88,7 @@ describe("taskCellLock", () => {
   it("locks a subtask's fase and an admin task's etapa, fase and espacio", () => {
     expect(taskCellLock({ ...task, parentTaskId: "t0" }, "fase", ADMIN)).toBe(LOCK_REASON.subtaskPhase);
     const admin = { ...task, kind: "admin" as const };
-    for (const field of ["tramo", "fase", "espacio"] as const) expect(taskCellLock(admin, field, ADMIN)).toBe(LOCK_REASON.adminTask);
+    for (const field of ["etapa", "fase", "espacio"] as const) expect(taskCellLock(admin, field, ADMIN)).toBe(LOCK_REASON.adminTask);
   });
 });
 
@@ -96,9 +96,9 @@ describe("taskCellOptions", () => {
   const labels = (field: TaskCellField) => taskCellOptions(task, field, CATALOGS).map((o) => o.label);
 
   it("lists the etapas in order with their colour, and the fases of the row's etapa", () => {
-    const tramos = taskCellOptions(task, "tramo", CATALOGS);
-    expect(tramos.map((o) => o.label)).toEqual(["Presale", "Diseño"]);
-    expect(tramos.every((o) => typeof o.color === "string" && o.color.startsWith("var("))).toBe(true);
+    const etapas = taskCellOptions(task, "etapa", CATALOGS);
+    expect(etapas.map((o) => o.label)).toEqual(["Presale", "Diseño"]);
+    expect(etapas.every((o) => typeof o.color === "string" && o.color.startsWith("var("))).toBe(true);
     expect(labels("fase")).toEqual(["Planos"]);
     expect(taskCellOptions({ ...task, workflowId: null }, "fase", CATALOGS)).toEqual([]);
   });
@@ -123,7 +123,7 @@ describe("taskCellValue / taskCellAction", () => {
   it("maps each field to its action", () => {
     expect(taskCellAction(task, "tarea", "  Planos v2 ")).toEqual({ kind: "update", patch: { title: "Planos v2" } });
     expect(taskCellAction(task, "tarea", "  ")).toEqual({ kind: "none" });
-    expect(taskCellAction(task, "tramo", PRESALE.id)).toEqual({ kind: "update", patch: { workflowId: PRESALE.id } });
+    expect(taskCellAction(task, "etapa", PRESALE.id)).toEqual({ kind: "update", patch: { workflowId: PRESALE.id } });
     expect(taskCellAction(task, "fase", null)).toEqual({ kind: "update", patch: { phaseId: null } });
     expect(taskCellAction(task, "estatus", "bloqueado")).toEqual({ kind: "status", status: "bloqueado" });
     expect(taskCellAction(task, "estatus", "custom:cs1")).toEqual({ kind: "customStatus", id: "cs1" });
@@ -136,9 +136,9 @@ describe("taskCellValue / taskCellAction", () => {
 
 describe("taskWithChange", () => {
   it("moves the task to another etapa and clears its fase", () => {
-    const moved = taskWithChange(task, "tramo", PRESALE.id, CATALOGS);
+    const moved = taskWithChange(task, "etapa", PRESALE.id, CATALOGS);
     expect(moved).toMatchObject({ workflowId: PRESALE.id, workflow: PRESALE, phaseId: null, phase: null });
-    expect(taskWithChange(task, "tramo", DISENO.id, CATALOGS)).toBe(task);
+    expect(taskWithChange(task, "etapa", DISENO.id, CATALOGS)).toBe(task);
   });
 
   it("patches the shown fields of the other cells", () => {
@@ -162,41 +162,41 @@ describe("patchTaskListPages", () => {
   const pages = (rows: TaskListRow[]): TareasListPages => ({ pages: [{ rows, nextCursor: null, total: rows.length }], pageParams: [null] });
   const other = analiticoTaskRow({ id: "t2", title: "Render" });
   const sub = analiticoTaskRow({ id: "t3", title: "Corte", parentTaskId: "t1" });
-  const toPresale = <R extends TaskCellTask>(row: R): R => taskWithChange(row, "tramo", PRESALE.id, CATALOGS);
+  const toPresale = <R extends TaskCellTask>(row: R): R => taskWithChange(row, "etapa", PRESALE.id, CATALOGS);
   const moved = toPresale(task);
 
   it("matches the etapa filter forms", () => {
-    expect(matchesTramoFilter(null, null)).toBe(true);
-    expect(matchesTramoFilter("diseno", "diseno")).toBe(true);
-    expect(matchesTramoFilter("presale, diseno", "diseno")).toBe(true);
-    expect(matchesTramoFilter("presale", "diseno")).toBe(false);
-    expect(matchesTramoFilter(SIN_TRAMO_KEY, null)).toBe(true);
+    expect(matchesEtapaFilter(null, null)).toBe(true);
+    expect(matchesEtapaFilter("diseno", "diseno")).toBe(true);
+    expect(matchesEtapaFilter("presale, diseno", "diseno")).toBe(true);
+    expect(matchesEtapaFilter("presale", "diseno")).toBe(false);
+    expect(matchesEtapaFilter(SIN_ETAPA_KEY, null)).toBe(true);
   });
 
   it("takes the row and its subtasks out of the old etapa group and puts the row first in the new one", () => {
     const diseno = pages([task, other, sub]);
-    const out = patchTaskListPages(diseno, { tramo: "diseno", proyecto: "p1" } as never, "t1", toPresale, { subtasks: true, moved });
+    const out = patchTaskListPages(diseno, { etapa: "diseno", proyecto: "p1" } as never, "t1", toPresale, { subtasks: true, moved });
     expect(out.pages[0].rows.map((r) => r.id)).toEqual(["t2"]);
 
     const presale = pages([other]);
-    const into = patchTaskListPages(presale, { tramo: "presale", proyecto: "p1" } as never, "t1", toPresale, { subtasks: true, moved });
+    const into = patchTaskListPages(presale, { etapa: "presale", proyecto: "p1" } as never, "t1", toPresale, { subtasks: true, moved });
     expect(into.pages[0].rows.map((r) => r.id)).toEqual(["t1", "t2"]);
     expect(into.pages[0].rows[0].phaseId).toBeNull();
 
     // Another project's group stays as it is.
     const roma = pages([other]);
-    expect(patchTaskListPages(roma, { tramo: "presale", proyecto: "p2" } as never, "t1", toPresale, { moved })).toBe(roma);
+    expect(patchTaskListPages(roma, { etapa: "presale", proyecto: "p2" } as never, "t1", toPresale, { moved })).toBe(roma);
   });
 
   it("patches in place in an unscoped list and leaves lists without the task untouched", () => {
     const all = pages([task, other]);
-    const out = patchTaskListPages(all, { tramo: null, proyecto: null } as never, "t1", toPresale, { moved });
+    const out = patchTaskListPages(all, { etapa: null, proyecto: null } as never, "t1", toPresale, { moved });
     expect(out.pages[0].rows.map((r) => [r.id, r.workflowId])).toEqual([
       ["t1", PRESALE.id],
       ["t2", DISENO.id],
     ]);
     const without = pages([other]);
-    expect(patchTaskListPages(without, { tramo: null, proyecto: null } as never, "t1", toPresale, { moved })).toBe(without);
+    expect(patchTaskListPages(without, { etapa: null, proyecto: null } as never, "t1", toPresale, { moved })).toBe(without);
   });
 });
 

@@ -350,7 +350,7 @@ describe("TaskBoardWidget · card link", () => {
 });
 
 describe("TaskBoardWidget · column totals and Cargar más", () => {
-  const FILTERS = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+  const FILTERS = { etapa: null, proyecto: null, responsable: null, estado: null, q: null };
 
   it("counts every matching task and loads the rest of a column page by page", async () => {
     const t1 = Object.values(taskBoardFixture).flat().find((t) => t.id === "t1")!;
@@ -573,7 +573,7 @@ describe("TaskBoardWidget · Visual motion and drag state (frame Tareas-Visual)"
     expect(live.textContent).toBe("Movida a En proceso");
   });
 
-  it("columns are labelled sections with a share bar, cards a etapa strip and a drag handle", () => {
+  it("columns are labelled sections with a share bar, cards an etapa strip and a drag handle", () => {
     const { container } = renderBoard("visual");
     const pendiente = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 3) });
     expect(pendiente.tagName).toBe("SECTION");

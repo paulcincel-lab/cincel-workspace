@@ -16,10 +16,10 @@ import {
   sliceToRange,
 } from "./dashboard-store";
 
-type TestWidget = "kpis" | "weeklyPace" | "tramoDonut";
+type TestWidget = "kpis" | "weeklyPace" | "etapaDonut";
 type TestKpi = "overdue" | "blocked";
 
-const WIDGETS: readonly TestWidget[] = ["kpis", "weeklyPace", "tramoDonut"];
+const WIDGETS: readonly TestWidget[] = ["kpis", "weeklyPace", "etapaDonut"];
 const SERIES = { weeklyPace: ["created", "completed"] } as const;
 
 /** The internal test instance (the pages create theirs in their own files). */
@@ -90,25 +90,25 @@ describe("createDashboardStore · state and actions", () => {
     expect(selectCollapsed<TestWidget>("weeklyPace")(useTestDashboard.getState())).toBe(true);
     useTestDashboard.getState().toggleCollapsed("weeklyPace");
     expect(selectCollapsed<TestWidget>("weeklyPace")(useTestDashboard.getState())).toBe(false);
-    useTestDashboard.getState().setCollapsed("tramoDonut", true);
-    expect(useTestDashboard.getState().collapsed).toEqual({ weeklyPace: false, tramoDonut: true });
+    useTestDashboard.getState().setCollapsed("etapaDonut", true);
+    expect(useTestDashboard.getState().collapsed).toEqual({ weeklyPace: false, etapaDonut: true });
     expect(selectCollapsed<TestWidget>("kpis")(useTestDashboard.getState())).toBe(false);
   });
 
   it("setWidgetView keeps one override per style: a Visual pick does not leak into Esencial or Analítico", () => {
     const fallback = { visual: "chart", esencial: "chart", analitico: "table" } as const;
-    useTestDashboard.getState().setWidgetView("visual", "tramoDonut", "table");
+    useTestDashboard.getState().setWidgetView("visual", "etapaDonut", "table");
     const s = useTestDashboard.getState();
-    expect(s.views).toEqual({ visual: { tramoDonut: "table" } });
-    expect(selectWidgetView<TestWidget>("visual", "tramoDonut", fallback)(s)).toBe("table");
-    expect(selectWidgetView<TestWidget>("esencial", "tramoDonut", fallback)(s)).toBe("chart");
-    expect(selectWidgetView<TestWidget>("analitico", "tramoDonut", fallback)(s)).toBe("table");
+    expect(s.views).toEqual({ visual: { etapaDonut: "table" } });
+    expect(selectWidgetView<TestWidget>("visual", "etapaDonut", fallback)(s)).toBe("table");
+    expect(selectWidgetView<TestWidget>("esencial", "etapaDonut", fallback)(s)).toBe("chart");
+    expect(selectWidgetView<TestWidget>("analitico", "etapaDonut", fallback)(s)).toBe("table");
     expect(selectWidgetView<TestWidget>("visual", "weeklyPace", fallback)(s)).toBe("chart");
 
-    useTestDashboard.getState().setWidgetView("analitico", "tramoDonut", "chart");
+    useTestDashboard.getState().setWidgetView("analitico", "etapaDonut", "chart");
     const t = useTestDashboard.getState();
-    expect(selectWidgetView<TestWidget>("analitico", "tramoDonut", fallback)(t)).toBe("chart");
-    expect(selectWidgetView<TestWidget>("visual", "tramoDonut", fallback)(t)).toBe("table");
+    expect(selectWidgetView<TestWidget>("analitico", "etapaDonut", fallback)(t)).toBe("chart");
+    expect(selectWidgetView<TestWidget>("visual", "etapaDonut", fallback)(t)).toBe("table");
   });
 
   it("toggleSeries hides and shows a series", () => {
@@ -133,9 +133,9 @@ describe("createDashboardStore · state and actions", () => {
     // Ignored without a state change.
     expect(useTestDashboard.getState()).toBe(before);
 
-    toggleSeries("tramoDonut", "a", ["a", "b"]);
-    toggleSeries("tramoDonut", "b", ["a", "b"]);
-    expect(useTestDashboard.getState().hiddenSeries.tramoDonut).toEqual(["a"]);
+    toggleSeries("etapaDonut", "a", ["a", "b"]);
+    toggleSeries("etapaDonut", "b", ["a", "b"]);
+    expect(useTestDashboard.getState().hiddenSeries.etapaDonut).toEqual(["a"]);
   });
 
   it("reset() returns every field to the defaults, selectedKpi included", () => {
@@ -209,14 +209,14 @@ describe("createDashboardStore · persistence", () => {
     storeV({
       range: "12w",
       collapsed: { weeklyPace: true },
-      views: { visual: { tramoDonut: "table" } },
+      views: { visual: { etapaDonut: "table" } },
       hiddenSeries: { weeklyPace: ["created"] },
     });
     await useTestDashboard.persist.rehydrate();
     const s = useTestDashboard.getState();
     expect(s.range).toBe("12w");
     expect(s.collapsed).toEqual({ weeklyPace: true });
-    expect(s.views).toEqual({ visual: { tramoDonut: "table" } });
+    expect(s.views).toEqual({ visual: { etapaDonut: "table" } });
     expect(s.hiddenSeries).toEqual({ weeklyPace: ["created"] });
     expect(s.selectedKpi).toBeNull();
     expect(useTestDashboard.persist.hasHydrated()).toBe(true);
@@ -226,8 +226,8 @@ describe("createDashboardStore · persistence", () => {
     storeV({
       range: "52w",
       collapsed: { weeklyPace: true, removedWidget: true, kpis: "yes" },
-      views: { visual: { tramoDonut: "pie", weeklyPace: "table", gone: "chart" }, compacto: { kpis: "table" } },
-      hiddenSeries: { weeklyPace: ["created", 3], gone: ["x"], tramoDonut: "a" },
+      views: { visual: { etapaDonut: "pie", weeklyPace: "table", gone: "chart" }, compacto: { kpis: "table" } },
+      hiddenSeries: { weeklyPace: ["created", 3], gone: ["x"], etapaDonut: "a" },
       selectedKpi: "overdue",
     });
     await useTestDashboard.persist.rehydrate();

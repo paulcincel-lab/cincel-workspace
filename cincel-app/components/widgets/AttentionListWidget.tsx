@@ -10,20 +10,20 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { WidgetCard, type WidgetCardProps } from "@/components/widgets/WidgetCard";
-import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import type { WorkflowRef } from "@/lib/types/core";
-import type { AttentionItem, RecordTableData, Tone, TramoKey } from "@/lib/types/widgets";
+import type { AttentionItem, RecordTableData, Tone, EtapaKey } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
 /**
  * "Requiere atención" list in three styles (redesign FE §4.10.1, §15).
  *
- * - Visual: rows with a 4 px tramo bar, title link, "proyecto · tramo", reason
+ * - Visual: rows with a 4 px etapa bar, title link, "proyecto · etapa", reason
  *   pill, avatar and due date (mono, `destructive` when late).
  * - Esencial: title + "proyecto · persona · motivo fecha" as plain text.
- * - Analítico: `RecordTable` (Tarea, Proyecto, Tramo dot, Resp. initials,
+ * - Analítico: `RecordTable` (Tarea, Proyecto, Etapa dot, Resp. initials,
  *   Motivo, Vence, Retraso).
  *
  * `totalCount` / `moreHref` render the "Ver más" affordance in the card header.
@@ -69,8 +69,8 @@ function isLate(item: AttentionItem): boolean {
   return item.daysLate !== null && item.daysLate > 0;
 }
 
-function tramoRef(key: TramoKey): WorkflowRef {
-  return { id: key, key, name: tramoLabel(key), sortOrder: 0 };
+function etapaRef(key: EtapaKey): WorkflowRef {
+  return { id: key, key, name: etapaLabel(key), sortOrder: 0 };
 }
 
 /** Card tone: the most severe tone among the items. */
@@ -123,7 +123,7 @@ function VisualRows({ items }: { items: AttentionItem[] }) {
           key={item.id}
           data-slot="attention-row"
           className="flex items-center gap-3 rounded-lg border border-l-4 bg-card py-2 pr-3 pl-3"
-          style={{ borderLeftColor: item.tramo ? tramoColorVar(item.tramo) : "var(--border)" }}
+          style={{ borderLeftColor: item.etapa ? etapaColorVar(item.etapa) : "var(--border)" }}
         >
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <Link href={item.href} className="truncate text-sm font-medium text-foreground hover:underline">
@@ -131,10 +131,10 @@ function VisualRows({ items }: { items: AttentionItem[] }) {
             </Link>
             <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
               <span className="truncate">{item.project}</span>
-              {item.tramo ? (
+              {item.etapa ? (
                 <>
                   <span aria-hidden="true">·</span>
-                  <TramoBadge tramo={tramoRef(item.tramo)} variant="text" />
+                  <EtapaBadge etapa={etapaRef(item.etapa)} variant="text" />
                 </>
               ) : null}
             </span>
@@ -178,7 +178,7 @@ function EsencialRows({ items }: { items: AttentionItem[] }) {
 const ANALITICO_COLUMNS: RecordTableData["columns"] = [
   { key: "title", label: "Tarea" },
   { key: "project", label: "Proyecto" },
-  { key: "tramo", label: "Etapa" },
+  { key: "etapa", label: "Etapa" },
   { key: "assignee", label: "Resp." },
   { key: "reason", label: "Motivo" },
   { key: "due", label: "Vence", mono: true, format: "date" },
@@ -193,7 +193,7 @@ function AnaliticoTable({ items }: { items: AttentionItem[] }) {
       id: item.id,
       title: item.title,
       project: item.project,
-      tramo: item.tramo,
+      etapa: item.etapa,
       assignee: item.assignee?.initials ?? null,
       reason: item.reason,
       due: item.due,
@@ -211,8 +211,8 @@ function AnaliticoTable({ items }: { items: AttentionItem[] }) {
             {item.title}
           </Link>
         );
-      case "tramo":
-        return item.tramo ? <TramoBadge tramo={tramoRef(item.tramo)} variant="dot" /> : NO_VALUE;
+      case "etapa":
+        return item.etapa ? <EtapaBadge etapa={etapaRef(item.etapa)} variant="dot" /> : NO_VALUE;
       case "assignee":
         return item.assignee ? (
           <abbr title={item.assignee.name} className="font-mono no-underline">

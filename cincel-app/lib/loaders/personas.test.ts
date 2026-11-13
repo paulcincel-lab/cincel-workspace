@@ -25,7 +25,7 @@ vi.mock("@/lib/auth/permissions", () => ({
   canViewTeamHours: vi.fn(() => false),
   canDecideVacations: vi.fn(() => false),
 }));
-vi.mock("@/lib/tramos/compat", () => ({ canSeeAdminData: vi.fn(() => caps.admin) }));
+vi.mock("@/lib/etapas/compat", () => ({ canSeeAdminData: vi.fn(() => caps.admin) }));
 vi.mock("@/lib/time-tracking/settings", () => ({
   TIME_TRACKING_TIME_ZONE: "America/Mexico_City",
   getTimeTrackingSettings: vi.fn(async () => ({ enabled: true })),
@@ -35,7 +35,7 @@ vi.mock("@/lib/vacations/approved-absences", () => ({ approvedAbsences: vi.fn(as
 
 const reads = vi.hoisted(() => ({
   listStaff: vi.fn(),
-  listTramosNav: vi.fn(),
+  listEtapasNav: vi.fn(),
   listAssignedOpenTasks: vi.fn(),
   listActiveProjectsByStaff: vi.fn(),
   listContacts: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock("@/lib/repositories/staff-repository", () => ({
   loadStaffPositions: vi.fn(async () => new Map()),
   toStaff: vi.fn(),
 }));
-vi.mock("@/lib/repositories/workflows-repository", () => ({ listTramosNav: reads.listTramosNav }));
+vi.mock("@/lib/repositories/workflows-repository", () => ({ listEtapasNav: reads.listEtapasNav }));
 vi.mock("@/lib/repositories/people-repository", () => ({
   listAssignedOpenTasks: reads.listAssignedOpenTasks,
   listActiveProjectsByStaff: reads.listActiveProjectsByStaff,
@@ -56,7 +56,7 @@ vi.mock("@/lib/repositories/contacts-repository", () => ({
   countByType: reads.countByType,
 }));
 
-import { EQUIPO_STAFF, EQUIPO_TRAMOS } from "@/components/personas/fixtures/equipo";
+import { EQUIPO_STAFF, EQUIPO_ETAPAS } from "@/components/personas/fixtures/equipo";
 
 import { loadPersonasContacts, loadPersonasCounts, loadPersonasEquipo } from "./personas";
 import { approvedAbsences } from "@/lib/vacations/approved-absences";
@@ -88,7 +88,7 @@ beforeEach(() => {
   caps.admin = false;
   caps.activities = { canCreateActivity: true, canChangeResponsible: true };
   reads.listStaff.mockReset().mockResolvedValue(EQUIPO_STAFF);
-  reads.listTramosNav.mockReset().mockResolvedValue(EQUIPO_TRAMOS);
+  reads.listEtapasNav.mockReset().mockResolvedValue(EQUIPO_ETAPAS);
   reads.listAssignedOpenTasks.mockReset().mockResolvedValue(new Map());
   reads.listActiveProjectsByStaff.mockReset().mockResolvedValue(new Map());
   reads.listContacts.mockReset().mockResolvedValue([]);
@@ -100,7 +100,7 @@ describe("loadPersonasEquipo", () => {
     const data = await loadPersonasEquipo(USER);
     expect(reads.listStaff).toHaveBeenCalledTimes(1);
     expect(data.people.map((p) => p.name)).toEqual(["Ana Ruiz", "Bruno Soto", "Carla Méndez"]);
-    expect(data.people.map((p) => p.tramo)).toEqual(["diseno", "construccion", null]);
+    expect(data.people.map((p) => p.etapa)).toEqual(["diseno", "construccion", null]);
     expect(data.people.every((p) => p.weekHours === null)).toBe(true);
     expect(data.emails[EQUIPO_STAFF[0].id]).toBe("ana@cincel.mx");
     expect(data.canCreate).toBe(true);
@@ -134,7 +134,7 @@ describe("loadPersonasEquipo", () => {
     const [ana] = data.people;
     expect(ana.weeks).toHaveLength(4);
     expect(ana.absences).toEqual([{ from: "2000-01-03", to: "2000-01-04", kind: "ausencia" }]);
-    expect(data.tramos).toEqual(EQUIPO_TRAMOS);
+    expect(data.etapas).toEqual(EQUIPO_ETAPAS);
   });
 
   it("refuses a viewer without team.canViewTeam", async () => {

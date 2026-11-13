@@ -10,7 +10,7 @@ import { initialsOf } from "@/lib/inicio/header";
 import { isTaskCompleted } from "@/lib/tasks/status-options";
 import type { DayHours, InicioHero, InicioOpenShifts } from "@/lib/types/redesign";
 import type { TaskListItem } from "@/lib/types/core";
-import type { KpiDatum, TramoKey } from "@/lib/types/widgets";
+import type { KpiDatum, EtapaKey } from "@/lib/types/widgets";
 
 type HeroTask = Pick<TaskListItem, "commitmentDate" | "projectId" | "project">;
 
@@ -46,24 +46,24 @@ export function inicioHero(openTasks: HeroTask[], overdueTasks: HeroTask[], toda
 }
 
 /**
- * Each staff member's tramo: the tramo of most of the open tasks they are
- * involved in (manager or support), ties by tramo key; absent = no tramo.
+ * Each staff member's etapa: the etapa of most of the open tasks they are
+ * involved in (manager or support), ties by etapa key; absent = no etapa.
  */
-export function dominantTramoByStaff(
+export function dominantEtapaByStaff(
   tasks: Pick<TaskListItem, "managerId" | "support" | "workflow">[],
-): Map<string, TramoKey> {
-  const counts = new Map<string, Map<TramoKey, number>>();
+): Map<string, EtapaKey> {
+  const counts = new Map<string, Map<EtapaKey, number>>();
   for (const task of tasks) {
     const key = task.workflow?.key;
     if (!key) continue;
     const people = new Set([task.managerId, ...(task.support ?? []).map((s) => s.id)].filter((id): id is string => !!id));
     for (const id of people) {
-      const own = counts.get(id) ?? new Map<TramoKey, number>();
+      const own = counts.get(id) ?? new Map<EtapaKey, number>();
       own.set(key, (own.get(key) ?? 0) + 1);
       counts.set(id, own);
     }
   }
-  const out = new Map<string, TramoKey>();
+  const out = new Map<string, EtapaKey>();
   for (const [id, own] of counts) {
     const best = [...own.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
     if (best) out.set(id, best[0]);
@@ -99,22 +99,22 @@ export function scopedStaffIds(
   return [...ids].filter((id) => active.has(id) || id === input.viewerId);
 }
 
-/** Open shifts of today: the given staff ids (distinct, in scope) with their initials and tramo. */
+/** Open shifts of today: the given staff ids (distinct, in scope) with their initials and etapa. */
 export function openShiftsOf(
   openStaffIds: string[],
   inScope: ReadonlySet<string>,
   staffById: ReadonlyMap<string, { name: string; lastName: string | null }>,
-  tramoByStaff: ReadonlyMap<string, TramoKey>,
+  etapaByStaff: ReadonlyMap<string, EtapaKey>,
 ): InicioOpenShifts {
   const ids = [...new Set(openStaffIds)].filter((id) => inScope.has(id) && staffById.has(id));
   const people = ids
     .map((id) => {
       const s = staffById.get(id)!;
       const name = [s.name, s.lastName].filter((part) => part && part.trim()).join(" ");
-      return { id, name, initials: initialsOf(name), tramo: tramoByStaff.get(id) ?? null };
+      return { id, name, initials: initialsOf(name), etapa: etapaByStaff.get(id) ?? null };
     })
     .sort((a, b) => a.name.localeCompare(b.name, "es"))
-    .map(({ id, initials, tramo }) => ({ id, initials, tramo }));
+    .map(({ id, initials, etapa }) => ({ id, initials, etapa }));
   return { count: people.length, people };
 }
 
@@ -122,8 +122,8 @@ export function openShiftsOf(
 export function projectTeam(
   project: { manager: { id: string; name: string } | null; coordinator: { id: string; name: string } | null },
   tasks: Pick<TaskListItem, "manager" | "support">[],
-  tramoByStaff: ReadonlyMap<string, TramoKey>,
-): { id: string; initials: string; tramo: TramoKey | null }[] {
+  etapaByStaff: ReadonlyMap<string, EtapaKey>,
+): { id: string; initials: string; etapa: EtapaKey | null }[] {
   const people = new Map<string, string>();
   const add = (p: { id: string; name: string } | null | undefined) => {
     if (p && !people.has(p.id)) people.set(p.id, p.name);
@@ -134,7 +134,7 @@ export function projectTeam(
     add(task.manager);
     for (const s of task.support ?? []) add(s);
   }
-  return [...people.entries()].map(([id, name]) => ({ id, initials: initialsOf(name), tramo: tramoByStaff.get(id) ?? null }));
+  return [...people.entries()].map(([id, name]) => ({ id, initials: initialsOf(name), etapa: etapaByStaff.get(id) ?? null }));
 }
 
 /** Subtask progress of an attention item: done / total (null without subtareas) and the % (`taskProgressPct`). */

@@ -18,9 +18,9 @@ export const kpiFixture: KpiDatum[] = [
     min30: 8,
     max30: 12,
     split: [
-      { tramo: "presale", share: 0.25 },
-      { tramo: "diseno", share: 0.33 },
-      { tramo: "construccion", share: 0.42 },
+      { etapa: "presale", share: 0.25 },
+      { etapa: "diseno", share: 0.33 },
+      { etapa: "construccion", share: 0.42 },
     ],
     caption: "3 inician este mes",
     href: "/proyectos",

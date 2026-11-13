@@ -80,7 +80,7 @@ const ALL_PEOPLE = "__todos__";
 /** How long typing waits before the search reaches the URL. */
 export const PROJECT_TASKS_SEARCH_DEBOUNCE_MS = 300;
 const NO_STAFF: never[] = [];
-const NO_TRAMOS: never[] = [];
+const NO_ETAPAS: never[] = [];
 
 /**
  * Writes the tab's filters to the URL with `history.replaceState`: the App
@@ -143,7 +143,7 @@ export function ProjectTareasTab({ projectId }: { projectId: string }) {
 
 /**
  * Proyecto · Tareas (redesign FE §3.5, §4.6): the project's tasks grouped by
- * fase (by tramo when the project has no fase data) with progress per group,
+ * fase (by etapa when the project has no fase data) with progress per group,
  * the estado / responsable / search filters and "+ Agregar tarea" per group.
  * A composition of library widgets: the per-group summary and the grouped
  * task list are `RecordTable`s, which render Visual, Esencial and Analítico.
@@ -217,7 +217,7 @@ export function ProjectTasksByFase({
   const staff = staffQuery.data ?? NO_STAFF;
   const tasksById = useMemo(() => new Map(rows.map((task) => [task.id, task])), [rows]);
   const taskOfRow = useCallback((row: ProjectTaskRow) => tasksById.get(row.id), [tasksById]);
-  const cells = useTaskCellEdits<ProjectTaskRow>({ taskOf: taskOfRow, tramos: NO_TRAMOS, staff });
+  const cells = useTaskCellEdits<ProjectTaskRow>({ taskOf: taskOfRow, etapas: NO_ETAPAS, staff });
   const tasksTable = useMemo(() => {
     const table = buildTasksTable(loadedGroups, today);
     const support = cells.support();
@@ -260,7 +260,7 @@ export function ProjectTasksByFase({
   const openCreate = (group: ProjectTaskGroupSummary | null) =>
     useNewTaskUi
       .getState()
-      .openNewTask({ projectId, ...(group?.tramo ? { tramoKey: group.tramo.key } : {}) }, "proyecto");
+      .openNewTask({ projectId, ...(group?.etapa ? { etapaKey: group.etapa.key } : {}) }, "proyecto");
 
   const clearFilters = () => {
     if (searchTimer.current) clearTimeout(searchTimer.current);

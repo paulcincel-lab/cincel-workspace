@@ -19,7 +19,7 @@ function pageData(user: { access?: string }): ProyectosPageData {
   return {
     projects: [],
     portfolio: [],
-    tramos: [
+    etapas: [
       { id: "w1", key: "presale", name: "Presale", sortOrder: 1 },
       { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
     ],
@@ -82,7 +82,7 @@ describe("/proyectos page", () => {
     expect(screen.getByTestId("portfolio").textContent).toBe("hydrated");
     expect(loaders.loadProyectosPage).toHaveBeenCalledTimes(1);
     expect(loaders.loadProyectosPage).toHaveBeenCalledWith(expect.objectContaining({ access: "Colaborador" }));
-    expect(seen.data?.tramos.map((t) => t.key)).toEqual(["presale", "diseno"]);
+    expect(seen.data?.etapas.map((t) => t.key)).toEqual(["presale", "diseno"]);
     expect(seen.data?.presaleAutoStart).toBe(true);
     expect(pageDataActions.getProyectosPageData).not.toHaveBeenCalled();
   });
@@ -99,7 +99,7 @@ describe("/proyectos page", () => {
         "presaleAutoStart",
         "projects",
         "today",
-        "tramos",
+        "etapas",
         "viewerStaffId",
       ].sort(),
     );

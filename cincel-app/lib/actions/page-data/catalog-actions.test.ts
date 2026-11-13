@@ -45,21 +45,21 @@ vi.mock("@/lib/db/client", () => {
 
 const repos = vi.hoisted(() => ({
   listAssignableStaff: vi.fn(),
-  countOpenTasksInTramo: vi.fn(async () => new Map()),
-  listTramosNav: vi.fn(),
+  countOpenTasksInEtapa: vi.fn(async () => new Map()),
+  listEtapasNav: vi.fn(),
   listTaskStatuses: vi.fn(),
   projectExists: vi.fn(),
   listSpaces: vi.fn(),
 }));
 vi.mock("@/lib/repositories/staff-repository", () => ({
   listAssignableStaff: repos.listAssignableStaff,
-  countOpenTasksInTramo: repos.countOpenTasksInTramo,
+  countOpenTasksInEtapa: repos.countOpenTasksInEtapa,
 }));
 vi.mock("@/lib/settings/general-settings-server", async () => {
   const { GENERAL_SETTINGS_DEFAULTS } = await import("@/lib/settings/general-settings");
   return { getGeneralSettings: async () => ({ settings: GENERAL_SETTINGS_DEFAULTS }) };
 });
-vi.mock("@/lib/repositories/workflows-repository", () => ({ listTramosNav: repos.listTramosNav }));
+vi.mock("@/lib/repositories/workflows-repository", () => ({ listEtapasNav: repos.listEtapasNav }));
 vi.mock("@/lib/repositories/task-statuses-repository", () => ({ listTaskStatuses: repos.listTaskStatuses }));
 vi.mock("@/lib/repositories/projects-repository", () => ({ projectExists: repos.projectExists }));
 vi.mock("@/lib/repositories/project-spaces-repository", () => ({ listSpaces: repos.listSpaces }));
@@ -145,10 +145,10 @@ describe("fetchCatalogAssignableStaff", () => {
       fullStaff(STAFF_A, "Ana", "Ruiz", true),
       fullStaff(STAFF_B, "Luis", null, false),
     ]);
-    repos.countOpenTasksInTramo.mockResolvedValueOnce(new Map([[STAFF_A, { open: 4, overdue: 2 }]]));
+    repos.countOpenTasksInEtapa.mockResolvedValueOnce(new Map([[STAFF_A, { open: 4, overdue: 2 }]]));
     const rows = await fetchCatalogAssignableStaff({ workflowId: WORKFLOW });
     expect(repos.listAssignableStaff).toHaveBeenCalledWith({ workflowId: WORKFLOW });
-    expect(repos.countOpenTasksInTramo).toHaveBeenCalledWith(WORKFLOW, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(repos.countOpenTasksInEtapa).toHaveBeenCalledWith(WORKFLOW, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     expect(rows).toEqual([
       { id: STAFF_A, name: "Ana Ruiz", suggested: true, openCount: 4, overdueCount: 2 },
       { id: STAFF_B, name: "Luis", suggested: false, openCount: 0, overdueCount: 0 },
@@ -156,11 +156,11 @@ describe("fetchCatalogAssignableStaff", () => {
     for (const row of rows) expect(Object.keys(row).sort()).toEqual(["id", "name", "openCount", "overdueCount", "suggested"]);
   });
 
-  it("without a etapa the rows are exactly {id,name,suggested}", async () => {
+  it("without an etapa the rows are exactly {id,name,suggested}", async () => {
     repos.listAssignableStaff.mockResolvedValue([fullStaff(STAFF_A, "Ana", "Ruiz", true)]);
     const rows = await fetchCatalogAssignableStaff({ workflowId: null });
     expect(rows).toEqual([{ id: STAFF_A, name: "Ana Ruiz", suggested: true }]);
-    expect(repos.countOpenTasksInTramo).not.toHaveBeenCalled();
+    expect(repos.countOpenTasksInEtapa).not.toHaveBeenCalled();
   });
 
   it("accepts a null etapa and refuses a malformed id", async () => {
@@ -225,7 +225,7 @@ describe("fetchCatalogProjectSpaces", () => {
 describe("fetchCatalogWorkflows / fetchCatalogTaskStatuses", () => {
   it("workflows are the active etapa refs", async () => {
     const refs = [{ id: WORKFLOW, key: "presale", name: "Presale", sortOrder: 0 }];
-    repos.listTramosNav.mockResolvedValue(refs);
+    repos.listEtapasNav.mockResolvedValue(refs);
     expect(await fetchCatalogWorkflows({})).toEqual(refs);
   });
 

@@ -11,10 +11,10 @@ import { tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
 import type { TaskListItem, TaskListRow } from "@/lib/types/core";
 import type { QueryClient } from "@tanstack/react-query";
 
-import { DISENO, LISTA_TRAMOS, PRESALE, makeListaTask } from "./lista-tasks";
+import { DISENO, LISTA_ETAPAS, PRESALE, makeListaTask } from "./lista-tasks";
 
 export const ANALITICO_TODAY = "2026-11-09";
-export const ANALITICO_TRAMOS = LISTA_TRAMOS;
+export const ANALITICO_ETAPAS = LISTA_ETAPAS;
 
 const LOMAS = { id: "p1", name: "Casa Lomas", clientName: null };
 const ROMA = { id: "p2", name: "Depto Roma", clientName: null };
@@ -73,13 +73,13 @@ const UNFILTERED: TareasSummary["unfiltered"] = {
   projects: 3,
   total: 7,
   projectList: [
-    { id: "p1", name: "Casa Lomas", total: 4, byTramo: { [PRESALE.id]: 2, [DISENO.id]: 2 } },
-    { id: "p3", name: "Casa Valle de Bravo", total: 2, byTramo: { [DISENO.id]: 2 } },
-    { id: "p2", name: "Depto Roma", total: 1, byTramo: { [DISENO.id]: 1 } },
+    { id: "p1", name: "Casa Lomas", total: 4, byEtapa: { [PRESALE.id]: 2, [DISENO.id]: 2 } },
+    { id: "p3", name: "Casa Valle de Bravo", total: 2, byEtapa: { [DISENO.id]: 2 } },
+    { id: "p2", name: "Depto Roma", total: 1, byEtapa: { [DISENO.id]: 1 } },
   ],
 };
 
-/** Mostrar: Todas (Casa Valle de Bravo sits outside the tramo filter here, so it isn't listed). */
+/** Mostrar: Todas (Casa Valle de Bravo sits outside the etapa filter here, so it isn't listed). */
 export const ANALITICO_SUMMARY: TareasSummary = {
   projects: [
     {
@@ -89,9 +89,9 @@ export const ANALITICO_SUMMARY: TareasSummary = {
       overdue: 3,
       blocked: 1,
       daysLateSum: 19,
-      tramos: [
-        { tramo: presale, total: 2, open: 1, overdue: 1, blocked: 1, daysLateSum: 10 },
-        { tramo: diseno, total: 2, open: 2, overdue: 2, blocked: 0, daysLateSum: 9 },
+      etapas: [
+        { etapa: presale, total: 2, open: 1, overdue: 1, blocked: 1, daysLateSum: 10 },
+        { etapa: diseno, total: 2, open: 2, overdue: 2, blocked: 0, daysLateSum: 9 },
       ],
     },
     {
@@ -101,7 +101,7 @@ export const ANALITICO_SUMMARY: TareasSummary = {
       overdue: 0,
       blocked: 0,
       daysLateSum: 0,
-      tramos: [{ tramo: diseno, total: 1, open: 1, overdue: 0, blocked: 0, daysLateSum: 0 }],
+      etapas: [{ etapa: diseno, total: 1, open: 1, overdue: 0, blocked: 0, daysLateSum: 0 }],
     },
   ],
   totals: { total: 5, open: 4, overdue: 3, blocked: 1, daysLateSum: 19, projects: 2 },
@@ -118,9 +118,9 @@ export const ANALITICO_LATE_SUMMARY: TareasSummary = {
       overdue: 3,
       blocked: 1,
       daysLateSum: 19,
-      tramos: [
-        { tramo: presale, total: 1, open: 1, overdue: 1, blocked: 1, daysLateSum: 10 },
-        { tramo: diseno, total: 2, open: 2, overdue: 2, blocked: 0, daysLateSum: 9 },
+      etapas: [
+        { etapa: presale, total: 1, open: 1, overdue: 1, blocked: 1, daysLateSum: 10 },
+        { etapa: diseno, total: 2, open: 2, overdue: 2, blocked: 0, daysLateSum: 9 },
       ],
     },
   ],
@@ -130,7 +130,7 @@ export const ANALITICO_LATE_SUMMARY: TareasSummary = {
 
 export const ANALITICO_FACETS: TareasFacets = {
   total: 5,
-  byTramo: { presale: 2, diseno: 3 },
+  byEtapa: { presale: 2, diseno: 3 },
   projects: [],
   mostrar: { todas: 7, abiertas: 6, en_retraso: 3 },
   mine: 1,

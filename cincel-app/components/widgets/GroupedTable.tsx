@@ -46,7 +46,7 @@ import { cn } from "@/lib/utils";
 /**
  * Analítico grouped table (ADR 0005, frames `Main`, `Analitico-Vencidas`,
  * `Proyectos-Analitico`): one card per top group, a second collapsible level
- * (e.g. project → tramo), metrics in each group header, heat cells, footer
+ * (e.g. project → etapa), metrics in each group header, heat cells, footer
  * totals, "Ir a" anchors and a totals bar under the last card. `layout:
  * "table"` puts every top group in one table instead (group rows, one
  * `tfoot` from `footerRow`).

@@ -7,9 +7,9 @@ import type { ReactNode } from "react";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import type { ListPageProps } from "@/components/patterns/ListPage";
 import type { ColorMode, PresentationStyle, ThemeId } from "@/lib/types/redesign";
-import type { TramoBoard } from "@/lib/types/core";
+import type { EtapaBoard } from "@/lib/types/core";
 
-import { DISENO, LISTA_TASKS, LISTA_TRAMOS } from "./fixtures/lista-tasks";
+import { DISENO, LISTA_TASKS, LISTA_ETAPAS } from "./fixtures/lista-tasks";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
@@ -40,9 +40,9 @@ vi.mock("next/link", () => ({
   },
 }));
 
-const BOARD: TramoBoard = {
+const BOARD: EtapaBoard = {
   workflow: DISENO,
-  ready: [{ project: { id: "p7", name: "Casa Valle" }, currentTramo: null, readySince: "2026-11-02T10:00:00.000Z", pending: null }],
+  ready: [{ project: { id: "p7", name: "Casa Valle" }, currentEtapa: null, readySince: "2026-11-02T10:00:00.000Z", pending: null }],
   upcoming: [],
   started: [],
 };
@@ -55,10 +55,10 @@ vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
   getTareasBoard: vi.fn(),
   getTareasBoardColumn: vi.fn(),
 }));
-vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  previewStartTramoAction: vi.fn(),
-  startTramoAction: vi.fn(),
-  undoStartTramoAction: vi.fn(),
+vi.mock("@/lib/actions/etapa-start-actions", () => ({
+  previewStartEtapaAction: vi.fn(),
+  startEtapaAction: vi.fn(),
+  undoStartEtapaAction: vi.fn(),
 }));
 vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({ member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" }),
@@ -67,8 +67,8 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
   resolveActivitiesCapabilities: () => ({ canCreateActivity: true }),
 }));
-vi.mock("@/components/widgets/TramoBadge", () => ({
-  TramoBadge: ({ tramo }: { tramo: { name: string } }) => <span>{tramo.name}</span>,
+vi.mock("@/components/widgets/EtapaBadge", () => ({
+  EtapaBadge: ({ etapa }: { etapa: { name: string } }) => <span>{etapa.name}</span>,
 }));
 
 // The page shell is ListPage's own concern (and its own a11y test); here it
@@ -98,15 +98,15 @@ import { seedSessionUser } from "@/tests/helpers/session-user";
 // The components read the signed-in user from the session store; seed it with the mocked user.
 beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 
-const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo: "diseno" };
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, etapa: "diseno" };
 
-/** The cache `/tareas?estilo=analitico&tramo=diseno` hydrates. */
+/** The cache `/tareas?estilo=analitico&etapa=diseno` hydrates. */
 function seededClient() {
   const client = createTestQueryClient();
   // The bundle is keyed by the style; seed it for every one the tests render.
   const page = {
-    facets: { total: LISTA_TASKS.length, byTramo: {}, projects: [] },
-    tramos: LISTA_TRAMOS,
+    facets: { total: LISTA_TASKS.length, byEtapa: {}, projects: [] },
+    etapas: LISTA_ETAPAS,
     staff: [],
   };
   for (const estilo of ["visual", "esencial", "analitico"] as const) {

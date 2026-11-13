@@ -123,7 +123,7 @@ describe("BibliotecaSection", () => {
   });
 
   it("builds tipo and etapa filter chips as links keeping the other filter", () => {
-    renderSection({ tipo: "drive_file", tramo: null });
+    renderSection({ tipo: "drive_file", etapa: null });
     const carpeta = screen.getByRole("button", { name: "Carpeta" });
     expect(carpeta.getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_folder");
     expect(screen.getByRole("button", { name: "Archivo" }).getAttribute("aria-pressed")).toBe("true");

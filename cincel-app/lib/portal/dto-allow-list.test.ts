@@ -15,12 +15,12 @@ import {
   toPortalScheduleDTO,
   toPortalFolderGroupDTO,
   toPortalTeamMemberDTO,
-  toPortalTramosDTO,
+  toPortalEtapasDTO,
   type PortalProjectRow,
   type PortalScheduleTaskRow,
   type PortalTeamRow,
-  type PortalTramoProgressRow,
-  type PortalTramoRow,
+  type PortalEtapaProgressRow,
+  type PortalEtapaRow,
 } from "./dto";
 import { toPortalFileDTO } from "./files";
 
@@ -69,11 +69,11 @@ const taskRow = {
   status: "done",
   startedOn: "2026-02-02",
   finishedOn: "2026-02-07",
-  tramoKey: "construccion",
+  etapaKey: "construccion",
   ...LEAKS,
 } as PortalScheduleTaskRow;
 
-const tramoRow = {
+const etapaRow = {
   id: "w1",
   key: "diseno",
   name: "Diseño",
@@ -82,7 +82,7 @@ const tramoRow = {
   startedAt: "2026-01-10",
   closedAt: null,
   ...LEAKS,
-} as PortalTramoRow;
+} as PortalEtapaRow;
 
 const driveFile = {
   id: "f1",
@@ -113,9 +113,9 @@ describe("portal DTO allow-list", () => {
     expectNoLeak(dto);
   });
 
-  it("schedule section emits real dates and tramoKey only, from the new columns", () => {
+  it("schedule section emits real dates and etapaKey only, from the new columns", () => {
     const [section] = toPortalScheduleDTO([taskRow])!.sections;
-    expect(section).toMatchObject({ actualStart: "2026-02-02", actualEnd: "2026-02-07", tramoKey: "construccion" });
+    expect(section).toMatchObject({ actualStart: "2026-02-02", actualEnd: "2026-02-07", etapaKey: "construccion" });
     expect(sortedKeys(section)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.scheduleSection]);
   });
 
@@ -125,15 +125,15 @@ describe("portal DTO allow-list", () => {
     expect(dto).not.toHaveProperty("progressMonthStart");
   });
 
-  it("toPortalTramosDTO emits exactly the allowed keys", () => {
-    const [dto] = toPortalTramosDTO([tramoRow], null);
-    expect(sortedKeys(dto)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.tramo]);
+  it("toPortalEtapasDTO emits exactly the allowed keys", () => {
+    const [dto] = toPortalEtapasDTO([etapaRow], null);
+    expect(sortedKeys(dto)).toEqual([...PORTAL_DTO_ALLOWED_KEYS.etapa]);
     expectNoLeak(dto);
   });
 
-  it("toPortalTramosDTO emits progressPct and startMonth only", () => {
+  it("toPortalEtapasDTO emits progressPct and startMonth only", () => {
     const progress = { workflowId: "w1", total: 8, done: 5, title: "Tarea interna", responsable: "Responsable interno" };
-    const [dto] = toPortalTramosDTO([tramoRow], null, [progress as PortalTramoProgressRow]);
+    const [dto] = toPortalEtapasDTO([etapaRow], null, [progress as PortalEtapaProgressRow]);
     expect(dto).toEqual({ key: "diseno", name: "Diseño", state: "en_curso", progressPct: 63, startMonth: "2026-01" });
     expect(sortedKeys(dto)).toEqual(["key", "name", "progressPct", "startMonth", "state"]);
     expectNoLeak(dto);
@@ -180,8 +180,8 @@ describe("portal DTO allow-list", () => {
       project: ["address", "code", "endDate", "id", "manager", "name", "progressDeltaMonth", "progressPct", "startDate", "status"],
       projectManager: ["email", "name"],
       schedule: ["sections"],
-      scheduleSection: ["actualEnd", "actualStart", "end", "key", "planta", "progressPct", "seccion", "start", "tramoKey"],
-      tramo: ["key", "name", "progressPct", "startMonth", "state"],
+      scheduleSection: ["actualEnd", "actualStart", "end", "etapaKey", "key", "planta", "progressPct", "seccion", "start"],
+      etapa: ["key", "name", "progressPct", "startMonth", "state"],
       file: ["deliveredAs", "id", "kind", "mimeType", "modifiedAt", "name", "sizeBytes", "uploadedBy"],
       folderGroup: ["files", "folderId", "name"],
       teamMember: ["email", "name", "role"],

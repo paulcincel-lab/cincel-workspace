@@ -39,8 +39,8 @@ vi.mock("@/lib/actions/tasks-actions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/actions/tasks-actions")>()),
   ...actions,
 }));
-vi.mock("@/components/widgets/TramoBadge", () => ({
-  TramoBadge: ({ tramo }: { tramo: { name: string } }) => <span>{tramo.name}</span>,
+vi.mock("@/components/widgets/EtapaBadge", () => ({
+  EtapaBadge: ({ etapa }: { etapa: { name: string } }) => <span>{etapa.name}</span>,
 }));
 // The real RecordTable (the grid), without the page shell.
 vi.mock("@/components/patterns/ListPage", async () => {
@@ -90,13 +90,13 @@ import { seedSessionUser } from "@/tests/helpers/session-user";
 
 import { TareasLista } from "./TareasLista";
 import { analiticoTaskRow } from "./fixtures/analitico-summary";
-import { DISENO, LISTA_TRAMOS, PRESALE } from "./fixtures/lista-tasks";
+import { DISENO, LISTA_ETAPAS, PRESALE } from "./fixtures/lista-tasks";
 
-const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo: "diseno" };
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, etapa: "diseno" };
 
 function renderLista() {
   const client = createTestQueryClient();
-  const page = { facets: { total: 2, byTramo: {}, projects: [] }, tramos: LISTA_TRAMOS, staff: [] };
+  const page = { facets: { total: 2, byEtapa: {}, projects: [] }, etapas: LISTA_ETAPAS, staff: [] };
   client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY, "analitico")), page);
   client.setQueryData(qk.catalog.taskStatuses(), []);
   const rows = [
@@ -131,7 +131,7 @@ describe("TareasLista editable cells", () => {
   it("edits the task columns and leaves Proyecto and the summary columns calculated", () => {
     seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Administrador" });
     renderLista();
-    for (const column of ["tarea", "tramo", "fase", "responsable", "vence", "prioridad"]) {
+    for (const column of ["tarea", "etapa", "fase", "responsable", "vence", "prioridad"]) {
       expect(cell("t1", column).dataset.cellState).toBe("editable");
     }
     for (const column of ["proyecto", "subtareas", "diasRetraso", "abiertas", "pctVencidas"]) {
@@ -155,7 +155,7 @@ describe("TareasLista editable cells", () => {
     seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Administrador" });
     actions.updateTaskAction.mockResolvedValue({ ok: true, data: { id: "t1", workflowId: PRESALE.id, phaseId: null } });
     renderLista();
-    fireEvent.click(cell("t1", "tramo"));
+    fireEvent.click(cell("t1", "etapa"));
     await act(async () => {
       fireEvent.click(within(screen.getByRole("dialog", { name: "Editor Etapa" })).getByRole("button", { name: "Presale" }));
     });
@@ -165,10 +165,10 @@ describe("TareasLista editable cells", () => {
     expect(document.querySelector('[data-cell-row="t2"]')).toBeNull();
   });
 
-  it("colaborador can't move a task with a etapa", () => {
+  it("colaborador can't move a task with an etapa", () => {
     seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
     renderLista();
-    fireEvent.click(cell("t1", "tramo"));
-    expect(screen.getByRole("dialog", { name: "Editor Etapa" }).textContent).toBe(LOCK_REASON.tramo);
+    fireEvent.click(cell("t1", "etapa"));
+    expect(screen.getByRole("dialog", { name: "Editor Etapa" }).textContent).toBe(LOCK_REASON.etapa);
   });
 });

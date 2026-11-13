@@ -28,7 +28,7 @@ beforeEach(() => vi.clearAllMocks());
 const cases = [
   { name: "projectOptions", opts: () => catalogOptions.projectOptions(), key: qk.catalog.projectOptions(), action: actions.fetchCatalogProjectOptions, input: {} },
   { name: "workflows", opts: () => catalogOptions.workflows(), key: qk.catalog.workflows(), action: actions.fetchCatalogWorkflows, input: {} },
-  { name: "tramos", opts: () => catalogOptions.tramos(), key: qk.catalog.tramos(), action: actions.fetchCatalogWorkflows, input: {} },
+  { name: "etapas", opts: () => catalogOptions.etapas(), key: qk.catalog.etapas(), action: actions.fetchCatalogWorkflows, input: {} },
   { name: "taskStatuses", opts: () => catalogOptions.taskStatuses(), key: qk.catalog.taskStatuses(), action: actions.fetchCatalogTaskStatuses, input: {} },
   { name: "staff", opts: () => catalogOptions.staff(), key: qk.catalog.staff(), action: actions.fetchCatalogStaff, input: {} },
   {

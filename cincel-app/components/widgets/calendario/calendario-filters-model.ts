@@ -9,7 +9,7 @@ export type CalendarioFiltersProps = {
   /** `canViewTeamCalendar`: without it "Todos" / "Todo el equipo" is hidden. */
   canViewTeam: boolean;
   projects: readonly ProjectFilterOption[];
-  tramos: readonly WorkflowRef[];
+  etapas: readonly WorkflowRef[];
   onChange(patch: Partial<CalendarioFilters>): void;
 };
 
@@ -19,19 +19,19 @@ export const FILTER_MOSTRAR = [
   { value: "reuniones", label: "Reuniones" },
 ] as const;
 
-/** `?tramo=none`: tasks without a tramo. */
-export const TRAMO_NONE = "none";
-export const TRAMO_ALL = "__todos";
+/** `?etapa=none`: tasks without an etapa. */
+export const ETAPA_NONE = "none";
+export const ETAPA_ALL = "__todos";
 
 export const CALENDARIO_FILTER_COPY = {
   mostrar: "Mostrar",
   responsable: "Responsable",
-  tramo: "Etapa",
+  etapa: "Etapa",
   yo: "Yo",
   todos: "Todos",
   miAgenda: "Mi agenda",
   todoElEquipo: "Todo el equipo",
-  sinTramo: "Sin etapa",
+  sinEtapa: "Sin etapa",
   hideCompleted: "Ocultar completadas",
   dayHint: "Clic en un número de día para abrir ese día",
   legend: "Leyenda",

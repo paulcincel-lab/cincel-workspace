@@ -94,7 +94,7 @@ describe("scheduleTaskClosingHook", () => {
     expect(onTaskClosingChanged.mock.calls.map((call) => call[2])).toEqual([PRESALE, DISENO]);
   });
 
-  it("skips tasks without a etapa", async () => {
+  it("skips tasks without an etapa", async () => {
     await scheduleTaskClosingHook({ projectId: PROJECT, workflowId: null }, ACTOR);
     expect(after).not.toHaveBeenCalled();
   });

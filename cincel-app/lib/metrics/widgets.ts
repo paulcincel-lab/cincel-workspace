@@ -6,10 +6,10 @@
  * `server-only` code.
  */
 import { buildCalendarEvents } from "@/lib/calendar/calendar-service";
-import { NO_TRAMO_LABEL } from "@/lib/dashboard/donut-groups";
+import { NO_ETAPA_LABEL } from "@/lib/dashboard/donut-groups";
 import { localIsoDate, TASK_TREND_TIME_ZONE } from "@/lib/dashboard/task-trend";
 import { isTaskClosed, taskStatusLabel } from "@/lib/tasks/status-options";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorVar } from "@/lib/etapas/etapa-color";
 import type { CalendarEvent } from "@/lib/types/calendar";
 import type { ProjectListItem, Staff, TaskListItem } from "@/lib/types/core";
 import type { PeopleOverviewRow, PortfolioRow, Reminder, TeamAbsence } from "@/lib/types/redesign";
@@ -73,7 +73,7 @@ function clampPct(value: number): number {
 }
 
 /**
- * Generalizes `tasksByBaseStatus` / `projectsByTramo`: one segment per key in
+ * Generalizes `tasksByBaseStatus` / `projectsByEtapa`: one segment per key in
  * first-seen order, `value` = item count, `secondary` = sum of `secondaryOf`,
  * `extra` = numeric fields summed, text fields from the first item. Label and
  * color come from the first item of each key.
@@ -124,11 +124,11 @@ export function toProgressItems(projects: ProjectListItem[], portfolio?: Portfol
     return {
       id: project.id,
       label: project.name,
-      sublabel: project.currentWorkflow?.name ?? NO_TRAMO_LABEL,
+      sublabel: project.currentWorkflow?.name ?? NO_ETAPA_LABEL,
       real: clampPct(row ? row.real : project.progress),
       plan: row?.plan ?? null,
       budgetPct: row?.budgetSpentPct ?? null,
-      colorVar: tramoColorVar(project.currentWorkflow),
+      colorVar: etapaColorVar(project.currentWorkflow),
       href: projectHref(project.id),
       next: row?.nextDelivery ?? null,
       ...(row ? { open: row.open, overdue: row.overdue } : {}),
@@ -179,7 +179,7 @@ export function toAttentionItems(tasks: Omit<TaskListItem, "notes">[], now: Date
       title: task.title,
       href: taskHref(task.id),
       project: task.project.name,
-      tramo: task.workflow?.key ?? null,
+      etapa: task.workflow?.key ?? null,
       reason,
       tone,
       assignee: task.manager
@@ -201,8 +201,8 @@ export function toAttentionItems(tasks: Omit<TaskListItem, "notes">[], now: Date
   );
 }
 
-/** Calendar tramo keys that aren't `workflows.key`. */
-const NON_TRAMO_KEYS = new Set(["sin-tramo", "admin"]);
+/** Calendar etapa keys that aren't `workflows.key`. */
+const NON_ETAPA_KEYS = new Set(["sin-etapa", "admin"]);
 
 /** Task events only store a date; their time is synthesized, so it is estimated. */
 function eventToAgendaItem(event: CalendarEvent): AgendaItem {
@@ -212,7 +212,7 @@ function eventToAgendaItem(event: CalendarEvent): AgendaItem {
     start: `${event.date}T${event.time}`,
     estimated: true,
     project: event.project,
-    tramo: NON_TRAMO_KEYS.has(event.tramo) ? null : event.tramo,
+    etapa: NON_ETAPA_KEYS.has(event.etapa) ? null : event.etapa,
     href: taskHref(event.taskId),
   };
   if (event.responsible && event.responsible !== "Sin responsable") item.attendees = [event.responsible];
@@ -289,7 +289,7 @@ export function toPersonDatum(
     name,
     initials: initialsOf(name),
     puesto: staff.positions[0]?.name ?? null,
-    tramo: null,
+    etapa: null,
     open: overviewRow?.open ?? 0,
     overdue: overviewRow?.overdue ?? 0,
     activeProjects: overviewRow?.activeProjects ?? 0,

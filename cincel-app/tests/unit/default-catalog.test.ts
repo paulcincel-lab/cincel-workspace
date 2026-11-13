@@ -6,7 +6,7 @@
  */
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { lockTramoCatalog } from "@/tests/setup/catalog-lock";
+import { lockEtapaCatalog } from "@/tests/setup/catalog-lock";
 
 import {
   DEFAULT_CATALOG,
@@ -20,8 +20,8 @@ const url = process.env.TEST_DATABASE_URL;
 
 class Rollback extends Error {}
 
-const tramo = (key: string) => DEFAULT_CATALOG.find((c) => c.workflowKey === key)!;
-const templateCount = (key: string) => tramo(key).phases.reduce((n, p) => n + p.templates.length, 0);
+const etapa = (key: string) => DEFAULT_CATALOG.find((c) => c.workflowKey === key)!;
+const templateCount = (key: string) => etapa(key).phases.reduce((n, p) => n + p.templates.length, 0);
 const allTemplates = DEFAULT_CATALOG.flatMap((c) => c.phases.flatMap((p) => p.templates));
 
 describe("DEFAULT_CATALOG", () => {
@@ -46,7 +46,7 @@ describe("DEFAULT_CATALOG", () => {
       ],
       ["construccion", ["residencia", "postventa"]],
     ]);
-    expect(tramo("diseno").phases.find((p) => p.key === "proyecto_arquitectonico")?.name).toBe(
+    expect(etapa("diseno").phases.find((p) => p.key === "proyecto_arquitectonico")?.name).toBe(
       "Proyecto Arquitectónico"
     );
   });
@@ -106,7 +106,7 @@ describe("DEFAULT_POSITIONS", () => {
     for (const p of DEFAULT_POSITIONS) {
       expect(p.phases.length).toBeGreaterThan(0);
       for (const ref of p.phases) {
-        expect(tramo(ref.workflowKey).phases.map((f) => f.key)).toContain(ref.phaseKey);
+        expect(etapa(ref.workflowKey).phases.map((f) => f.key)).toContain(ref.phaseKey);
       }
     }
   });
@@ -116,7 +116,7 @@ describe.skipIf(!url)("ensureDefaultCatalog (test DB)", () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
-    unlockCatalog = await lockTramoCatalog(url!);
+    unlockCatalog = await lockEtapaCatalog(url!);
   }, 300_000);
   afterAll(async () => {
     await unlockCatalog?.();
@@ -182,7 +182,7 @@ describe.skipIf(!url)("ensureDefaultCatalog (test DB)", () => {
         select w.key as workflow, p.key, p.name, p.sort_order
         from core.workflow_phases p join core.workflows w on w.id = p.workflow_id
         where w.key = 'diseno' order by p.sort_order`;
-      expect(phases.map((p) => p.key)).toEqual(tramo("diseno").phases.map((p) => p.key));
+      expect(phases.map((p) => p.key)).toEqual(etapa("diseno").phases.map((p) => p.key));
 
       const templates = await tx`
         select t.title, t.sort_order, t.default_priority, p.key as phase
@@ -191,7 +191,7 @@ describe.skipIf(!url)("ensureDefaultCatalog (test DB)", () => {
         join core.workflows w on w.id = t.workflow_id
         where w.key = 'presale' order by t.sort_order`;
       expect(templates.map((t) => [t.sort_order, t.phase, t.title])).toEqual(
-        tramo("presale").phases.flatMap((p) => p.templates.map((t) => [p.key, t.title])).map((r, i) => [i, ...r])
+        etapa("presale").phases.flatMap((p) => p.templates.map((t) => [p.key, t.title])).map((r, i) => [i, ...r])
       );
       expect(new Set(templates.map((t) => t.default_priority))).toEqual(new Set(["media"]));
 
@@ -275,7 +275,7 @@ describe.skipIf(!url)("ensureDefaultCatalog (test DB)", () => {
       const [presale] = await tx`select id from core.workflows where key = 'presale'`;
       await tx`insert into core.workflow_phases (workflow_id, key, name) values (${presale.id}, 'propia', 'Propia')`;
       const changes = await ensureDefaultCatalog(tx);
-      expect(changes.phases).toBe(14 - tramo("presale").phases.length);
+      expect(changes.phases).toBe(14 - etapa("presale").phases.length);
       expect(changes.templates).toBe(51 - templateCount("presale"));
       const rows = await tx`select key from core.workflow_phases where workflow_id = ${presale.id}`;
       expect(rows.map((r) => r.key)).toEqual(["propia"]);

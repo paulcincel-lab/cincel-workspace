@@ -107,7 +107,7 @@ export type PortalProjectAccess = {
   driveFolderStatus: DriveFolderStatus;
   driveClientFolderId: string | null;
   driveInboundFolderId: string | null;
-  /** The project's current tramo, so the tramo read after the access check needs no project query. */
+  /** The project's current etapa, so the etapa read after the access check needs no project query. */
   currentWorkflowId: string | null;
 };
 

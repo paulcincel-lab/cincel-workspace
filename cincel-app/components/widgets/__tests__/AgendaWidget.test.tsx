@@ -2,13 +2,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
   };
 });
 
@@ -114,7 +114,7 @@ describe("AgendaWidget · Visual", () => {
       id: `extra-${i}`,
       title: `Pendiente ${i + 1}`,
       start: `2026-11-09T${String(15 + i).padStart(2, "0")}:00:00`,
-      tramo: "presale",
+      etapa: "presale",
     }));
     const { container } = renderWidget("visual", { mode: "month", items: [...agendaFixture.items, ...busy] });
     const widget = container.querySelector('[data-slot="agenda-widget"]') as HTMLElement;

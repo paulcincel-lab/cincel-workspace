@@ -50,12 +50,12 @@ export async function loadCatalogProjectOptions(user: AuthenticatedUser): Promis
 }
 
 /**
- * Active tramos by `sortOrder` (`catalog.workflows` and `catalog.tramos`).
+ * Active etapas by `sortOrder` (`catalog.workflows` and `catalog.etapas`).
  * Any staff session, as `fetchWorkflowsAction` (Actividades, Proyectos, Equipo
  * and Puestos all need them): the caller checks the session, no page capability.
  */
 export async function loadCatalogWorkflows(): Promise<WorkflowRef[]> {
-  return workflowsRepository.listTramosNav();
+  return workflowsRepository.listEtapasNav();
 }
 
 /** The task status catalog. `canViewTaskStatuses`, else `[]`. */
@@ -76,9 +76,9 @@ export async function loadCatalogStaff(user: AuthenticatedUser): Promise<Catalog
 }
 
 /**
- * Staff who can take a task `{id,name,suggested}`: with a tramo, the ones
+ * Staff who can take a task `{id,name,suggested}`: with an etapa, the ones
  * whose puesto covers it come first, each with `openCount` / `overdueCount`
- * (their open tasks in the tramo, overdue = due before today in the org time
+ * (their open tasks in the etapa, overdue = due before today in the org time
  * zone; the quick-add suggestions). Any staff session, as
  * `fetchAssignableStaffAction` (every task form assigns).
  */
@@ -92,7 +92,7 @@ export async function loadCatalogAssignableStaff(
   if (!workflowId) return rows.map((r) => ({ id: r.id, name: staffDisplayName(r), suggested: r.suggested }));
   const { settings } = await getGeneralSettings();
   const todayIso = zonedIsoDate(options.now ?? new Date(), settings.regional.timeZone);
-  const counts = await staffRepository.countOpenTasksInTramo(workflowId, todayIso);
+  const counts = await staffRepository.countOpenTasksInEtapa(workflowId, todayIso);
   return rows.map((r) => ({
     id: r.id,
     name: staffDisplayName(r),

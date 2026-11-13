@@ -3,14 +3,14 @@
  * (`DEFAULT_CATALOG`, `DEFAULT_POSITIONS`) lives in scripts/default-catalog.mjs.
  */
 
-/** A readiness rule: tramo `key` is ready once fase `phaseKey` of tramo `after` is done. */
+/** A readiness rule: etapa `key` is ready once fase `phaseKey` of etapa `after` is done. */
 export type ReadinessRule = { after: string; phaseKey: string };
 
 /**
  * Readiness, fixed in code and shown read-only (RD-4): Diseño after
  * Presale·Cobro, Construcción after Diseño·Ejecutivo. Keyed by
  * `workflows.key`, resolved through `workflow_phases.key`, so renaming a fase
- * doesn't break it. A tramo with no rule (the first one) has `readiness: null`.
+ * doesn't break it. An etapa with no rule (the first one) has `readiness: null`.
  */
 export const READINESS: Readonly<Record<string, ReadinessRule>> = {
   diseno: { after: "presale", phaseKey: "cobro" },
@@ -24,18 +24,24 @@ export const ASSIGN_CLIENT_TASK_TITLE = "Asignar cliente y origen";
 /** Time zone of "today" for system-made task dates (same as TASK_TREND_TIME_ZONE). */
 export const FLOW_TIME_ZONE = "America/Mexico_City";
 
-/** What started a tramo (`tramo_start_batches.trigger`). */
-export type TramoStartTrigger = "manual" | "on_create" | "on_ready";
-export const TRAMO_START_TRIGGERS: readonly TramoStartTrigger[] = ["manual", "on_create", "on_ready"];
+/** What started an etapa (`tramo_start_batches.trigger`). */
+export type EtapaStartTrigger = "manual" | "on_create" | "on_ready";
+export const ETAPA_START_TRIGGERS: readonly EtapaStartTrigger[] = ["manual", "on_create", "on_ready"];
 
 /** `tramo_start_batches.assignment_mode`. */
-export type TramoAssignmentMode = "self" | "by_phase" | "none";
+export type EtapaAssignmentMode = "self" | "by_phase" | "none";
 
-/** Project history fields (`history_events.field`) written by a start and its undo. */
-export const TRAMO_STARTED_FIELD = "tramo_started";
-export const TRAMO_START_UNDONE_FIELD = "tramo_start_undone";
+/**
+ * Project history fields (`history_events.field`) written by a start and its undo.
+ * Compatibility: the stored values keep the old name (`tramo_*`); rows already in the database use them (renamed with the database in #1130).
+ */
+export const ETAPA_STARTED_FIELD = "tramo_started";
+export const ETAPA_START_UNDONE_FIELD = "tramo_start_undone";
 
-/** `project_flow_migration_report.kind` values (BE §4.4). */
+/**
+ * `project_flow_migration_report.kind` values (BE §4.4). Compatibility: `task_tramo_inferred` and
+ * `project_without_tramo` are stored values and CHECK constraint names, kept until #1130.
+ */
 export const PROJECT_FLOW_REPORT_KINDS = [
   "task_phase_unmatched",
   "task_tramo_inferred",

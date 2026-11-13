@@ -1,6 +1,6 @@
 /**
  * Data shapes of the /proyectos list (redesign FE §3.5, §4.6): the cards, the
- * portfolio table and the "Proyectos por tramo" segments, built once from
+ * portfolio table and the "Proyectos por etapa" segments, built once from
  * `fetchProjectsAction` + `fetchProjectsPortfolioAction`. Every style renders
  * these same shapes through the widget library; nothing here depends on the
  * presentation style. Pure and client-safe.
@@ -9,7 +9,7 @@ import type { FilterCardProps } from "@/components/widgets/FilterCard";
 import type { KpiStripProps } from "@/components/widgets/KpiStrip";
 import type { TareasListFilters } from "@/lib/query/keys";
 import { TASK_TREND_TIME_ZONE, localIsoDate } from "@/lib/dashboard/task-trend";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type { ProjectListItem, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow, PresentationStyle } from "@/lib/types/redesign";
 import type { DistributionSegment, EntityCard, RecordColumn, RecordTableData } from "@/lib/types/widgets";
@@ -19,13 +19,13 @@ import { readEtapaParam } from "@/lib/ui/etapa-param";
 /** Statuses the list shows (the archived ones live in the ficha and the legacy list). */
 const LISTED_STATUSES: ReadonlySet<ProjectListItem["status"]> = new Set(["activo", "pausado"]);
 
-export const NO_TRAMO_KEY = "sin-tramo";
-export const NO_TRAMO_LABEL = "Sin etapa";
+export const NO_ETAPA_KEY = "sin-etapa";
+export const NO_ETAPA_LABEL = "Sin etapa";
 const NEUTRAL_COLOR_VAR = "var(--muted-foreground)";
 const NO_VALUE = "—";
 
 export const PROJECTS_TITLE = "Proyectos";
-export const PROJECTS_BY_TRAMO_TITLE = "Proyectos por etapa";
+export const PROJECTS_BY_ETAPA_TITLE = "Proyectos por etapa";
 export const BUDGET_COLUMN_LABEL = "Presup. ejercido";
 export const NEXT_DELIVERY_LABEL = "Próxima entrega";
 /** Pill on admin-only columns (Presup. ejercido). */
@@ -57,20 +57,20 @@ export function searchProjects(projects: ProjectListItem[], query: string): Proj
   );
 }
 
-/** The project's current tramo, or null (`needsTramo`). */
-export function currentTramoOf(project: ProjectListItem): WorkflowRef | null {
-  if (project.needsTramo) return null;
-  return project.currentWorkflow ?? project.tramos.find((t) => t.current) ?? null;
+/** The project's current etapa, or null (`needsEtapa`). */
+export function currentEtapaOf(project: ProjectListItem): WorkflowRef | null {
+  if (project.needsEtapa) return null;
+  return project.currentWorkflow ?? project.etapas.find((t) => t.current) ?? null;
 }
 
 /**
- * Projects whose current tramo is `key` (a `buildTramoSegments` key;
- * `NO_TRAMO_KEY` keeps the projects without a tramo). A null key keeps every
+ * Projects whose current etapa is `key` (a `buildEtapaSegments` key;
+ * `NO_ETAPA_KEY` keeps the projects without an etapa). A null key keeps every
  * project.
  */
-export function filterByTramo(projects: ProjectListItem[], key: string | null): ProjectListItem[] {
+export function filterByEtapa(projects: ProjectListItem[], key: string | null): ProjectListItem[] {
   if (key === null) return projects;
-  return projects.filter((p) => (currentTramoOf(p)?.key ?? NO_TRAMO_KEY) === key);
+  return projects.filter((p) => (currentEtapaOf(p)?.key ?? NO_ETAPA_KEY) === key);
 }
 
 /** "Ciudad, Estado", or null when the ficha has no address. */
@@ -120,16 +120,16 @@ export function portfolioById(portfolio: PortfolioRow[]): Map<string, PortfolioR
 }
 
 /**
- * Tramos in order for the strip and the step bars: `tramos` (from
- * `listTramos`) when given, otherwise the tramos the projects carry.
+ * Etapas in order for the strip and the step bars: `etapas` (from
+ * `listEtapas`) when given, otherwise the etapas the projects carry.
  */
-export function orderedTramos(projects: ProjectListItem[], tramos?: WorkflowRef[]): WorkflowRef[] {
+export function orderedEtapas(projects: ProjectListItem[], etapas?: WorkflowRef[]): WorkflowRef[] {
   const source: WorkflowRef[] =
-    tramos && tramos.length > 0
-      ? tramos
+    etapas && etapas.length > 0
+      ? etapas
       : projects.flatMap((p) => {
-          const current = currentTramoOf(p);
-          return current ? [...p.tramos, current] : p.tramos;
+          const current = currentEtapaOf(p);
+          return current ? [...p.etapas, current] : p.etapas;
         });
   const byKey = new Map<string, WorkflowRef>();
   for (const t of source) if (!byKey.has(t.key)) byKey.set(t.key, { id: t.id, key: t.key, name: t.name, sortOrder: t.sortOrder });
@@ -140,12 +140,12 @@ export function orderedTramos(projects: ProjectListItem[], tramos?: WorkflowRef[
 export function buildProjectCards(projects: ProjectListItem[], portfolio: Map<string, PortfolioRow>): EntityCard[] {
   return projects.map((project) => {
     const row = portfolio.get(project.id);
-    const tramo = currentTramoOf(project);
+    const etapa = currentEtapaOf(project);
     const open = row?.open ?? project.taskCounts.open;
     const overdue = row?.overdue ?? 0;
     const badges: NonNullable<EntityCard["badges"]> = [];
     if (project.status === "pausado") badges.push({ label: "Pausado", tone: "warn" });
-    if (!tramo) badges.push({ label: NO_TRAMO_LABEL, tone: "warn" });
+    if (!etapa) badges.push({ label: NO_ETAPA_LABEL, tone: "warn" });
     if (overdue > 0) badges.push({ label: overdue === 1 ? "1 vencida" : `${overdue} vencidas`, tone: "critical" });
     const meta: NonNullable<EntityCard["meta"]> = [{ label: "Tareas", value: openOverdueText(open, overdue) }];
     meta.push({ label: NEXT_DELIVERY_LABEL, value: nextDeliveryText(row) ?? "Sin entregas" });
@@ -155,7 +155,7 @@ export function buildProjectCards(projects: ProjectListItem[], portfolio: Map<st
       subtitle: placeOf(project) ?? project.projectType ?? undefined,
       href: `/proyectos/${project.id}`,
       iconName: "Building2",
-      tramo: tramo?.key ?? null,
+      etapa: etapa?.key ?? null,
       progress: realProgress(project, row),
       badges,
       meta,
@@ -169,7 +169,7 @@ const ONLY_ANALITICO: PresentationStyle[] = ["analitico"];
 
 /**
  * The portfolio table (FE §3.5): Esencial (and Visual, when the user picks
- * the table view) reads nombre, lugar, tramo, avance and próxima entrega;
+ * the table view) reads nombre, lugar, etapa, avance and próxima entrega;
  * Analítico reads Real, Plan, Desv., Presup. ejercido (only with
  * `canSeeAdminData`: the column is absent otherwise), Abiertas,
  * Vencidas, Días a entrega, Próxima entrega and the 7-day trend, with a
@@ -183,7 +183,7 @@ export function buildPortfolioTable(
   const columns: RecordColumn[] = [
     { key: "name", label: "Proyecto" },
     { key: "lugar", label: "Lugar", hideOn: ONLY_ANALITICO },
-    { key: "tramo", label: "Etapa" },
+    { key: "etapa", label: "Etapa" },
     { key: "avance", label: "Avance", format: "percent", hideOn: ONLY_ANALITICO },
     { key: "real", label: "Real", format: "percent", hideOn: HIDE_ESENCIAL },
     { key: "plan", label: "Plan", format: "percent", hideOn: HIDE_ESENCIAL },
@@ -207,7 +207,7 @@ export function buildPortfolioTable(
       id: project.id,
       name: project.name,
       lugar: placeOf(project) ?? NO_VALUE,
-      tramo: currentTramoOf(project)?.name ?? NO_TRAMO_LABEL,
+      etapa: currentEtapaOf(project)?.name ?? NO_ETAPA_LABEL,
       avance: real,
       real,
       plan: row?.plan ?? null,
@@ -252,18 +252,18 @@ function portfolioTotals(rows: Record<string, unknown>[], options: { canSeeAdmin
 }
 
 /**
- * "Proyectos por tramo": one segment per tramo (count of listed projects in
- * it, in tramo order) plus "Sin tramo" when some project has none. Extra
+ * "Proyectos por etapa": one segment per etapa (count of listed projects in
+ * it, in etapa order) plus "Sin etapa" when some project has none. Extra
  * columns for Analítico: open and overdue tasks and the average progress.
  */
-export function buildTramoSegments(
+export function buildEtapaSegments(
   projects: ProjectListItem[],
   portfolio: Map<string, PortfolioRow>,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
 ): DistributionSegment[] {
   const groups = new Map<string, ProjectListItem[]>();
   for (const project of projects) {
-    const key = currentTramoOf(project)?.key ?? NO_TRAMO_KEY;
+    const key = currentEtapaOf(project)?.key ?? NO_ETAPA_KEY;
     groups.set(key, [...(groups.get(key) ?? []), project]);
   }
   const segment = (key: string, label: string, colorVar: string): DistributionSegment => {
@@ -281,34 +281,34 @@ export function buildTramoSegments(
       },
     };
   };
-  const segments = tramos.map((t) => segment(t.key, t.name, tramoColorVar(t.key)));
-  // A project whose tramo isn't in the catalog list still counts, under its own name.
+  const segments = etapas.map((t) => segment(t.key, t.name, etapaColorVar(t.key)));
+  // A project whose etapa isn't in the catalog list still counts, under its own name.
   for (const project of projects) {
-    const tramo = currentTramoOf(project);
-    if (tramo && !segments.some((s) => s.key === tramo.key)) segments.push(segment(tramo.key, tramo.name, tramoColorVar(tramo.key)));
+    const etapa = currentEtapaOf(project);
+    if (etapa && !segments.some((s) => s.key === etapa.key)) segments.push(segment(etapa.key, etapa.name, etapaColorVar(etapa.key)));
   }
-  if (groups.has(NO_TRAMO_KEY)) segments.push(segment(NO_TRAMO_KEY, NO_TRAMO_LABEL, NEUTRAL_COLOR_VAR));
+  if (groups.has(NO_ETAPA_KEY)) segments.push(segment(NO_ETAPA_KEY, NO_ETAPA_LABEL, NEUTRAL_COLOR_VAR));
   return segments;
 }
 
-export const TRAMO_EXTRA_COLUMNS = [
+export const ETAPA_EXTRA_COLUMNS = [
   { key: "abiertas", label: "Abiertas" },
   { key: "vencidas", label: "Vencidas" },
   { key: "avance", label: "Avance prom." },
 ];
 
-/** Step state of each tramo for a project's step bar: done, current or next. */
-export function tramoSteps(
+/** Step state of each etapa for a project's step bar: done, current or next. */
+export function etapaSteps(
   project: ProjectListItem,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
 ): { key: string; label: string; state: "done" | "current" | "next"; colorVar: string }[] {
-  const current = currentTramoOf(project);
-  const currentOrder = current ? tramos.findIndex((t) => t.key === current.key) : -1;
-  return tramos.map((t, index) => {
-    const started = project.tramos.find((pt) => pt.key === t.key);
+  const current = currentEtapaOf(project);
+  const currentOrder = current ? etapas.findIndex((t) => t.key === current.key) : -1;
+  return etapas.map((t, index) => {
+    const started = project.etapas.find((pt) => pt.key === t.key);
     const state: "done" | "current" | "next" =
       current?.key === t.key ? "current" : (started && started.closedAt) || (currentOrder >= 0 && index < currentOrder) ? "done" : "next";
-    return { key: t.key, label: t.name, state, colorVar: tramoColorVar(t.key) };
+    return { key: t.key, label: t.name, state, colorVar: etapaColorVar(t.key) };
   });
 }
 
@@ -328,51 +328,51 @@ export function projectTeam(project: ProjectListItem): { id: string; name: strin
   return team;
 }
 
-// ── Esencial (#993): tramo pills and soft project cards ─────────────────────
+// ── Esencial (#993): etapa pills and soft project cards ─────────────────────
 
-/** Key of the "Todos" pill (no tramo selected). */
-export const ALL_TRAMOS_KEY = "todos";
-export const ALL_TRAMOS_LABEL = "Todos";
+/** Key of the "Todos" pill (no etapa selected). */
+export const ALL_ETAPAS_KEY = "todos";
+export const ALL_ETAPAS_LABEL = "Todos";
 
-export type TramoPill = { key: string; label: string; count: number };
+export type EtapaPill = { key: string; label: string; count: number };
 
 /**
  * The Esencial filter pills: "Todos" first (every project), then one pill per
- * tramo with projects in it, in tramo order (a tramo outside `tramos` keeps
- * its own name after them), and "Sin tramo" last when some project has none.
+ * etapa with projects in it, in etapa order (an etapa outside `etapas` keeps
+ * its own name after them), and "Sin etapa" last when some project has none.
  * Pills with no project are left out; "Todos" always stays.
  */
-export function tramoPills(projects: ProjectListItem[], tramos: WorkflowRef[]): TramoPill[] {
+export function etapaPills(projects: ProjectListItem[], etapas: WorkflowRef[]): EtapaPill[] {
   const counts = new Map<string, { label: string; count: number }>();
   for (const project of projects) {
-    const tramo = currentTramoOf(project);
-    const key = tramo?.key ?? NO_TRAMO_KEY;
-    const entry = counts.get(key) ?? { label: tramo?.name ?? NO_TRAMO_LABEL, count: 0 };
+    const etapa = currentEtapaOf(project);
+    const key = etapa?.key ?? NO_ETAPA_KEY;
+    const entry = counts.get(key) ?? { label: etapa?.name ?? NO_ETAPA_LABEL, count: 0 };
     entry.count += 1;
     counts.set(key, entry);
   }
-  const pills: TramoPill[] = [{ key: ALL_TRAMOS_KEY, label: ALL_TRAMOS_LABEL, count: projects.length }];
+  const pills: EtapaPill[] = [{ key: ALL_ETAPAS_KEY, label: ALL_ETAPAS_LABEL, count: projects.length }];
   const take = (key: string, label: string) => {
     const entry = counts.get(key);
     if (!entry || entry.count === 0) return;
     pills.push({ key, label, count: entry.count });
     counts.delete(key);
   };
-  for (const t of tramos) take(t.key, t.name);
-  for (const [key, entry] of [...counts]) if (key !== NO_TRAMO_KEY) take(key, entry.label);
-  take(NO_TRAMO_KEY, NO_TRAMO_LABEL);
+  for (const t of etapas) take(t.key, t.name);
+  for (const [key, entry] of [...counts]) if (key !== NO_ETAPA_KEY) take(key, entry.label);
+  take(NO_ETAPA_KEY, NO_ETAPA_LABEL);
   return pills;
 }
 
-type ListTramoStep = ReturnType<typeof tramoSteps>[number];
+type ListEtapaStep = ReturnType<typeof etapaSteps>[number];
 
 export type EsencialProjectRow = {
   id: string;
   name: string;
   /** "{client} · {place}", either part alone, or null. */
   subtitle: string | null;
-  tramoKey: string | null;
-  steps: ListTramoStep[];
+  etapaKey: string | null;
+  steps: ListEtapaStep[];
   stepLabels: { key: string; label: string; current: boolean }[];
   open: number;
   overdue: number;
@@ -387,20 +387,20 @@ export type EsencialProjectRow = {
 export function esencialProjectRows(
   projects: ProjectListItem[],
   portfolio: Map<string, PortfolioRow>,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
 ): EsencialProjectRow[] {
   const rows = projects.map((project): EsencialProjectRow => {
     const row = portfolio.get(project.id);
-    const tramoKey = currentTramoOf(project)?.key ?? null;
+    const etapaKey = currentEtapaOf(project)?.key ?? null;
     const overdue = row?.overdue ?? 0;
     const parts = [project.client?.name?.trim(), placeOf(project)].filter((s): s is string => Boolean(s));
     return {
       id: project.id,
       name: project.name,
       subtitle: parts.length > 0 ? parts.join(" · ") : null,
-      tramoKey,
-      steps: tramoSteps(project, tramos),
-      stepLabels: tramos.map((t) => ({ key: t.key, label: t.name, current: t.key === tramoKey })),
+      etapaKey,
+      steps: etapaSteps(project, etapas),
+      stepLabels: etapas.map((t) => ({ key: t.key, label: t.name, current: t.key === etapaKey })),
       open: row?.open ?? project.taskCounts.open,
       overdue,
       status: overdue > 0 ? "vencidas" : "al-dia",
@@ -420,16 +420,16 @@ export function esencialProjectRows(
   });
 }
 
-/** "7 activos · en qué tramo va cada obra y qué sigue." ("1 activo" in singular). */
+/** "7 activos · en qué etapa va cada obra y qué sigue." ("1 activo" in singular). */
 export function esencialDescription(count: number): string {
   return `${count} ${count === 1 ? "activo" : "activos"} · en qué etapa va cada obra y qué sigue.`;
 }
 
-// ── Analítico (#994): filters, KPI strip, portfolio grouped by tramo, CSV ────
+// ── Analítico (#994): filters, KPI strip, portfolio grouped by etapa, CSV ────
 
 /** `?mostrar=`: every project, those with overdue tasks, or those behind plan. */
 export type PortfolioMostrar = "todos" | "vencidas" | "atrasados";
-export type PortfolioFilters = { mostrar: PortfolioMostrar; tramos: string[]; mios: boolean; pausados: boolean; q: string };
+export type PortfolioFilters = { mostrar: PortfolioMostrar; etapas: string[]; mios: boolean; pausados: boolean; q: string };
 
 /** "Atrasados vs plan": deviation at or below this many points. */
 export const PORTFOLIO_BEHIND_PLAN_PTS = -3;
@@ -440,10 +440,10 @@ export const PORTFOLIO_HEAT = {
 } as const;
 
 export const PORTFOLIO_MOSTRAR: readonly PortfolioMostrar[] = ["todos", "vencidas", "atrasados"];
-export const DEFAULT_PORTFOLIO_FILTERS: PortfolioFilters = { mostrar: "todos", tramos: [], mios: false, pausados: false, q: "" };
+export const DEFAULT_PORTFOLIO_FILTERS: PortfolioFilters = { mostrar: "todos", etapas: [], mios: false, pausados: false, q: "" };
 
 /** URL params of the Analítico filters (defaults are left out of the URL). */
-export const PORTFOLIO_FILTER_PARAMS = { mostrar: "mostrar", tramo: "etapa", mios: "mios", pausados: "pausados", q: "q" } as const;
+export const PORTFOLIO_FILTER_PARAMS = { mostrar: "mostrar", etapa: "etapa", mios: "mios", pausados: "pausados", q: "q" } as const;
 
 export const PORTFOLIO_ANALITICO_DESCRIPTION = "Portafolio por proyecto: avance contra plan, carga y retrasos.";
 export const PORTFOLIO_NO_MATCH = "Ningún proyecto coincide con los filtros.";
@@ -455,19 +455,19 @@ const MOSTRAR_LABELS: Record<PortfolioMostrar, string> = {
   atrasados: "Atrasados vs plan",
 };
 
-const TRAMO_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+const ETAPA_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 const MINUS = "−";
 
 /** The Analítico filters of a URL; unknown values fall back to the defaults. */
 export function parsePortfolioFilters(params: URLSearchParams): PortfolioFilters {
   const mostrar = params.get(PORTFOLIO_FILTER_PARAMS.mostrar);
-  const tramos = (readEtapaParam(params) ?? "")
+  const etapas = (readEtapaParam(params) ?? "")
     .split(",")
     .map((key) => key.trim())
-    .filter((key, index, all) => TRAMO_KEY_PATTERN.test(key) && all.indexOf(key) === index);
+    .filter((key, index, all) => ETAPA_KEY_PATTERN.test(key) && all.indexOf(key) === index);
   return {
     mostrar: PORTFOLIO_MOSTRAR.includes(mostrar as PortfolioMostrar) ? (mostrar as PortfolioMostrar) : "todos",
-    tramos,
+    etapas,
     mios: params.get(PORTFOLIO_FILTER_PARAMS.mios) === "1",
     pausados: params.get(PORTFOLIO_FILTER_PARAMS.pausados) === "1",
     q: (params.get(PORTFOLIO_FILTER_PARAMS.q) ?? "").trim(),
@@ -485,7 +485,7 @@ export function portfolioFiltersSearch(filters: PortfolioFilters, params: URLSea
     else next.delete(key);
   };
   put(PORTFOLIO_FILTER_PARAMS.mostrar, filters.mostrar === "todos" ? null : filters.mostrar);
-  put(PORTFOLIO_FILTER_PARAMS.tramo, filters.tramos.length > 0 ? filters.tramos.join(",") : null);
+  put(PORTFOLIO_FILTER_PARAMS.etapa, filters.etapas.length > 0 ? filters.etapas.join(",") : null);
   put(PORTFOLIO_FILTER_PARAMS.mios, filters.mios ? "1" : null);
   put(PORTFOLIO_FILTER_PARAMS.pausados, filters.pausados ? "1" : null);
   put(PORTFOLIO_FILTER_PARAMS.q, filters.q.trim() || null);
@@ -494,7 +494,7 @@ export function portfolioFiltersSearch(filters: PortfolioFilters, params: URLSea
 
 /** True when any Analítico filter differs from its default. */
 export function hasPortfolioFilters(filters: PortfolioFilters): boolean {
-  return filters.mostrar !== "todos" || filters.tramos.length > 0 || filters.mios || filters.pausados || filters.q.trim() !== "";
+  return filters.mostrar !== "todos" || filters.etapas.length > 0 || filters.mios || filters.pausados || filters.q.trim() !== "";
 }
 
 /** The viewer is the project's manager, coordinator or one of its members. */
@@ -505,8 +505,8 @@ function isMine(project: ProjectListItem, viewerStaffId: string): boolean {
   return project.members.some((member) => member.id === viewerStaffId);
 }
 
-function tramoKeyOf(project: ProjectListItem): string {
-  return currentTramoOf(project)?.key ?? NO_TRAMO_KEY;
+function etapaKeyOf(project: ProjectListItem): string {
+  return currentEtapaOf(project)?.key ?? NO_ETAPA_KEY;
 }
 
 function isBehindPlan(row: PortfolioRow | undefined): boolean {
@@ -519,7 +519,7 @@ function matchesMostrar(mostrar: PortfolioMostrar, row: PortfolioRow | undefined
   return true;
 }
 
-type Facet = "mostrar" | "tramos" | "mios" | "pausados";
+type Facet = "mostrar" | "etapas" | "mios" | "pausados";
 
 /** The listed projects that pass every filter except `skip` (faceted counts). */
 function filterExcept(
@@ -534,7 +534,7 @@ function filterExcept(
     const row = portfolio.get(project.id);
     if (skip !== "pausados" && !filters.pausados && project.status === "pausado") return false;
     if (skip !== "mostrar" && !matchesMostrar(filters.mostrar, row)) return false;
-    if (skip !== "tramos" && filters.tramos.length > 0 && !filters.tramos.includes(tramoKeyOf(project))) return false;
+    if (skip !== "etapas" && filters.etapas.length > 0 && !filters.etapas.includes(etapaKeyOf(project))) return false;
     if (skip !== "mios" && filters.mios && !isMine(project, viewerStaffId)) return false;
     return true;
   });
@@ -554,10 +554,10 @@ export function applyPortfolioFilters(
 }
 
 /** Filter group ids of `portfolioFilterGroups`. */
-export const PORTFOLIO_FILTER_GROUP = { mostrar: "mostrar", tramo: "tramo", mios: "mios", pausados: "pausados" } as const;
+export const PORTFOLIO_FILTER_GROUP = { mostrar: "mostrar", etapa: "etapa", mios: "mios", pausados: "pausados" } as const;
 
 /**
- * The FilterCard groups, in order: Mostrar (one value), Tramo (several:
+ * The FilterCard groups, in order: Mostrar (one value), Etapa (several:
  * `value` is the comma-joined selection), Solo míos and Incluir pausados
  * (one option each, `value` "1" when on). Each count is computed over the
  * other active filters.
@@ -569,19 +569,19 @@ export function portfolioFilterGroups(
   viewerStaffId: string,
 ): FilterCardProps["groups"] {
   const forMostrar = filterExcept(projects, portfolio, filters, viewerStaffId, "mostrar");
-  const forTramos = filterExcept(projects, portfolio, filters, viewerStaffId, "tramos");
+  const forEtapas = filterExcept(projects, portfolio, filters, viewerStaffId, "etapas");
   const forMios = filterExcept(projects, portfolio, filters, viewerStaffId, "mios");
   const forPausados = filterExcept(projects, portfolio, filters, viewerStaffId, "pausados");
 
-  const tramoOptions = orderedTramos(listedProjects(projects)).map((tramo) => ({
-    value: tramo.key,
-    label: tramo.name,
-    color: tramoColorVar(tramo.key),
-    count: forTramos.filter((p) => tramoKeyOf(p) === tramo.key).length,
+  const etapaOptions = orderedEtapas(listedProjects(projects)).map((etapa) => ({
+    value: etapa.key,
+    label: etapa.name,
+    color: etapaColorVar(etapa.key),
+    count: forEtapas.filter((p) => etapaKeyOf(p) === etapa.key).length,
   }));
-  const withoutTramo = forTramos.filter((p) => tramoKeyOf(p) === NO_TRAMO_KEY).length;
-  if (withoutTramo > 0 || filters.tramos.includes(NO_TRAMO_KEY)) {
-    tramoOptions.push({ value: NO_TRAMO_KEY, label: NO_TRAMO_LABEL, color: NEUTRAL_COLOR_VAR, count: withoutTramo });
+  const withoutEtapa = forEtapas.filter((p) => etapaKeyOf(p) === NO_ETAPA_KEY).length;
+  if (withoutEtapa > 0 || filters.etapas.includes(NO_ETAPA_KEY)) {
+    etapaOptions.push({ value: NO_ETAPA_KEY, label: NO_ETAPA_LABEL, color: NEUTRAL_COLOR_VAR, count: withoutEtapa });
   }
 
   return [
@@ -596,7 +596,7 @@ export function portfolioFilterGroups(
         ...(mostrar === "vencidas" ? { tone: "destructive" as const, color: "var(--destructive)" } : {}),
       })),
     },
-    { id: PORTFOLIO_FILTER_GROUP.tramo, label: "Etapa", value: filters.tramos.join(","), options: tramoOptions },
+    { id: PORTFOLIO_FILTER_GROUP.etapa, label: "Etapa", value: filters.etapas.join(","), options: etapaOptions },
     {
       id: PORTFOLIO_FILTER_GROUP.mios,
       label: "Solo míos",
@@ -617,11 +617,11 @@ export type PortfolioTableRow = {
   id: string;
   name: string;
   client: string | null;
-  tramoKey: string | null;
-  /** Current tramo name, or "Sin tramo". */
-  tramo: string;
-  /** Position of the current tramo in the catalog (sorts the Tramo actual column); "Sin tramo" last. */
-  tramoRank: number;
+  etapaKey: string | null;
+  /** Current etapa name, or "Sin etapa". */
+  etapa: string;
+  /** Position of the current etapa in the catalog (sorts the Etapa actual column); "Sin etapa" last. */
+  etapaRank: number;
   real: number;
   deviation: number | null;
   open: number;
@@ -650,13 +650,13 @@ export function portfolioColumns(opts: { canSeeAdminData: boolean }): RecordColu
   return columns;
 }
 
-/** A sortable column key: Proyecto, Tramo actual and the numeric columns. */
-export type PortfolioSortKey = "name" | "tramo" | "real" | "deviation" | "open" | "overdue" | "overduePct" | "avgDelayDays" | "budgetSpentPct";
+/** A sortable column key: Proyecto, Etapa actual and the numeric columns. */
+export type PortfolioSortKey = "name" | "etapa" | "real" | "deviation" | "open" | "overdue" | "overduePct" | "avgDelayDays" | "budgetSpentPct";
 
 /** Columns that sort on a header click. */
 export const PORTFOLIO_SORTABLE_COLUMNS: readonly PortfolioSortKey[] = [
   "name",
-  "tramo",
+  "etapa",
   "real",
   "deviation",
   "open",
@@ -743,25 +743,25 @@ function proyectosText(n: number): string {
   return `${n} ${n === 1 ? "proyecto" : "proyectos"}`;
 }
 
-/** Sort rank of "Sin tramo": after every tramo. */
-const NO_TRAMO_RANK = Number.MAX_SAFE_INTEGER;
+/** Sort rank of "Sin etapa": after every etapa. */
+const NO_ETAPA_RANK = Number.MAX_SAFE_INTEGER;
 
-/** One table row of a project; `tramoRank` is its tramo's position (`portfolioTable` sets it from the catalog). */
+/** One table row of a project; `etapaRank` is its etapa's position (`portfolioTable` sets it from the catalog). */
 export function portfolioTableRow(
   project: ProjectListItem,
   row: PortfolioRow | undefined,
-  opts: { canSeeAdminData: boolean; tramoRank?: number },
+  opts: { canSeeAdminData: boolean; etapaRank?: number },
 ): PortfolioTableRow {
   const open = row?.open ?? project.taskCounts.open;
   const overdue = row?.overdue ?? 0;
-  const tramo = currentTramoOf(project);
+  const etapa = currentEtapaOf(project);
   return {
     id: project.id,
     name: project.name,
     client: project.client?.name ?? null,
-    tramoKey: tramo?.key ?? null,
-    tramo: tramo?.name ?? NO_TRAMO_LABEL,
-    tramoRank: tramo ? (opts.tramoRank ?? tramo.sortOrder) : NO_TRAMO_RANK,
+    etapaKey: etapa?.key ?? null,
+    etapa: etapa?.name ?? NO_ETAPA_LABEL,
+    etapaRank: etapa ? (opts.etapaRank ?? etapa.sortOrder) : NO_ETAPA_RANK,
     real: realProgress(project, row),
     deviation: row?.deviation ?? null,
     open,
@@ -807,25 +807,25 @@ function summarize(rows: PortfolioTableRow[]): RowsSummary {
 
 /**
  * The Analítico table (#1042): one row per project, by name, whatever its
- * tramo (a project without one is a row like any other, "Sin tramo" in its
- * Tramo actual cell). `totals` holds the footer cell of every column.
+ * etapa (a project without one is a row like any other, "Sin etapa" in its
+ * Etapa actual cell). `totals` holds the footer cell of every column.
  */
 export function portfolioTable(
   projects: ProjectListItem[],
   portfolio: Map<string, PortfolioRow>,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
   opts: { canSeeAdminData: boolean },
 ): { rows: PortfolioTableRow[]; totals: Record<string, string> } {
-  const order = orderedTramos(projects, tramos);
+  const order = orderedEtapas(projects, etapas);
   for (const project of projects) {
-    const tramo = currentTramoOf(project);
-    if (tramo && !order.some((t) => t.key === tramo.key)) order.push(tramo);
+    const etapa = currentEtapaOf(project);
+    if (etapa && !order.some((t) => t.key === etapa.key)) order.push(etapa);
   }
   const rank = new Map(order.map((t, i) => [t.key, i]));
   const rows = projects
     .map((project) => {
-      const key = currentTramoOf(project)?.key;
-      return portfolioTableRow(project, portfolio.get(project.id), { ...opts, tramoRank: key === undefined ? undefined : rank.get(key) });
+      const key = currentEtapaOf(project)?.key;
+      return portfolioTableRow(project, portfolio.get(project.id), { ...opts, etapaRank: key === undefined ? undefined : rank.get(key) });
     })
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
@@ -845,8 +845,8 @@ export function portfolioTable(
 }
 
 /**
- * Rows sorted by a column: Proyecto by name, Tramo actual by catalog order
- * ("Sin tramo" last), numbers with nulls last; ties by name. Null: as given
+ * Rows sorted by a column: Proyecto by name, Etapa actual by catalog order
+ * ("Sin etapa" last), numbers with nulls last; ties by name. Null: as given
  * (by name).
  */
 export function sortPortfolioRows(
@@ -857,12 +857,12 @@ export function sortPortfolioRows(
   const factor = sort.direction === "asc" ? 1 : -1;
   const byName = (a: PortfolioTableRow, b: PortfolioTableRow) => a.name.localeCompare(b.name, "es");
   if (sort.key === "name") return [...rows].sort((a, b) => byName(a, b) * factor);
-  if (sort.key === "tramo") {
+  if (sort.key === "etapa") {
     return [...rows].sort((a, b) => {
-      if (a.tramoRank === b.tramoRank) return byName(a, b);
-      if (a.tramoRank === NO_TRAMO_RANK) return 1;
-      if (b.tramoRank === NO_TRAMO_RANK) return -1;
-      return (a.tramoRank - b.tramoRank) * factor;
+      if (a.etapaRank === b.etapaRank) return byName(a, b);
+      if (a.etapaRank === NO_ETAPA_RANK) return 1;
+      if (b.etapaRank === NO_ETAPA_RANK) return -1;
+      return (a.etapaRank - b.etapaRank) * factor;
     });
   }
   const key = sort.key;
@@ -882,12 +882,12 @@ export function sortPortfolioRows(
 
 /**
  * The open tasks of one project, as the Tareas tables read them
- * (`qk.tareas.list`): every tramo, every responsable, completed ones out,
+ * (`qk.tareas.list`): every etapa, every responsable, completed ones out,
  * sorted by due date on the server (#1051), so "Cargar más" appends rows in
  * order. Loaded on the row's first expand.
  */
 export function projectOpenTasksFilters(projectId: string): TareasListFilters {
-  return { tramo: null, proyecto: projectId, responsable: null, estado: null, q: null, mostrar: "abiertas", orderBy: "vence" };
+  return { etapa: null, proyecto: projectId, responsable: null, estado: null, q: null, mostrar: "abiertas", orderBy: "vence" };
 }
 
 type DueTask = { title: string; commitmentDate: string | null; deliveryDate?: string | null };
@@ -915,9 +915,9 @@ export const PROJECT_TASKS_SEE_ALL = "Ver todas en el proyecto";
 export const PROJECT_TASKS_EMPTY = "Este proyecto no tiene tareas abiertas.";
 export const PROJECT_TASKS_ERROR = "No se pudieron cargar las tareas";
 
-/** First click on a header: names and tramos A→Z, numbers highest first. */
+/** First click on a header: names and etapas A→Z, numbers highest first. */
 export function initialSortDirection(key: PortfolioSortKey): "asc" | "desc" {
-  return key === "name" || key === "tramo" ? "asc" : "desc";
+  return key === "name" || key === "etapa" ? "asc" : "desc";
 }
 
 /** `createdAt` falls in the calendar month of `now` (Mexico City). */
@@ -1008,7 +1008,7 @@ function csvField(value: string | number | null): string {
 
 /**
  * The visible rows as CSV for es-MX Excel: UTF-8 BOM, `;` separator, CRLF,
- * one line per project with its tramo and the visible columns (the budget
+ * one line per project with its etapa and the visible columns (the budget
  * only with `canSeeAdminData`).
  */
 export function portfolioCsv(rows: PortfolioTableRow[], opts: { canSeeAdminData: boolean }): string {
@@ -1016,7 +1016,7 @@ export function portfolioCsv(rows: PortfolioTableRow[], opts: { canSeeAdminData:
   const header = ["Etapa", ...columns.flatMap((c) => (c.key === "name" ? [c.label, "Cliente"] : [c.label]))];
   const lines = [header.map(csvField).join(";")];
   for (const row of rows) {
-    const cells: (string | number | null)[] = [row.tramo];
+    const cells: (string | number | null)[] = [row.etapa];
     for (const column of columns) {
       if (column.key === "name") cells.push(row.name, row.client);
       else if (column.key === "nextDelivery") cells.push(row.nextDelivery ? `${row.nextDelivery.title} · ${row.nextDelivery.date}` : null);
@@ -1039,13 +1039,13 @@ export function activeOnlyProjects(projects: ProjectListItem[]): ProjectListItem
   return projects.filter((p) => p.status === "activo");
 }
 
-/** One step of a project's tramo bar or stepper (`tramoSteps`). */
-export type TramoStep = ReturnType<typeof tramoSteps>[number];
+/** One step of a project's etapa bar or stepper (`etapaSteps`). */
+export type EtapaStep = ReturnType<typeof etapaSteps>[number];
 
-/** CSS colors of one tramo: dot / bar / stroke, text on its tint, and the tint itself. */
-export type TramoTone = { color: string; ink: string; soft: string };
+/** CSS colors of one etapa: dot / bar / stroke, text on its tint, and the tint itself. */
+export type EtapaTone = { color: string; ink: string; soft: string };
 
-/** Tint token per chart slot (tramo tokens of #981). */
+/** Tint token per chart slot (etapa tokens of #981). */
 const TINT_BY_SLOT: Record<string, string> = {
   "1": "var(--tint-primary)",
   "2": "var(--tint-violet)",
@@ -1053,22 +1053,22 @@ const TINT_BY_SLOT: Record<string, string> = {
   "4": "var(--tint-cyan)",
   "5": "var(--tint-success)",
 };
-const NEUTRAL_TONE: TramoTone = { color: NEUTRAL_COLOR_VAR, ink: "var(--foreground)", soft: "var(--muted)" };
+const NEUTRAL_TONE: EtapaTone = { color: NEUTRAL_COLOR_VAR, ink: "var(--foreground)", soft: "var(--muted)" };
 
 /**
- * The tone of a tramo key (`NO_TRAMO_KEY` and unknown keys are neutral). With
- * `tramos`, a tramo outside the known keys takes its `sortOrder` slot, as in
- * `tramoColorVar`.
+ * The tone of an etapa key (`NO_ETAPA_KEY` and unknown keys are neutral). With
+ * `etapas`, an etapa outside the known keys takes its `sortOrder` slot, as in
+ * `etapaColorVar`.
  */
-export function tramoTone(key: string | null, tramos: WorkflowRef[] = []): TramoTone {
-  if (!key || key === NO_TRAMO_KEY) return NEUTRAL_TONE;
-  const color = tramoColorVar(key, tramos.find((t) => t.key === key)?.sortOrder);
+export function etapaTone(key: string | null, etapas: WorkflowRef[] = []): EtapaTone {
+  if (!key || key === NO_ETAPA_KEY) return NEUTRAL_TONE;
+  const color = etapaColorVar(key, etapas.find((t) => t.key === key)?.sortOrder);
   const slot = /^var\(--chart-(\d)\)$/.exec(color)?.[1];
   if (!slot) return NEUTRAL_TONE;
   return { color, ink: `var(--chart-${slot}-ink)`, soft: TINT_BY_SLOT[slot] ?? NEUTRAL_TONE.soft };
 }
 
-export type TeamAvatar = { id: string; name: string; initials: string; tramoKey: string | null };
+export type TeamAvatar = { id: string; name: string; initials: string; etapaKey: string | null };
 
 /** One of the four Visual summary cards (#1042): a figure, its bar (0–100) and a footnote. */
 export type PortfolioSummaryCard = {
@@ -1164,7 +1164,7 @@ export function portfolioSummary(projects: ProjectListItem[], portfolio: Map<str
 }
 
 /** The tone of a summary card (`PortfolioSummaryCard.tone`). */
-export function summaryTone(tone: PortfolioSummaryCard["tone"]): TramoTone {
+export function summaryTone(tone: PortfolioSummaryCard["tone"]): EtapaTone {
   if (tone === "destructive") return { color: "var(--destructive)", ink: "var(--destructive-ink)", soft: "var(--tint-destructive)" };
   return { color: `var(--chart-${tone})`, ink: `var(--chart-${tone}-ink)`, soft: TINT_BY_SLOT[tone] ?? NEUTRAL_TONE.soft };
 }
@@ -1193,15 +1193,15 @@ export type AttentionProject = {
   id: string;
   name: string;
   initials: string;
-  tramoKey: string | null;
-  /** "Diseño · Proyecto ejecutivo" (the tramo alone without an active fase). */
+  etapaKey: string | null;
+  /** "Diseño · Proyecto ejecutivo" (the etapa alone without an active fase). */
   badge: string;
   /** "Grupo Altavista · Polanco, CDMX". */
   subtitle: string | null;
   real: number;
   open: number;
   overdue: number;
-  steps: TramoStep[];
+  steps: EtapaStep[];
   /** At most `ATTENTION_TEAM_MAX`. */
   team: TeamAvatar[];
   /** The "+n" after the avatars. */
@@ -1217,10 +1217,10 @@ export type AttentionProject = {
 export function attentionProjects(
   projects: ProjectListItem[],
   portfolio: Map<string, PortfolioRow>,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
   limit: number = ATTENTION_LIMIT,
 ): AttentionProject[] {
-  const order = orderedTramos(projects, tramos);
+  const order = orderedEtapas(projects, etapas);
   return projects
     .map((project) => ({ project, row: portfolio.get(project.id) }))
     .filter(({ row }) => (row?.overdue ?? 0) > 0)
@@ -1242,33 +1242,33 @@ export function attentionProjects(
 
 /** One project card (the attention cards and the Visual project grid share it). */
 function projectCardOf(project: ProjectListItem, row: PortfolioRow | undefined, order: WorkflowRef[]): AttentionProject {
-  const tramo = currentTramoOf(project);
-  const tramoKey = tramo?.key ?? null;
+  const etapa = currentEtapaOf(project);
+  const etapaKey = etapa?.key ?? null;
   const team = fullTeam(project);
   return {
     id: project.id,
     name: project.name,
     initials: initialsOf(project.name),
-    tramoKey,
-    badge: tramo ? (project.activePhase ? `${tramo.name} · ${project.activePhase.name}` : tramo.name) : NO_TRAMO_LABEL,
+    etapaKey,
+    badge: etapa ? (project.activePhase ? `${etapa.name} · ${project.activePhase.name}` : etapa.name) : NO_ETAPA_LABEL,
     subtitle: clientPlace(project),
     real: realProgress(project, row),
     open: row?.open ?? project.taskCounts.open,
     overdue: row?.overdue ?? 0,
-    steps: tramoSteps(project, order),
-    team: team.slice(0, ATTENTION_TEAM_MAX).map((p) => ({ ...p, initials: initialsOf(p.name), tramoKey })),
+    steps: etapaSteps(project, order),
+    team: team.slice(0, ATTENTION_TEAM_MAX).map((p) => ({ ...p, initials: initialsOf(p.name), etapaKey })),
     teamOverflow: Math.max(0, team.length - ATTENTION_TEAM_MAX),
     nextDelivery: row?.nextDelivery ?? null,
   };
 }
 
-/** The Visual project grid (#1042): one card per project, by name, whatever its tramo. */
+/** The Visual project grid (#1042): one card per project, by name, whatever its etapa. */
 export function portfolioProjectCards(
   projects: ProjectListItem[],
   portfolio: Map<string, PortfolioRow>,
-  tramos: WorkflowRef[],
+  etapas: WorkflowRef[],
 ): AttentionProject[] {
-  const order = orderedTramos(projects, tramos);
+  const order = orderedEtapas(projects, etapas);
   return [...projects]
     .sort((a, b) => a.name.localeCompare(b.name, "es"))
     .map((project) => projectCardOf(project, portfolio.get(project.id), order));
@@ -1278,20 +1278,20 @@ export function portfolioProjectCards(
 export const NO_UPCOMING_DELIVERY = "Sin entregas próximas";
 
 /**
- * The list data after moving project `id` to tramo `workflowId` (the
- * Tramo actual cell's optimistic update): `currentWorkflow` / `currentWorkflowId` point
- * at it, `needsTramo` clears and `tramos[].current` flips. Other projects
- * are untouched; an unknown tramo leaves the data as is.
+ * The list data after moving project `id` to etapa `workflowId` (the
+ * Etapa actual cell's optimistic update): `currentWorkflow` / `currentWorkflowId` point
+ * at it, `needsEtapa` clears and `etapas[].current` flips. Other projects
+ * are untouched; an unknown etapa leaves the data as is.
  */
-export function moveProjectToTramo<T extends { projects: ProjectListItem[]; tramos: WorkflowRef[] }>(
+export function moveProjectToEtapa<T extends { projects: ProjectListItem[]; etapas: WorkflowRef[] }>(
   data: T,
   id: string,
   workflowId: string,
 ): T {
   const project = data.projects.find((p) => p.id === id);
   const target =
-    data.tramos.find((t) => t.id === workflowId) ??
-    project?.tramos.find((t) => t.id === workflowId) ??
+    data.etapas.find((t) => t.id === workflowId) ??
+    project?.etapas.find((t) => t.id === workflowId) ??
     null;
   if (!project || !target) return data;
   const ref: WorkflowRef = { id: target.id, key: target.key, name: target.name, sortOrder: target.sortOrder };
@@ -1303,8 +1303,8 @@ export function moveProjectToTramo<T extends { projects: ProjectListItem[]; tram
             ...p,
             currentWorkflowId: ref.id,
             currentWorkflow: ref,
-            needsTramo: false,
-            tramos: p.tramos.map((t) => ({ ...t, current: t.id === ref.id })),
+            needsEtapa: false,
+            etapas: p.etapas.map((t) => ({ ...t, current: t.id === ref.id })),
           }
         : p,
     ),
@@ -1318,7 +1318,7 @@ export type TimelineItem = {
   title: string;
   date: string;
   dayIndex: number;
-  tramoKey: string | null;
+  etapaKey: string | null;
 };
 
 /** Days the delivery timeline covers (today … today + 10). */
@@ -1372,7 +1372,7 @@ export function deliveryTimeline(
       title: delivery.title,
       date: delivery.date.slice(0, 10),
       dayIndex,
-      tramoKey: currentTramoOf(project)?.key ?? null,
+      etapaKey: currentEtapaOf(project)?.key ?? null,
     });
   }
   items.sort((a, b) => a.dayIndex - b.dayIndex || a.projectName.localeCompare(b.projectName, "es"));

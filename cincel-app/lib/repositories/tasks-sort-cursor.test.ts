@@ -35,7 +35,7 @@ describe("column sort cursors (#1044)", () => {
   }
 
   it("puts empty values last both ways: the null flag ignores the direction", () => {
-    for (const column of ["tramo", "fase", "responsable", "vence", "retraso"] as const) {
+    for (const column of ["etapa", "fase", "responsable", "vence", "retraso"] as const) {
       const flags = columnSortParts(column).filter((p) => p.fixed);
       expect(flags).toHaveLength(1);
     }

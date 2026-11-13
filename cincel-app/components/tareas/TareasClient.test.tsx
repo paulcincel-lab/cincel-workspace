@@ -63,8 +63,8 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: caps.canCreateActivity }),
 }));
 
-vi.mock("@/lib/tramos/compat", () => ({
-  tramoColorVar: (key: string) => `var(--tramo-${key})`,
+vi.mock("@/lib/etapas/compat", () => ({
+  etapaColorVar: (key: string) => `var(--etapa-${key})`,
 }));
 
 // Reads never reach the server here: the cache is seeded as `/tareas` hydrates it.
@@ -79,7 +79,7 @@ vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
 
 // The task sheet (R3-08) opens from `?tarea=`; none here.
 vi.mock("./TaskSheet", () => ({ TaskSheetRoute: () => null }));
-// The start slot reads its own query (`TareasStartSlot.test.tsx`); here it only shows which tramo it was mounted for.
+// The start slot reads its own query (`TareasStartSlot.test.tsx`); here it only shows which etapa it was mounted for.
 vi.mock("./TareasStartSlot", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./TareasStartSlot")>()),
   TareasStartSlot: ({ workflow }: { workflow: { id: string } }) => (
@@ -142,7 +142,7 @@ beforeEach(() => seedSessionUser(getCurrentAuthenticatedUser()));
 const P1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const P2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
-const TRAMOS: WorkflowRef[] = [
+const ETAPAS: WorkflowRef[] = [
   { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 },
   { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 },
   { id: "w-construccion", key: "construccion", name: "Construcción", sortOrder: 3 },
@@ -155,7 +155,7 @@ const STAFF = [
 
 const FACETS: TareasFacets = {
   total: 4,
-  byTramo: { presale: 1, diseno: 2, construccion: 1 },
+  byEtapa: { presale: 1, diseno: 2, construccion: 1 },
   projects: [
     { id: P1, name: "Guadalajara 83", count: 2 },
     { id: P2, name: "Local Espinopapa", count: 2 },
@@ -176,7 +176,7 @@ function styled(node: ReactNode) {
 
 /** The query the URL holds and the cache `/tareas` hydrates for it: the bundle and the facets it seeded. */
 function seed(client: QueryClient, query: TareasQuery, facets: TareasFacets) {
-  const page: TareasPageData = { facets, tramos: TRAMOS, staff: STAFF };
+  const page: TareasPageData = { facets, etapas: ETAPAS, staff: STAFF };
   client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query, style)), page);
   client.setQueryData(qk.tareas.facets(tareasListFiltersOf(query)), facets);
 }
@@ -228,7 +228,7 @@ describe("TareasClient data", () => {
   it("passes the Analítico layout no data props: the query, the facets and the shell only", () => {
     renderClient();
     expect(screen.getByTestId("view-analitico").getAttribute("data-props")).toBe(
-      "actions,canCreate,empty,facets,onQuery,onSearch,query,search,staff,startSlot,tramos",
+      "actions,canCreate,empty,etapas,facets,onQuery,onSearch,query,search,staff,startSlot",
     );
   });
 
@@ -245,7 +245,7 @@ describe("TareasClient data", () => {
     rerender(styled(<TareasClient />));
     expect(pageData.getTareasPageData).toHaveBeenCalledTimes(1);
     expect(pageData.getTareasPageData).toHaveBeenCalledWith(
-      expect.objectContaining({ estilo: "analitico", tramo: "diseno" }),
+      expect.objectContaining({ estilo: "analitico", etapa: "diseno" }),
     );
     expect(pageData.getTareasFacets).not.toHaveBeenCalled();
     // The layout stays on screen while the next bundle loads.
@@ -256,7 +256,7 @@ describe("TareasClient data", () => {
 describe("TareasClient search", () => {
   it("writes the search to the URL after a pause, with history.replaceState", () => {
     vi.useFakeTimers();
-    renderClient({ tramo: "diseno" });
+    renderClient({ etapa: "diseno" });
     fireEvent.change(screen.getByRole("textbox", { name: "Buscar tareas" }), { target: { value: " renders " } });
     expect(replaceState).not.toHaveBeenCalled();
     act(() => {
@@ -280,9 +280,9 @@ describe("TareasClient search", () => {
 describe("TareasClient per style", () => {
   it("Visual renders the team board with the query, facets, search and the header actions", () => {
     style = "visual";
-    renderClient({ tramo: "presale" });
+    renderClient({ etapa: "presale" });
     const visual = screen.getByTestId("view-visual");
-    expect(visual.getAttribute("data-props")).toBe("actions,empty,facets,onQuery,onSearch,query,search,startSlot,tramos");
+    expect(visual.getAttribute("data-props")).toBe("actions,empty,etapas,facets,onQuery,onSearch,query,search,startSlot");
     expect(within(visual).getByRole("button", { name: "Nueva tarea" })).toBeTruthy();
     expect(screen.queryByTestId("view-tablero")).toBeNull();
     expect(pageData.getTareasPageData).not.toHaveBeenCalled();
@@ -321,13 +321,13 @@ describe("TareasClient start slot", () => {
   for (const [s, testId] of Object.entries(VIEWS) as [PresentationStyle, string][]) {
     it(`${s}: one etapa filter mounts the slot for that etapa inside the layout`, () => {
       style = s;
-      renderClient({ tramo: "diseno" });
+      renderClient({ etapa: "diseno" });
       const slot = within(screen.getByTestId(testId)).getByTestId("tareas-start-slot");
       expect(slot.getAttribute("data-workflow")).toBe("w-diseno");
       expect(screen.getAllByTestId("tareas-start-slot")).toHaveLength(1);
     });
 
-    it(`${s}: no slot without a etapa filter`, () => {
+    it(`${s}: no slot without an etapa filter`, () => {
       style = s;
       renderClient();
       expect(screen.getByTestId(testId)).toBeTruthy();
@@ -336,8 +336,8 @@ describe("TareasClient start slot", () => {
   }
 
   it("no slot for several etapas or an unknown etapa", () => {
-    for (const tramo of ["presale,diseno", "nope"]) {
-      renderClient({ tramo });
+    for (const etapa of ["presale,diseno", "nope"]) {
+      renderClient({ etapa });
       expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
       cleanup();
     }
@@ -355,12 +355,12 @@ describe("TareasClient start slot", () => {
 
 describe("TareasClient Nueva tarea", () => {
   it("opens the shell's NewTaskDialogHost with the etapa and project as defaults, without a navigation", () => {
-    renderClient({ tramo: "presale", proyecto: P1 });
+    renderClient({ etapa: "presale", proyecto: P1 });
     fireEvent.click(screen.getByRole("button", { name: "Nueva tarea" }));
     expect(navigation.replace).not.toHaveBeenCalled();
     expect(useNewTaskUi.getState()).toMatchObject({
       open: true,
-      defaults: { projectId: P1, tramoKey: "presale" },
+      defaults: { projectId: P1, etapaKey: "presale" },
       source: "tareas",
     });
     // The host renders the dialog; this screen mounts none of its own.
@@ -376,7 +376,7 @@ describe("TareasClient Nueva tarea", () => {
 
 describe("TareasClient empty state", () => {
   it("hands the layouts No hay tareas con estos filtros and Quitar filtros clears the URL filters", () => {
-    renderClient({ tramo: "presale", proyecto: P2, q: "nada" });
+    renderClient({ etapa: "presale", proyecto: P2, q: "nada" });
     expect(screen.getByText("No hay tareas con estos filtros")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Quitar filtros" }).getAttribute("href")).toBe("/tareas");
   });

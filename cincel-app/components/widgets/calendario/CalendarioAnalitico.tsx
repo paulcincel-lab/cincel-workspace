@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/shadcn/switch";
 import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
 import { KpiStrip, type KpiStripItem } from "@/components/widgets/KpiStrip";
 import { formatValue } from "@/components/widgets/record-table-format";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import {
   buildGroups,
@@ -32,8 +32,8 @@ import { DEFAULT_CALENDARIO_FILTERS, normalizeCalendarioFilters } from "@/lib/ca
 import { useCalendarioUi } from "@/lib/stores/calendario-ui-store";
 import { qk } from "@/lib/query/keys";
 import { calendarioListInfiniteOptions } from "@/lib/query/options/calendario";
-import { catalogStaffOptions, catalogTramosOptions } from "@/lib/query/options/catalog";
-import type { CalItem, CalTaskItem, CalTramoRef, CalendarioListPage, CalendarioQuery, CalendarioRange } from "@/lib/types/calendario";
+import { catalogStaffOptions, catalogEtapasOptions } from "@/lib/query/options/catalog";
+import type { CalItem, CalTaskItem, CalEtapaRef, CalendarioListPage, CalendarioQuery, CalendarioRange } from "@/lib/types/calendario";
 import type { StaffRef, WorkflowRef } from "@/lib/types/core";
 import type { RecordColumn } from "@/lib/types/widgets";
 
@@ -49,7 +49,7 @@ type AnaliticoRow = Record<string, unknown> & { id: string; item: CalItem };
 
 const NO_ITEMS: CalItem[] = [];
 const NO_STAFF: StaffRef[] = [];
-const NO_TRAMOS: WorkflowRef[] = [];
+const NO_ETAPAS: WorkflowRef[] = [];
 const TABLE_LABEL = "Tareas y reuniones del rango";
 const ERROR_TITLE = "No se pudo cargar el calendario.";
 const EMPTY_TITLE = "No hay tareas ni reuniones en este rango.";
@@ -64,11 +64,11 @@ const COLUMNS: RecordColumn<AnaliticoRow>[] = [
   { key: "tipo", label: "TIPO", width: 90 },
   { key: "titulo", label: "TÍTULO", width: 280 },
   { key: "proyecto", label: "PROYECTO", width: 170 },
-  { key: "tramo", label: "ETAPA", width: 130 },
+  { key: "etapa", label: "ETAPA", width: 130 },
   { key: "responsable", label: "RESPONSABLE / ASISTENTES", width: 200 },
 ];
 
-/** The optional Horas column, after TRAMO; shown when "Mostrar horas" is on. */
+/** The optional Horas column, after ETAPA; shown when "Mostrar horas" is on. */
 export const HOURS_COLUMN: RecordColumn<AnaliticoRow> = { key: "horas", label: "HORAS", align: "right", mono: true, width: 90, format: "hours" };
 export const SHOW_HOURS_LABEL = "Mostrar horas";
 export const SHOW_HOURS_STORAGE_KEY = "cincel:calendario:analitico:horas";
@@ -83,8 +83,8 @@ export function hoursOf(item: CalItem): number | null {
 
 const toRow = (item: CalItem): AnaliticoRow => ({ id: item.id, item });
 
-function workflowOf(tramo: CalTramoRef | null): WorkflowRef | null {
-  return tramo ? { id: tramo.id, key: tramo.key ?? "", name: tramo.name, sortOrder: 0, colorSlot: tramo.colorSlot } : null;
+function workflowOf(etapa: CalEtapaRef | null): WorkflowRef | null {
+  return etapa ? { id: etapa.id, key: etapa.key ?? "", name: etapa.name, sortOrder: 0, colorSlot: etapa.colorSlot } : null;
 }
 
 /** A task item as the task-table kit reads a task (the cells, the bulk bar and the delete flow). */
@@ -92,10 +92,10 @@ function taskOfItem(item: CalTaskItem): TaskBulkTask {
   return {
     id: item.taskId,
     projectId: item.project?.id ?? "",
-    kind: item.tramo ? "workflow" : "usuario",
+    kind: item.etapa ? "workflow" : "usuario",
     title: item.title,
-    workflowId: item.tramo?.id ?? null,
-    workflow: workflowOf(item.tramo),
+    workflowId: item.etapa?.id ?? null,
+    workflow: workflowOf(item.etapa),
     phaseId: item.phase?.id ?? null,
     phase: null,
     spaceId: null,
@@ -155,8 +155,8 @@ export function CalendarioAnalitico({ range, query, list, onOpen }: CalendarioAn
 
   // ── Catalogs of the editors.
   const staff = useQuery(catalogStaffOptions()).data ?? NO_STAFF;
-  const tramos = useQuery(catalogTramosOptions()).data ?? NO_TRAMOS;
-  const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, tramos, staff });
+  const etapas = useQuery(catalogEtapasOptions()).data ?? NO_ETAPAS;
+  const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, etapas, staff });
   const deletes = useDeleteTasks({ invalidate: [qk.calendario.all] });
 
   // ── Groups: headers and counts from `days`, rows by date.
@@ -206,7 +206,7 @@ export function CalendarioAnalitico({ range, query, list, onOpen }: CalendarioAn
       if (row.item.kind === "event") return LOCK_MEETING;
       return row.item.canEdit ? base(row) : LOCK_TASK;
     };
-    const base = showHours ? COLUMNS.flatMap((column) => (column.key === "tramo" ? [column, HOURS_COLUMN] : [column])) : COLUMNS;
+    const base = showHours ? COLUMNS.flatMap((column) => (column.key === "etapa" ? [column, HOURS_COLUMN] : [column])) : COLUMNS;
     return base.map((column): RecordColumn<AnaliticoRow> => {
       if (column.key === "fecha") return { ...column, edit: fecha.edit, canEdit: lockOf(fecha.canEdit) };
       if (column.key === "responsable") return { ...column, edit: responsable.edit, canEdit: lockOf(responsable.canEdit) };
@@ -244,8 +244,8 @@ export function CalendarioAnalitico({ range, query, list, onOpen }: CalendarioAn
           const hours = hoursOf(item);
           return hours === null ? "—" : formatValue(hours, "hours");
         }
-        case "tramo":
-          return <TramoBadge tramo={workflowOf(item.tramo)} variant="dot" emptyText="—" />;
+        case "etapa":
+          return <EtapaBadge etapa={workflowOf(item.etapa)} variant="dot" emptyText="—" />;
         case "responsable": {
           const text = peopleOf(item);
           return item.kind === "task" && !item.manager ? (

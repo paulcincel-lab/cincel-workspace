@@ -14,8 +14,8 @@ export type ClosingHookTask = {
 };
 
 /**
- * Runs the closing hook for one (project, tramo) pair (BE §9.8): refreshes
- * the stage's `closed_at` and auto-starts the tramos that became ready. Never
+ * Runs the closing hook for one (project, etapa) pair (BE §9.8): refreshes
+ * the stage's `closed_at` and auto-starts the etapas that became ready. Never
  * throws: a failure is logged as one JSON line with `trace_id` and the next
  * status change retries.
  */
@@ -53,8 +53,8 @@ async function requestTraceId(): Promise<string> {
 }
 
 /**
- * Schedules the closing hook in `after()` for each distinct (project, tramo)
- * pair of the given tasks, once the response is sent. Tasks without a tramo
+ * Schedules the closing hook in `after()` for each distinct (project, etapa)
+ * pair of the given tasks, once the response is sent. Tasks without an etapa
  * (admin tasks, legacy rows) have no stage to close and are skipped.
  *
  * Everything request-scoped (the trace id from `headers()`, the actor) is read

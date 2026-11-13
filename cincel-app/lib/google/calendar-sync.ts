@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { tramoPhaseLine } from "@/lib/calendar/ics";
+import { etapaPhaseLine } from "@/lib/calendar/ics";
 import type { CalendarEvent } from "@/lib/types/calendar";
 
 /**
@@ -42,7 +42,7 @@ export function toGoogleEvent(event: CalendarEvent, baseUrl: string): GoogleEven
   const url = new URL(event.href, baseUrl).toString();
   const description = [
     `Proyecto: ${event.project}`,
-    tramoPhaseLine(event),
+    etapaPhaseLine(event),
     `Responsable: ${event.responsible}`,
     `Tipo: ${event.type}`,
     "",

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
-const projectFlow = vi.hoisted(() => ({ pages: { tramos: true, puestos: true } }));
+const projectFlow = vi.hoisted(() => ({ pages: { etapas: true, puestos: true } }));
 vi.mock("@/lib/auth/ajustes-segments", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/ajustes-segments")>();
   return { ...actual, PROJECT_FLOW_SETTINGS_PAGES: projectFlow.pages };
@@ -33,7 +33,7 @@ const NONE: AjustesVisibleSegments = {
   general: false,
   tema: false,
   horario: false,
-  tramos: false,
+  etapas: false,
   puestos: false,
   estatus: false,
   permisos: false,
@@ -48,7 +48,7 @@ function linkNames(): string[] {
 
 afterEach(() => {
   cleanup();
-  projectFlow.pages.tramos = true;
+  projectFlow.pages.etapas = true;
   projectFlow.pages.puestos = true;
 });
 
@@ -118,9 +118,9 @@ describe("AjustesNav", () => {
   });
 
   it("shows Etapas y fases and Puestos only when Project Flow's pages exist", () => {
-    projectFlow.pages.tramos = false;
+    projectFlow.pages.etapas = false;
     projectFlow.pages.puestos = false;
-    render(<AjustesNav active="general" isAdmin segments={{ ...NONE, general: true, tramos: true, puestos: true }} />);
+    render(<AjustesNav active="general" isAdmin segments={{ ...NONE, general: true, etapas: true, puestos: true }} />);
 
     expect(screen.queryByRole("link", { name: /^Etapas y fases/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Puestos/ })).toBeNull();

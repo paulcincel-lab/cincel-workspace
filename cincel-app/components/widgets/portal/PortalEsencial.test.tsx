@@ -3,7 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { PortalOverviewData } from "@/lib/portal/overview";
-import type { PortalFileDTO, PortalProjectDTO, PortalTramoDTO } from "@/lib/types/portal";
+import type { PortalFileDTO, PortalProjectDTO, PortalEtapaDTO } from "@/lib/types/portal";
 
 import { PortalEsencial } from "./PortalEsencial";
 
@@ -21,7 +21,7 @@ const project: PortalProjectDTO = {
   manager: { name: "Ana Torres", email: "ana@cincel.mx" },
 };
 
-const tramos: PortalTramoDTO[] = [
+const etapas: PortalEtapaDTO[] = [
   { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
   { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 62, startMonth: "2026-03" },
   { key: "construccion", name: "Construcción", state: "por_iniciar", progressPct: 0, startMonth: null },
@@ -40,7 +40,7 @@ const file = (id: string, name: string, modifiedAt: string): PortalFileDTO & { f
 
 function overview(over: Record<string, unknown> = {}): PortalOverviewData {
   return {
-    tramos,
+    etapas,
     stepper: null,
     progress: [],
     entregas: [
@@ -118,19 +118,19 @@ describe("PortalEsencial", () => {
   });
 
   it("sentence variants: terminado, por iniciar, no etapas", () => {
-    const done = tramos.map((t) => ({ ...t, state: "completado" as const, progressPct: 100 }));
-    const { unmount } = render(<PortalEsencial project={project} data={overview({ tramos: done })} />);
+    const done = etapas.map((t) => ({ ...t, state: "completado" as const, progressPct: 100 }));
+    const { unmount } = render(<PortalEsencial project={project} data={overview({ etapas: done })} />);
     expect(screen.getByText("Proyecto terminado")).toBeTruthy();
     unmount();
 
-    const fresh = tramos.map((t) => ({ ...t, state: "por_iniciar" as const, progressPct: 0 }));
-    const second = render(<PortalEsencial project={project} data={overview({ tramos: fresh })} />);
+    const fresh = etapas.map((t) => ({ ...t, state: "por_iniciar" as const, progressPct: 0 }));
+    const second = render(<PortalEsencial project={project} data={overview({ etapas: fresh })} />);
     expect(
       screen.getByText((_, el) => el?.tagName === "P" && /^Aún no comenzamos/.test(el.textContent ?? "")).textContent,
     ).toBe("Aún no comenzamos · próxima entrega 14 nov");
     second.unmount();
 
-    render(<PortalEsencial project={project} data={overview({ tramos: [], entregas: [] })} />);
+    render(<PortalEsencial project={project} data={overview({ etapas: [], entregas: [] })} />);
     expect(
       screen.getByText((_, el) => el?.tagName === "P" && /^Llevamos/.test(el.textContent ?? "")).textContent,
     ).toBe("Llevamos 41 % de avance general");

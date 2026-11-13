@@ -49,7 +49,7 @@ import type { CalendarEvent } from "@/lib/types/calendar";
 
 const BASE = "https://app";
 const ev = (id: string, title = "T") =>
-  ({ id, taskId: id, date: "2026-12-01", time: "09:00", title, project: "P", responsible: "R", tramo: "s", tramoLabel: "S", phaseId: null, phaseLabel: "", type: "Compromiso", href: "/x" }) as CalendarEvent;
+  ({ id, taskId: id, date: "2026-12-01", time: "09:00", title, project: "P", responsible: "R", etapa: "s", etapaLabel: "S", phaseId: null, phaseLabel: "", type: "Compromiso", href: "/x" }) as CalendarEvent;
 
 beforeEach(() => {
   Object.values(m).forEach((fn) => fn.mockReset());

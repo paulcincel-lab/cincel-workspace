@@ -32,7 +32,7 @@ export type AssignedOpenTask = {
   due: string | null;
   projectId: string;
   projectName: string;
-  tramo: string | null;
+  etapa: string | null;
 };
 
 export type StaffProjectRole = "responsable" | "coordinador" | "miembro";
@@ -74,7 +74,7 @@ const taskColumns = {
   due: tasks.commitmentDate,
   projectId: projects.id,
   projectName: projects.name,
-  tramo: workflows.key,
+  etapa: workflows.key,
 };
 
 /**
@@ -118,7 +118,7 @@ export async function listAssignedOpenTasks(
       due: row.due,
       projectId: row.projectId,
       projectName: row.projectName,
-      tramo: row.tramo ?? null,
+      etapa: row.etapa ?? null,
     });
   };
   // Responsable first, then support, as two reads used to return them.

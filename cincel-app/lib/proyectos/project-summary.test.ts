@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { PORTFOLIO, TRAMOS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { PORTFOLIO, ETAPAS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
 import type { TaskListItem } from "@/lib/types/core";
 
 import {
   buildProjectSummary,
   contactsTable,
-  esencialTramoLine,
+  esencialEtapaLine,
   fichaTable,
   monthRange,
   monthYear,
@@ -16,29 +16,29 @@ import {
   recentFileRows,
   relativeWhen,
   shortDate,
-  nextTramoHint,
-  RESUMEN_NO_TRAMO,
-  startedTramos,
+  nextEtapaHint,
+  RESUMEN_NO_ETAPA,
+  startedEtapas,
   teamLine,
-  tramoSteps,
-  type TramoProgress,
+  etapaSteps,
+  type EtapaProgress,
 } from "./project-summary";
 import {
   loadToneOf,
   resumenKpis,
   sCurveGapStart,
-  taskGroupsByTramo,
+  taskGroupsByEtapa,
   tareasCsvFilename,
   teamLoadRows,
-  tramoPhaseGroups,
+  etapaPhaseGroups,
 } from "./project-summary";
-import { PHASES_BY_TRAMO, fixtureTaskRow } from "@/tests/unit/fixtures/project-summary";
+import { PHASES_BY_ETAPA, fixtureTaskRow } from "@/tests/unit/fixtures/project-summary";
 import {
   activityItems,
   nextTasks,
   statusCounts,
   teamLoadCards,
-  tramoProgress as visualTramoProgress,
+  etapaProgress as visualEtapaProgress,
 } from "./project-summary";
 import { HISTORY_EVENTS, TASK_ROWS } from "@/tests/unit/fixtures/project-summary";
 import type { HistoryEvent } from "@/lib/types/core";
@@ -99,48 +99,48 @@ describe("projectTaskStats", () => {
   });
 });
 
-// #1043: a project created with "Ninguno" (no tramo) or started directly in Diseño.
-const [PRESALE_REF, DISENO_REF, CONSTRUCCION_REF] = TRAMOS;
-const noTramoProject = () =>
-  fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [], stages: [] });
+// #1043: a project created with "Ninguno" (no etapa) or started directly in Diseño.
+const [PRESALE_REF, DISENO_REF, CONSTRUCCION_REF] = ETAPAS;
+const noEtapaProject = () =>
+  fixtureProject({ needsEtapa: true, currentWorkflowId: null, currentWorkflow: null, etapas: [], stages: [] });
 const disenoProject = () =>
   fixtureProject({
     currentWorkflowId: DISENO_REF!.id,
     currentWorkflow: DISENO_REF!,
-    tramos: [{ ...DISENO_REF!, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
+    etapas: [{ ...DISENO_REF!, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
     stages: [DISENO_REF!],
   });
 
-describe("startedTramos / nextTramoHint", () => {
+describe("startedEtapas / nextEtapaHint", () => {
   it("lists only the started etapas, in catalog order", () => {
-    expect(startedTramos(TRAMOS, fixtureProject()).map((t) => t.key)).toEqual(["presale", "diseno", "construccion"]);
-    expect(startedTramos(TRAMOS, disenoProject()).map((t) => t.key)).toEqual(["diseno"]);
-    expect(startedTramos(TRAMOS, noTramoProject())).toEqual([]);
+    expect(startedEtapas(ETAPAS, fixtureProject()).map((t) => t.key)).toEqual(["presale", "diseno", "construccion"]);
+    expect(startedEtapas(ETAPAS, disenoProject()).map((t) => t.key)).toEqual(["diseno"]);
+    expect(startedEtapas(ETAPAS, noEtapaProject())).toEqual([]);
   });
 
   it("hints the next etapa only when a readiness rule waits on the current one", () => {
-    expect(nextTramoHint(TRAMOS, disenoProject())?.key).toBe("construccion");
+    expect(nextEtapaHint(ETAPAS, disenoProject())?.key).toBe("construccion");
     // Construcción is current; Decoración has no readiness rule.
-    expect(nextTramoHint(TRAMOS, fixtureProject())).toBeNull();
-    expect(nextTramoHint(TRAMOS, noTramoProject())).toBeNull();
+    expect(nextEtapaHint(ETAPAS, fixtureProject())).toBeNull();
+    expect(nextEtapaHint(ETAPAS, noEtapaProject())).toBeNull();
     const presaleOnly = fixtureProject({
-      tramos: [{ ...PRESALE_REF!, startedAt: "2026-04-06T00:00:00.000Z", closedAt: null, current: true }],
+      etapas: [{ ...PRESALE_REF!, startedAt: "2026-04-06T00:00:00.000Z", closedAt: null, current: true }],
     });
-    expect(nextTramoHint(TRAMOS, presaleOnly)?.key).toBe("diseno");
-    // Never an earlier tramo, and never one already started.
+    expect(nextEtapaHint(ETAPAS, presaleOnly)?.key).toBe("diseno");
+    // Never an earlier etapa, and never one already started.
     const both = fixtureProject({
-      tramos: [
+      etapas: [
         { ...DISENO_REF!, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true },
         { ...CONSTRUCCION_REF!, startedAt: "2026-07-01T00:00:00.000Z", closedAt: null, current: false },
       ],
     });
-    expect(nextTramoHint(TRAMOS, both)).toBeNull();
+    expect(nextEtapaHint(ETAPAS, both)).toBeNull();
   });
 });
 
-describe("tramoSteps", () => {
+describe("etapaSteps", () => {
   it("marks closed etapas done and the current one current, only for started etapas, with ranges", () => {
-    const steps = tramoSteps(fixtureProject(), TRAMOS, "2026-11-06");
+    const steps = etapaSteps(fixtureProject(), ETAPAS, "2026-11-06");
     expect(steps.map((s) => [s.label, s.state, s.range])).toEqual([
       ["Presale", "done", "abr – may"],
       ["Diseño", "done", "jun"],
@@ -150,12 +150,12 @@ describe("tramoSteps", () => {
   });
 
   it("has no steps without a started etapa, and no earlier etapas when started later", () => {
-    expect(tramoSteps(noTramoProject(), TRAMOS, "2026-11-06")).toEqual([]);
-    expect(tramoSteps(disenoProject(), TRAMOS, "2026-11-06").map((s) => [s.label, s.state])).toEqual([["Diseño", "current"]]);
+    expect(etapaSteps(noEtapaProject(), ETAPAS, "2026-11-06")).toEqual([]);
+    expect(etapaSteps(disenoProject(), ETAPAS, "2026-11-06").map((s) => [s.label, s.state])).toEqual([["Diseño", "current"]]);
   });
 
   it("falls back to the started etapas without a catalog", () => {
-    expect(tramoSteps(fixtureProject(), [], "2026-11-06").map((s) => s.label)).toEqual([
+    expect(etapaSteps(fixtureProject(), [], "2026-11-06").map((s) => s.label)).toEqual([
       "Presale",
       "Diseño",
       "Construcción",
@@ -268,12 +268,12 @@ describe("buildProjectSummary", () => {
   });
 });
 
-describe("esencialTramoLine", () => {
-  const progress: TramoProgress[] = [
-    { tramoId: "w-presale", key: "presale", label: "Presale", state: "done", pct: 100, open: 0, overdue: 0, total: 4, startsOn: null },
-    { tramoId: "w-diseno", key: "diseno", label: "Diseño", state: "done", pct: 95, open: 1, overdue: 1, total: 20, startsOn: null },
+describe("esencialEtapaLine", () => {
+  const progress: EtapaProgress[] = [
+    { etapaId: "w-presale", key: "presale", label: "Presale", state: "done", pct: 100, open: 0, overdue: 0, total: 4, startsOn: null },
+    { etapaId: "w-diseno", key: "diseno", label: "Diseño", state: "done", pct: 95, open: 1, overdue: 1, total: 20, startsOn: null },
     {
-      tramoId: "w-construccion",
+      etapaId: "w-construccion",
       key: "construccion",
       label: "Construcción",
       state: "current",
@@ -283,21 +283,21 @@ describe("esencialTramoLine", () => {
       total: 15,
       startsOn: "2026-07-03",
     },
-    { tramoId: "w-decoracion", key: "decoracion", label: "Decoración", state: "next", pct: 0, open: 2, overdue: 0, total: 2, startsOn: "2027-01-12" },
+    { etapaId: "w-decoracion", key: "decoracion", label: "Decoración", state: "next", pct: 0, open: 2, overdue: 0, total: 2, startsOn: "2027-01-12" },
   ];
   // Decoración started (planned, not current) so its "next" detail shows.
   const withDecoracion = () =>
     fixtureSummaryInput({
       project: fixtureProject({
-        tramos: [
-          ...fixtureProject().tramos,
-          { ...TRAMOS[3]!, startedAt: null, closedAt: null, current: false },
+        etapas: [
+          ...fixtureProject().etapas,
+          { ...ETAPAS[3]!, startedAt: null, closedAt: null, current: false },
         ],
       }),
     });
 
   it("details per state (done with overdue, current fase index, next start month)", () => {
-    const line = esencialTramoLine(withDecoracion(), progress);
+    const line = esencialEtapaLine(withDecoracion(), progress);
     expect(line.title).toBe("En Construcción · Obra negra");
     expect(line.real).toBe(82);
     expect(line.steps.map((s) => [s.state, s.detail])).toEqual([
@@ -313,12 +313,12 @@ describe("esencialTramoLine", () => {
   });
 
   it("leaves out etapas the project never started", () => {
-    const line = esencialTramoLine(fixtureSummaryInput(), progress);
+    const line = esencialEtapaLine(fixtureSummaryInput(), progress);
     expect(line.steps.map((s) => s.key)).toEqual(["presale", "diseno", "construccion"]);
   });
 
   it("started in Diseño: only Diseño, plus the Siguiente: Construcción hint", () => {
-    const line = esencialTramoLine(fixtureSummaryInput({ project: disenoProject() }), [
+    const line = esencialEtapaLine(fixtureSummaryInput({ project: disenoProject() }), [
       { ...progress[1]!, state: "current" },
     ]);
     expect(line.steps.map((s) => [s.key, s.state])).toEqual([["diseno", "current"]]);
@@ -329,18 +329,18 @@ describe("esencialTramoLine", () => {
   it("uses the fase id and the catalog order, not the name", () => {
     const input = fixtureSummaryInput({
       taskStats: { total: 1, done: 0, open: 1, overdue: 0, currentPhase: "Renamed", currentPhaseId: "f-acabados" },
-      phasesByTramo: {
+      phasesByEtapa: {
         "w-construccion": [
           { id: "f-acabados", name: "Acabados", sortOrder: 3 },
           { id: "f-preliminares", name: "Preliminares", sortOrder: 1 },
         ],
       },
     });
-    expect(esencialTramoLine(input, progress).steps[2]!.detail).toBe("fase 2 de 2");
+    expect(esencialEtapaLine(input, progress).steps[2]!.detail).toBe("fase 2 de 2");
   });
 
   it("reads 'sin iniciar' for a next etapa without dates and pluralizes vencidas", () => {
-    const line = esencialTramoLine(withDecoracion(), [
+    const line = esencialEtapaLine(withDecoracion(), [
       { ...progress[0]!, overdue: 2 },
       progress[2]!,
       { ...progress[3]!, startsOn: null },
@@ -350,21 +350,21 @@ describe("esencialTramoLine", () => {
   });
 
   it("no started etapa: no steps, no hint, the empty-state copy", () => {
-    const line = esencialTramoLine(fixtureSummaryInput({ project: noTramoProject() }), progress);
+    const line = esencialEtapaLine(fixtureSummaryInput({ project: noEtapaProject() }), progress);
     expect(line.steps).toEqual([]);
     expect(line.next).toBeNull();
-    expect(line.title).toBe(RESUMEN_NO_TRAMO);
-    expect(line.ariaLabel).toBe(RESUMEN_NO_TRAMO);
+    expect(line.title).toBe(RESUMEN_NO_ETAPA);
+    expect(line.ariaLabel).toBe(RESUMEN_NO_ETAPA);
   });
 
   it("started etapas but none current reads Sin etapa asignada", () => {
     const project = fixtureProject({
-      needsTramo: true,
+      needsEtapa: true,
       currentWorkflowId: null,
       currentWorkflow: null,
-      tramos: fixtureProject().tramos.map((t) => ({ ...t, current: false, closedAt: t.closedAt ?? "2026-10-01T00:00:00.000Z" })),
+      etapas: fixtureProject().etapas.map((t) => ({ ...t, current: false, closedAt: t.closedAt ?? "2026-10-01T00:00:00.000Z" })),
     });
-    const line = esencialTramoLine(fixtureSummaryInput({ project }), []);
+    const line = esencialEtapaLine(fixtureSummaryInput({ project }), []);
     expect(line.title).toBe("Sin etapa asignada");
     expect(line.steps.map((s) => s.key)).toEqual(["presale", "diseno", "construccion"]);
     expect(line.steps.every((s) => s.state === "next" && s.detail === "")).toBe(true);
@@ -416,7 +416,7 @@ describe("teamLine", () => {
 
 describe("Resumen Analítico", () => {
   const TODAY = "2026-11-06";
-  const [, DISENO, CONSTRUCCION] = TRAMOS;
+  const [, DISENO, CONSTRUCCION] = ETAPAS;
   const OBRA = { id: "f-obra-negra", name: "Obra negra", sortOrder: 2 };
   const ACABADOS = { id: "f-acabados", name: "Acabados", sortOrder: 3 };
   const EJECUTIVO = { id: "f-ejecutivo", name: "Proyecto ejecutivo", sortOrder: 2 };
@@ -448,10 +448,10 @@ describe("Resumen Analítico", () => {
   ];
   const project = fixtureProject();
 
-  describe("tramoPhaseGroups", () => {
+  describe("etapaPhaseGroups", () => {
     it("counts, pct and current flags per fase; catalog fases with 0 tasks listed", () => {
-      const { groups, totals } = tramoPhaseGroups(tasks, TRAMOS, PHASES_BY_TRAMO, project, TODAY);
-      // Only the started tramos: Decoración (never started) is left out.
+      const { groups, totals } = etapaPhaseGroups(tasks, ETAPAS, PHASES_BY_ETAPA, project, TODAY);
+      // Only the started etapas: Decoración (never started) is left out.
       expect(groups.map((g) => g.id)).toEqual(["w-presale", "w-diseno", "w-construccion"]);
       const construccion = groups.find((g) => g.id === CONSTRUCCION!.id)!;
       expect(construccion.rows!.map((r) => [r.name, r.tasks, r.open, r.overdue, r.pct, r.current])).toEqual([
@@ -476,7 +476,7 @@ describe("Resumen Analítico", () => {
     });
 
     it("start/end/deviation from task dates; null when undated", () => {
-      const { groups } = tramoPhaseGroups(tasks, TRAMOS, PHASES_BY_TRAMO, project, TODAY);
+      const { groups } = etapaPhaseGroups(tasks, ETAPAS, PHASES_BY_ETAPA, project, TODAY);
       const rows = groups.find((g) => g.id === CONSTRUCCION!.id)!.rows!;
       const obra = rows.find((r) => r.phaseId === OBRA.id)!;
       expect([obra.start, obra.endPlan, obra.deviationDays]).toEqual(["2026-07-01", "2026-10-27", 10]);
@@ -486,7 +486,7 @@ describe("Resumen Analítico", () => {
       expect([sinFase.start, sinFase.endPlan, sinFase.deviationDays]).toEqual([null, null, null]);
 
       // A finished fase: the last close against the latest commitment date.
-      const done = tramoPhaseGroups(
+      const done = etapaPhaseGroups(
         [
           fixtureTaskRow("x", {
             phaseId: OBRA.id,
@@ -496,8 +496,8 @@ describe("Resumen Analítico", () => {
             closedAt: "2026-09-04T12:00:00.000Z",
           }),
         ],
-        TRAMOS,
-        PHASES_BY_TRAMO,
+        ETAPAS,
+        PHASES_BY_ETAPA,
         project,
         TODAY,
       ).groups.find((g) => g.id === CONSTRUCCION!.id)!.rows!;
@@ -505,16 +505,16 @@ describe("Resumen Analítico", () => {
     });
 
     it("no started etapa: no groups; started in Diseño: only Diseño's fases", () => {
-      expect(tramoPhaseGroups(tasks, TRAMOS, PHASES_BY_TRAMO, noTramoProject(), TODAY).groups).toEqual([]);
-      const { groups } = tramoPhaseGroups(tasks, TRAMOS, PHASES_BY_TRAMO, disenoProject(), TODAY);
+      expect(etapaPhaseGroups(tasks, ETAPAS, PHASES_BY_ETAPA, noEtapaProject(), TODAY).groups).toEqual([]);
+      const { groups } = etapaPhaseGroups(tasks, ETAPAS, PHASES_BY_ETAPA, disenoProject(), TODAY);
       expect(groups.map((g) => g.id)).toEqual(["w-diseno"]);
       expect(groups[0]!.rows!.map((r) => r.name)).toEqual(
-        (PHASES_BY_TRAMO["w-diseno"] ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder).map((p) => p.name),
+        (PHASES_BY_ETAPA["w-diseno"] ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder).map((p) => p.name),
       );
     });
 
     it("closed etapa with open tasks says cerrado con n pendiente", () => {
-      const { groups } = tramoPhaseGroups(tasks, TRAMOS, PHASES_BY_TRAMO, project, TODAY);
+      const { groups } = etapaPhaseGroups(tasks, ETAPAS, PHASES_BY_ETAPA, project, TODAY);
       const diseno = groups.find((g) => g.id === DISENO!.id)!;
       const estado = diseno.metrics.find((m) => m.key === "estado")!;
       expect(estado.value).toBe("cerrado con 1 pendiente");
@@ -524,9 +524,9 @@ describe("Resumen Analítico", () => {
     });
   });
 
-  describe("taskGroupsByTramo", () => {
+  describe("taskGroupsByEtapa", () => {
     it("ordering of groups and rows; Sin fase bucket", () => {
-      const { groups, totals } = taskGroupsByTramo(tasks, TRAMOS, project, TODAY);
+      const { groups, totals } = taskGroupsByEtapa(tasks, ETAPAS, project, TODAY);
       // Overdue groups first by days late (10 > 5), then catalog order; Decoración
       // (never started, no tasks) gets no group.
       expect(groups.map((g) => g.id)).toEqual(["w-construccion", "w-diseno", "w-presale"]);
@@ -541,21 +541,21 @@ describe("Resumen Analítico", () => {
       expect(totals).toEqual({ title: "Total · 5 tareas", daysLate: "15" });
     });
 
-    it("puts tasks without a etapa in Administración", () => {
-      const { groups } = taskGroupsByTramo(
+    it("puts tasks without an etapa in Administración", () => {
+      const { groups } = taskGroupsByEtapa(
         [fixtureTaskRow("adm", { kind: "admin", workflowId: null, workflow: null })],
-        TRAMOS,
+        ETAPAS,
         project,
         TODAY,
       );
       expect(groups[groups.length - 1]!.label).toBe("Administración");
     });
 
-    it("only started etapas get a group when empty; a etapa not started shows only with tasks", () => {
-      expect(taskGroupsByTramo([], TRAMOS, noTramoProject(), TODAY).groups).toEqual([]);
-      const { groups } = taskGroupsByTramo(
-        [fixtureTaskRow("dec", { workflowId: "w-decoracion", workflow: TRAMOS.find((t) => t.id === "w-decoracion")! })],
-        TRAMOS,
+    it("only started etapas get a group when empty; an etapa not started shows only with tasks", () => {
+      expect(taskGroupsByEtapa([], ETAPAS, noEtapaProject(), TODAY).groups).toEqual([]);
+      const { groups } = taskGroupsByEtapa(
+        [fixtureTaskRow("dec", { workflowId: "w-decoracion", workflow: ETAPAS.find((t) => t.id === "w-decoracion")! })],
+        ETAPAS,
         disenoProject(),
         TODAY,
       );
@@ -642,9 +642,9 @@ describe("statusCounts", () => {
   });
 });
 
-describe("tramoProgress", () => {
-  it("done/total per etapa, states from project.tramos, startsOn from the earliest commitment date", () => {
-    const rows = visualTramoProgress(TASK_ROWS, TRAMOS, fixtureProject(), "2026-11-06");
+describe("etapaProgress", () => {
+  it("done/total per etapa, states from project.etapas, startsOn from the earliest commitment date", () => {
+    const rows = visualEtapaProgress(TASK_ROWS, ETAPAS, fixtureProject(), "2026-11-06");
     expect(rows.map((r) => [r.key, r.state, r.pct, r.open, r.overdue, r.total, r.startsOn])).toEqual([
       ["presale", "done", 100, 0, 0, 1, "2026-04-06"],
       ["diseno", "done", 50, 1, 0, 2, "2026-06-01"],
@@ -652,12 +652,12 @@ describe("tramoProgress", () => {
     ]);
   });
 
-  it("0 % for a etapa without tasks; started etapas only, with or without a catalog", () => {
-    const rows = visualTramoProgress([], TRAMOS, fixtureProject(), "2026-11-06");
+  it("0 % for an etapa without tasks; started etapas only, with or without a catalog", () => {
+    const rows = visualEtapaProgress([], ETAPAS, fixtureProject(), "2026-11-06");
     expect(rows.map((r) => r.key)).toEqual(["presale", "diseno", "construccion"]);
     expect(rows.at(-1)).toMatchObject({ key: "construccion", state: "current", pct: 0, total: 0 });
-    expect(visualTramoProgress(TASK_ROWS, TRAMOS, noTramoProject(), "2026-11-06")).toEqual([]);
-    expect(visualTramoProgress([], [], fixtureProject(), "2026-11-06").map((r) => r.key)).toEqual([
+    expect(visualEtapaProgress(TASK_ROWS, ETAPAS, noEtapaProject(), "2026-11-06")).toEqual([]);
+    expect(visualEtapaProgress([], [], fixtureProject(), "2026-11-06").map((r) => r.key)).toEqual([
       "presale",
       "diseno",
       "construccion",
@@ -669,7 +669,7 @@ describe("nextTasks", () => {
   it("blocked and overdue first by days late, then by date; limit", () => {
     const next = nextTasks(TASK_ROWS, "2026-11-06", 4);
     expect(next.map((t) => t.id)).toEqual(["t-obra-1", "t-obra-2", "t-obra-3", "t-diseno-2"]);
-    expect(next[0]).toMatchObject({ daysLate: 10, blocked: false, tramoKey: "construccion", subtasks: { done: 2, total: 4 } });
+    expect(next[0]).toMatchObject({ daysLate: 10, blocked: false, etapaKey: "construccion", subtasks: { done: 2, total: 4 } });
     expect(next[1]).toMatchObject({ daysLate: 0, blocked: true, responsable: { id: "s2", name: "Alejandro Riofrio" } });
     expect(nextTasks(TASK_ROWS, "2026-11-06", 10)).toHaveLength(5);
     // Undated tasks go last among the non-urgent ones.
@@ -691,7 +691,7 @@ describe("activityItems", () => {
         HISTORY_EVENTS[1]!,
         { ...base, id: "start", field: "tramo_started", afterValue: "decoracion: 3" },
       ],
-      TRAMOS,
+      ETAPAS,
       now,
       10,
     );
@@ -699,13 +699,13 @@ describe("activityItems", () => {
       ["comentó en", "el proyecto", "default"],
       ["marcó el proyecto como", "Bloqueado", "destructive"],
       ["completó", "el proyecto", "default"],
-      ["movió el proyecto a", "Construcción", "tramo"],
-      ["inició", "Decoración", "tramo"],
+      ["movió el proyecto a", "Construcción", "etapa"],
+      ["inició", "Decoración", "etapa"],
     ]);
     expect(items[0]).toMatchObject({ actor: { name: "Paul Langarica" }, when: "hace 2 h" });
-    expect(items[3]).toMatchObject({ tramoKey: "construccion", tramoLabel: null });
-    expect(items[4]).toMatchObject({ tramoKey: "decoracion", tramoLabel: "Decoración" });
-    expect(activityItems(HISTORY_EVENTS, TRAMOS, now, 1)).toHaveLength(1);
+    expect(items[3]).toMatchObject({ etapaKey: "construccion", etapaLabel: null });
+    expect(items[4]).toMatchObject({ etapaKey: "decoracion", etapaLabel: "Decoración" });
+    expect(activityItems(HISTORY_EVENTS, ETAPAS, now, 1)).toHaveLength(1);
   });
 });
 
@@ -727,7 +727,7 @@ describe("relativeWhen", () => {
 describe("teamLoadCards", () => {
   it("joins the team with its load and this project's overdue and blocked tasks", () => {
     const cards = teamLoadCards(fixtureSummaryInput(), TASK_ROWS);
-    expect(cards.map((c) => [c.id, c.loadPct, c.overdueHere, c.blockedHere, c.tramoKey])).toEqual([
+    expect(cards.map((c) => [c.id, c.loadPct, c.overdueHere, c.blockedHere, c.etapaKey])).toEqual([
       ["s1", 92, 1, 0, "construccion"],
       ["s2", 60, 0, 1, "construccion"],
       ["s3", 40, 0, 0, "diseno"],

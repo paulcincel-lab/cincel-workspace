@@ -37,7 +37,7 @@ export const projectStatus = core.enum("project_status", [
   "completado",
   "cancelado",
 ]);
-/** `admin`: admin-only task with no tramo, fase or espacio (project flow, BE §3.5). */
+/** `admin`: admin-only task with no etapa, fase or espacio (project flow, BE §3.5). */
 export const taskKind = core.enum("task_kind", ["workflow", "usuario", "admin"]);
 export const taskStatus = core.enum("task_status", [
   "pendiente",

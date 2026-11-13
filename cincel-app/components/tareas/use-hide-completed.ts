@@ -38,7 +38,7 @@ function replaceUrl(next: (href: string) => string): void {
 
 /**
  * "Ocultar completadas" for the task tables outside `/tareas` (#1039): the
- * project Tareas tab, Resumen "Tareas por tramo" and Mi espacio. On when the
+ * project Tareas tab, Resumen "Tareas por etapa" and Mi espacio. On when the
  * URL says `?completadas=0`, else the viewer's preference. The setter saves
  * the preference and writes the URL with `history.replaceState` (no server
  * render), so a link keeps it.

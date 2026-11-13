@@ -92,19 +92,19 @@ export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hid
     return [...selection.selectedIds].map(taskOf).filter((t): t is TaskBulkTask => t !== undefined);
   }, [active, selection.selectedIds, taskOf]);
 
-  // ── Catalogs: the custom statuses and the fases of the selected tasks' tramos, while the bar shows.
+  // ── Catalogs: the custom statuses and the fases of the selected tasks' etapas, while the bar shows.
   const statuses = useQuery({ ...catalogTaskStatusesOptions(), enabled: active }).data ?? NO_STATUSES;
-  const tramoIds = useMemo(() => [...new Set(tasks.flatMap((t) => (t.workflowId ? [t.workflowId] : [])))], [tasks]);
+  const etapaIds = useMemo(() => [...new Set(tasks.flatMap((t) => (t.workflowId ? [t.workflowId] : [])))], [tasks]);
   const phaseData = useQueries({
-    queries: tramoIds.map((id) => ({ ...taskPhasesOptions(id), enabled: active })),
+    queries: etapaIds.map((id) => ({ ...taskPhasesOptions(id), enabled: active })),
     combine: (results) => results.map((r) => r.data),
   });
   const phasesOf = useCallback(
-    (id: string): readonly WorkflowPhaseRef[] => phaseData[tramoIds.indexOf(id)] ?? NO_PHASES,
-    [phaseData, tramoIds],
+    (id: string): readonly WorkflowPhaseRef[] => phaseData[etapaIds.indexOf(id)] ?? NO_PHASES,
+    [phaseData, etapaIds],
   );
   const catalogs = useMemo<TaskCellCatalogs>(
-    () => ({ tramos: [], phasesOf: () => [], statuses, staff: [...staff], spacesOf: () => [] }),
+    () => ({ etapas: [], phasesOf: () => [], statuses, staff: [...staff], spacesOf: () => [] }),
     [statuses, staff],
   );
 

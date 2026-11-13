@@ -78,7 +78,7 @@ describe("FilterCard", () => {
     const onChange = vi.fn();
     render(<FilterCard groups={filterCardFixture} onChange={onChange} />);
     fireEvent.click(screen.getByRole("radio", { name: "Construcción" }));
-    expect(onChange).toHaveBeenCalledWith("tramo", "construccion");
+    expect(onChange).toHaveBeenCalledWith("etapa", "construccion");
     onChange.mockClear();
     fireEvent.click(screen.getByRole("radio", { name: "Todos" }));
     expect(onChange).not.toHaveBeenCalled();

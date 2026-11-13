@@ -13,8 +13,8 @@ export type CalendarioFilters = {
   quien: "yo" | "todos";
   /** Project ids, [] = all. */
   proyectos: string[];
-  /** Workflow id, "none" = sin tramo. */
-  tramo: string | null;
+  /** Workflow id, "none" = sin etapa. */
+  etapa: string | null;
   /** Staff id, only with `quien = "todos"`. */
   responsable: string | null;
   /** Include tasks where the person is support (default true). */
@@ -53,7 +53,7 @@ export type GoogleSyncError =
   | "NOT_ORGANIZER";
 export type InvitesVia = "google" | "cincel";
 
-export type CalTramoRef = { id: string; key: string | null; name: string; colorSlot: 1 | 2 | 3 | 4 | 5 | null };
+export type CalEtapaRef = { id: string; key: string | null; name: string; colorSlot: 1 | 2 | 3 | 4 | 5 | null };
 export type CalPersonRef = { id: string; name: string };
 export type CalTaskItem = {
   kind: "task";
@@ -65,7 +65,7 @@ export type CalTaskItem = {
   date: string;
   dateField: "commitmentDate" | "deliveryDate";
   project: { id: string; name: string } | null;
-  tramo: CalTramoRef | null;
+  etapa: CalEtapaRef | null;
   phase: { id: string; name: string } | null;
   status: TaskStatus;
   statusLabel: string;
@@ -95,7 +95,7 @@ export type CalEventItem = {
   end: string;
   allDay: boolean;
   project: { id: string; name: string } | null;
-  tramo: CalTramoRef | null;
+  etapa: CalEtapaRef | null;
   location: string | null;
   meetUrl: string | null;
   attendees: CalEventAttendee[];
@@ -216,7 +216,9 @@ export type ProposalChange =
         projectId: string;
         managerId: string | null;
         commitmentDate: string | null;
-        tramoId: string | null;
+        etapaId: string | null;
+        /** Compatibility: proposals saved before the rename carry `tramoId` instead of `etapaId`. */
+        tramoId?: string | null;
         sourceText: string;
       };
     }
@@ -298,7 +300,7 @@ export type MeetingPrep = {
   eventId: string;
   kpis: {
     progressVsPlan: number | null;
-    tramo: { name: string; phase: string | null } | null;
+    etapa: { name: string; phase: string | null } | null;
     overdue: number;
     open: number;
     lastMeeting: { date: string; decisions: number; open: number } | null;

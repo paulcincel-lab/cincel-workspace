@@ -12,17 +12,17 @@ import {
   attentionProjects,
   deliveryTimeline,
   formatDeliveryDate,
-  orderedTramos,
+  orderedEtapas,
   portfolioById,
   portfolioProjectCards,
   portfolioSummary,
   summaryTone,
-  tramoTone,
+  etapaTone,
   visualDescription,
   type AttentionProject,
   type PortfolioSummaryCard,
-  type TramoStep,
-  type TramoTone,
+  type EtapaStep,
+  type EtapaTone,
 } from "@/components/proyectos/projects-portfolio-data";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
@@ -44,15 +44,15 @@ import { cn } from "@/lib/utils";
  * motion over the one `qk.proyectos.list()` read (prefetched by the page).
  * Five sections in frame order:
  *
- * 1. `PageHeader`: "{n} obras activas en {t} tramos · {k} entregas en los
+ * 1. `PageHeader`: "{n} obras activas en {t} etapas · {k} entregas en los
  *    próximos 11 días." and "Nuevo proyecto" (`onNewProject`).
  * 2. Portfolio summary (#1042): four cards (Proyectos activos, Tareas
  *    abiertas, Vencidas, Avance medio), each with its bar and footnote.
  * 3. "Requieren atención": up to three projects with overdue tasks.
  * 4. "Todos los proyectos" (#1042): one card per project (the attention
- *    card without the tramo stepper; the tramo is only its chip), by name.
- *    A card opens the project. Tramo is never a grouping here: it changes
- *    from the Tramo actual cell in Analítico or from the project.
+ *    card without the etapa stepper; the etapa is only its chip), by name.
+ *    A card opens the project. Etapa is never a grouping here: it changes
+ *    from the Etapa actual cell in Analítico or from the project.
  * 5. "Próximas entregas" (`DeliveryTimelineWidget`): today … today + 10.
  *
  * Only `activo` projects are shown (paused ones are reachable from
@@ -83,7 +83,7 @@ export { ProjectsVisualSkeleton };
 
 // ── Pieces ─────────────────────────────────────────────────────────────────
 
-function ProgressRing({ value, tone }: { value: number; tone: TramoTone }) {
+function ProgressRing({ value, tone }: { value: number; tone: EtapaTone }) {
   return (
     <div role="img" aria-label={`Avance ${value} %`} className="relative size-16 shrink-0">
       <svg viewBox="0 0 64 64" aria-hidden="true" className="size-full -rotate-90">
@@ -114,9 +114,9 @@ function ProgressRing({ value, tone }: { value: number; tone: TramoTone }) {
   );
 }
 
-function TramoStepper({ steps, current, toneOf }: { steps: TramoStep[]; current: string; toneOf(key: string): TramoTone }) {
+function EtapaStepper({ steps, current, toneOf }: { steps: EtapaStep[]; current: string; toneOf(key: string): EtapaTone }) {
   return (
-    <div role="img" aria-label={`Etapa actual: ${current}`} className="flex items-center" data-slot="tramo-stepper">
+    <div role="img" aria-label={`Etapa actual: ${current}`} className="flex items-center" data-slot="etapa-stepper">
       {steps.map((step, index) => {
         const tone = toneOf(step.key);
         const filled = step.state !== "next";
@@ -189,7 +189,7 @@ function SummaryCard({ card, index }: { card: PortfolioSummaryCard; index: numbe
   );
 }
 
-/** A project card: "Requieren atención" (with the tramo stepper) and the project grid (`steps` false). */
+/** A project card: "Requieren atención" (with the etapa stepper) and the project grid (`steps` false). */
 function ProjectCard({
   project,
   index,
@@ -200,13 +200,13 @@ function ProjectCard({
 }: {
   project: AttentionProject;
   index: number;
-  toneOf(key: string | null): TramoTone;
+  toneOf(key: string | null): EtapaTone;
   slot?: string;
   steps?: boolean;
   /** The card's `⋯` entries ("Eliminar proyecto", #1050); none hides the menu. */
   actions?: TableRowAction[];
 }) {
-  const tone = toneOf(project.tramoKey);
+  const tone = toneOf(project.etapaKey);
   const current = project.steps.find((s) => s.state === "current")?.label ?? project.badge.split(" · ")[0];
   const names = project.team.map((p) => p.name).join(", ");
   const card = (
@@ -251,7 +251,7 @@ function ProjectCard({
             ) : null}
           </div>
         </div>
-        {steps && project.steps.length > 0 ? <TramoStepper steps={project.steps} current={current} toneOf={toneOf} /> : null}
+        {steps && project.steps.length > 0 ? <EtapaStepper steps={project.steps} current={current} toneOf={toneOf} /> : null}
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="rounded-full bg-muted px-2.5 py-[3px] text-[12.5px] font-medium">
@@ -307,19 +307,19 @@ function ProjectCard({
 // ── Layout ─────────────────────────────────────────────────────────────────
 
 function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNewProject?(): void }) {
-  const { projects, portfolio, tramos, today, canCreateProject } = data;
+  const { projects, portfolio, etapas, today, canCreateProject } = data;
   const attentionId = useId();
   const gridId = useId();
 
   const listed = useMemo(() => activeOnlyProjects(projects), [projects]);
   const rows = useMemo(() => portfolioById(portfolio), [portfolio]);
-  const tramoOrder = useMemo(() => orderedTramos(listed, tramos), [listed, tramos]);
+  const etapaOrder = useMemo(() => orderedEtapas(listed, etapas), [listed, etapas]);
   const summary = useMemo(() => portfolioSummary(listed, rows), [listed, rows]);
-  const attention = useMemo(() => attentionProjects(listed, rows, tramos), [listed, rows, tramos]);
-  const cards = useMemo(() => portfolioProjectCards(listed, rows, tramos), [listed, rows, tramos]);
+  const attention = useMemo(() => attentionProjects(listed, rows, etapas), [listed, rows, etapas]);
+  const cards = useMemo(() => portfolioProjectCards(listed, rows, etapas), [listed, rows, etapas]);
   const timeline = useMemo(() => deliveryTimeline(listed, rows, today), [listed, rows, today]);
 
-  const toneOf = (key: string | null) => tramoTone(key, tramoOrder);
+  const toneOf = (key: string | null) => etapaTone(key, etapaOrder);
   // Card menu "Eliminar proyecto" (#1050), only with `canDeleteProject`.
   const deleteProject = useDeleteProject();
 
@@ -436,7 +436,7 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
         items={timeline.items}
         rangeLabel={timeline.rangeLabel}
         toneOf={toneOf}
-        legend={tramoOrder.map((t) => ({ key: t.key, label: t.name }))}
+        legend={etapaOrder.map((t) => ({ key: t.key, label: t.name }))}
         enterIndex={gridIndex + 1}
       />
       {deleteProject.dialog}

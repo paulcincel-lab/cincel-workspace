@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
 import type { WorkflowPhase } from "@/lib/types/core";
 
 export interface PhaseListEditorProps {
-  /** The tramo's name, for the labels. */
+  /** The etapa's name, for the labels. */
   workflowName: string;
-  /** The tramo's fases in catalog order (inactive ones included). */
+  /** The etapa's fases in catalog order (inactive ones included). */
   phases: WorkflowPhase[];
   /** phaseId → live tasks in it. */
   taskCounts: Readonly<Record<string, number>>;
@@ -34,9 +34,9 @@ function tasksText(n: number): string {
 }
 
 /**
- * The fases of a tramo inside its editor (Ajustes › Tramos y fases): an
+ * The fases of an etapa inside its editor (Ajustes › Etapas y fases): an
  * ordered list with a drag handle (pointer, or Space / ↑ / ↓ / Space), the
- * Geist Mono index, the name edited in place (saved with the tramo's
+ * Geist Mono index, the name edited in place (saved with the etapa's
  * "Guardar cambios"), its task count, a "Nueva" pill for fases created here
  * and, last, the inline "Agregar fase…" row. Reorders persist on drop.
  */

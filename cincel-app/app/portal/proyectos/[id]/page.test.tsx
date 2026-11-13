@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => {
     requireProjectAccess: vi.fn(),
     getPortalProject: vi.fn(),
     getPortalSchedule: vi.fn(),
-    getPortalProjectTramos: vi.fn(),
+    getPortalProjectEtapas: vi.fn(),
     listPortalProjects: vi.fn(),
     listPortalFolder: vi.fn(),
     listPortalFolderGroups: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock("@/components/portal/PortalUploader", () => ({
 vi.mock("@/lib/portal/queries", () => ({
   getPortalProject: mocks.getPortalProject,
   getPortalSchedule: mocks.getPortalSchedule,
-  getPortalProjectTramos: mocks.getPortalProjectTramos,
+  getPortalProjectEtapas: mocks.getPortalProjectEtapas,
   getPortalTeam: mocks.getPortalTeam,
   listPortalProjects: mocks.listPortalProjects,
 }));
@@ -110,7 +110,7 @@ describe("/portal/proyectos/[id]", () => {
     mocks.requireProjectAccess.mockResolvedValue(ACCESS);
     mocks.getPortalProject.mockResolvedValue(project);
     mocks.getPortalSchedule.mockResolvedValue(schedule);
-    mocks.getPortalProjectTramos.mockResolvedValue([]);
+    mocks.getPortalProjectEtapas.mockResolvedValue([]);
     mocks.getPortalTeam.mockResolvedValue([]);
     mocks.listPortalProjects.mockResolvedValue([project]);
   });
@@ -140,7 +140,7 @@ describe("/portal/proyectos/[id]", () => {
     expect(client.getQueryData(qk.portal.project(PID, "cronograma"))).toEqual({
       project,
       schedule,
-      tramos: [],
+      etapas: [],
       documents: null,
       documentFolders: null,
       team: [],
@@ -241,7 +241,7 @@ describe("/portal/proyectos/[id]", () => {
 });
 
 describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
-  const tramos = [
+  const etapas = [
     { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
     { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 62, startMonth: "2026-06" },
   ];
@@ -256,7 +256,7 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
     mocks.requireProjectAccess.mockResolvedValue(READY);
     mocks.getPortalProject.mockResolvedValue(project);
     mocks.getPortalSchedule.mockResolvedValue(schedule);
-    mocks.getPortalProjectTramos.mockResolvedValue(tramos);
+    mocks.getPortalProjectEtapas.mockResolvedValue(etapas);
     mocks.listPortalFolder.mockResolvedValue({ folderId: "client-root", breadcrumbs: [], items: files });
     mocks.listPortalFolderGroups.mockResolvedValue([{ folderId: "client-root", name: "General", files }]);
     mocks.getPortalTeam.mockResolvedValue([{ name: "Laura Pérez", role: "Responsable del proyecto", email: "laura@cincel.mx" }]);
@@ -274,11 +274,11 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
 
     expect(screen.getByTestId("overview").getAttribute("data-project")).toBe(PID);
     expect(mocks.getPortalSchedule).toHaveBeenCalledWith(READY);
-    expect(mocks.getPortalProjectTramos).toHaveBeenCalledWith(READY);
+    expect(mocks.getPortalProjectEtapas).toHaveBeenCalledWith(READY);
     expect(mocks.listPortalFolder).toHaveBeenCalledWith({ driveClientFolderId: "client-root" });
     expect(mocks.requireProjectAccess).toHaveBeenCalledTimes(1);
     const data = overview();
-    expect(data.tramos).toEqual(tramos);
+    expect(data.etapas).toEqual(etapas);
     expect(data.progress[0]).toMatchObject({ label: "Avance general", real: 42 });
     expect(data.documentos.rows.map((r: { id: string }) => r.id)).toEqual(["f1"]);
     expect(mocks.getPortalTeam).toHaveBeenCalledWith(READY);
@@ -304,7 +304,7 @@ describe("/portal/proyectos/[id] Resumen (FE §3.11)", () => {
   it("keeps the other tabs as they are", async () => {
     await renderInto("cronograma");
     expect(screen.queryByTestId("overview")).toBeNull();
-    expect(mocks.getPortalProjectTramos).not.toHaveBeenCalled();
+    expect(mocks.getPortalProjectEtapas).not.toHaveBeenCalled();
     expect(mocks.listPortalFolder).not.toHaveBeenCalled();
     expect(mocks.listPortalFolderGroups).not.toHaveBeenCalled();
     expect(mocks.getPortalTeam).not.toHaveBeenCalled();

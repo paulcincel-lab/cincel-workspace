@@ -161,7 +161,7 @@ function DayTasksColumn({ tasks, date, onOpen }: { tasks: CalTaskItem[]; date: s
                 </span>
                 <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                   {task.hoursSource === "task" ? <span className="font-mono">{formatHours(task.hours)} h</span> : null}
-                  {task.tramo ? <span>{task.tramo.name}</span> : null}
+                  {task.etapa ? <span>{task.etapa.name}</span> : null}
                 </span>
               </button>
             </li>

@@ -62,7 +62,7 @@ import { getAppOrigin } from "@/lib/auth/safe-return-to";
 import { db } from "@/lib/db/client";
 import { actionErrorText } from "@/lib/errors";
 import { TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/settings";
-import { canSeeAdminData } from "@/lib/tramos/compat";
+import { canSeeAdminData } from "@/lib/etapas/compat";
 import type { ProjectListItem, TaskFilters, TaskListItem } from "@/lib/types/core";
 import type { AgendaItem } from "@/lib/types/widgets";
 import { approvedAbsences } from "@/lib/vacations/approved-absences";
@@ -324,7 +324,7 @@ export function taskAgendaItems(tasks: TaskListItem[], from: string, to: string)
         start: date,
         allDay: true,
         project: task.project.name,
-        tramo: task.workflow?.key ?? null,
+        etapa: task.workflow?.key ?? null,
         attendees,
         href: `/tareas?tarea=${task.id}`,
       });
@@ -365,7 +365,7 @@ export function eventAgendaItems(events: CalEventItem[]): AgendaItem[] {
       href: `/calendario?vista=dia&fecha=${event.date}&evento=${event.id}`,
     };
     if (event.project) item.project = event.project.name;
-    if (event.tramo?.key) item.tramo = event.tramo.key as AgendaItem["tramo"];
+    if (event.etapa?.key) item.etapa = event.etapa.key as AgendaItem["etapa"];
     if (event.meetUrl) item.meetUrl = event.meetUrl;
     return item;
   });

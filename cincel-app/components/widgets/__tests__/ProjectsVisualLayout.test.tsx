@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 
 const nav = vi.hoisted(() => ({ params: new URLSearchParams() }));
-const actions = vi.hoisted(() => ({ setProjectCurrentTramoAction: vi.fn() }));
+const actions = vi.hoisted(() => ({ setProjectCurrentEtapaAction: vi.fn() }));
 const pageData = vi.hoisted(() => ({ getProyectosPageData: vi.fn() }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 
@@ -16,14 +16,14 @@ vi.mock("sonner", () => ({ toast: toasts }));
 vi.mock("@/lib/actions/projects-actions", () => actions);
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => pageData);
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
     canSeeAdminData: () => false,
-    listTramos: async () => [],
-    tramoLabel: (key: string) => key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    listEtapas: async () => [],
+    etapaLabel: (key: string) => key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
   };
 });
@@ -56,7 +56,7 @@ function projectCard(container: HTMLElement, id: string): HTMLAnchorElement {
 
 beforeEach(() => {
   resetProyectosDashboard();
-  actions.setProjectCurrentTramoAction.mockReset();
+  actions.setProjectCurrentEtapaAction.mockReset();
   toasts.error.mockReset();
 });
 
@@ -69,7 +69,7 @@ describe("ProjectsVisualLayout", () => {
   it("renders the five sections in order", () => {
     const { container } = renderLayout();
     expect(screen.getByRole("heading", { name: "Proyectos" })).toBeTruthy();
-    // Two active projects (the paused one is reachable from Analítico) in two tramos; Casa Lomas delivers on day 2.
+    // Two active projects (the paused one is reachable from Analítico) in two etapas; Casa Lomas delivers on day 2.
     expect(screen.getByText("2 obras activas · 1 entrega en los próximos 11 días.")).toBeTruthy();
     const sections = [...container.querySelectorAll<HTMLElement>("[data-section], [data-slot=delivery-timeline]")].map(
       (el) => el.dataset.section ?? el.dataset.slot,
@@ -81,7 +81,7 @@ describe("ProjectsVisualLayout", () => {
       "/proyectos?estilo=analitico&mostrar=vencidas",
     );
     expect(screen.getByRole("heading", { name: "Todos los proyectos" })).toBeTruthy();
-    // No tramo board, no drag.
+    // No etapa board, no drag.
     expect(screen.queryByText("Arrastra un proyecto para moverlo de etapa")).toBeNull();
     expect(container.querySelector('[data-slot="board-column"]')).toBeNull();
     expect(screen.getByRole("heading", { name: "Próximas entregas" })).toBeTruthy();
@@ -116,7 +116,7 @@ describe("ProjectsVisualLayout", () => {
     const summary = screen.getByRole("region", { name: "Resumen del portafolio" });
     const cards = [...summary.querySelectorAll<HTMLElement>('[data-slot="portfolio-summary"]')];
     expect(cards.map((c) => c.dataset.summary)).toEqual(["activos", "abiertas", "vencidas", "avance"]);
-    // Not toggles: the tramo filter is gone from Visual.
+    // Not toggles: the etapa filter is gone from Visual.
     expect(within(summary).queryAllByRole("button")).toHaveLength(0);
     // Casa Lomas (4 open, 2 overdue, 62 %) and Depto Andares (8 open, 15 %).
     expect(cards[0].textContent).toContain("Proyectos activos");
@@ -132,7 +132,7 @@ describe("ProjectsVisualLayout", () => {
     const cards = [...grid.querySelectorAll<HTMLAnchorElement>('[data-slot="project-card"]')];
     expect(cards.map((c) => c.getAttribute("href"))).toEqual(["/proyectos/p-lomas", "/proyectos/p-andares"]);
     const lomas = projectCard(container, "p-lomas");
-    // Same card as Requieren atención: ring, name, chip, pills, avatars and next delivery; no tramo stepper.
+    // Same card as Requieren atención: ring, name, chip, pills, avatars and next delivery; no etapa stepper.
     expect(within(lomas).getByRole("img", { name: "Avance 62 %" })).toBeTruthy();
     expect(within(lomas).getByText("Casa Lomas")).toBeTruthy();
     expect(within(lomas).getByText("Diseño")).toBeTruthy();

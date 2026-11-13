@@ -11,10 +11,10 @@
  */
 import { cuttoLinks } from "@/lib/integrations/cutto-links";
 import { ganttBySeccion, statusWeight } from "@/lib/cronograma/metrics";
-import { dominantTramo, initialsOf } from "@/lib/people/aggregates";
+import { dominantEtapa, initialsOf } from "@/lib/people/aggregates";
 import { READINESS } from "@/lib/project-flow/catalog";
 import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
-import type { TramoStep } from "@/components/widgets/TramoStepperWidget";
+import type { EtapaStep } from "@/components/widgets/EtapaStepperWidget";
 import type { ProjectDetail, ProjectSpaceRef, ProjectStatus, TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { HistoryEvent, StaffRef, TaskListRow, TaskStatus } from "@/lib/types/core";
 import type { PortfolioRow } from "@/lib/types/redesign";
@@ -31,7 +31,7 @@ export type ProjectTaskStats = {
   done: number;
   open: number;
   overdue: number;
-  /** Name of the first fase of the current tramo with open tasks; null when no task has a fase. */
+  /** Name of the first fase of the current etapa with open tasks; null when no task has a fase. */
   currentPhase: string | null;
   /** Id of that fase (the "fase i de n" index reads it, not the name). */
   currentPhaseId: string | null;
@@ -50,8 +50,8 @@ export type ProjectStatsTask = Pick<TaskListItem, "archived" | "status" | "commi
 export type ProjectSummaryInput = {
   project: ProjectDetail;
   portfolio: PortfolioRow | null;
-  /** Every active tramo in order (Presale, Diseño, Construcción, …); empty = only the started ones. */
-  tramoCatalog: WorkflowRef[];
+  /** Every active etapa in order (Presale, Diseño, Construcción, …); empty = only the started ones. */
+  etapaCatalog: WorkflowRef[];
   taskStats: ProjectTaskStats;
   schedule: { tasks: ScheduleTask[]; payments: PaymentRow[] } | null;
   /** Root items of the project's Drive folder; null when the folder can't be read. */
@@ -65,8 +65,8 @@ export type ProjectSummaryInput = {
   showClientContacts: boolean;
   /** YYYY-MM-DD (project timezone). */
   today: string;
-  /** Active catalog fases per tramo (by workflow id), in `sortOrder`. */
-  phasesByTramo: Record<string, WorkflowPhaseRef[]>;
+  /** Active catalog fases per etapa (by workflow id), in `sortOrder`. */
+  phasesByEtapa: Record<string, WorkflowPhaseRef[]>;
   /** The project's Drive folder ("Abrir Drive"); null when it has none yet. */
   driveFolderUrl?: string | null;
   /** By staff id, only the project's team: open tasks across all projects against capacity. */
@@ -74,7 +74,7 @@ export type ProjectSummaryInput = {
 };
 
 export type ProjectSummaryData = {
-  tramos: TramoStep[];
+  etapas: EtapaStep[];
   avance: ProgressItem[];
   /** Admins only. */
   budget: ProgressItem[] | null;
@@ -179,30 +179,30 @@ export function projectTaskStats(tasks: ProjectStatsTask[], today: string, curre
   };
 }
 
-// ── Tramos ──────────────────────────────────────────────────────────────────
+// ── Etapas ──────────────────────────────────────────────────────────────────
 
 /**
- * The tramos the Resumen shows: only the ones the project has started
- * (`project.tramos`, i.e. `project_stages`), in catalog order. A tramo it
- * never started is not shown, so a project with none shows no tramo at all.
- * Names and colors come from the catalog when it has the tramo.
+ * The etapas the Resumen shows: only the ones the project has started
+ * (`project.etapas`, i.e. `project_stages`), in catalog order. An etapa it
+ * never started is not shown, so a project with none shows no etapa at all.
+ * Names and colors come from the catalog when it has the etapa.
  */
-export function startedTramos(catalog: WorkflowRef[], project: Pick<ProjectDetail, "tramos">): WorkflowRef[] {
+export function startedEtapas(catalog: WorkflowRef[], project: Pick<ProjectDetail, "etapas">): WorkflowRef[] {
   const byId = new Map(catalog.map((t) => [t.id, t]));
-  return project.tramos
+  return project.etapas
     .map(({ id, key, name, sortOrder, colorSlot }): WorkflowRef => byId.get(id) ?? { id, key, name, sortOrder, colorSlot })
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 /**
- * The muted "Siguiente: {tramo}" hint after the current tramo (the last
- * started one when none is current): the first later catalog tramo, not
- * started, whose readiness rule (`READINESS`) waits on that tramo. Null
- * without a started tramo or without such a rule.
+ * The muted "Siguiente: {etapa}" hint after the current etapa (the last
+ * started one when none is current): the first later catalog etapa, not
+ * started, whose readiness rule (`READINESS`) waits on that etapa. Null
+ * without a started etapa or without such a rule.
  */
-export function nextTramoHint(catalog: WorkflowRef[], project: Pick<ProjectDetail, "tramos">): WorkflowRef | null {
-  const started = startedTramos(catalog, project);
-  const anchor = started.find((t) => project.tramos.some((run) => run.id === t.id && run.current)) ?? started.at(-1) ?? null;
+export function nextEtapaHint(catalog: WorkflowRef[], project: Pick<ProjectDetail, "etapas">): WorkflowRef | null {
+  const started = startedEtapas(catalog, project);
+  const anchor = started.find((t) => project.etapas.some((run) => run.id === t.id && run.current)) ?? started.at(-1) ?? null;
   if (!anchor) return null;
   const startedIds = new Set(started.map((t) => t.id));
   return (
@@ -212,21 +212,21 @@ export function nextTramoHint(catalog: WorkflowRef[], project: Pick<ProjectDetai
   );
 }
 
-/** One step per started tramo (`startedTramos`): done, current or (started, not current, not closed) next. */
-export function tramoSteps(project: ProjectDetail, catalog: WorkflowRef[], today: string): TramoStep[] {
-  const started = new Map(project.tramos.map((t) => [t.id, t]));
-  const ordered = startedTramos(catalog, project);
-  const current = project.tramos.find((t) => t.current) ?? null;
-  return ordered.map((tramo) => {
-    const run = started.get(tramo.id) ?? null;
-    let state: TramoStep["state"] = "next";
+/** One step per started etapa (`startedEtapas`): done, current or (started, not current, not closed) next. */
+export function etapaSteps(project: ProjectDetail, catalog: WorkflowRef[], today: string): EtapaStep[] {
+  const started = new Map(project.etapas.map((t) => [t.id, t]));
+  const ordered = startedEtapas(catalog, project);
+  const current = project.etapas.find((t) => t.current) ?? null;
+  return ordered.map((etapa) => {
+    const run = started.get(etapa.id) ?? null;
+    let state: EtapaStep["state"] = "next";
     if (run?.current) state = "current";
-    else if (run && (run.closedAt !== null || (current !== null && tramo.sortOrder < current.sortOrder))) state = "done";
+    else if (run && (run.closedAt !== null || (current !== null && etapa.sortOrder < current.sortOrder))) state = "done";
     const start = run?.startedAt?.slice(0, 10) ?? null;
     const end = run?.closedAt?.slice(0, 10) ?? null;
     return {
-      key: tramo.key || tramo.id,
-      label: tramo.name,
+      key: etapa.key || etapa.id,
+      label: etapa.name,
       range: monthRange(start, end),
       state,
       start,
@@ -515,7 +515,7 @@ export function buildProjectSummary(input: ProjectSummaryInput): ProjectSummaryD
   ];
 
   return {
-    tramos: tramoSteps(project, input.tramoCatalog, today),
+    etapas: etapaSteps(project, input.etapaCatalog, today),
     avance,
     budget,
     budgetTable: showBudget && schedule ? budgetTable(schedule.payments, amount) : null,
@@ -564,8 +564,8 @@ export function statusCounts(tasks: TaskListRow[]): StatusCount[] {
   }));
 }
 
-export type TramoProgress = {
-  tramoId: string;
+export type EtapaProgress = {
+  etapaId: string;
   key: string;
   label: string;
   state: "done" | "current" | "next";
@@ -573,33 +573,33 @@ export type TramoProgress = {
   open: number;
   overdue: number;
   total: number;
-  /** YYYY-MM-DD: when the tramo started, or for one not started the earliest commitment date of its tasks. */
+  /** YYYY-MM-DD: when the etapa started, or for one not started the earliest commitment date of its tasks. */
   startsOn: string | null;
 };
 
 /**
- * One row per started tramo (`startedTramos`, catalog order): state from
- * `project.tramos` (current; done when closed or before the current one),
- * `pct` = completado / total of the tramo's top-level non-archived tasks (0
+ * One row per started etapa (`startedEtapas`, catalog order): state from
+ * `project.etapas` (current; done when closed or before the current one),
+ * `pct` = completado / total of the etapa's top-level non-archived tasks (0
  * without tasks), open and overdue counts, and `startsOn`: the start date of
- * a started tramo, else the earliest commitment date among its tasks.
+ * a started etapa, else the earliest commitment date among its tasks.
  */
-export function tramoProgress(
+export function etapaProgress(
   tasks: TaskListRow[],
   catalog: WorkflowRef[],
   project: ProjectDetail,
   today: string,
-): TramoProgress[] {
+): EtapaProgress[] {
   const live = liveParents(tasks);
-  const started = new Map(project.tramos.map((t) => [t.id, t]));
-  const ordered = startedTramos(catalog, project);
-  const current = project.tramos.find((t) => t.current) ?? null;
-  return ordered.map((tramo) => {
-    const run = started.get(tramo.id) ?? null;
-    let state: TramoProgress["state"] = "next";
+  const started = new Map(project.etapas.map((t) => [t.id, t]));
+  const ordered = startedEtapas(catalog, project);
+  const current = project.etapas.find((t) => t.current) ?? null;
+  return ordered.map((etapa) => {
+    const run = started.get(etapa.id) ?? null;
+    let state: EtapaProgress["state"] = "next";
     if (run?.current) state = "current";
-    else if (run && (run.closedAt !== null || (current !== null && tramo.sortOrder < current.sortOrder))) state = "done";
-    const own = live.filter((task) => task.workflowId === tramo.id);
+    else if (run && (run.closedAt !== null || (current !== null && etapa.sortOrder < current.sortOrder))) state = "done";
+    const own = live.filter((task) => task.workflowId === etapa.id);
     const done = own.filter((task) => task.status === "completado").length;
     const open = own.filter((task) => task.status !== "completado");
     const overdue = open.filter((task) => {
@@ -612,9 +612,9 @@ export function tramoProgress(
         .filter((d): d is string => d !== null)
         .sort()[0] ?? null;
     return {
-      tramoId: tramo.id,
-      key: tramo.key || tramo.id,
-      label: tramo.name,
+      etapaId: etapa.id,
+      key: etapa.key || etapa.id,
+      label: etapa.name,
       state,
       pct: own.length > 0 ? Math.round((done / own.length) * 100) : 0,
       open: open.length,
@@ -628,7 +628,7 @@ export function tramoProgress(
 export type NextTask = {
   id: string;
   title: string;
-  tramoKey: string | null;
+  etapaKey: string | null;
   phase: string | null;
   responsable: StaffRef | null;
   dueDate: string | null;
@@ -649,7 +649,7 @@ export function nextTasks(tasks: TaskListRow[], today: string, limit: number): N
       return {
         id: task.id,
         title: task.title,
-        tramoKey: task.workflow?.key ?? null,
+        etapaKey: task.workflow?.key ?? null,
         phase: task.phase?.name ?? null,
         responsable: task.manager,
         dueDate: due,
@@ -677,12 +677,12 @@ export type ActivityItem = {
   actor: StaffRef | null;
   verb: string;
   object: string | null;
-  objectTone: "default" | "destructive" | "tramo";
+  objectTone: "default" | "destructive" | "etapa";
   /** `relativeWhen` of the event. */
   when: string;
-  tramoLabel: string | null;
-  /** Tramo key of a tramo move or start (the object's color); absent otherwise. */
-  tramoKey?: string | null;
+  etapaLabel: string | null;
+  /** Etapa key of an etapa move or start (the object's color); absent otherwise. */
+  etapaKey?: string | null;
 };
 
 const STATUS_VALUE_LABEL: Record<string, string> = {
@@ -713,8 +713,8 @@ const PROJECT_FIELD_LABEL: Record<string, string> = {
   progress: "el avance",
 };
 
-/** The tramo of a history value: a workflow id, or the "{key}: {n}" of a tramo start. */
-function tramoOfValue(value: string | null, catalog: WorkflowRef[]): WorkflowRef | null {
+/** The etapa of a history value: a workflow id, or the "{key}: {n}" of an etapa start. */
+function etapaOfValue(value: string | null, catalog: WorkflowRef[]): WorkflowRef | null {
   if (!value) return null;
   const head = value.split(":")[0]!.trim();
   return catalog.find((t) => t.id === value || t.id === head || t.key === head) ?? null;
@@ -725,54 +725,55 @@ function tramoOfValue(value: string | null, catalog: WorkflowRef[]): WorkflowRef
  * "{actor} {verb} {object}" lines, only what the history records (file
  * uploads are not history events): comentario → "comentó en"; a status
  * change → "marcó … como {after}" (Bloqueado in destructive), to completado
- * → "completó"; the current tramo → "movió el proyecto a {tramo}"; a tramo
- * start → "inició {tramo}"; any other change → "actualizó {field}".
+ * → "completó"; the current etapa → "movió el proyecto a {etapa}"; an etapa
+ * start → "inició {etapa}"; any other change → "actualizó {field}".
  */
 export function activityItems(events: HistoryEvent[], catalog: WorkflowRef[], now: Date, limit: number): ActivityItem[] {
   return events.slice(0, Math.max(0, limit)).map((event): ActivityItem => {
     const subject = event.entity === "project" ? "el proyecto" : "la tarea";
     const base = { id: event.id, actor: event.actor, when: relativeWhen(event.eventAt, now) };
     if (event.kind === "comentario") {
-      return { ...base, verb: "comentó en", object: subject, objectTone: "default", tramoLabel: null };
+      return { ...base, verb: "comentó en", object: subject, objectTone: "default", etapaLabel: null };
     }
     if (event.field === "currentWorkflowId") {
-      const tramo = tramoOfValue(event.afterValue, catalog);
+      const etapa = etapaOfValue(event.afterValue, catalog);
       return {
         ...base,
         verb: "movió el proyecto a",
-        object: tramo?.name ?? "otra etapa",
-        objectTone: "tramo",
-        tramoLabel: null,
-        tramoKey: tramo?.key ?? null,
+        object: etapa?.name ?? "otra etapa",
+        objectTone: "etapa",
+        etapaLabel: null,
+        etapaKey: etapa?.key ?? null,
       };
     }
+    // Compatibility: the stored history fields keep the old name (`ETAPA_STARTED_FIELD` in lib/project-flow/catalog.ts).
     if (event.field === "tramo_started" || event.field === "tramo_start_undone") {
       const startedNow = event.field === "tramo_started";
-      const tramo = tramoOfValue(startedNow ? event.afterValue : event.beforeValue, catalog);
+      const etapa = etapaOfValue(startedNow ? event.afterValue : event.beforeValue, catalog);
       return {
         ...base,
         verb: startedNow ? "inició" : "deshizo el inicio de",
-        object: tramo?.name ?? "una etapa",
-        objectTone: "tramo",
-        tramoLabel: tramo?.name ?? null,
-        tramoKey: tramo?.key ?? null,
+        object: etapa?.name ?? "una etapa",
+        objectTone: "etapa",
+        etapaLabel: etapa?.name ?? null,
+        etapaKey: etapa?.key ?? null,
       };
     }
     if (event.field === "status") {
       const after = event.afterValue ?? "";
       if (after === "completado") {
-        return { ...base, verb: "completó", object: subject, objectTone: "default", tramoLabel: null };
+        return { ...base, verb: "completó", object: subject, objectTone: "default", etapaLabel: null };
       }
       return {
         ...base,
         verb: `marcó ${subject} como`,
         object: STATUS_VALUE_LABEL[after] ?? (after || "sin estatus"),
         objectTone: after === "bloqueado" ? "destructive" : "default",
-        tramoLabel: null,
+        etapaLabel: null,
       };
     }
     const field = event.field ? (PROJECT_FIELD_LABEL[event.field] ?? "la ficha") : "la ficha";
-    return { ...base, verb: "actualizó", object: field, objectTone: "default", tramoLabel: null };
+    return { ...base, verb: "actualizó", object: field, objectTone: "default", etapaLabel: null };
   });
 }
 
@@ -805,8 +806,8 @@ export type TeamLoadCard = {
   /** This project's open top-level tasks of the person (as responsable) that are overdue / blocked. */
   overdueHere: number;
   blockedHere: number;
-  /** Most frequent tramo among the person's tasks in this project (avatar tint). */
-  tramoKey: string | null;
+  /** Most frequent etapa among the person's tasks in this project (avatar tint). */
+  etapaKey: string | null;
 };
 
 /** People of "Equipo y carga" before "+{n}". */
@@ -843,38 +844,38 @@ export function teamLoadCards(
         return due !== null && due < today;
       }).length,
       blockedHere: open.filter((task) => task.status === "bloqueado").length,
-      tramoKey: dominantTramo(own.map((task) => task.workflow?.key ?? null)),
+      etapaKey: dominantEtapa(own.map((task) => task.workflow?.key ?? null)),
     };
   });
 }
 
-// ── Esencial (tramo line, recent files, team) ───────────────────────────────
+// ── Esencial (etapa line, recent files, team) ───────────────────────────────
 
-/** One tramo of the Esencial dot line, with its second label line. */
-export type EsencialTramoStep = {
+/** One etapa of the Esencial dot line, with its second label line. */
+export type EsencialEtapaStep = {
   key: string;
   label: string;
   state: "done" | "current" | "next";
   pct: number;
   overdue: number;
-  /** "95 % · 1 vencida" | "fase 2 de 3" | "inicia ene" | "sin iniciar"; empty without a tramo. */
+  /** "95 % · 1 vencida" | "fase 2 de 3" | "inicia ene" | "sin iniciar"; empty without an etapa. */
   detail: string;
 };
 
-export type EsencialTramoLine = {
-  /** One per started tramo; empty when the project has started none (the card shows its empty state). */
-  steps: EsencialTramoStep[];
-  /** The muted "Siguiente: {tramo}" hint (`nextTramoHint`); null without one. */
+export type EsencialEtapaLine = {
+  /** One per started etapa; empty when the project has started none (the card shows its empty state). */
+  steps: EsencialEtapaStep[];
+  /** The muted "Siguiente: {etapa}" hint (`nextEtapaHint`); null without one. */
   next: { key: string; label: string } | null;
-  /** "En Diseño · Proyecto ejecutivo"; "Sin tramo asignado" without a current tramo. */
+  /** "En Diseño · Proyecto ejecutivo"; "Sin etapa asignado" without a current etapa. */
   title: string;
   real: number;
   /** Text alternative of the dot line. */
   ariaLabel: string;
 };
 
-/** The Resumen's empty state when the project has started no tramo (#1043). */
-export const RESUMEN_NO_TRAMO = "Este proyecto aún no tiene etapa.";
+/** The Resumen's empty state when the project has started no etapa (#1043). */
+export const RESUMEN_NO_ETAPA = "Este proyecto aún no tiene etapa.";
 
 const LONG_MONTH = new Intl.DateTimeFormat("es-MX", { month: "long", timeZone: "UTC" });
 
@@ -895,25 +896,25 @@ function phasePosition(phases: WorkflowPhaseRef[], phaseId: string | null): { in
 }
 
 /**
- * The Esencial tramo card: one step per started tramo of `progress` (catalog order),
- * with "{pct} % · {n} vencida(s)" for a done tramo, "fase {i} de {n}" for the
- * current one (by `taskStats.currentPhaseId` over `phasesByTramo`) and
+ * The Esencial etapa card: one step per started etapa of `progress` (catalog order),
+ * with "{pct} % · {n} vencida(s)" for a done etapa, "fase {i} de {n}" for the
+ * current one (by `taskStats.currentPhaseId` over `phasesByEtapa`) and
  * "inicia {mmm}" (earliest commitment date of its tasks) or "sin iniciar"
- * for the next ones. Without a current tramo (`needsTramo`) every step is
- * "next" with no detail and the title reads "Sin tramo asignado".
+ * for the next ones. Without a current etapa (`needsEtapa`) every step is
+ * "next" with no detail and the title reads "Sin etapa asignado".
  */
-export function esencialTramoLine(input: ProjectSummaryInput, progress: TramoProgress[]): EsencialTramoLine {
+export function esencialEtapaLine(input: ProjectSummaryInput, progress: EtapaProgress[]): EsencialEtapaLine {
   const { project, portfolio, taskStats } = input;
   const real = Math.round(portfolio?.real ?? project.progress);
-  const startedIds = new Set(project.tramos.map((t) => t.id));
-  const fromProgress = progress.filter((step) => startedIds.has(step.tramoId));
-  const source: TramoProgress[] =
+  const startedIds = new Set(project.etapas.map((t) => t.id));
+  const fromProgress = progress.filter((step) => startedIds.has(step.etapaId));
+  const source: EtapaProgress[] =
     fromProgress.length > 0
       ? fromProgress
-      : tramoSteps(project, input.tramoCatalog, input.today).map((step) => {
-          const tramo = startedTramos(input.tramoCatalog, project).find((t) => (t.key || t.id) === step.key);
+      : etapaSteps(project, input.etapaCatalog, input.today).map((step) => {
+          const etapa = startedEtapas(input.etapaCatalog, project).find((t) => (t.key || t.id) === step.key);
           return {
-            tramoId: tramo?.id ?? step.key,
+            etapaId: etapa?.id ?? step.key,
             key: step.key,
             label: step.label,
             state: step.state,
@@ -924,9 +925,9 @@ export function esencialTramoLine(input: ProjectSummaryInput, progress: TramoPro
             startsOn: null,
           };
         });
-  const hint = nextTramoHint(input.tramoCatalog, project);
+  const hint = nextEtapaHint(input.etapaCatalog, project);
   const next = hint ? { key: hint.key || hint.id, label: hint.name } : null;
-  const current = project.needsTramo ? null : (source.find((step) => step.state === "current") ?? null);
+  const current = project.needsEtapa ? null : (source.find((step) => step.state === "current") ?? null);
 
   if (!current) {
     const steps = source.map((step) => ({
@@ -940,19 +941,19 @@ export function esencialTramoLine(input: ProjectSummaryInput, progress: TramoPro
     return {
       steps,
       next,
-      title: steps.length > 0 ? "Sin etapa asignada" : RESUMEN_NO_TRAMO,
+      title: steps.length > 0 ? "Sin etapa asignada" : RESUMEN_NO_ETAPA,
       real,
       ariaLabel:
         steps.length > 0
           ? `Etapas: sin etapa asignada (${steps.map((s) => s.label).join(", ")})${next ? `, siguiente ${next.label}` : ""}`
-          : RESUMEN_NO_TRAMO,
+          : RESUMEN_NO_ETAPA,
     };
   }
 
-  const position = phasePosition(input.phasesByTramo[current.tramoId] ?? [], taskStats.currentPhaseId);
+  const position = phasePosition(input.phasesByEtapa[current.etapaId] ?? [], taskStats.currentPhaseId);
   const spoken: string[] = [];
-  const steps: EsencialTramoStep[] = source.map((step) => {
-    // A tramo closed without tasks of its own reads as complete.
+  const steps: EsencialEtapaStep[] = source.map((step) => {
+    // An etapa closed without tasks of its own reads as complete.
     const pct = Math.round(step.state === "done" && step.total === 0 ? 100 : step.pct);
     if (step.state === "done") {
       spoken.push(`${step.label} terminado ${pct} %${step.overdue > 0 ? `, ${vencidas(step.overdue)}` : ""}`);
@@ -1033,8 +1034,8 @@ export function recentFileRows(files: StaffFileItem[] | null, now: Date, limit: 
     }));
 }
 
-/** One avatar of the team stack; `tramoKey` (the tint) is filled by the caller from the person's tasks. */
-export type TeamAvatar = { id: string; name: string; initials: string; tramoKey: string | null };
+/** One avatar of the team stack; `etapaKey` (the tint) is filled by the caller from the person's tasks. */
+export type TeamAvatar = { id: string; name: string; initials: string; etapaKey: string | null };
 
 /** Avatars shown before "+{n}". */
 export const TEAM_AVATARS_MAX = 5;
@@ -1058,7 +1059,7 @@ export function teamLine(project: Pick<ProjectDetail, "manager" | "coordinator" 
   add(project.coordinator);
   for (const member of project.members) if (member.active !== false) add(member);
 
-  const all = [...people.entries()].map(([id, name]) => ({ id, name, initials: initialsOf(name), tramoKey: null }));
+  const all = [...people.entries()].map(([id, name]) => ({ id, name, initials: initialsOf(name), etapaKey: null }));
   const count = all.length;
   const personas = `${count} ${count === 1 ? "persona" : "personas"}`;
   const manager = project.manager?.name ?? null;
@@ -1070,11 +1071,11 @@ export function teamLine(project: Pick<ProjectDetail, "manager" | "coordinator" 
   };
 }
 
-// ── Analítico (tramos y fases, tareas por tramo, KPIs, carga del equipo) ────
+// ── Analítico (etapas y fases, tareas por etapa, KPIs, carga del equipo) ────
 
 /** Label of the bucket of tasks without a fase, in both grouped tables. */
 export const RESUMEN_SIN_FASE = "Sin fase";
-/** Group of the administrative tasks (no tramo), shown to administrators only. */
+/** Group of the administrative tasks (no etapa), shown to administrators only. */
 export const RESUMEN_ADMIN_GROUP = "Administración";
 /** Load thresholds of the team table: the same values as `OCCUPANCY_HEAT` (`PeopleWidget`). */
 export const RESUMEN_LOAD_WARN_AT = 60;
@@ -1124,17 +1125,17 @@ function pctOf(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;
 }
 
-/** A started tramo's state: current, done (closed or before the current one) or next. */
-export function tramoRunState(project: ProjectDetail, tramo: WorkflowRef): "done" | "current" | "next" {
-  const run = project.tramos.find((t) => t.id === tramo.id) ?? null;
-  const current = project.tramos.find((t) => t.current) ?? null;
+/** A started etapa's state: current, done (closed or before the current one) or next. */
+export function etapaRunState(project: ProjectDetail, etapa: WorkflowRef): "done" | "current" | "next" {
+  const run = project.etapas.find((t) => t.id === etapa.id) ?? null;
+  const current = project.etapas.find((t) => t.current) ?? null;
   if (run?.current) return "current";
-  if (run && (run.closedAt !== null || (current !== null && tramo.sortOrder < current.sortOrder))) return "done";
+  if (run && (run.closedAt !== null || (current !== null && etapa.sortOrder < current.sortOrder))) return "done";
   return "next";
 }
 
 /**
- * The current fase: the first fase (by `sortOrder`) of the current tramo with
+ * The current fase: the first fase (by `sortOrder`) of the current etapa with
  * open tasks, the same rule as `projectTaskStats.currentPhase`.
  */
 function currentPhaseIdOf(tasks: TaskListRow[], project: ProjectDetail): string | null {
@@ -1202,23 +1203,23 @@ function phaseRowOf(
   };
 }
 
-const TRAMO_STATE_LABEL = { done: "cerrado", current: "en curso", next: "sin iniciar" } as const;
+const ETAPA_STATE_LABEL = { done: "cerrado", current: "en curso", next: "sin iniciar" } as const;
 
 /**
- * "Tramos y fases": one group per started tramo (`startedTramos`, catalog
+ * "Etapas y fases": one group per started etapa (`startedEtapas`, catalog
  * order) with one row per fase; no groups when the project started none.
  * Catalog fases with no tasks are listed with zeros; fases that only appear on
  * tasks follow, and tasks without a fase go to a last "Sin fase" row. Group
- * metrics: "actual" on the current tramo, "{n} fases" caption, "{state} {pct} %"
- * (or "cerrado con {n} pendiente" for a closed tramo with open tasks),
+ * metrics: "actual" on the current etapa, "{n} fases" caption, "{state} {pct} %"
+ * (or "cerrado con {n} pendiente" for a closed etapa with open tasks),
  * "{n} tareas", "{n} vencida(s)" and "{n} bloqueada(s)" when any. `totals`
  * is keyed by column (`name`, `tasks`, `open`, `overdue`, `pct`, `start`,
  * `endPlan`, `deviationDays`).
  */
-export function tramoPhaseGroups(
+export function etapaPhaseGroups(
   tasks: TaskListRow[],
   catalog: WorkflowRef[],
-  phasesByTramo: Record<string, WorkflowPhaseRef[]>,
+  phasesByEtapa: Record<string, WorkflowPhaseRef[]>,
   project: ProjectDetail,
   today: string,
 ): { groups: Group<PhaseRow>[]; totals: Record<string, string> } {
@@ -1226,12 +1227,12 @@ export function tramoPhaseGroups(
   const currentPhaseId = currentPhaseIdOf(live, project);
   const allRows: PhaseRow[] = [];
 
-  const groups = startedTramos(catalog, project).map((tramo): Group<PhaseRow> => {
-    const inTramo = live.filter((t) => t.workflowId === tramo.id);
-    const known = [...(phasesByTramo[tramo.id] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  const groups = startedEtapas(catalog, project).map((etapa): Group<PhaseRow> => {
+    const inEtapa = live.filter((t) => t.workflowId === etapa.id);
+    const known = [...(phasesByEtapa[etapa.id] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
     const knownIds = new Set(known.map((p) => p.id));
     const extra = new Map<string, WorkflowPhaseRef>();
-    for (const t of inTramo) if (t.phase && !knownIds.has(t.phase.id)) extra.set(t.phase.id, t.phase);
+    for (const t of inEtapa) if (t.phase && !knownIds.has(t.phase.id)) extra.set(t.phase.id, t.phase);
     const phases = [...known, ...[...extra.values()].sort((a, b) => a.sortOrder - b.sortOrder)];
 
     const rows = phases.map((phase) =>
@@ -1239,30 +1240,30 @@ export function tramoPhaseGroups(
         phase.id,
         phase.name,
         phase.id === currentPhaseId,
-        inTramo.filter((t) => t.phaseId === phase.id || t.phase?.id === phase.id),
+        inEtapa.filter((t) => t.phaseId === phase.id || t.phase?.id === phase.id),
         today,
       ),
     );
-    const unphased = inTramo.filter((t) => !t.phaseId && !t.phase);
+    const unphased = inEtapa.filter((t) => !t.phaseId && !t.phase);
     if (unphased.length > 0) rows.push(phaseRowOf(null, RESUMEN_SIN_FASE, false, unphased, today));
     allRows.push(...rows);
 
-    const state = tramoRunState(project, tramo);
-    const open = inTramo.filter((t) => !rowDone(t)).length;
-    const overdue = inTramo.filter((t) => rowOverdue(t, today)).length;
-    const blocked = inTramo.filter((t) => t.status === "bloqueado").length;
-    const pct = pctOf(inTramo.length - open, inTramo.length);
+    const state = etapaRunState(project, etapa);
+    const open = inEtapa.filter((t) => !rowDone(t)).length;
+    const overdue = inEtapa.filter((t) => rowOverdue(t, today)).length;
+    const blocked = inEtapa.filter((t) => t.status === "bloqueado").length;
+    const pct = pctOf(inEtapa.length - open, inEtapa.length);
 
     return {
-      id: tramo.id,
-      label: tramo.name,
+      id: etapa.id,
+      label: etapa.name,
       caption: countLabel(rows.length, "fase", "fases"),
       metrics: [
         ...(state === "current" ? [{ key: "actual", value: "actual", pill: true }] : []),
         state === "done" && open > 0
           ? { key: "estado", value: `cerrado con ${open} pendiente`, tone: "warning" as const }
-          : { key: "estado", value: `${TRAMO_STATE_LABEL[state]} ${pct} %` },
-        { key: "tareas", value: countLabel(inTramo.length, "tarea", "tareas") },
+          : { key: "estado", value: `${ETAPA_STATE_LABEL[state]} ${pct} %` },
+        { key: "tareas", value: countLabel(inEtapa.length, "tarea", "tareas") },
         {
           key: "vencidas",
           value: countLabel(overdue, "vencida", "vencidas"),
@@ -1311,7 +1312,7 @@ export type TaskRow = {
   customStatus: TaskListRow["customStatus"];
 };
 
-/** A "Tareas por tramo" row of a task. */
+/** A "Tareas por etapa" row of a task. */
 export function taskRowOf(task: TaskListRow, today: string): TaskRow {
   return {
     id: task.id,
@@ -1343,22 +1344,22 @@ function sortTaskRows(rows: TaskRow[]): TaskRow[] {
 }
 
 /**
- * "Tareas por tramo": one group per started tramo (`startedTramos`, also when
- * empty, for its quick-add row), then tramos not started that still have
- * tasks, and "Administración" for tasks without a tramo; a tramo the project
+ * "Tareas por etapa": one group per started etapa (`startedEtapas`, also when
+ * empty, for its quick-add row), then etapas not started that still have
+ * tasks, and "Administración" for tasks without an etapa; an etapa the project
  * never started gets no empty group. Groups with overdue tasks come first by Σ days late
  * (desc), the rest in catalog order. Metrics: "{k} vencidas · {Σ} d" and
  * "bloqueada" when any. `totals` is keyed by column (`title`, `daysLate`).
  */
-export function taskGroupsByTramo(
+export function taskGroupsByEtapa(
   tasks: TaskListRow[],
   catalog: WorkflowRef[],
-  project: Pick<ProjectDetail, "tramos">,
+  project: Pick<ProjectDetail, "etapas">,
   today: string,
 ): { groups: Group<TaskRow>[]; totals: Record<string, string> } {
   const live = resumenTasks(tasks);
-  const tramos = startedTramos(catalog, project);
-  const known = new Set(tramos.map((t) => t.id));
+  const etapas = startedEtapas(catalog, project);
+  const known = new Set(etapas.map((t) => t.id));
   const byId = new Map(catalog.map((t) => [t.id, t]));
   const extra = new Map<string, WorkflowRef>();
   for (const t of live) {
@@ -1367,14 +1368,14 @@ export function taskGroupsByTramo(
     if (ref) extra.set(t.workflowId, ref);
   }
   const buckets: { id: string; label: string; tasks: TaskListRow[] }[] = [
-    ...[...tramos, ...[...extra.values()].sort((a, b) => a.sortOrder - b.sortOrder)].map((tramo) => ({
-      id: tramo.id,
-      label: tramo.name,
-      tasks: live.filter((t) => t.workflowId === tramo.id),
+    ...[...etapas, ...[...extra.values()].sort((a, b) => a.sortOrder - b.sortOrder)].map((etapa) => ({
+      id: etapa.id,
+      label: etapa.name,
+      tasks: live.filter((t) => t.workflowId === etapa.id),
     })),
   ];
-  const untramoed = live.filter((t) => !t.workflowId);
-  if (untramoed.length > 0) buckets.push({ id: "admin", label: RESUMEN_ADMIN_GROUP, tasks: untramoed });
+  const withoutEtapa = live.filter((t) => !t.workflowId);
+  if (withoutEtapa.length > 0) buckets.push({ id: "admin", label: RESUMEN_ADMIN_GROUP, tasks: withoutEtapa });
 
   const built = buckets.map((bucket, index) => {
     const rows = sortTaskRows(bucket.tasks.map((t) => taskRowOf(t, today)));
@@ -1510,7 +1511,7 @@ export function resumenKpis(input: ProjectSummaryInput, tasks: TaskListRow[]): K
 export type TeamLoadRow = {
   staffId: string;
   name: string;
-  /** "{dominant tramo here} · {role}" (each part left out when unknown). */
+  /** "{dominant etapa here} · {role}" (each part left out when unknown). */
   context: string;
   /** Open tasks of the person in this project. */
   here: number;
@@ -1529,7 +1530,7 @@ export function loadToneOf(pct: number): TeamLoadRow["tone"] {
 
 /**
  * "Carga del equipo": responsable, coordinación and active miembros (each
- * once) with their open and overdue tasks here, the tramo where most of them
+ * once) with their open and overdue tasks here, the etapa where most of them
  * are, their role ("responsable" for the manager) and the total load from
  * `teamLoad`. Sorted by load (desc), then name.
  */
@@ -1547,14 +1548,14 @@ export function teamLoadRows(input: ProjectSummaryInput, tasks: TaskListRow[]): 
   const load = input.teamLoad;
   const rows = [...people.entries()].map(([staffId, person]): TeamLoadRow => {
     const mine = live.filter((t) => t.managerId === staffId && !rowDone(t));
-    const tramoCounts = new Map<string, number>();
+    const etapaCounts = new Map<string, number>();
     let dominant: string | null = null;
     for (const t of mine) {
       const name = t.workflow?.name ?? null;
       if (!name) continue;
-      const n = (tramoCounts.get(name) ?? 0) + 1;
-      tramoCounts.set(name, n);
-      if (dominant === null || n > (tramoCounts.get(dominant) ?? 0)) dominant = name;
+      const n = (etapaCounts.get(name) ?? 0) + 1;
+      etapaCounts.set(name, n);
+      if (dominant === null || n > (etapaCounts.get(dominant) ?? 0)) dominant = name;
     }
     const role = person.role ?? staff[staffId]?.puesto ?? null;
     const loadPct = Math.round(load[staffId]?.loadPct ?? 0);
@@ -1589,7 +1590,7 @@ export function tareasCsvFilename(projectName: string, today: string): string {
   return `${slug}-tareas-${today}.csv`;
 }
 
-/** The "Tareas por tramo" export: header + one row per task, in table order. */
+/** The "Tareas por etapa" export: header + one row per task, in table order. */
 export function tareasCsvRows(groups: Group<TaskRow>[]): { header: string[]; rows: (string | number | null)[][] } {
   return {
     header: ["Etapa", "Tarea", "Fase", "Responsable", "Estatus", "Vence", "Días de retraso"],

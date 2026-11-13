@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { BibliotecaSection } from "@/components/biblioteca/BibliotecaSection";
 import { canViewResourceSection, resolveResourcesCapabilities } from "@/lib/auth/permissions";
-import { isBibliotecaSection, parseTipo, parseTramo } from "@/lib/biblioteca/catalog";
+import { isBibliotecaSection, parseTipo, parseEtapa } from "@/lib/biblioteca/catalog";
 import { requireBibliotecaViewer } from "@/lib/biblioteca/load";
 import type { DriveStatus } from "@/lib/google/use-drive-status";
 import { loadBibliotecaPageData } from "@/lib/loaders/biblioteca";
@@ -45,7 +45,7 @@ export default async function BibliotecaSeccionPage({
 
   return (
     <Hydrate qc={qc}>
-      <BibliotecaSection section={seccion} tipo={parseTipo(sp.tipo)} tramo={parseTramo(pickEtapaParam(sp))} />
+      <BibliotecaSection section={seccion} tipo={parseTipo(sp.tipo)} etapa={parseEtapa(pickEtapaParam(sp))} />
     </Hydrate>
   );
 }

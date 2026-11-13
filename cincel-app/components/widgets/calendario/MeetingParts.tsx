@@ -31,15 +31,15 @@ import { cancelMeetingAction } from "@/lib/actions/calendario-actions";
 import { useActionMutation } from "@/lib/query/mutation";
 import { calendarioInvalidations, meetingDetailOptions, meetingMinutesOptions } from "@/lib/query/options/calendario";
 import { openAssistant } from "@/lib/stores/assistant-ui-store";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
-import type { CalEventItem, CalTramoRef, MeetingDetail } from "@/lib/types/calendario";
+import { etapaColorVar } from "@/lib/etapas/etapa-color";
+import type { CalEventItem, CalEtapaRef, MeetingDetail } from "@/lib/types/calendario";
 
-/** The tramo edge colour of a meeting: its slot token, or the neutral one. */
-export function tramoEdgeVar(tramo: CalTramoRef | null): string {
-  return tramoColorVar(tramo ? { key: tramo.key ?? "", sortOrder: 0, colorSlot: tramo.colorSlot } : null);
+/** The etapa edge colour of a meeting: its slot token, or the neutral one. */
+export function etapaEdgeVar(etapa: CalEtapaRef | null): string {
+  return etapaColorVar(etapa ? { key: etapa.key ?? "", sortOrder: 0, colorSlot: etapa.colorSlot } : null);
 }
 
-/** A meeting on the calendar: white card with the tramo edge (FE §4). */
+/** A meeting on the calendar: white card with the etapa edge (FE §4). */
 export function MeetingChip({ item, density }: { item: CalEventItem; density: "chip" | "card" | "block" }) {
   const time = item.allDay ? "Todo el día" : timeOf(item.start);
   const place = item.location ?? (item.meetUrl ? "Meet" : null);
@@ -48,7 +48,7 @@ export function MeetingChip({ item, density }: { item: CalEventItem; density: "c
       data-slot="calendar-item-chip"
       data-kind="event"
       data-density={density}
-      style={{ borderLeftColor: tramoEdgeVar(item.tramo) }}
+      style={{ borderLeftColor: etapaEdgeVar(item.etapa) }}
       className={`flex min-w-0 gap-1.5 rounded-md border border-l-[3px] border-border bg-card text-card-foreground ${
         density === "chip" ? "items-center px-1.5 py-0.5 text-xs" : "flex-col px-2 py-1.5 text-sm"
       }`}
@@ -148,7 +148,7 @@ function MeetingDetailBody({
     : item.syncError
       ? C.originPending
       : C.originCincel;
-  const project = item.project ? `${item.project.name}${item.tramo ? ` · ${item.tramo.name}` : ""}` : item.tramo?.name ?? null;
+  const project = item.project ? `${item.project.name}${item.etapa ? ` · ${item.etapa.name}` : ""}` : item.etapa?.name ?? null;
 
   const grant = range?.google.eventsGrant ?? false;
   const googleNote = (v: "card" | "line" | "field") => <MeetingGoogleNote item={item} eventsGrant={grant} variant={v} />;
@@ -196,7 +196,7 @@ function MeetingDetailBody({
           </Field>
           <Field label="LUGAR">{item.location ?? "—"}</Field>
           <Field label="PROYECTO">{item.project?.name ?? "—"}</Field>
-          <Field label="ETAPA">{item.tramo?.name ?? "—"}</Field>
+          <Field label="ETAPA">{item.etapa?.name ?? "—"}</Field>
           <Field label="ASISTENTES">
             <span className="flex flex-wrap items-center gap-2">
               <PeopleStack people={item.attendees.map((p, i) => ({ id: `${i}:${p.name}`, name: p.name }))} label="Asistentes" />
@@ -254,7 +254,7 @@ function MeetingDetailBody({
       <div className="flex flex-col gap-3">
         <p className="text-xs font-semibold text-muted-foreground">
           {C.kindChip}
-          {item.tramo ? ` · ${item.tramo.name}` : ""}
+          {item.etapa ? ` · ${item.etapa.name}` : ""}
         </p>
         <p className="flex items-center gap-1.5 text-sm">
           <CalendarClock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -367,7 +367,7 @@ type MeetingDetailProps = { item: CalEventItem; detail?: MeetingDetail; onClose(
 /** Visual: the floating card of a meeting (`role="dialog"`). */
 export function MeetingDetailCard({ item, detail, onClose }: MeetingDetailProps) {
   return (
-    <Card role="dialog" aria-label={item.title} data-slot="event-detail" className="w-full max-w-sm shadow-lg" style={{ borderTop: `3px solid ${tramoEdgeVar(item.tramo)}` }}>
+    <Card role="dialog" aria-label={item.title} data-slot="event-detail" className="w-full max-w-sm shadow-lg" style={{ borderTop: `3px solid ${etapaEdgeVar(item.etapa)}` }}>
       <CardHeader className="flex-row items-start justify-between gap-2">
         <CardTitle className="text-base font-semibold">{item.title}</CardTitle>
         <Button variant="ghost" size="sm" onClick={onClose} aria-label={C.closeDetail}>

@@ -60,9 +60,9 @@ describe("query patterns (#1051)", () => {
     expect(rows).toMatch(/tareasListInfiniteOptions\(/);
     expect(rows).not.toMatch(/sortByDueDate/);
     expect(read("components/widgets/ProjectsAnaliticoLayout.tsx")).toMatch(/prefetchTareasListFirstPages\(/);
-    // Resumen: server task numbers, and "Tareas por tramo" pages per group.
+    // Resumen: server task numbers, and "Tareas por etapa" pages per group.
     for (const file of ["components/widgets/ResumenVisualLayout.tsx", "components/proyectos/ProjectSummary.tsx", "components/widgets/ResumenEsencialLayout.tsx"]) {
-      expect(read(file)).not.toMatch(/proyectoTareasOptions|tramoProgress\(tasks|nextTasks\(/);
+      expect(read(file)).not.toMatch(/proyectoTareasOptions|etapaProgress\(tasks|nextTasks\(/);
     }
     const resumen = read("components/widgets/ResumenAnaliticoLayout.tsx");
     expect(resumen).toMatch(/proyectoResumenSummaryOptions\(/);

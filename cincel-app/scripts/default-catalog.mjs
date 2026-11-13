@@ -8,7 +8,7 @@
  *   `legacyTitle` is the spelling of the old (deleted) TS templates,
  *   used only to link existing tasks to their template (0024 step 5e).
  * @typedef {{ key: string; name: string; templates: ReadonlyArray<CatalogTemplate> }} CatalogPhase
- * @typedef {{ workflowKey: string; phases: ReadonlyArray<CatalogPhase> }} CatalogTramo
+ * @typedef {{ workflowKey: string; phases: ReadonlyArray<CatalogPhase> }} CatalogEtapa
  * @typedef {{ workflowKey: string; phaseKey: string }} PhaseRef
  * @typedef {{ name: string; phases: ReadonlyArray<PhaseRef> }} DefaultPosition
  */
@@ -20,7 +20,7 @@ const t = (title, legacyTitle = title) => Object.freeze({ title, legacyTitle });
 const phase = (key, name, templates) => Object.freeze({ key, name, templates: Object.freeze(templates) });
 
 /** Fases (§5.1) in `sort_order`, each with its templates (§5.2) in seed order. */
-/** @type {ReadonlyArray<CatalogTramo>} */
+/** @type {ReadonlyArray<CatalogEtapa>} */
 export const DEFAULT_CATALOG = Object.freeze([
   Object.freeze({
     workflowKey: "presale",
@@ -147,24 +147,24 @@ export const DEFAULT_FLOW_STATUSES = Object.freeze([
  *
  * Returns how many rows of each kind were created.
  * @param {import("postgres").Sql | import("postgres").TransactionSql} sql
- * @param {{ catalog?: ReadonlyArray<CatalogTramo>; positions?: ReadonlyArray<DefaultPosition> }} [options]
+ * @param {{ catalog?: ReadonlyArray<CatalogEtapa>; positions?: ReadonlyArray<DefaultPosition> }} [options]
  * @returns {Promise<CatalogChanges>}
  */
 export async function ensureDefaultCatalog(sql, { catalog = DEFAULT_CATALOG, positions = DEFAULT_POSITIONS } = {}) {
   /** @type {CatalogChanges} */
   const changes = { phases: 0, templates: 0, positions: 0, positionPhases: 0, statuses: 0 };
 
-  for (const tramo of catalog) {
+  for (const etapa of catalog) {
     const [workflow] = await sql`
       select w.id,
         (select count(*)::int from core.workflow_phases p where p.workflow_id = w.id) as phase_count
       from core.workflows w
-      where w.key = ${tramo.workflowKey} and w.deleted_at is null
+      where w.key = ${etapa.workflowKey} and w.deleted_at is null
       limit 1`;
     if (!workflow || workflow.phase_count > 0) continue;
 
     let templateOrder = 0;
-    for (const [i, p] of tramo.phases.entries()) {
+    for (const [i, p] of etapa.phases.entries()) {
       const [row] = await sql`
         insert into core.workflow_phases (workflow_id, key, name, sort_order)
         values (${workflow.id}, ${p.key}, ${p.name}, ${i})

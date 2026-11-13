@@ -64,7 +64,7 @@ const quickAdd = vi.hoisted(() => ({ create: vi.fn(), undo: vi.fn() }));
 vi.mock("./quick-add-create", () => ({ useQuickAddCreate: () => quickAdd }));
 
 import { TareasEsencial, overdueLabel, taskCountLabel } from "./TareasEsencial";
-import { ESENCIAL_DATA, ESENCIAL_FACETS, ESENCIAL_TRAMOS, LOMAS_GROUP, esencialRow } from "./fixtures/esencial-groups";
+import { ESENCIAL_DATA, ESENCIAL_FACETS, ESENCIAL_ETAPAS, LOMAS_GROUP, esencialRow } from "./fixtures/esencial-groups";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { qk } from "@/lib/query/keys";
 import { tareasEsencialFilters, tareasListFiltersOf } from "@/lib/query/options/tareas";
@@ -97,7 +97,7 @@ beforeEach(() => {
   resetQuickAddRecent();
   replaceState.mockClear();
   seedSessionUser(getCurrentAuthenticatedUser());
-  pageData.getTareasPageData.mockResolvedValue({ facets: ESENCIAL_FACETS, tramos: ESENCIAL_TRAMOS, staff: [] });
+  pageData.getTareasPageData.mockResolvedValue({ facets: ESENCIAL_FACETS, etapas: ESENCIAL_ETAPAS, staff: [] });
   pageData.getTareasFacets.mockResolvedValue(ESENCIAL_FACETS);
   pageData.getTareasByProject.mockResolvedValue(ESENCIAL_DATA);
   pageData.getTareasListPage.mockReset();
@@ -156,7 +156,7 @@ describe("TareasEsencial", () => {
     const draft = {
       title: "Revisar acabados",
       projectId: "p1",
-      tramoId: null,
+      etapaId: null,
       assigneeId: ME,
       dueDate: null,
       priority: "media" as const,

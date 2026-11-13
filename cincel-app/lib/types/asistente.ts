@@ -43,12 +43,12 @@ export type AssistantMessageMeta = {
 /** A chat message with its metadata. */
 export type AssistantUIMessage = UIMessage<AssistantMessageMeta>;
 
-/** A tramo as a context chip shows it (dot color from `tramoColorClass`). */
-export type TramoRef = { key: string; name: string; sortOrder: number };
+/** An etapa as a context chip shows it (dot color from `etapaColorClass`). */
+export type EtapaRef = { key: string; name: string; sortOrder: number };
 
 /**
  * A removable context chip of the Asistente composer: the project
  * (`context.projectId`) or the module (`context.route`) the next message is
  * about.
  */
-export type ContextChip = { kind: "project" | "module"; id: string; label: string; tramo?: TramoRef };
+export type ContextChip = { kind: "project" | "module"; id: string; label: string; etapa?: EtapaRef };

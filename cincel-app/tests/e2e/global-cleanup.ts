@@ -28,7 +28,7 @@ async function purgeE2ERows(): Promise<void> {
     `;
     await sql`delete from core.tasks where title like '%E2E%'`;
     // Tasks the app made on E2E projects (Presale auto-start, "Asignar cliente
-    // y origen", a started tramo) don't carry the tag in their title.
+    // y origen", a started etapa) don't carry the tag in their title.
     await sql`
       delete from core.tasks
       where project_id in (select id from core.projects where name like '%E2E%')

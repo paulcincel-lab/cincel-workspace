@@ -5,7 +5,7 @@ import {
   isTaskClosed,
   statusColorVar,
 } from "@/lib/tasks/status-options";
-import { tramoColorSlot } from "@/lib/tramos/tramo-color";
+import { etapaColorSlot } from "@/lib/etapas/etapa-color";
 import type { TaskStatus, WorkflowRef } from "@/lib/types/core";
 
 /** One donut segment: legend label, count and CSS fill color. */
@@ -39,45 +39,45 @@ export function tasksByBaseStatus(
   }));
 }
 
-export const NO_TRAMO_LABEL = "Sin etapa";
+export const NO_ETAPA_LABEL = "Sin etapa";
 
-/** Chart fill for a tramo: its fixed chart token, or the neutral gray. */
-function tramoChartColor(tramo: WorkflowRef | null): string {
-  const slot = tramo ? tramoColorSlot(tramo) : null;
+/** Chart fill for an etapa: its fixed chart token, or the neutral gray. */
+function etapaChartColor(etapa: WorkflowRef | null): string {
+  const slot = etapa ? etapaColorSlot(etapa) : null;
   return slot ? `var(--chart-${slot})` : "var(--muted-foreground)";
 }
 
 /**
- * Projects by their current tramo, in tramo order; projects without one go to
- * "Sin tramo" (last). BE §8.8.
+ * Projects by their current etapa, in etapa order; projects without one go to
+ * "Sin etapa" (last). BE §8.8.
  */
-export function projectsByTramo(projects: Array<{ currentWorkflow: WorkflowRef | null }>): DonutSlice[] {
+export function projectsByEtapa(projects: Array<{ currentWorkflow: WorkflowRef | null }>): DonutSlice[] {
   const slices = new Map<string, DonutSlice & { sortOrder: number }>();
-  let noTramo = 0;
-  projects.forEach(({ currentWorkflow: tramo }) => {
-    if (!tramo) {
-      noTramo += 1;
+  let noEtapa = 0;
+  projects.forEach(({ currentWorkflow: etapa }) => {
+    if (!etapa) {
+      noEtapa += 1;
       return;
     }
-    const slice = slices.get(tramo.id) ?? {
-      key: tramo.id,
-      label: tramo.name,
+    const slice = slices.get(etapa.id) ?? {
+      key: etapa.id,
+      label: etapa.name,
       count: 0,
-      color: tramoChartColor(tramo),
-      sortOrder: tramo.sortOrder,
+      color: etapaChartColor(etapa),
+      sortOrder: etapa.sortOrder,
     };
     slice.count += 1;
-    slices.set(tramo.id, slice);
+    slices.set(etapa.id, slice);
   });
   const rows: DonutSlice[] = [...slices.values()]
     .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
     .map(({ sortOrder: _sortOrder, ...slice }) => slice);
-  if (noTramo > 0)
+  if (noEtapa > 0)
     rows.push({
-      key: "sin-tramo",
-      label: NO_TRAMO_LABEL,
-      count: noTramo,
-      color: tramoChartColor(null),
+      key: "sin-etapa",
+      label: NO_ETAPA_LABEL,
+      count: noEtapa,
+      color: etapaChartColor(null),
     });
   return rows;
 }

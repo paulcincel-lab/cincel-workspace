@@ -62,7 +62,7 @@ describe("RecordTable, same fixture in every style", () => {
     expect(rendered[0].getAttribute("data-style")).toBe(style);
 
     for (const row of recordTableFixture.rows) {
-      const item = itemFor(String(row.tramo));
+      const item = itemFor(String(row.etapa));
       expect(item.textContent).toContain(formatValue(row.abiertas, "count"));
       expect(item.textContent).toContain(formatValue(row.vencidas, "count"));
       expect(item.textContent).toContain(formatValue(row.pctVencidas, "percent"));
@@ -109,14 +109,14 @@ describe("RecordTable, same fixture in every style", () => {
     const abiertas = cellFor("Diseño", "abiertas", "analitico");
     expect(abiertas.className).toContain("font-mono");
     expect(abiertas.className).toContain("text-right");
-    const tramo = cellFor("Diseño", "tramo", "analitico");
-    expect(tramo.className).not.toContain("font-mono");
-    expect(tramo.className).not.toContain("text-right");
+    const etapa = cellFor("Diseño", "etapa", "analitico");
+    expect(etapa.className).not.toContain("font-mono");
+    expect(etapa.className).not.toContain("text-right");
 
     const totals = container.querySelector<HTMLElement>("[data-slot='totals-row']")!;
     expect(totals).not.toBeNull();
     const cell = (key: string) => totals.querySelector(`[data-column='${key}']`)?.textContent;
-    expect(cell("tramo")).toBe("Total");
+    expect(cell("etapa")).toBe("Total");
     expect(cell("abiertas")).toBe("48");
     expect(cell("vencidas")).toBe("19");
     expect(cell("pctVencidas")).toBe("35%");
@@ -160,21 +160,21 @@ describe("RecordTable grouping", () => {
 describe("RecordTable props", () => {
   it.each(STYLES)("%s uses renderCell when it returns a node and the format otherwise", (style) => {
     renderTable(style, {
-      renderCell: (key, row) => (key === "tramo" ? <a href={`/tramos/${String(row.id)}`}>{String(row.tramo)}</a> : undefined),
+      renderCell: (key, row) => (key === "etapa" ? <a href={`/etapas/${String(row.id)}`}>{String(row.etapa)}</a> : undefined),
     });
-    expect(screen.getByRole("link", { name: "Diseño" }).getAttribute("href")).toBe("/tramos/diseno");
+    expect(screen.getByRole("link", { name: "Diseño" }).getAttribute("href")).toBe("/etapas/diseno");
     expect(itemFor("Diseño").textContent).toContain("70%");
   });
 
   it("density sets the row padding", () => {
     renderTable("visual", { density: "compacta" });
-    expect(cellFor("Diseño", "tramo", "visual").className).toContain("py-1");
+    expect(cellFor("Diseño", "etapa", "visual").className).toContain("py-1");
     cleanup();
     renderTable("visual", { density: "comoda" });
-    expect(cellFor("Diseño", "tramo", "visual").className).toContain("py-2.5");
+    expect(cellFor("Diseño", "etapa", "visual").className).toContain("py-2.5");
     cleanup();
     renderTable("analitico");
-    expect(cellFor("Diseño", "tramo", "analitico").className).toContain("py-1");
+    expect(cellFor("Diseño", "etapa", "analitico").className).toContain("py-1");
   });
 
   it.each(STYLES)("%s selectable shows the bulk bar with export and clears the selection", (style) => {
@@ -261,9 +261,9 @@ describe("record-table-format", () => {
 
   it("auto totals sum counts and average percent and days; explicit totals get the label", () => {
     const columns = recordTableFixture.columns;
-    expect(computeTotals(recordTableFixture, columns)).toEqual({ tramo: "Total", ...recordTableFixtureTotals });
+    expect(computeTotals(recordTableFixture, columns)).toEqual({ etapa: "Total", ...recordTableFixtureTotals });
     expect(computeTotals({ ...recordTableFixture, totals: { abiertas: 1 } }, columns)).toEqual({
-      tramo: "Total",
+      etapa: "Total",
       abiertas: 1,
     });
     expect(computeTotals({ ...recordTableFixture, totals: undefined }, columns)).toBeNull();

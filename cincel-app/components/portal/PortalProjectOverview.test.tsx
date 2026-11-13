@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { buildPortalOverview } from "@/lib/portal/overview";
-import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
+import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalEtapaDTO } from "@/lib/types/portal";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
 /** What each style's layout received. */
@@ -45,14 +45,14 @@ const project: PortalProjectDTO = {
 const schedule: PortalScheduleDTO = {
   sections: [{ key: "PB::Muros", planta: "PB", seccion: "Muros", start: "2026-03-01", end: "2026-12-15", progressPct: 50 }],
 };
-const tramos: PortalTramoDTO[] = [
+const etapas: PortalEtapaDTO[] = [
   { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
   { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 40, startMonth: "2026-05" },
 ];
 const files: PortalFileDTO[] = [
   { id: "f1", name: "Contrato.pdf", mimeType: "application/pdf", sizeBytes: 10, modifiedAt: "2026-09-15T00:00:00Z", kind: "file", deliveredAs: "original" },
 ];
-const data = buildPortalOverview({ project, schedule, tramos, files, today: "2026-11-07" });
+const data = buildPortalOverview({ project, schedule, etapas, files, today: "2026-11-07" });
 
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 

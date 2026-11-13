@@ -57,12 +57,12 @@ exports[`qk > builds every key shape 1`] = `
     {
       "filters": {
         "apoyo": true,
+        "etapa": null,
         "mostrar": "todo",
         "ocultarCompletadas": false,
         "proyectos": [],
         "quien": "yo",
         "responsable": null,
-        "tramo": null,
       },
       "from": "2026-11-09",
       "orderDir": "asc",
@@ -122,12 +122,12 @@ exports[`qk > builds every key shape 1`] = `
     {
       "filters": {
         "apoyo": true,
+        "etapa": null,
         "mostrar": "todo",
         "ocultarCompletadas": false,
         "proyectos": [],
         "quien": "yo",
         "responsable": null,
-        "tramo": null,
       },
       "from": "2026-11-09",
       "to": "2026-11-15",
@@ -158,6 +158,10 @@ exports[`qk > builds every key shape 1`] = `
     "contacts",
     "cliente",
   ],
+  "catalog.etapas": [
+    "catalog",
+    "etapas",
+  ],
   "catalog.projectOptions": [
     "catalog",
     "project-options",
@@ -174,10 +178,6 @@ exports[`qk > builds every key shape 1`] = `
   "catalog.taskStatuses": [
     "catalog",
     "task-statuses",
-  ],
-  "catalog.tramos": [
-    "catalog",
-    "tramos",
   ],
   "catalog.workflows": [
     "catalog",
@@ -294,9 +294,9 @@ exports[`qk > builds every key shape 1`] = `
     "tasks",
     "list",
     {
+      "etapa": "diseno",
       "orderBy": "retraso",
       "proyecto": "p1",
-      "tramo": "diseno",
     },
   ],
   "me.tasksSummary": [
@@ -304,8 +304,8 @@ exports[`qk > builds every key shape 1`] = `
     "tasks",
     "summary",
     {
+      "etapa": "diseno",
       "q": null,
-      "tramo": "diseno",
     },
   ],
   "me.today": [
@@ -531,10 +531,10 @@ exports[`qk > builds every key shape 1`] = `
     "board",
     {
       "estado": "pendiente",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
   ],
   "tareas.board(f, col)": [
@@ -542,10 +542,10 @@ exports[`qk > builds every key shape 1`] = `
     "board",
     {
       "estado": "pendiente",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
     "en_proceso",
   ],
@@ -554,10 +554,10 @@ exports[`qk > builds every key shape 1`] = `
     "by-project",
     {
       "estado": "pendiente",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
   ],
   "tareas.facets": [
@@ -565,10 +565,10 @@ exports[`qk > builds every key shape 1`] = `
     "facets",
     {
       "estado": "pendiente",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
   ],
   "tareas.list": [
@@ -576,10 +576,10 @@ exports[`qk > builds every key shape 1`] = `
     "list",
     {
       "estado": "pendiente",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
   ],
   "tareas.page": [
@@ -588,10 +588,10 @@ exports[`qk > builds every key shape 1`] = `
     {
       "estado": "pendiente",
       "estilo": "visual",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
   ],
   "tareas.startPreview": [
@@ -610,10 +610,10 @@ exports[`qk > builds every key shape 1`] = `
     "summary",
     {
       "estado": "pendiente",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
   ],
   "tareas.trend": [
@@ -621,10 +621,10 @@ exports[`qk > builds every key shape 1`] = `
     "trend",
     {
       "estado": "pendiente",
+      "etapa": "diseno",
       "proyecto": null,
       "q": null,
       "responsable": "yo",
-      "tramo": "diseno",
     },
   ],
   "tasks.children": [
@@ -750,7 +750,7 @@ exports[`qk > covers every key of the factory 1`] = `
   "monday.positionSuggestion",
   "google.driveStatus",
   "google.driveList",
-  "catalog.tramos",
+  "catalog.etapas",
   "catalog.workflows",
   "catalog.taskStatuses",
   "catalog.staff",

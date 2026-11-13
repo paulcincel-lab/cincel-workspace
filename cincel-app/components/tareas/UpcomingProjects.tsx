@@ -1,15 +1,15 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/shadcn/accordion";
-import type { TramoCandidateProject } from "@/lib/types/core";
+import type { EtapaCandidateProject } from "@/lib/types/core";
 
-/** "{proyecto} · falta {fase} de {tramo}: {abiertas} de {total} tareas abiertas". */
-export function upcomingLine(item: TramoCandidateProject): string {
+/** "{proyecto} · falta {fase} de {etapa}: {abiertas} de {total} tareas abiertas". */
+export function upcomingLine(item: EtapaCandidateProject): string {
   if (!item.pending) return item.project.name;
-  const { phase, tramo, open, total } = item.pending;
-  return `${item.project.name} · falta ${phase.name} de ${tramo.name}: ${open} de ${total} tareas abiertas`;
+  const { phase, etapa, open, total } = item.pending;
+  return `${item.project.name} · falta ${phase.name} de ${etapa.name}: ${open} de ${total} tareas abiertas`;
 }
 
-/** Projects that aren't ready for this tramo yet. Collapsed by default; hidden when empty. */
-export function UpcomingProjects({ upcoming }: { upcoming: TramoCandidateProject[] }) {
+/** Projects that aren't ready for this etapa yet. Collapsed by default; hidden when empty. */
+export function UpcomingProjects({ upcoming }: { upcoming: EtapaCandidateProject[] }) {
   if (upcoming.length === 0) return null;
   return (
     <Accordion className="mb-4 rounded-lg border border-border bg-card px-4">

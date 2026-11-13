@@ -19,8 +19,8 @@ describe("useNewTaskUi", () => {
   });
 
   it("openNewTask opens with the defaults and the source", () => {
-    state().openNewTask({ projectId: "p-1", tramoKey: "diseno" }, "url");
-    expect(state()).toMatchObject({ open: true, defaults: { projectId: "p-1", tramoKey: "diseno" }, source: "url" });
+    state().openNewTask({ projectId: "p-1", etapaKey: "diseno" }, "url");
+    expect(state()).toMatchObject({ open: true, defaults: { projectId: "p-1", etapaKey: "diseno" }, source: "url" });
   });
 
   it("openNewTask without arguments opens a blank form with no source", () => {

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * "Carga del equipo" of Proyecto · Resumen (Analítico): one row per person of
- * the project team, sorted by load. `Persona` (name + "{tramo} · {rol}"),
+ * the project team, sorted by load. `Persona` (name + "{etapa} · {rol}"),
  * `Aquí` (open tasks in this project), `Venc.` (overdue here, `destructive`
  * above 0) and `Carga total` (70 × 6 px bar plus the percentage, both in the
  * `OCCUPANCY_HEAT` tone: success, warning, destructive).

@@ -25,7 +25,7 @@ import {
   type ToolStepTone,
   type ToolTaskCard,
 } from "@/lib/assistant/tool-steps";
-import { tramoColorClass, tramoColorSlot } from "@/lib/tramos/tramo-color";
+import { etapaColorClass, etapaColorSlot } from "@/lib/etapas/etapa-color";
 import type { AssistantMessageMeta } from "@/lib/types/asistente";
 import { cn } from "@/lib/utils";
 
@@ -120,12 +120,12 @@ const DAYS_CLASS = {
 } as const;
 
 function TaskCard({ card }: { card: ToolTaskCard }) {
-  const slot = card.tramo ? tramoColorSlot(card.tramo) : null;
-  const meta = [card.tramo?.name, card.person].filter(Boolean).join(" · ");
+  const slot = card.etapa ? etapaColorSlot(card.etapa) : null;
+  const meta = [card.etapa?.name, card.person].filter(Boolean).join(" · ");
   const days = card.daysLate;
   return (
     <li className="lift relative flex flex-col gap-1.5 overflow-hidden rounded-[10px] border border-border bg-card py-2.5 pr-3 pl-4">
-      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1", tramoColorClass(card.tramo))} />
+      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1", etapaColorClass(card.etapa))} />
       <span className="text-[13px] font-semibold text-foreground">{card.title}</span>
       <span className="flex flex-wrap items-center gap-2 text-xs text-sidebar-foreground">
         {card.person ? (

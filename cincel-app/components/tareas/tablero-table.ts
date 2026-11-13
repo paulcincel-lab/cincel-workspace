@@ -1,6 +1,6 @@
 /**
  * The record table of the Tareas · Tablero view (redesign FE §3.4): one row
- * per board task, the 10 Analítico columns (Tarea, Proyecto, Tramo, Fase,
+ * per board task, the 10 Analítico columns (Tarea, Proyecto, Etapa, Fase,
  * Responsable, Estatus, Prioridad, Vence, Días de retraso, Subtareas) and a
  * totals row. Esencial drops every column but tarea / proyecto / responsable /
  * vence (`hideOn`). Built from the same `TaskBoard` the Visual columns use, so
@@ -18,7 +18,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const COLUMNS: RecordColumn[] = [
   { key: "tarea", label: "Tarea" },
   { key: "proyecto", label: "Proyecto" },
-  { key: "tramo", label: "Etapa", hideOn: ["esencial"] },
+  { key: "etapa", label: "Etapa", hideOn: ["esencial"] },
   { key: "fase", label: "Fase", hideOn: ["esencial"] },
   { key: "responsable", label: "Responsable" },
   { key: "estatus", label: "Estatus", hideOn: ["esencial"] },
@@ -62,7 +62,7 @@ export function tableroRow(task: TaskListItem, today: string): Record<string, un
     id: task.id,
     tarea: task.title,
     proyecto: task.project.name,
-    tramo: task.workflow?.name ?? null,
+    etapa: task.workflow?.name ?? null,
     fase: task.phase?.name ?? null,
     responsable: task.manager?.name ?? null,
     estatus: taskStatusLabel(task),

@@ -12,11 +12,11 @@ vi.mock("@/lib/actions/preferences-actions", () => ({
   fetchMyPreferencesAction: vi.fn(),
   updateMyPreferencesAction: vi.fn(),
 }));
-vi.mock("@/lib/tramos/compat", () => ({
-  tramoLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
-  tramoColorVar: (key: string) =>
+vi.mock("@/lib/etapas/compat", () => ({
+  etapaLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
+  etapaColorVar: (key: string) =>
     ({ presale: "var(--chart-1)", diseno: "var(--chart-2)", construccion: "var(--chart-3)" })[key] ?? "var(--muted-foreground)",
-  tramoColorSlot: (key: string) => ({ presale: 1, diseno: 2, construccion: 3 })[key] ?? null,
+  etapaColorSlot: (key: string) => ({ presale: 1, diseno: 2, construccion: 3 })[key] ?? null,
   phaseLabel: () => null,
   canSeeAdminData: () => false,
 }));

@@ -27,18 +27,18 @@ vi.mock("@/lib/actions/staff-actions", () => ({
 vi.mock("@/lib/actions/positions-actions", () => ({ fetchPositionsAction: vi.fn(async () => []) }));
 vi.mock("@/lib/actions/workspace-access-actions", () => ({ recheckStaffAccessAction: vi.fn() }));
 vi.mock("@/lib/query/options/catalog", async (importOriginal) => {
-  const { EQUIPO_TRAMOS: tramos } = await import("./fixtures/equipo");
+  const { EQUIPO_ETAPAS: etapas } = await import("./fixtures/equipo");
   return {
     ...(await importOriginal<typeof import("@/lib/query/options/catalog")>()),
-    catalogTramosOptions: () => ({ queryKey: ["catalog", "tramos"], queryFn: async () => tramos }),
+    catalogEtapasOptions: () => ({ queryKey: ["catalog", "etapas"], queryFn: async () => etapas }),
   };
 });
 vi.mock("@/lib/actions/tasks-actions", () => ({ createUserTaskAction: vi.fn() }));
-vi.mock("@/lib/tramos/compat", () => ({
-  tramoLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
-  tramoColorVar: (key: string) =>
+vi.mock("@/lib/etapas/compat", () => ({
+  etapaLabel: (key: string) => ({ presale: "Presale", diseno: "Diseño", construccion: "Construcción" })[key] ?? key,
+  etapaColorVar: (key: string) =>
     ({ presale: "var(--chart-1)", diseno: "var(--chart-2)", construccion: "var(--chart-3)" })[key] ?? "var(--muted-foreground)",
-  tramoColorSlot: (key: string) => ({ presale: 1, diseno: 2, construccion: 3 })[key] ?? null,
+  etapaColorSlot: (key: string) => ({ presale: 1, diseno: 2, construccion: 3 })[key] ?? null,
   phaseLabel: () => null,
   canSeeAdminData: () => false,
 }));
@@ -54,7 +54,7 @@ import { renderWithQueryClient as render } from "@/lib/query/test-utils";
 import type { PresentationStyle, ThemeId } from "@/lib/types/redesign";
 
 import { EquipoView } from "./EquipoView";
-import { EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_STAFF, EQUIPO_TRAMOS } from "./fixtures/equipo";
+import { EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_STAFF, EQUIPO_ETAPAS } from "./fixtures/equipo";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/auth-service";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 import { settle } from "@/tests/helpers/settle";
@@ -119,7 +119,7 @@ afterEach(() => {
 });
 
 describe("Personas · Equipo accessibility", () => {
-  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_ETAPAS);
   const counts = countPersonasTabs(EQUIPO_STAFF, []);
 
   for (const theme of THEME_IDS) {
@@ -161,7 +161,7 @@ describe("Personas · Equipo accessibility", () => {
 });
 
 describe("Personas · Equipo Esencial accessibility", () => {
-  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_ETAPAS);
   const counts = countPersonasTabs(EQUIPO_STAFF, []);
 
   for (const mode of MODES) {
@@ -192,7 +192,7 @@ describe("Personas · Equipo Esencial accessibility", () => {
 });
 
 describe("Personas · Equipo Visual accessibility", () => {
-  const { emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const { emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_ETAPAS);
   const counts = countPersonasTabs(EQUIPO_STAFF, []);
   const week = (weekStart: string, occupancyPct: number, absentDays = 0) => ({
     weekStart,
@@ -201,7 +201,7 @@ describe("Personas · Equipo Visual accessibility", () => {
     absentDays,
   });
   const MONDAYS = ["2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"];
-  const base = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS).people;
+  const base = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_ETAPAS).people;
   // Ana over capacity (banner), Bruno leaving next week, Carla free.
   const people = [
     { ...base[0]!, occupancyPct: 120, overdue: 2, weeks: MONDAYS.map((m, i) => week(m, [120, 90, 40, 0][i]!)) },
@@ -237,7 +237,7 @@ describe("Personas · Equipo Visual accessibility", () => {
 });
 
 describe("Personas · Analítico accessibility", () => {
-  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_TRAMOS);
+  const { people, emails } = buildTeamPeople(EQUIPO_STAFF, EQUIPO_OVERVIEW_WITH_HOURS, EQUIPO_ETAPAS);
   const counts = countPersonasTabs(EQUIPO_STAFF, []);
 
   function renderAnalitico() {

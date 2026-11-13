@@ -2,12 +2,12 @@
 
 import { Button } from "@/components/ui/shadcn/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/shadcn/card";
-import type { TramoCandidateProject, WorkflowRef } from "@/lib/types/core";
+import type { EtapaCandidateProject, WorkflowRef } from "@/lib/types/core";
 import { formatDateDMY } from "@/lib/utils/date";
 
 export interface ReadyToStartCardProps {
   workflow: WorkflowRef;
-  ready: TramoCandidateProject[];
+  ready: EtapaCandidateProject[];
   /** `activities.canCreateActivity`; without it only a read-only count shows. */
   canStart: boolean;
   onStart: (projectId: string) => void;
@@ -18,7 +18,7 @@ function readySinceText(readySince: string | null): string | null {
   return `Listo desde ${formatDateDMY(readySince.slice(0, 10))}`;
 }
 
-/** "Listos para iniciar" card of `/actividades/[tramo]` (FE §3.1, §4.3). */
+/** "Listos para iniciar" card of `/actividades/[etapa]` (FE §3.1, §4.3). */
 export function ReadyToStartCard({ workflow, ready, canStart, onStart }: ReadyToStartCardProps) {
   if (!canStart) {
     return (

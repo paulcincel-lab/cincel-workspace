@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import axe from "axe-core";
 
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
   };
 });
 
@@ -26,7 +26,7 @@ const AGENDA_MODES: AgendaWidgetProps["mode"][] = ["day", "week", "month"];
 
 /**
  * Token pairs of `CONTRAST_PAIRS` the widget paints: text and meta on `card`,
- * ink on the tramo tints, tramo borders / dots, the today circle, heat cells,
+ * ink on the etapa tints, etapa borders / dots, the today circle, heat cells,
  * grid borders and the focus ring.
  */
 const AGENDA_PAIRS = new Set([

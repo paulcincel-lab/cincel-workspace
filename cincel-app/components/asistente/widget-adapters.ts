@@ -57,7 +57,7 @@ export function toKpiItems(stats: AssistantStat[]): KpiDatum[] {
 
 /**
  * `render_list` items → `AttentionItem[]`. A list entry is plain text with no
- * task behind it: no link, project, tramo, person or date, neutral tone.
+ * task behind it: no link, project, etapa, person or date, neutral tone.
  */
 export function toAttentionItems(items: string[]): AttentionItem[] {
   return items.map((item, index) => ({
@@ -65,7 +65,7 @@ export function toAttentionItems(items: string[]): AttentionItem[] {
     title: item,
     href: "",
     project: "",
-    tramo: null,
+    etapa: null,
     reason: "",
     tone: "default",
     assignee: null,

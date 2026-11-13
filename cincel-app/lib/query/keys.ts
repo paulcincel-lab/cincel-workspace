@@ -24,7 +24,7 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 
 /** The filters every Tareas view shares (the URL filters). */
 export type TareasListFilters = {
-  tramo: string | null;
+  etapa: string | null;
   proyecto: string | null;
   /** "yo", "todos", a staff id, or "sin" (no Responsable, the project Tareas tab). */
   responsable: "yo" | "sin" | string | null;
@@ -36,14 +36,14 @@ export type TareasListFilters = {
   apoyo?: false;
   /**
    * Proyecto multi-select (#1045): sorted project ids, left out when none.
-   * `proyecto` stays the single-project scope (project Tareas tab, tramo
+   * `proyecto` stays the single-project scope (project Tareas tab, etapa
    * groups); with both, a task matches when it is in both.
    */
   proyectos?: string[];
   /**
    * `tareas.list` only: the sort column (#1044); "retraso" is the Analítico
-   * tramo groups' default (overdue first). Left out for the board order
-   * (tramo, fase, manual order, due date).
+   * etapa groups' default (overdue first). Left out for the board order
+   * (etapa, fase, manual order, due date).
    */
   orderBy?: TaskSortColumn;
   /** `tareas.list` only (#1044): left out for "asc", so the default keys stay as they were. */
@@ -105,7 +105,7 @@ export const qk = {
     page: (q: TareasPageKeyInput) => ["tareas", "page", q] as const,
     list: (f: TareasListFilters) => ["tareas", "list", f] as const,
     facets: (f: TareasListFilters) => ["tareas", "facets", f] as const,
-    /** Analítico counts per project and tramo (one grouping-sets query). */
+    /** Analítico counts per project and etapa (one grouping-sets query). */
     summary: (f: TareasListFilters) => ["tareas", "summary", f] as const,
     board: (f: TareasListFilters, columnId?: string) =>
       (columnId ? ["tareas", "board", f, columnId] : ["tareas", "board", f]) as readonly unknown[],
@@ -113,7 +113,7 @@ export const qk = {
     trend: (f: TareasListFilters) => ["tareas", "trend", f] as const,
     /** Esencial: the cards per project (counts and open rows, cap 200); `f` comes resolved (null responsable = everyone). */
     byProject: (f: TareasListFilters) => ["tareas", "by-project", f] as const,
-    startSlot: (tramoId: string | null) => ["tareas", "start-slot", tramoId] as const,
+    startSlot: (etapaId: string | null) => ["tareas", "start-slot", etapaId] as const,
     startPreview: (projectId: string, workflowId: string) => ["tareas", "start-preview", projectId, workflowId] as const,
   },
   tasks: {
@@ -130,7 +130,7 @@ export const qk = {
     list: () => ["proyectos", "list"] as const,
     /** Admin "Proyectos eliminados" (#1050): projects deleted in the last 30 days. */
     deleted: () => ["proyectos", "deleted"] as const,
-    /** The create dialog's "Tramo inicial" options (#1034). */
+    /** The create dialog's "Etapa inicial" options (#1034). */
     createStart: () => ["proyectos", "create-start"] as const,
     detail: (id: string) => ["proyectos", id] as const,
     shell: (id: string) => ["proyectos", id, "shell"] as const,
@@ -144,7 +144,7 @@ export const qk = {
     tareasSummary: (id: string, f: { responsable: string | null; q: string }) =>
       ["proyectos", id, "tareas", "summary", f] as const,
     /**
-     * The Resumen's task numbers (#1051): KPIs, tramos and fases, team load,
+     * The Resumen's task numbers (#1051): KPIs, etapas and fases, team load,
      * "Lo que sigue". Under `tab(id, "tareas")`, so every task invalidation
      * of the project refreshes it.
      */
@@ -203,7 +203,7 @@ export const qk = {
     driveList: (folderId: string | null, q: string) => ["google", "drive-list", folderId, q] as const,
   },
   catalog: {
-    tramos: () => ["catalog", "tramos"] as const,
+    etapas: () => ["catalog", "etapas"] as const,
     workflows: () => ["catalog", "workflows"] as const,
     taskStatuses: () => ["catalog", "task-statuses"] as const,
     staff: () => ["catalog", "staff"] as const,

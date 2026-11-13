@@ -44,7 +44,7 @@ function task(id: string, date: string, title: string): CalTaskItem {
     date,
     dateField: "commitmentDate",
     project: { id: "p1", name: "Madrid 22" },
-    tramo: null,
+    etapa: null,
     phase: null,
     status: "pendiente",
     statusLabel: "Pendiente",

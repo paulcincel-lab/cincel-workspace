@@ -91,7 +91,7 @@ describe("createTemplateAction", () => {
     caps.canManage = true;
     await createTemplateAction(WORKFLOW, { phaseId: PHASE, title: "  Planos  " });
     expect(repo.createTemplate).toHaveBeenCalledWith(WORKFLOW, { phaseId: PHASE, title: "Planos" }, ACTOR);
-    // Ajustes › Tramos reads through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
+    // Ajustes › Etapas reads through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 

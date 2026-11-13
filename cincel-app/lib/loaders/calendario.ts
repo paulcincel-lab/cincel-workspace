@@ -235,7 +235,7 @@ export async function loadMeetingPrep(
     eventId: event.id,
     kpis: {
       progressVsPlan: delta,
-      tramo: project?.tramoName ? { name: project.tramoName, phase: project.phaseName } : null,
+      etapa: project?.etapaName ? { name: project.etapaName, phase: project.phaseName } : null,
       overdue: late.overdueCount,
       open: late.openCount,
       lastMeeting,

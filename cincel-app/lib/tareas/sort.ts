@@ -6,7 +6,7 @@
 /** Every sortable column of the task tables; "retraso" is the Analítico default. */
 export const TASK_SORT_COLUMNS = [
   "titulo",
-  "tramo",
+  "etapa",
   "fase",
   "responsable",
   "estatus",
@@ -22,7 +22,7 @@ export type TaskSortDir = "asc" | "desc";
 
 export type TaskSort = { orderBy: TaskSortColumn; orderDir: TaskSortDir };
 
-/** The sort the Analítico tramo groups use when the URL has none. */
+/** The sort the Analítico etapa groups use when the URL has none. */
 export const DEFAULT_TASK_SORT: TaskSort = {
   orderBy: "retraso",
   orderDir: "asc",
@@ -67,7 +67,7 @@ export function nextSort(current: TaskSort | null, column: TaskSortColumn): Task
 /** What each column's two directions read as in the subtitle. */
 const SORT_PHRASE: Record<TaskSortColumn, { label: string; asc: string; desc: string }> = {
   titulo: { label: "tarea", asc: "A a Z", desc: "Z a A" },
-  tramo: { label: "etapa", asc: "primera a última", desc: "última a primera" },
+  etapa: { label: "etapa", asc: "primera a última", desc: "última a primera" },
   fase: { label: "fase", asc: "primera a última", desc: "última a primera" },
   responsable: { label: "responsable", asc: "A a Z", desc: "Z a A" },
   estatus: { label: "estatus", asc: "pendientes primero", desc: "completadas primero" },
@@ -80,7 +80,7 @@ const SORT_PHRASE: Record<TaskSortColumn, { label: string; asc: string; desc: st
 /**
  * The sort part of the Tareas subtitle, e.g. "ordenada por vencimiento (más
  * próximo primero)"; the default is "ordenada por retraso". The page shows
- * `Por proyecto y tramo, ${describeSort(orderBy, dir)}`.
+ * `Por proyecto y etapa, ${describeSort(orderBy, dir)}`.
  */
 export function describeSort(orderBy: TaskSortColumn | undefined, dir: TaskSortDir = "asc"): string {
   if (!orderBy || isDefaultSort(orderBy, dir)) return "ordenada por retraso";
@@ -91,7 +91,7 @@ export function describeSort(orderBy: TaskSortColumn | undefined, dir: TaskSortD
 /** Task table column keys (`ANALITICO_COLUMNS`, …) → the sort column of their header. */
 export const TASK_TABLE_SORT_KEYS: Readonly<Record<string, TaskSortColumn>> = {
   tarea: "titulo",
-  tramo: "tramo",
+  etapa: "etapa",
   fase: "fase",
   responsable: "responsable",
   estatus: "estatus",

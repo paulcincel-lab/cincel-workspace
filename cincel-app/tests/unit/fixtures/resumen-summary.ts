@@ -30,7 +30,7 @@ function card(t: TaskListRow, today: string): NextTask {
   return {
     id: t.id,
     title: t.title,
-    tramoKey: t.workflow?.key ?? null,
+    etapaKey: t.workflow?.key ?? null,
     phase: t.phase?.name ?? null,
     responsable: t.manager,
     dueDate: d,
@@ -130,11 +130,11 @@ export function retrasoOrder(rows: TaskListRow[], today: string): TaskListRow[] 
 /**
  * Seeds what the Resumen page prefetches for `rows`: the task numbers
  * (`qk.proyectos.resumenSummary(id)`) and the first page of every
- * "Tareas por tramo" group (`qk.tareas.list(f)`, all its rows, "retraso" order).
+ * "Tareas por etapa" group (`qk.tareas.list(f)`, all its rows, "retraso" order).
  */
 export function seedResumenTasks(
   client: QueryClient,
-  input: Pick<ProjectSummaryInput, "project" | "tramoCatalog" | "today">,
+  input: Pick<ProjectSummaryInput, "project" | "etapaCatalog" | "today">,
   rows: TaskListRow[],
   options: { includeAdmin?: boolean; hideCompleted?: boolean; pageSize?: number } = {},
 ): ResumenTareasSummary {

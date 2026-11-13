@@ -297,11 +297,11 @@ export {
   type MondayPageViewer,
 } from "@/lib/loaders/ajustes-monday";
 
-// ── Catalog segments (9b): estatus, puestos, tramos, permisos ───────────────
+// ── Catalog segments (9b): estatus, puestos, etapas, permisos ───────────────
 
 export {
   loadAjustesEstatus,
   loadAjustesPermisos,
   loadAjustesPuestos,
-  loadAjustesTramos,
+  loadAjustesEtapas,
 } from "@/lib/loaders/ajustes-catalogs";

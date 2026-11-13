@@ -14,7 +14,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/actions/projects-actions", () => ({
   submitProjectCreateAction: vi.fn(),
   updateProjectAction: vi.fn(),
-  setProjectCurrentTramoAction: vi.fn(),
+  setProjectCurrentEtapaAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn() }));
 vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
@@ -27,15 +27,15 @@ vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
   fetchCatalogWorkflows: vi.fn(),
 }));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   return {
     canSeeAdminData: () => false,
-    listTramos: async () => [],
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    listEtapas: async () => [],
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
   };
 });
@@ -137,7 +137,7 @@ describe("Proyectos list accessibility", () => {
     it(`segment toggles and the collapse button are axe clean in ${mode} for the three styles`, async () => {
       setTheme("azul", mode);
       for (const style of STYLES) {
-        // A selected tramo (pressed toggle).
+        // A selected etapa (pressed toggle).
         useProyectosDashboard.getState().selectKpi("diseno");
         const expanded = renderSeeded(
           <StyleProvider style={style} scope="staff">
@@ -148,7 +148,7 @@ describe("Proyectos list accessibility", () => {
         expanded.unmount();
 
         // The collapsed strip: only its title and the expand button remain.
-        useProyectosDashboard.getState().setCollapsed("tramoStrip", true);
+        useProyectosDashboard.getState().setCollapsed("etapaStrip", true);
         const collapsed = renderSeeded(
           <StyleProvider style={style} scope="staff">
             <ProjectsPortfolio />
@@ -186,7 +186,7 @@ describe("Proyectos list accessibility · Esencial (#993)", () => {
       expect(await seriousViolations(listed.container)).toEqual([]);
       listed.unmount();
 
-      // A selected pill, a project without tramo and the no-results state.
+      // A selected pill, a project without etapa and the no-results state.
       useProyectosDashboard.getState().selectKpi("diseno");
       const selected = renderEsencial({
         projects: [...PROJECTS, { ...PROJECTS[2], id: "p-sin", name: "Bodega Norte", status: "activo" }],
@@ -241,7 +241,7 @@ describe("Proyectos list accessibility · Analítico (#994)", () => {
       expect(await seriousViolations(admin.container)).toEqual([]);
       admin.unmount();
 
-      // Filters with a pressed tramo, then the no-match state.
+      // Filters with a pressed etapa, then the no-match state.
       nav.params = new URLSearchParams("etapa=diseno&mostrar=vencidas&pausados=1");
       const filtered = renderAnalitico();
       expect(await seriousViolations(filtered.container)).toEqual([]);
@@ -268,11 +268,11 @@ describe("Proyectos list accessibility · Analítico (#994)", () => {
       expect(headers.length).toBeGreaterThan(0);
       for (const th of headers) expect(th.getAttribute("scope")).toBe("col");
     }
-    // No "Ir a tramo" anchors (#1042): each project row has a named expand toggle instead.
+    // No "Ir a etapa" anchors (#1042): each project row has a named expand toggle instead.
     expect(screen.queryByRole("navigation", { name: "Ir a etapa" })).toBeNull();
     const toggle = screen.getByRole("button", { name: "Tareas de «Casa Lomas»" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    // The tramo bar's segments are pressed toggles.
+    // The etapa bar's segments are pressed toggles.
     const legend = screen.getByRole("list", { name: "Filtrar por etapa" });
     expect(within(legend).getAllByRole("button").every((b) => b.getAttribute("aria-pressed") === "false")).toBe(true);
   });
@@ -323,7 +323,7 @@ describe("Proyectos list accessibility · Visual (#992)", () => {
       expect(await seriousViolations(listed.container)).toEqual([]);
       listed.unmount();
 
-      // A project without tramo, and a viewer who can't create projects.
+      // A project without etapa, and a viewer who can't create projects.
       const loose = renderVisual({
         projects: [...PROJECTS, { ...PROJECTS[2], id: "p-sin", name: "Bodega Norte", status: "activo" }],
         canCreateProject: false,

@@ -39,10 +39,10 @@ import {
 } from "@/lib/inicio/visual";
 import { sliceToRange } from "@/lib/stores/dashboard-store";
 import { useInicioDashboard } from "@/lib/stores/inicio-dashboard-store";
-import { tramoColorSlot, tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorSlot, etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import { staggerStyle } from "@/lib/ui/motion";
 import type { InicioData } from "@/lib/types/redesign";
-import type { AgendaItem, AttentionItem, KpiDatum, ProgressItem, TramoKey } from "@/lib/types/widgets";
+import type { AgendaItem, AttentionItem, KpiDatum, ProgressItem, EtapaKey } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
 import { EmptyWidgetCard } from "./EmptyWidgetCard";
@@ -62,17 +62,17 @@ function tintOf(colorVar: string, pct = 14): string {
   return `color-mix(in oklab, ${colorVar} ${pct}%, var(--card))`;
 }
 
-function tramoTint(tramo: TramoKey | null | undefined): string {
-  return areaTintClass(tramo ? tramoColorSlot(tramo) : null);
+function etapaTint(etapa: EtapaKey | null | undefined): string {
+  return areaTintClass(etapa ? etapaColorSlot(etapa) : null);
 }
 
-function tramoColor(tramo: TramoKey | null | undefined): string {
-  return tramo ? tramoColorVar(tramo) : "var(--muted-foreground)";
+function etapaColor(etapa: EtapaKey | null | undefined): string {
+  return etapa ? etapaColorVar(etapa) : "var(--muted-foreground)";
 }
 
 // ── Avatars ──────────────────────────────────────────────────────────────────
 
-type AvatarPerson = { id: string; initials: string; tramo: TramoKey | null };
+type AvatarPerson = { id: string; initials: string; etapa: EtapaKey | null };
 
 /** Overlapping initials avatars (decorative: the caption or card text carries the meaning). */
 function AvatarStack({ people, cap, size }: { people: AvatarPerson[]; cap: number; size: "hero" | "card" }) {
@@ -88,7 +88,7 @@ function AvatarStack({ people, cap, size }: { people: AvatarPerson[]; cap: numbe
         <span
           key={p.id}
           data-slot="avatar"
-          className={cn("flex shrink-0 items-center justify-center rounded-full", box, tramoTint(p.tramo))}
+          className={cn("flex shrink-0 items-center justify-center rounded-full", box, etapaTint(p.etapa))}
         >
           {p.initials}
         </span>
@@ -353,13 +353,13 @@ function PaceCard({ weeks }: { weeks: InicioData["weeklyPace"] }) {
   );
 }
 
-function TramoCard({ segments }: { segments: InicioData["tasksByTramo"] }) {
+function EtapaCard({ segments }: { segments: InicioData["tasksByEtapa"] }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
   if (segments.length === 0 || total === 0) {
-    return <EmptyWidgetCard widget="tramoDonut" title="Tareas por etapa" text="No hay tareas abiertas." />;
+    return <EmptyWidgetCard widget="etapaDonut" title="Tareas por etapa" text="No hay tareas abiertas." />;
   }
   return (
-    <div data-slot="inicio-tramos" className="min-w-0">
+    <div data-slot="inicio-etapas" className="min-w-0">
       <DistributionWidget title="Tareas por etapa" segments={segments} totalLabel="Abiertas" />
       <SrTable caption="Tareas por etapa" head={["Etapa", "Abiertas"]} rows={segments.map((s) => [s.label, s.value])} />
     </div>
@@ -373,7 +373,7 @@ const CHIP = "inline-flex items-center rounded-full px-2 py-0.5 text-xs";
 function AttentionCard({ item, index }: { item: AttentionItem; index: number }) {
   const blocked = attentionBlocked(item);
   const late = lateChip(item.daysLate);
-  const stripe = blocked ? "var(--destructive)" : tramoColor(item.tramo);
+  const stripe = blocked ? "var(--destructive)" : etapaColor(item.etapa);
   const pct = Math.max(0, Math.min(100, item.progressPct ?? 0));
   return (
     <li className="min-w-0">
@@ -390,7 +390,7 @@ function AttentionCard({ item, index }: { item: AttentionItem; index: number }) 
         <span aria-hidden="true" className="h-1.5 w-full shrink-0" style={{ backgroundColor: stripe }} />
         <span className="flex flex-col gap-2 px-[18px] py-4">
           <span className="flex flex-wrap items-center gap-1.5">
-            {item.tramo ? <span className={cn(CHIP, "font-medium", tramoTint(item.tramo))}>{tramoLabel(item.tramo)}</span> : null}
+            {item.etapa ? <span className={cn(CHIP, "font-medium", etapaTint(item.etapa))}>{etapaLabel(item.etapa)}</span> : null}
             {late && !blocked ? (
               <span
                 data-slot="late-chip"
@@ -415,7 +415,7 @@ function AttentionCard({ item, index }: { item: AttentionItem; index: number }) 
           <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-muted">
             <span
               className="grow-x block h-full rounded-full"
-              style={{ width: `${pct}%`, backgroundColor: blocked ? "var(--destructive)" : tramoColor(item.tramo) }}
+              style={{ width: `${pct}%`, backgroundColor: blocked ? "var(--destructive)" : etapaColor(item.etapa) }}
             />
           </span>
           <span data-slot="attention-caption" className="font-mono text-xs text-muted-foreground">
@@ -457,7 +457,7 @@ function AttentionSection({ items }: { items: AttentionItem[] }) {
 // ── Agenda de hoy ────────────────────────────────────────────────────────────
 
 function agendaMeta(item: AgendaItem): string {
-  return [item.project, item.tramo ? tramoLabel(item.tramo) : null].filter(Boolean).join(" · ");
+  return [item.project, item.etapa ? etapaLabel(item.etapa) : null].filter(Boolean).join(" · ");
 }
 
 function AgendaCard({ items }: { items: AgendaItem[] }) {
@@ -478,7 +478,7 @@ function AgendaCard({ items }: { items: AgendaItem[] }) {
     >
       <ol data-slot="inicio-agenda" className="flex flex-col">
         {shown.map((item, i) => {
-          const color = tramoColor(item.tramo);
+          const color = etapaColor(item.etapa);
           const last = i === shown.length - 1;
           return (
             <li key={item.id} className={cn("flex gap-3", !last && "pb-3.5")}>
@@ -601,7 +601,7 @@ function ProjectsCard({ items }: { items: ProgressItem[] }) {
 /**
  * Inicio · Visual (#989, frame `Inicio-Visual`): the `visual` slot of
  * Inicio's `PageStyleLayout`. Header, greeting hero, four KPI tiles with
- * sparklines, "Ritmo semanal" and "Tareas por tramo", "Requiere atención"
+ * sparklines, "Ritmo semanal" and "Tareas por etapa", "Requiere atención"
  * cards, then "Agenda de hoy" and "Proyectos en curso". Everything comes from
  * `qk.inicio()`; the team agenda and the hero avatars need team access
  * (`openShifts` is null without it, so the viewer's own day is shown).
@@ -630,7 +630,7 @@ export function InicioVisual({ data, me, renderedAt }: InicioVisualProps) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <PaceCard weeks={data.weeklyPace} />
-        <TramoCard segments={data.tasksByTramo} />
+        <EtapaCard segments={data.tasksByEtapa} />
       </div>
 
       <AttentionSection items={data.attention} />

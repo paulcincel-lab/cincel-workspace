@@ -6,22 +6,22 @@ import { useQuery } from "@tanstack/react-query";
 import { FolderKanban, Plus, Search } from "lucide-react";
 
 import {
-  ALL_TRAMOS_KEY,
+  ALL_ETAPAS_KEY,
   NEXT_DELIVERY_LABEL,
-  NO_TRAMO_KEY,
-  NO_TRAMO_LABEL,
+  NO_ETAPA_KEY,
+  NO_ETAPA_LABEL,
   PROJECTS_TITLE,
-  currentTramoOf,
+  currentEtapaOf,
   esencialDescription,
   esencialProjectRows,
-  filterByTramo,
+  filterByEtapa,
   formatDeliveryDate,
-  orderedTramos,
+  orderedEtapas,
   portfolioById,
   searchProjects,
-  tramoPills,
+  etapaPills,
   type EsencialProjectRow,
-  type TramoPill,
+  type EtapaPill,
 } from "@/components/proyectos/projects-portfolio-data";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
@@ -36,15 +36,15 @@ import type { TableRowAction } from "@/components/widgets/table-rows";
 import { useDeleteProject } from "@/components/proyectos/use-delete-project";
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
 import { proyectosPageOptions } from "@/lib/query/options/proyectos";
-import { selectSelectedTramo, useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { selectSelectedEtapa, useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type { ProjectListItem } from "@/lib/types/core";
 
 /**
  * /proyectos in Esencial (#993, frame `Proyectos-Esencial`): header with the
- * active count, a row of tramo pills (single choice, `selectedKpi` of
+ * active count, a row of etapa pills (single choice, `selectedKpi` of
  * `useProyectosDashboard`, session only) and the `?q=` search, then one soft
- * `EsencialCard` per active project: tramo line, two chips (open tasks and
+ * `EsencialCard` per active project: etapa line, two chips (open tasks and
  * overdue / al día) and the next delivery. Paused projects are reachable from
  * Analítico only. No tables, charts or rings.
  *
@@ -62,13 +62,13 @@ export const ESENCIAL_PILLS_LABEL = "Filtrar por etapa";
 export const ESENCIAL_ERROR_TITLE = "No se pudieron cargar los proyectos";
 export const ESENCIAL_EMPTY_TITLE = "Aún no hay proyectos";
 export const ESENCIAL_NEW_PROJECT_LABEL = "Nuevo proyecto";
-export const ESENCIAL_CLEAR_TRAMO_LABEL = "Ver todas las etapas";
+export const ESENCIAL_CLEAR_ETAPA_LABEL = "Ver todas las etapas";
 /** Same param and debounce as the other styles (`ProjectsPortfolio`). */
 const SEARCH_PARAM = "q";
 const NEW_PROJECT_PARAM = "nuevo";
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Soft tint behind the current tramo dot, per chart slot (tramo tokens), with a mix fallback. */
+/** Soft tint behind the current etapa dot, per chart slot (etapa tokens), with a mix fallback. */
 const SOFT_TOKEN: Record<string, string> = {
   "1": "--tint-primary",
   "2": "--tint-violet",
@@ -82,7 +82,7 @@ function inkOf(colorVar: string): string {
   return slot ? `var(--chart-${slot}-ink)` : colorVar;
 }
 
-/** The soft tint of a tramo color (its tint token, else a 20 % mix into transparent). */
+/** The soft tint of an etapa color (its tint token, else a 20 % mix into transparent). */
 function softOf(colorVar: string): string {
   const slot = /^var\(--chart-(\d)\)$/.exec(colorVar.trim())?.[1];
   const mix = `color-mix(in oklch, ${colorVar} 20%, transparent)`;
@@ -106,10 +106,10 @@ function projectsCountText(n: number): string {
   return `${n} ${n === 1 ? "proyecto" : "proyectos"}`;
 }
 
-type PillWithColor = TramoPill & { colorVar?: string };
+type PillWithColor = EtapaPill & { colorVar?: string };
 
-/** Tramo filter pills: a labelled radiogroup, arrows move the focus, Space / Enter select. */
-function TramoPills({ pills, value, onChange }: { pills: PillWithColor[]; value: string; onChange(key: string): void }) {
+/** Etapa filter pills: a labelled radiogroup, arrows move the focus, Space / Enter select. */
+function EtapaPills({ pills, value, onChange }: { pills: PillWithColor[]; value: string; onChange(key: string): void }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const checkedIndex = Math.max(
     0,
@@ -190,19 +190,19 @@ function TramoPills({ pills, value, onChange }: { pills: PillWithColor[]; value:
 }
 
 /** Four dots joined by connectors: done, current (with a soft halo) and next (outlined). */
-function TramoLine({ row, tramoName }: { row: EsencialProjectRow; tramoName: string | null }) {
-  const noTramo = row.tramoKey === null;
+function EtapaLine({ row, etapaName }: { row: EsencialProjectRow; etapaName: string | null }) {
+  const noEtapa = row.etapaKey === null;
   const columns: CSSProperties = { gridTemplateColumns: `repeat(${Math.max(1, row.steps.length)}, minmax(0, 1fr))` };
   return (
     <div
       className="flex flex-col gap-1.5"
-      aria-label={`Etapa actual: ${tramoName ?? NO_TRAMO_LABEL}`}
+      aria-label={`Etapa actual: ${etapaName ?? NO_ETAPA_LABEL}`}
       role="group"
-      data-slot="tramo-line"
+      data-slot="etapa-line"
     >
       <div aria-hidden="true" className="grid items-center" style={columns}>
         {row.steps.map((step, index) => {
-          const state = noTramo ? "next" : step.state;
+          const state = noEtapa ? "next" : step.state;
           const last = index === row.steps.length - 1;
           const dot: CSSProperties =
             state === "current"
@@ -232,9 +232,9 @@ function TramoLine({ row, tramoName }: { row: EsencialProjectRow; tramoName: str
           );
         })}
       </div>
-      {noTramo ? (
+      {noEtapa ? (
         <span className="w-fit rounded-full bg-muted px-2.5 py-[3px] text-[12px] font-medium text-muted-foreground">
-          {NO_TRAMO_LABEL}
+          {NO_ETAPA_LABEL}
         </span>
       ) : (
         <div aria-hidden="true" className="grid text-[12px] text-muted-foreground" style={columns}>
@@ -258,12 +258,12 @@ function TramoLine({ row, tramoName }: { row: EsencialProjectRow; tramoName: str
 
 function ProjectCard({
   row,
-  tramoName,
+  etapaName,
   index,
   actions = [],
 }: {
   row: EsencialProjectRow;
-  tramoName: string | null;
+  etapaName: string | null;
   index: number;
   /** The card's `⋯` entries ("Eliminar proyecto", #1050); none hides the menu. */
   actions?: TableRowAction[];
@@ -279,7 +279,7 @@ function ProjectCard({
         meta={row.subtitle ? <span className="block truncate text-[12.5px] text-muted-foreground">{row.subtitle}</span> : undefined}
       >
         <div className="flex flex-col gap-3.5" data-slot="project-card-body">
-          <TramoLine row={row} tramoName={tramoName} />
+          <EtapaLine row={row} etapaName={etapaName} />
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-muted px-2.5 py-[3px] text-[12.5px] font-medium text-foreground">
               <span className="font-mono tabular-nums">{row.open}</span> {row.open === 1 ? "abierta" : "abiertas"}
@@ -332,7 +332,7 @@ function EsencialList({
   data: ProyectosPageData;
   onNewProject?(): void;
 }) {
-  const { projects, portfolio, tramos, canCreateProject } = data;
+  const { projects, portfolio, etapas, canCreateProject } = data;
   const pathname = usePathname() ?? "/proyectos";
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(() => searchParams?.get(SEARCH_PARAM) ?? "");
@@ -348,41 +348,41 @@ function EsencialList({
     [],
   );
 
-  const selectedTramo = useProyectosDashboard(selectSelectedTramo);
+  const selectedEtapa = useProyectosDashboard(selectSelectedEtapa);
   const selectKpi = useProyectosDashboard((s) => s.selectKpi);
 
   // Esencial lists the active projects only; paused ones live in Analítico.
   const listed = useMemo<ProjectListItem[]>(() => projects.filter((p) => p.status === "activo"), [projects]);
-  const tramoOrder = useMemo(() => orderedTramos(listed, tramos), [listed, tramos]);
+  const etapaOrder = useMemo(() => orderedEtapas(listed, etapas), [listed, etapas]);
   const rowsById = useMemo(() => portfolioById(portfolio), [portfolio]);
 
-  // The selection applies only while its tramo still has listed projects.
-  const tramoMembers = useMemo(
-    () => (selectedTramo === null ? [] : filterByTramo(listed, selectedTramo)),
-    [listed, selectedTramo],
+  // The selection applies only while its etapa still has listed projects.
+  const etapaMembers = useMemo(
+    () => (selectedEtapa === null ? [] : filterByEtapa(listed, selectedEtapa)),
+    [listed, selectedEtapa],
   );
-  const tramoListed = tramoMembers.length > 0;
-  const activeTramo = tramoListed ? selectedTramo : null;
-  const activeTramoLabel = tramoListed ? (currentTramoOf(tramoMembers[0])?.name ?? NO_TRAMO_LABEL) : null;
+  const etapaListed = etapaMembers.length > 0;
+  const activeEtapa = etapaListed ? selectedEtapa : null;
+  const activeEtapaLabel = etapaListed ? (currentEtapaOf(etapaMembers[0])?.name ?? NO_ETAPA_LABEL) : null;
   useEffect(() => {
-    if (selectedTramo !== null && !tramoListed) selectKpi(null);
-  }, [selectedTramo, tramoListed, selectKpi]);
+    if (selectedEtapa !== null && !etapaListed) selectKpi(null);
+  }, [selectedEtapa, etapaListed, selectKpi]);
 
   const visible = useMemo(() => searchProjects(listed, search), [listed, search]);
-  const shown = useMemo(() => filterByTramo(visible, activeTramo), [visible, activeTramo]);
-  const rows = useMemo(() => esencialProjectRows(shown, rowsById, tramoOrder), [shown, rowsById, tramoOrder]);
-  const tramoNames = useMemo(() => new Map(shown.map((p) => [p.id, currentTramoOf(p)?.name ?? null])), [shown]);
+  const shown = useMemo(() => filterByEtapa(visible, activeEtapa), [visible, activeEtapa]);
+  const rows = useMemo(() => esencialProjectRows(shown, rowsById, etapaOrder), [shown, rowsById, etapaOrder]);
+  const etapaNames = useMemo(() => new Map(shown.map((p) => [p.id, currentEtapaOf(p)?.name ?? null])), [shown]);
 
   // The pill set comes from every listed project (stable while typing); counts follow the search.
   const pills = useMemo<PillWithColor[]>(() => {
-    const counts = new Map(tramoPills(visible, tramoOrder).map((p) => [p.key, p.count]));
-    return tramoPills(listed, tramoOrder).map((pill) => ({
+    const counts = new Map(etapaPills(visible, etapaOrder).map((p) => [p.key, p.count]));
+    return etapaPills(listed, etapaOrder).map((pill) => ({
       ...pill,
-      count: pill.key === ALL_TRAMOS_KEY ? visible.length : (counts.get(pill.key) ?? 0),
+      count: pill.key === ALL_ETAPAS_KEY ? visible.length : (counts.get(pill.key) ?? 0),
       colorVar:
-        pill.key === ALL_TRAMOS_KEY ? undefined : pill.key === NO_TRAMO_KEY ? "var(--muted-foreground)" : tramoColorVar(pill.key),
+        pill.key === ALL_ETAPAS_KEY ? undefined : pill.key === NO_ETAPA_KEY ? "var(--muted-foreground)" : etapaColorVar(pill.key),
     }));
-  }, [listed, visible, tramoOrder]);
+  }, [listed, visible, etapaOrder]);
 
   function handleSearch(value: string) {
     setSearch(value);
@@ -426,10 +426,10 @@ function EsencialList({
     <div className="flex flex-col gap-5" data-slot="projects-esencial">
       {header}
       <div className="flex flex-wrap items-center gap-2" data-slot="projects-esencial-filters">
-        <TramoPills
+        <EtapaPills
           pills={pills}
-          value={activeTramo ?? ALL_TRAMOS_KEY}
-          onChange={(key) => selectKpi(key === ALL_TRAMOS_KEY ? null : key)}
+          value={activeEtapa ?? ALL_ETAPAS_KEY}
+          onChange={(key) => selectKpi(key === ALL_ETAPAS_KEY ? null : key)}
         />
         <span aria-hidden="true" className="hidden flex-[1_1_24px] sm:block" />
         <label htmlFor={searchId} className="sr-only">
@@ -459,11 +459,11 @@ function EsencialList({
         {projectsCountText(rows.length)}
       </p>
       {rows.length === 0 ? (
-        activeTramo && visible.length > 0 ? (
+        activeEtapa && visible.length > 0 ? (
           <EmptyState
             title="Sin resultados"
-            description={`Ningún proyecto de «${activeTramoLabel}» coincide con «${q}».`}
-            action={{ label: ESENCIAL_CLEAR_TRAMO_LABEL, onClick: () => selectKpi(null) }}
+            description={`Ningún proyecto de «${activeEtapaLabel}» coincide con «${q}».`}
+            action={{ label: ESENCIAL_CLEAR_ETAPA_LABEL, onClick: () => selectKpi(null) }}
           />
         ) : (
           <EmptyState title="Sin resultados" description={`Ningún proyecto coincide con «${q}».`} />
@@ -477,7 +477,7 @@ function EsencialList({
             <ProjectCard
               key={row.id}
               row={row}
-              tramoName={tramoNames.get(row.id) ?? null}
+              etapaName={etapaNames.get(row.id) ?? null}
               index={index}
               actions={deleteProject.rowActions({ id: row.id, name: row.name })}
             />

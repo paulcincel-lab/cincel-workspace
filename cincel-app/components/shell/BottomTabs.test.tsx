@@ -66,7 +66,7 @@ const NAV: NavModel = {
     { key: "biblioteca", label: "Biblioteca", href: "/biblioteca", icon: BookOpen },
     { key: "asistente", label: "Asistente", href: "/asistente", icon: Sparkles },
   ],
-  tramos: [],
+  etapas: [],
   footer: [{ key: "ajustes", label: "Ajustes", href: "/ajustes", icon: SlidersHorizontal }],
 };
 

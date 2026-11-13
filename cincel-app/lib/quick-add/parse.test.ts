@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { zonedIsoDate } from "@/lib/dates/zoned-formatters";
-import { parseQuickAdd, type QuickAddParseContext, type QuickAddPerson, type QuickAddTramo } from "@/lib/quick-add/parse";
+import { parseQuickAdd, type QuickAddParseContext, type QuickAddPerson, type QuickAddEtapa } from "@/lib/quick-add/parse";
 import type { TaskPriority } from "@/lib/types/core";
 
 const PEOPLE: QuickAddPerson[] = [
@@ -14,7 +14,7 @@ const PEOPLE: QuickAddPerson[] = [
   { id: "p-oscar", name: "Oscar Díaz" },
 ];
 
-const TRAMOS: QuickAddTramo[] = [
+const ETAPAS: QuickAddEtapa[] = [
   { id: "presale", key: "presale", name: "Presale" },
   { id: "diseno", key: "diseno", name: "Diseño" },
   { id: "construccion", key: "construccion", name: "Construcción" },
@@ -22,13 +22,13 @@ const TRAMOS: QuickAddTramo[] = [
 ];
 
 /** Monday 2026-11-09. */
-const CTX: QuickAddParseContext = { today: "2026-11-09", people: PEOPLE, tramos: TRAMOS, meId: "p-oscar" };
+const CTX: QuickAddParseContext = { today: "2026-11-09", people: PEOPLE, etapas: ETAPAS, meId: "p-oscar" };
 
 type Row = {
   input: string;
   title: string;
   assigneeId?: string;
-  tramoId?: string;
+  etapaId?: string;
   dueDate?: string;
   priority?: TaskPriority;
   slash?: string;
@@ -39,8 +39,8 @@ type Row = {
 
 const ROWS: Row[] = [
   { input: "Revisar plafones @ana viernes !alta", title: "Revisar plafones", assigneeId: "p-ana", dueDate: "2026-11-13", priority: "alta" },
-  { input: "Cotizar tablaroca #construccion 15 nov", title: "Cotizar tablaroca", tramoId: "construccion", dueDate: "2026-11-15" },
-  { input: "Enviar renders al cliente mañana #diseño", title: "Enviar renders al cliente", tramoId: "diseno", dueDate: "2026-11-10" },
+  { input: "Cotizar tablaroca #construccion 15 nov", title: "Cotizar tablaroca", etapaId: "construccion", dueDate: "2026-11-15" },
+  { input: "Enviar renders al cliente mañana #diseño", title: "Enviar renders al cliente", etapaId: "diseno", dueDate: "2026-11-10" },
   { input: "Llamar a proveedor hoy", title: "Llamar a proveedor", dueDate: "2026-11-09" },
   { input: "Junta de obra lunes", title: "Junta de obra", dueDate: "2026-11-16" },
   { input: "Entregar muestras miercoles", title: "Entregar muestras", dueDate: "2026-11-11" },
@@ -57,7 +57,7 @@ const ROWS: Row[] = [
   { input: "@luis revisar cotización", title: "revisar cotización", assigneeId: "p-luis" },
   { input: "@perez revisar", title: "revisar", assigneeId: "p-luis" },
   { input: "@zz revisar", title: "@zz revisar", unknown: ["@zz"] },
-  { input: "!alta #deco @sofia Elegir lámparas", title: "Elegir lámparas", assigneeId: "p-sofia", tramoId: "decoracion", priority: "alta" },
+  { input: "!alta #deco @sofia Elegir lámparas", title: "Elegir lámparas", assigneeId: "p-sofia", etapaId: "decoracion", priority: "alta" },
   { input: "Plano #xyz !urgente", title: "Plano #xyz !urgente", unknown: ["#xyz", "!urgente"] },
   { input: "@yo Preparar junta !b", title: "Preparar junta", assigneeId: "p-oscar", priority: "baja" },
   { input: "Revisar @ana @jorge", title: "Revisar", assigneeId: "p-jorge" },
@@ -78,7 +78,7 @@ describe("parseQuickAdd", () => {
     const parsed = parseQuickAdd(row.input, { ...CTX, today: row.today ?? CTX.today });
     expect(parsed.title).toBe(row.title);
     expect(parsed.assigneeId).toBe(row.assigneeId);
-    expect(parsed.tramoId).toBe(row.tramoId);
+    expect(parsed.etapaId).toBe(row.etapaId);
     expect(parsed.dueDate).toBe(row.dueDate);
     expect(parsed.priority).toBe(row.priority);
     expect(parsed.slash).toBe(row.slash ?? null);
@@ -109,7 +109,7 @@ describe("parseQuickAdd", () => {
       title: "Junta",
       dueDate: "2026-11-11",
       assigneeId: "p-sofia",
-      tramoId: "construccion",
+      etapaId: "construccion",
     });
     expect(parseQuickAdd("#dis #cons #de #pre", CTX).tokens.map((t) => t.value)).toEqual([
       "diseno",
@@ -178,7 +178,7 @@ describe("parseQuickAdd estimated hours (~2h, ~30m)", () => {
 
   it("combines with the other tokens", () => {
     const parsed = parseQuickAdd("Planos @ana #diseno mañana !alta ~3h", CTX);
-    expect(parsed).toMatchObject({ title: "Planos", assigneeId: "p-ana", tramoId: "diseno", priority: "alta", estimatedHours: 3 });
+    expect(parsed).toMatchObject({ title: "Planos", assigneeId: "p-ana", etapaId: "diseno", priority: "alta", estimatedHours: 3 });
     expect(parsed.dueDate).toBe("2026-11-10");
   });
 });

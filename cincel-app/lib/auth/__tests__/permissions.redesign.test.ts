@@ -18,7 +18,7 @@ import {
   canViewSensitiveStaffData,
   canViewTeamHours,
 } from "@/lib/auth/permissions";
-import { canSeeAdminData as compatCanSeeAdminData } from "@/lib/tramos/compat";
+import { canSeeAdminData as compatCanSeeAdminData } from "@/lib/etapas/compat";
 
 function makeUser(access: SystemAccessRole, role: string = access): AuthenticatedUser {
   const member: TeamMember = {

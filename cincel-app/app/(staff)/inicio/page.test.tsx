@@ -80,7 +80,7 @@ function appearance(): ResolvedAppearance {
 
 const DATA: InicioData = {
   kpis: [{ key: "vencidas", label: "Vencidas", value: 4 }],
-  tasksByTramo: [],
+  tasksByEtapa: [],
   weeklyPace: [],
   attention: [],
   myDay: [],

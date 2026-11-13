@@ -14,7 +14,7 @@ export const EDIT_MODE_LABELS: Record<EditMode, string> = { light: "Claro", dark
 
 export type TokenSection = { title: string; tokens: { name: TokenName; label: string }[] };
 
-/** Every token, grouped as the editor shows them (FE §3.8: Interfaz / Navegación / Tramos y estatus). */
+/** Every token, grouped as the editor shows them (FE §3.8: Interfaz / Navegación / Etapas y estatus). */
 export const TOKEN_SECTIONS: readonly TokenSection[] = [
   {
     title: "Interfaz",

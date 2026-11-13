@@ -68,7 +68,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
   );
 }
 
-const EMPTY_NAV: NavModel = { items: [], tramos: [], footer: [] };
+const EMPTY_NAV: NavModel = { items: [], etapas: [], footer: [] };
 
 /** A nav failure must not take every page down; the shell renders without items. */
 async function loadNav(session: NavSession): Promise<NavModel> {

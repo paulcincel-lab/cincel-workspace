@@ -2,7 +2,7 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-/** One labelled step of the stepper (e.g. a project's tramo). */
+/** One labelled step of the stepper (e.g. a project's etapa). */
 export type PhaseStepperItem = {
   key: string;
   label: string;
@@ -83,7 +83,7 @@ function LabelledSteps({ items, label, className }: { items: PhaseStepperItem[];
  * A dot-sequence progress indicator for a task's position in a sequential
  * pipeline (e.g. Anteproyecto → Proyecto Arquitectónico → Ejecutivo).
  * Replaces a plain text Badge for phase, which doesn't convey order.
- * With `items` it renders labelled steps instead (a project's tramos).
+ * With `items` it renders labelled steps instead (a project's etapas).
  */
 export function PhaseStepper({ steps, current, label, className, items }: PhaseStepperProps) {
   if (items) return <LabelledSteps items={items} label={label} className={className} />;

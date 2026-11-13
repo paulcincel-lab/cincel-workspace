@@ -10,7 +10,7 @@ vi.mock("sonner", () => ({ toast }));
 
 const prep: MeetingPrep = {
   eventId: "e1",
-  kpis: { progressVsPlan: -8, tramo: { name: "Diseño", phase: "Proyecto ejecutivo" }, overdue: 2, open: 15, lastMeeting: { date: "2026-10-28", decisions: 3, open: 1 } },
+  kpis: { progressVsPlan: -8, etapa: { name: "Diseño", phase: "Proyecto ejecutivo" }, overdue: 2, open: 15, lastMeeting: { date: "2026-10-28", decisions: 3, open: 1 } },
   overdue: [{ taskId: "t1", title: "Ingenierías", managerName: "Luis Martínez", date: "2026-11-09", daysLate: 2 }],
   agenda: ["Avance", "Pendientes"],
   summary: "Hay 2 tareas vencidas.",

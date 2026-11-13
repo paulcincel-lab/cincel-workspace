@@ -45,9 +45,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock("@/lib/tramos/compat", () => ({
-  listTramos: async () => [{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }],
-  tramoColorVar: () => "var(--chart-1)",
+vi.mock("@/lib/etapas/compat", () => ({
+  listEtapas: async () => [{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }],
+  etapaColorVar: () => "var(--chart-1)",
 }));
 // Markers: these entry points would call stubs, so the shell must not mount them.
 vi.mock("@/components/shell/CommandPalette", () => ({ CommandPalette: () => <div data-testid="command-palette" /> }));

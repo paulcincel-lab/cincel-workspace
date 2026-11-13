@@ -147,7 +147,7 @@ export function proyectosPageOptions() {
   });
 }
 
-/** The create dialog's "Tramo inicial" options (#1034); the dialog enables it while open. Catalog data, 5 min stale. */
+/** The create dialog's "Etapa inicial" options (#1034); the dialog enables it while open. Catalog data, 5 min stale. */
 export function projectCreateStartOptions() {
   return queryOptions<ProjectCreateStartOptions | null>({
     queryKey: qk.proyectos.createStart(),
@@ -185,8 +185,8 @@ export function proyectoResumenOptions(id: string) {
 
 /**
  * The Resumen's task numbers (`qk.proyectos.resumenSummary(id)`, #1051):
- * KPIs, tramos and fases, team load and "Lo que sigue" as server
- * aggregates, prefetched by the page; the "Tareas por tramo" rows are
+ * KPIs, etapas and fases, team load and "Lo que sigue" as server
+ * aggregates, prefetched by the page; the "Tareas por etapa" rows are
  * `qk.tareas.list` pages. 30 s stale. Null when the viewer can't see the project.
  */
 export function proyectoResumenSummaryOptions(id: string) {

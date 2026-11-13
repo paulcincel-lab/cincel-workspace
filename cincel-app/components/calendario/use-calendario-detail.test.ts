@@ -26,7 +26,7 @@ describe("taskItemFromDetail (deep link outside the cached range)", () => {
     expect(item.id).toBe(`t:${task.id}`);
     expect(item.overdue).toBe(true);
     expect(item.date).toBe("2026-11-09");
-    expect(item.tramo?.name).toBe("Diseño");
+    expect(item.etapa?.name).toBe("Diseño");
   });
 
   it("is not overdue once completed", () => {

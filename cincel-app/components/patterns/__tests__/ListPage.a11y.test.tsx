@@ -30,12 +30,12 @@ async function seriousViolations(container: HTMLElement) {
 const table: RecordTableData = {
   columns: [
     { key: "nombre", label: "Proyecto" },
-    { key: "tramo", label: "Etapa" },
+    { key: "etapa", label: "Etapa" },
     { key: "avance", label: "Avance", align: "right", format: "percent" },
   ],
   rows: [
-    { id: "p1", nombre: "Casa Espino", tramo: "Diseño", avance: 40 },
-    { id: "p2", nombre: "Local Papa", tramo: "Construcción", avance: 75 },
+    { id: "p1", nombre: "Casa Espino", etapa: "Diseño", avance: 40 },
+    { id: "p2", nombre: "Local Papa", etapa: "Construcción", avance: 75 },
   ],
 };
 

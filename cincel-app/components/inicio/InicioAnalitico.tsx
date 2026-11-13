@@ -36,14 +36,14 @@ import {
   shareHeat,
   signed,
   sortAgenda,
-  tramoTotals,
+  etapaTotals,
   workloadTotals,
   type AttentionProject,
 } from "@/lib/inicio/analitico";
 import {
   filterAgenda,
   filterAttention,
-  filterTramos,
+  filterEtapas,
   filterWorkload,
   hasActiveFilters,
   type InicioAnaliticoFilters,
@@ -74,7 +74,7 @@ const SECTION_WIDGET: Record<keyof typeof ANALITICO_SECTION, InicioWidget> = {
   atencion: "attention",
   ritmo: "weeklyPace",
   carga: "workload",
-  tramos: "tramoDonut",
+  etapas: "etapaDonut",
   agenda: "todayAgenda",
 };
 
@@ -123,8 +123,8 @@ const WORKLOAD_COLUMNS: RecordColumn[] = [
 ];
 const SHARE_HEAT_RULE: HeatRule = { key: "pctVencidas", warnAt: SHARE_WARN_AT - 1, critAt: SHARE_CRIT_AT - 1 };
 
-const TRAMO_COLUMNS: RecordColumn[] = [
-  { key: "tramo", label: "Etapa", width: 180 },
+const ETAPA_COLUMNS: RecordColumn[] = [
+  { key: "etapa", label: "Etapa", width: 180 },
   { key: "distribucion", label: "Distribución", width: 224 },
   { key: "abiertas", label: "Abiertas", align: "right", mono: true, format: "count", width: 80 },
   { key: "vencidas", label: "Vencidas", align: "right", mono: true, format: "count", width: 80 },
@@ -136,7 +136,7 @@ const AGENDA_COLUMNS: RecordColumn[] = [
   { key: "hora", label: "Hora", mono: true, width: 70 },
   { key: "actividad", label: "Actividad", width: 280 },
   { key: "proyecto", label: "Proyecto", width: 180 },
-  { key: "tramo", label: "Etapa", width: 140 },
+  { key: "etapa", label: "Etapa", width: 140 },
   { key: "tipo", label: "Tipo", width: 90 },
   { key: "responsable", label: "Responsable", width: 150 },
 ];
@@ -145,7 +145,7 @@ const AGENDA_COLUMNS: RecordColumn[] = [
 
 type AttentionRow = {
   id: string;
-  kind: "tramo" | "task";
+  kind: "etapa" | "task";
   nombre: string;
   href: string | null;
   color: string | null;
@@ -153,9 +153,9 @@ type AttentionRow = {
   estatus: string | null;
   statusValue: TaskStatus | null;
   vence: string | null;
-  /** Tramo rows: the tramo's overdue count. */
+  /** Etapa rows: the etapa's overdue count. */
   vencidas: number | null;
-  /** Task rows: days late (heat); tramo rows keep their sum in `diasTotal`. */
+  /** Task rows: days late (heat); etapa rows keep their sum in `diasTotal`. */
   dias: number | null;
   diasTotal: number | null;
 };
@@ -172,9 +172,9 @@ type WorkloadRow = {
   pctVencidas: number | null;
   retraso: string;
 };
-type TramoRow = {
+type EtapaRow = {
   id: string;
-  tramo: string;
+  etapa: string;
   color: string;
   share: number;
   abiertas: number;
@@ -188,7 +188,7 @@ type AgendaRow = {
   actividad: string;
   href: string | null;
   proyecto: string;
-  tramo: string | null;
+  etapa: string | null;
   color: string | null;
   tipo: string;
   responsable: string;
@@ -242,12 +242,12 @@ function metric(key: string, label: string, value: number | string, tone?: "dest
 
 /**
  * Inicio Analítico (#991, frame `Inicio-Analitico`): the operating summary.
- * Header, KPI strip, one filter card (Rango, Responsable, Tramo, Expandir /
+ * Header, KPI strip, one filter card (Rango, Responsable, Etapa, Expandir /
  * Contraer todo), the "Ir a" links and five sections, each a `GroupedTable`
- * card: Atención (project → tramo → task, with quick-add), Ritmo semanal
+ * card: Atención (project → etapa → task, with quick-add), Ritmo semanal
  * (table plus the line chart), Carga por persona (`showTeamWorkload` only),
- * Tareas abiertas por tramo and Agenda de hoy. Range, filters and collapsed
- * sections live in `useInicioDashboard`; Responsable and Tramo filter the
+ * Tareas abiertas por etapa and Agenda de hoy. Range, filters and collapsed
+ * sections live in `useInicioDashboard`; Responsable and Etapa filter the
  * tables only (never the KPIs or Ritmo semanal).
  */
 export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) {
@@ -267,27 +267,27 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
   const showWorkload = data.sections?.showTeamWorkload ?? true;
   const showRisk = data.sections?.showProjectRisk ?? true;
   const filtered = hasActiveFilters(filters);
-  const byTramoAssignee = data.tasksByTramoAssignee ?? [];
+  const byEtapaAssignee = data.tasksByEtapaAssignee ?? [];
 
   const weeks = sliceToRange(data.weeklyPace, range);
   const weekCount = DASHBOARD_RANGE_WEEKS[range];
   const pace = paceTotals(weeks);
 
   const fullAttention = useMemo(
-    () => attentionSummary(data.attention, data.projectsProgress, data.tasksByTramo),
-    [data.attention, data.projectsProgress, data.tasksByTramo],
+    () => attentionSummary(data.attention, data.projectsProgress, data.tasksByEtapa),
+    [data.attention, data.projectsProgress, data.tasksByEtapa],
   );
   const attention = useMemo(
-    () => attentionSummary(filterAttention(data.attention, filters), data.projectsProgress, data.tasksByTramo),
-    [data.attention, data.projectsProgress, data.tasksByTramo, filters],
+    () => attentionSummary(filterAttention(data.attention, filters), data.projectsProgress, data.tasksByEtapa),
+    [data.attention, data.projectsProgress, data.tasksByEtapa, filters],
   );
-  const people = filterWorkload(data.workload, filters, byTramoAssignee);
+  const people = filterWorkload(data.workload, filters, byEtapaAssignee);
   const workload = workloadTotals(people);
-  const tramos = filterTramos(data.tasksByTramo, filters, byTramoAssignee);
-  const tramoSum = tramoTotals(tramos);
-  const allTramoOpen = tramoTotals(data.tasksByTramo).open;
+  const etapas = filterEtapas(data.tasksByEtapa, filters, byEtapaAssignee);
+  const etapaSum = etapaTotals(etapas);
+  const allEtapaOpen = etapaTotals(data.tasksByEtapa).open;
   const agenda = sortAgenda(filterAgenda(data.todayAgenda, filters));
-  const tramoInfo = new Map(data.tasksByTramo.map((s) => [s.key, s]));
+  const etapaInfo = new Map(data.tasksByEtapa.map((s) => [s.key, s]));
 
   const isOpen = (section: keyof typeof ANALITICO_SECTION) => !(collapsed[SECTION_WIDGET[section]] ?? false);
   const sectionsShown = (Object.keys(SECTION_WIDGET) as (keyof typeof ANALITICO_SECTION)[]).filter(
@@ -329,13 +329,13 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
   // ── Header and KPI strip ──
   const kpis = analiticoKpis(data.kpis, data.projectsProgress, showRisk);
 
-  // ── Responsable and Tramo options ──
+  // ── Responsable and Etapa options ──
   const assignees = new Map<string, string>();
   for (const p of data.workload) assignees.set(p.id, p.name);
   for (const a of data.attention) if (a.assignee) assignees.set(a.assignee.id, a.assignee.name);
   for (const a of data.todayAgenda) if (a.assignee) assignees.set(a.assignee.id, a.assignee.name);
   const responsableOptions = [...assignees].sort((a, b) => a[1].localeCompare(b[1], "es"));
-  const tramoOptions = data.tasksByTramo.map((s) => [s.key, s.label] as const);
+  const etapaOptions = data.tasksByEtapa.map((s) => [s.key, s.label] as const);
 
   // ── Atención groups ──
   const attentionGroups: Group<AttentionRow>[] = attention.projects.map((project) => projectGroup(project));
@@ -343,23 +343,23 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
     const limit = taskLimits[project.id] ?? ATTENTION_PAGE_SIZE;
     const rows: AttentionRow[] = [];
     let more = false;
-    for (const tramo of project.tramos) {
+    for (const etapa of project.etapas) {
       rows.push({
-        id: `${project.id}:${tramo.key}`,
-        kind: "tramo",
-        nombre: tramo.label,
+        id: `${project.id}:${etapa.key}`,
+        kind: "etapa",
+        nombre: etapa.label,
         href: null,
-        color: tramo.colorVar,
+        color: etapa.colorVar,
         responsable: null,
         estatus: null,
         statusValue: null,
         vence: null,
-        vencidas: tramo.overdue,
+        vencidas: etapa.overdue,
         dias: null,
-        diasTotal: tramo.daysLate,
+        diasTotal: etapa.daysLate,
       });
-      if (tramo.tasks.length > limit) more = true;
-      for (const task of tramo.tasks.slice(0, limit)) {
+      if (etapa.tasks.length > limit) more = true;
+      for (const task of etapa.tasks.slice(0, limit)) {
         rows.push({
           id: task.id,
           kind: "task",
@@ -380,7 +380,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
     return {
       id: project.id,
       label: project.name,
-      caption: countLabel(project.tramos.length, "etapa", "etapas"),
+      caption: countLabel(project.etapas.length, "etapa", "etapas"),
       metrics: [
         ...(project.overduePct !== null
           ? [
@@ -409,7 +409,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
             projectId: project.id,
             placeholder: "Nueva tarea… (@persona #etapa mañana)",
           }}
-          onCreate={(draft) => quickAdd.create({ projectId: project.id, tramoKeys: project.tramos.map((t) => t.key) }, draft)}
+          onCreate={(draft) => quickAdd.create({ projectId: project.id, etapaKeys: project.etapas.map((t) => t.key) }, draft)}
           disabled={quickAdd.pending}
         />
       ),
@@ -428,7 +428,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
   function renderAttentionCell(key: string, row: AttentionRow): ReactNode | undefined {
     switch (key) {
       case "nombre":
-        if (row.kind === "tramo") {
+        if (row.kind === "etapa") {
           return (
             <span className="inline-flex items-center gap-2 font-semibold">
               <Dot color={row.color ?? "var(--muted-foreground)"} />
@@ -445,7 +445,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
       case "responsable":
         return row.responsable ?? "";
       case "estatus":
-        if (row.kind === "tramo" || !row.estatus) return "";
+        if (row.kind === "etapa" || !row.estatus) return "";
         return (
           <span className="inline-flex items-center gap-1.5">
             {row.statusValue ? (
@@ -457,9 +457,9 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
       case "vence":
         return row.vence ? <span className="text-destructive">{formatValue(row.vence, "date")}</span> : "";
       case "vencidas":
-        return row.kind === "tramo" ? String(row.vencidas ?? 0) : "";
+        return row.kind === "etapa" ? String(row.vencidas ?? 0) : "";
       case "dias":
-        if (row.kind === "tramo") return String(row.diasTotal ?? 0);
+        if (row.kind === "etapa") return String(row.diasTotal ?? 0);
         return row.dias === null ? "—" : <WithUnit value={String(row.dias)} unit={row.dias === 1 ? "día de retraso" : "días de retraso"} />;
       default:
         return undefined;
@@ -523,25 +523,25 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
     }
   }
 
-  // ── Tareas abiertas por tramo ──
-  const tramoRows: TramoRow[] = tramos.map((s) => ({
+  // ── Tareas abiertas por etapa ──
+  const etapaRows: EtapaRow[] = etapas.map((s) => ({
     id: s.key,
-    tramo: s.label,
+    etapa: s.label,
     color: s.colorVar,
-    share: tramoSum.open > 0 ? (s.value / tramoSum.open) * 100 : 0,
+    share: etapaSum.open > 0 ? (s.value / etapaSum.open) * 100 : 0,
     abiertas: s.value,
     vencidas: s.secondary ?? 0,
     pctVencidas: pctOf(s.secondary ?? 0, s.value),
     dias: s.value > 0 ? segmentDays(s).toFixed(1) : "—",
   }));
 
-  function renderTramoCell(key: string, row: TramoRow): ReactNode | undefined {
+  function renderEtapaCell(key: string, row: EtapaRow): ReactNode | undefined {
     switch (key) {
-      case "tramo":
+      case "etapa":
         return (
           <span className="inline-flex items-center gap-2 font-medium">
             <Dot color={row.color} />
-            {row.tramo}
+            {row.etapa}
           </span>
         );
       case "distribucion":
@@ -555,14 +555,14 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
 
   // ── Agenda de hoy ──
   const agendaRows: AgendaRow[] = agenda.map((item) => {
-    const info = item.tramo ? tramoInfo.get(item.tramo) : undefined;
+    const info = item.etapa ? etapaInfo.get(item.etapa) : undefined;
     return {
       id: item.id,
       hora: agendaTime(item) ?? "—",
       actividad: item.title,
       href: item.href ?? null,
       proyecto: item.project ?? "—",
-      tramo: info?.label ?? null,
+      etapa: info?.label ?? null,
       color: info?.colorVar ?? null,
       tipo: item.kind === "evento" ? "Evento" : "Entrega",
       responsable: item.assignee?.name ?? "—",
@@ -588,11 +588,11 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
             {row.proyecto}
           </span>
         );
-      case "tramo":
-        return row.tramo ? (
+      case "etapa":
+        return row.etapa ? (
           <span className="inline-flex items-center gap-2">
             <Dot color={row.color ?? "var(--muted-foreground)"} />
-            {row.tramo}
+            {row.etapa}
           </span>
         ) : (
           "—"
@@ -622,7 +622,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
     ...(showWorkload
       ? [{ section: "carga" as const, label: "Carga por persona", count: String(people.length), tone: "text-muted-foreground" }]
       : []),
-    { section: "tramos", label: "Por etapa", count: String(tramos.length), tone: "text-muted-foreground" },
+    { section: "etapas", label: "Por etapa", count: String(etapas.length), tone: "text-muted-foreground" },
     { section: "agenda", label: "Agenda", count: String(agenda.length), tone: "text-muted-foreground" },
   ];
 
@@ -662,7 +662,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
               options={responsableOptions}
               onChange={(v) => setFilter("responsable", v)}
             />
-            <FilterSelect label="Etapa" value={filters.tramo} options={tramoOptions} onChange={(v) => setFilter("tramo", v)} />
+            <FilterSelect label="Etapa" value={filters.etapa} options={etapaOptions} onChange={(v) => setFilter("etapa", v)} />
             <span className="flex-1" aria-hidden="true" />
             <div className="flex items-center gap-1">
               <Button type="button" variant="ghost" size="sm" onClick={() => setAll(true)}>
@@ -823,36 +823,36 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
       ) : null}
 
       <div className="min-w-0">
-        <GroupedTable<TramoRow>
+        <GroupedTable<EtapaRow>
           toggleAll={false}
           label="Tareas abiertas por etapa"
-          columns={TRAMO_COLUMNS}
+          columns={ETAPA_COLUMNS}
           heat={[SHARE_HEAT_RULE]}
           groups={[
             {
-              id: ANALITICO_SECTION.tramos,
+              id: ANALITICO_SECTION.etapas,
               label: "Tareas abiertas por etapa",
-              caption: countLabel(tramos.length, "etapa", "etapas"),
-              metrics: [metric("abiertas", "Abiertas", tramoSum.open)],
-              rows: tramoRows,
-              quickAdd: emptyRow(TRAMO_COLUMNS.length, tramos.length === 0, allTramoOpen > 0, "Sin tareas abiertas"),
+              caption: countLabel(etapas.length, "etapa", "etapas"),
+              metrics: [metric("abiertas", "Abiertas", etapaSum.open)],
+              rows: etapaRows,
+              quickAdd: emptyRow(ETAPA_COLUMNS.length, etapas.length === 0, allEtapaOpen > 0, "Sin tareas abiertas"),
               footer:
-                tramos.length === 0
+                etapas.length === 0
                   ? undefined
                   : {
-                      tramo: `Total · ${countLabel(tramos.length, "etapa", "etapas")}`,
+                      etapa: `Total · ${countLabel(etapas.length, "etapa", "etapas")}`,
                       distribucion: "",
-                      abiertas: tramoSum.open,
-                      vencidas: tramoSum.overdue,
-                      pctVencidas: tramoSum.overduePct === null ? "—" : `${tramoSum.overduePct} %`,
-                      dias: tramoSum.avgDays === null ? "—" : tramoSum.avgDays.toFixed(1),
+                      abiertas: etapaSum.open,
+                      vencidas: etapaSum.overdue,
+                      pctVencidas: etapaSum.overduePct === null ? "—" : `${etapaSum.overduePct} %`,
+                      dias: etapaSum.avgDays === null ? "—" : etapaSum.avgDays.toFixed(1),
                     },
             },
           ]}
-          expanded={isOpen("tramos") ? [ANALITICO_SECTION.tramos] : []}
-          onExpandedChange={(ids) => onSectionExpanded("tramos", ids)}
+          expanded={isOpen("etapas") ? [ANALITICO_SECTION.etapas] : []}
+          onExpandedChange={(ids) => onSectionExpanded("etapas", ids)}
           getRowId={(row) => row.id}
-          renderCell={renderTramoCell}
+          renderCell={renderEtapaCell}
         />
       </div>
 

@@ -14,7 +14,7 @@ import type {
   KpiDatum,
   PersonDatum,
   ProgressItem,
-  TramoKey,
+  EtapaKey,
 } from "@/lib/types/widgets";
 
 // ── Appearance ──────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ export type InicioData = {
   /** proyectos_activos, vencidas, bloqueadas, revisiones_7d, completadas_semana (visibleIn: ["analitico"]). */
   kpis: KpiDatum[];
   /** value = open, secondary = overdue, extra = { diasProm }. */
-  tasksByTramo: DistributionSegment[];
+  tasksByEtapa: DistributionSegment[];
   /** 12 weeks, oldest first: a fixed window; the client shows the last 4 / 8 / 12 (`sliceToRange`). */
   weeklyPace: { weekStart: string; created: number; completed: number }[];
   attention: AttentionItem[];
@@ -370,8 +370,8 @@ export type InicioData = {
   openShifts: InicioOpenShifts | null;
   /** Today's scoped events plus the open tasks due today (`entrega`), by time (Inicio Visual and Analítico). */
   todayAgenda: InicioAgendaItem[];
-  /** Open tasks per tramo and responsable (Inicio Analítico filters on Tramos and Carga). */
-  tasksByTramoAssignee?: InicioTramoAssigneeRow[];
+  /** Open tasks per etapa and responsable (Inicio Analítico filters on Etapas and Carga). */
+  tasksByEtapaAssignee?: InicioEtapaAssigneeRow[];
   /** The caller's Inicio sections (`resolveDashboardCapabilities(user).sections`). */
   sections?: { showTeamWorkload: boolean; showProjectRisk: boolean };
 };
@@ -386,7 +386,7 @@ export type InicioHero = {
 
 export type InicioOpenShifts = {
   count: number;
-  people: { id: string; initials: string; tramo: TramoKey | null }[];
+  people: { id: string; initials: string; etapa: EtapaKey | null }[];
 };
 
 /** One "Agenda de hoy" row: an event or a delivery (open task due today) with its responsable. */
@@ -395,9 +395,9 @@ export type InicioAgendaItem = AgendaItem & {
   assignee: { id: string; name: string; initials: string } | null;
 };
 
-/** Open tasks of one tramo and one responsable (null = sin responsable); `ageDays` sums creation → today. */
-export type InicioTramoAssigneeRow = {
-  tramo: TramoKey;
+/** Open tasks of one etapa and one responsable (null = sin responsable); `ageDays` sums creation → today. */
+export type InicioEtapaAssigneeRow = {
+  etapa: EtapaKey;
   assigneeId: string | null;
   open: number;
   overdue: number;
@@ -460,7 +460,7 @@ export type AbsenceRange = { from: string; to: string; kind: VacationKind | "aus
 export type PersonProjectLoad = {
   projectId: string;
   name: string;
-  tramo: TramoKey | null;
+  etapa: EtapaKey | null;
   open: number;
   overdue: number;
   /** Open tasks per week, same weeks as `weeks`. */

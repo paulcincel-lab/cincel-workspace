@@ -23,7 +23,7 @@ import type { WorkflowRef } from "@/lib/types/core";
 import { TareasEsencial } from "./TareasEsencial";
 import { TareasVisual } from "./TareasVisual";
 import { TareasAnalitico } from "./TareasAnalitico";
-import { TareasStartSlot, startSlotTramo } from "./TareasStartSlot";
+import { TareasStartSlot, startSlotEtapa } from "./TareasStartSlot";
 import { TaskSheetRoute } from "./TaskSheet";
 import {
   replaceTareasUrl,
@@ -39,9 +39,9 @@ export const TAREAS_CLEAR_FILTERS = "Quitar filtros";
 /** Pause after typing before the search box writes `q` to the URL. */
 export const TAREAS_SEARCH_DEBOUNCE_MS = 300;
 
-const NO_TRAMOS: WorkflowRef[] = [];
+const NO_ETAPAS: WorkflowRef[] = [];
 const NO_STAFF: TareasStaffOption[] = [];
-const NO_FACETS: TareasFacets = { total: 0, byTramo: {}, projects: [] };
+const NO_FACETS: TareasFacets = { total: 0, byEtapa: {}, projects: [] };
 
 /**
  * /tareas client (redesign FE §3.4, §4.5; Query Migration 4a; Estilos ADR
@@ -50,8 +50,8 @@ const NO_FACETS: TareasFacets = { total: 0, byTramo: {}, projects: [] };
  * takes no data: the query comes from the URL, the counts and options from
  * `tareas.facets(f)` and `tareas.page(q)`, and each layout reads its own
  * query. Filters write the URL with `history.replaceState` (no server
- * render); the key change refetches. With exactly one tramo filter, Project
- * Flow's start slot ("Listos para iniciar", "Próximos" and the Iniciar tramo
+ * render); the key change refetches. With exactly one etapa filter, Project
+ * Flow's start slot ("Listos para iniciar", "Próximos" and the Iniciar etapa
  * sheet, its own `qk.tareas.startSlot` query) sits under the header in every
  * style; `?project=X&iniciar=1` opens the sheet for X.
  */
@@ -62,7 +62,7 @@ export function TareasClient() {
   const ready = useTareasPageReady(query);
   const facetsQuery = useQuery({ ...tareasFacetsOptions(filtersKey), enabled: ready });
   const facets = facetsQuery.data ?? page.data?.facets ?? NO_FACETS;
-  const tramos = page.data?.tramos ?? NO_TRAMOS;
+  const etapas = page.data?.etapas ?? NO_ETAPAS;
   const staff = page.data?.staff ?? NO_STAFF;
 
   const openNewTask = useNewTaskUi((s) => s.openNewTask);
@@ -102,7 +102,7 @@ export function TareasClient() {
   const actions: ReactNode = canCreate ? (
     <Button
       onClick={() =>
-        openNewTask({ projectId: query.proyecto ?? undefined, tramoKey: query.tramo ?? undefined }, "tareas")
+        openNewTask({ projectId: query.proyecto ?? undefined, etapaKey: query.etapa ?? undefined }, "tareas")
       }
     >
       <Plus aria-hidden="true" data-icon="inline-start" />
@@ -118,9 +118,9 @@ export function TareasClient() {
       }
     : { title: TAREAS_EMPTY_TITLE };
 
-  // ── Project Flow's start slot: one per tramo, remounted when the tramo changes.
-  const slotTramo = startSlotTramo(query.tramo, tramos);
-  const startSlot = slotTramo ? <TareasStartSlot key={slotTramo.id} workflow={slotTramo} /> : null;
+  // ── Project Flow's start slot: one per etapa, remounted when the etapa changes.
+  const slotEtapa = startSlotEtapa(query.etapa, etapas);
+  const startSlot = slotEtapa ? <TareasStartSlot key={slotEtapa.id} workflow={slotEtapa} /> : null;
 
   return (
     <>
@@ -130,7 +130,7 @@ export function TareasClient() {
           <TareasVisual
             query={query}
             facets={facets}
-            tramos={tramos}
+            etapas={etapas}
             actions={actions}
             search={search}
             onSearch={setSearch}
@@ -141,11 +141,11 @@ export function TareasClient() {
         )}
         esencial={() => <TareasEsencial startSlot={startSlot} />}
         analitico={() => (
-          // Analítico is the tables by project and tramo.
+          // Analítico is the tables by project and etapa.
           <TareasAnalitico
             query={query}
             facets={facets}
-            tramos={tramos}
+            etapas={etapas}
             staff={staff}
             actions={actions}
             search={search}

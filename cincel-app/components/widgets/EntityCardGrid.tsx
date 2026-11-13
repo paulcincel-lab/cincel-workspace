@@ -14,23 +14,23 @@ import { LIFT_CLASS } from "@/components/widgets/lift";
 import { ProgressRing } from "@/components/widgets/ProgressRing";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import type { WidgetView } from "@/lib/stores/dashboard-store";
-import { tramoColorSlot, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorSlot, etapaLabel } from "@/lib/etapas/compat";
 import type { WorkflowRef } from "@/lib/types/core";
-import type { EntityCard, RecordColumn, RecordTableData, Tone, TramoKey } from "@/lib/types/widgets";
+import type { EntityCard, RecordColumn, RecordTableData, Tone, EtapaKey } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
 /**
  * Card grid in three styles (redesign FE §4.10.1, §15), built on shadcn `Card`.
  *
- * - Visual: cards with a tinted 84 px head (tramo chip + progress ring) when the
- *   item has a tramo, otherwise an icon chip row (`iconName`, lucide); title,
+ * - Visual: cards with a tinted 84 px head (etapa chip + progress ring) when the
+ *   item has an etapa, otherwise an icon chip row (`iconName`, lucide); title,
  *   subtitle, badges tinted by tone and a meta row. The ring fills in
  *   (`ring`) and cards with a link lift on hover and focus (`lift`).
  * - Esencial: white bordered cards (no shadow, no tints): title + text meta.
  * - Analítico: `table` when given, otherwise one built from `title`,
- *   `subtitle` and `meta` (plus tramo, avance and badges when the items carry
+ *   `subtitle` and `meta` (plus etapa, avance and badges when the items carry
  *   them), rendered by `RecordTable`.
  *
  * `footer` renders below each card (Visual / Esencial); `minWidth` is the
@@ -77,17 +77,17 @@ export function formatProgress(progress: number): string {
   return `${Math.max(0, Math.min(100, Math.round(progress)))}%`;
 }
 
-function tramoRef(key: TramoKey): WorkflowRef {
-  return { id: key, key, name: tramoLabel(key), sortOrder: 0 };
+function etapaRef(key: EtapaKey): WorkflowRef {
+  return { id: key, key, name: etapaLabel(key), sortOrder: 0 };
 }
 
 /**
- * Tint source of a card: the tramo color (`chart-1..3`) for a known tramo,
- * neutral for an unknown one, `chart-1` for items without a tramo (icon chip).
+ * Tint source of a card: the etapa color (`chart-1..3`) for a known etapa,
+ * neutral for an unknown one, `chart-1` for items without an etapa (icon chip).
  * Text on the tint uses the slot's `chart-N-ink` (FE §14.5).
  */
 function tintVars(item: EntityCard): CSSProperties {
-  const slot = item.tramo ? tramoColorSlot(item.tramo) : 1;
+  const slot = item.etapa ? etapaColorSlot(item.etapa) : 1;
   const vars: Record<string, string> = slot
     ? { "--entity-color": `var(--chart-${slot})`, "--entity-ink": `var(--chart-${slot}-ink)` }
     : { "--entity-color": "var(--muted-foreground)", "--entity-ink": "var(--foreground)" };
@@ -198,10 +198,10 @@ function VisualCard({ item, footer }: { item: EntityCard; footer?: (item: Entity
   return (
     <Card
       data-item={item.id}
-      className={cn("relative w-full gap-3 shadow-sm", item.tramo && "pt-0", item.href && LIFT_CLASS)}
+      className={cn("relative w-full gap-3 shadow-sm", item.etapa && "pt-0", item.href && LIFT_CLASS)}
       style={tintVars(item)}
     >
-      {item.tramo ? (
+      {item.etapa ? (
         <div data-slot="entity-head" className={cn("flex h-21 items-start justify-between gap-3 px-4 pt-3.5", TINT_BG)}>
           <span className="flex min-w-0 items-center gap-2">
             {item.iconName ? (
@@ -212,7 +212,7 @@ function VisualCard({ item, footer }: { item: EntityCard; footer?: (item: Entity
                 <EntityIcon name={item.iconName} className="size-4" />
               </span>
             ) : null}
-            <TramoBadge tramo={tramoRef(item.tramo)} variant="chip" />
+            <EtapaBadge etapa={etapaRef(item.etapa)} variant="chip" />
           </span>
           {item.progress !== undefined ? <EntityProgressRing progress={item.progress} /> : null}
         </div>
@@ -273,8 +273,8 @@ function VisualCard({ item, footer }: { item: EntityCard; footer?: (item: Entity
 
 function EsencialCard({ item, footer }: { item: EntityCard; footer?: (item: EntityCard) => ReactNode }) {
   const parts: { key: string; node: ReactNode }[] = [];
-  if (item.tramo) {
-    parts.push({ key: "tramo", node: <TramoBadge tramo={tramoRef(item.tramo)} variant="text" /> });
+  if (item.etapa) {
+    parts.push({ key: "etapa", node: <EtapaBadge etapa={etapaRef(item.etapa)} variant="text" /> });
   }
   if (item.progress !== undefined) {
     parts.push({
@@ -343,13 +343,13 @@ function metaLabels(items: EntityCard[]): string[] {
 
 /**
  * The Analítico table built from the cards when no `table` is given: Nombre,
- * Detalle (subtitle), Tramo, Avance, one column per meta label, Estado
+ * Detalle (subtitle), Etapa, Avance, one column per meta label, Estado
  * (badges). Columns no item fills are left out.
  */
 export function entityTableData(items: EntityCard[]): RecordTableData {
   const columns: RecordColumn[] = [{ key: "title", label: "Nombre" }];
   if (items.some((i) => i.subtitle)) columns.push({ key: "subtitle", label: "Detalle" });
-  if (items.some((i) => i.tramo)) columns.push({ key: "tramo", label: "Etapa" });
+  if (items.some((i) => i.etapa)) columns.push({ key: "etapa", label: "Etapa" });
   if (items.some((i) => i.progress !== undefined)) {
     columns.push({ key: "progress", label: ENTITY_PROGRESS_LABEL, align: "right", mono: true, format: "percent" });
   }
@@ -364,7 +364,7 @@ export function entityTableData(items: EntityCard[]): RecordTableData {
         id: item.id,
         title: item.title,
         subtitle: item.subtitle ?? null,
-        tramo: item.tramo ?? null,
+        etapa: item.etapa ?? null,
         progress: item.progress ?? null,
         badges: item.badges && item.badges.length > 0 ? item.badges.map((b) => b.label).join(" · ") : null,
       };
@@ -414,8 +414,8 @@ function AnaliticoTable({ items, table }: { items: EntityCard[]; table?: RecordT
             {item.subtitle ?? NO_VALUE}
           </span>
         );
-      case "tramo":
-        return item.tramo ? <TramoBadge tramo={tramoRef(item.tramo)} variant="dot" /> : NO_VALUE;
+      case "etapa":
+        return item.etapa ? <EtapaBadge etapa={etapaRef(item.etapa)} variant="dot" /> : NO_VALUE;
       case "progress":
         return (
           <span data-item={item.id} data-value="progress" className="block text-right font-mono">

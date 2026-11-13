@@ -1,13 +1,13 @@
 /**
  * Proyecto · Tareas tab (redesign FE §3.5, §4.6): the project's tasks grouped
- * by fase (tramo when the project has no fase data), with progress per group,
+ * by fase (etapa when the project has no fase data), with progress per group,
  * the URL filters of the tab and the `RecordTableData` the grouped
  * `RecordTable` renders in the three styles. Pure and client-safe.
  *
- * Grouping reuses `groupFichaTasks` (tramo order, fase catalog order, "Sin fase
- * · revisar" last, "Sin tramo", and "Administración" only for administrators).
+ * Grouping reuses `groupFichaTasks` (etapa order, fase catalog order, "Sin fase
+ * · revisar" last, "Sin etapa", and "Administración" only for administrators).
  */
-import { tramoLabel } from "@/lib/tramos/compat";
+import { etapaLabel } from "@/lib/etapas/compat";
 import { ADMIN_GROUP_LABEL, groupFichaTasks } from "@/lib/proyectos/task-groups";
 import { isDueDateLate, isTaskClosed, isTaskCompleted, taskStatusLabel } from "@/lib/tasks/status-options";
 import type { TareasListFilters } from "@/lib/query/keys";
@@ -131,13 +131,13 @@ export function responsableOptions(tasks: ProjectTask[]): { id: string; name: st
 
 // ── Groups ───────────────────────────────────────────────────────────────────
 
-export type ProjectTaskGroupMode = "fase" | "tramo";
+export type ProjectTaskGroupMode = "fase" | "etapa";
 
 export type ProjectTaskGroup = {
   id: string;
   label: string;
-  kind: "fase" | "tramo" | "sin_tramo" | "admin";
-  tramo: WorkflowRef | null;
+  kind: "fase" | "etapa" | "sin_etapa" | "admin";
+  etapa: WorkflowRef | null;
   phase: WorkflowPhaseRef | null;
   tasks: ProjectTask[];
   total: number;
@@ -159,13 +159,13 @@ export function topLevelTasks(tasks: ProjectTask[]): ProjectTask[] {
   return tasks.filter((task) => !task.parentTaskId || !ids.has(task.parentTaskId));
 }
 
-/** True when any non-admin task carries a fase: the tab then groups by fase, else by tramo. */
+/** True when any non-admin task carries a fase: the tab then groups by fase, else by etapa. */
 export function hasPhaseData(tasks: ProjectTask[]): boolean {
   return tasks.some((task) => task.kind !== "admin" && task.phase !== null);
 }
 
-function tramoName(tramo: WorkflowRef): string {
-  return tramo.name.trim() || tramoLabel(tramo.key);
+function etapaName(etapa: WorkflowRef): string {
+  return etapa.name.trim() || etapaLabel(etapa.key);
 }
 
 function summarize(
@@ -195,9 +195,9 @@ function summarize(
 }
 
 /**
- * Groups for the tab. With fase data: one group per (tramo, fase), labelled
- * with the fase name ("Tramo · Fase" when the project spans several tramos).
- * Without: one group per tramo. Admin tasks form "Administración" only when
+ * Groups for the tab. With fase data: one group per (etapa, fase), labelled
+ * with the fase name ("Etapa · Fase" when the project spans several etapas).
+ * Without: one group per etapa. Admin tasks form "Administración" only when
  * `includeAdmin` (the viewer passes `canSeeAdminData`); the server already
  * leaves them out for everyone else.
  */
@@ -207,63 +207,63 @@ export function groupProjectTasks(
 ): { mode: ProjectTaskGroupMode; groups: ProjectTaskGroup[] } {
   const rows = topLevelTasks(tasks);
   const visible = options.includeAdmin ? rows : rows.filter((task) => task.kind !== "admin");
-  const mode: ProjectTaskGroupMode = hasPhaseData(visible) ? "fase" : "tramo";
-  const tramoGroups = groupFichaTasks(visible, { includeAdmin: options.includeAdmin });
-  const multiTramo = tramoGroups.filter((group) => group.kind === "tramo").length > 1;
+  const mode: ProjectTaskGroupMode = hasPhaseData(visible) ? "fase" : "etapa";
+  const etapaGroups = groupFichaTasks(visible, { includeAdmin: options.includeAdmin });
+  const multiEtapa = etapaGroups.filter((group) => group.kind === "etapa").length > 1;
 
   const groups: ProjectTaskGroup[] = [];
-  for (const tramoGroup of tramoGroups) {
-    if (tramoGroup.kind === "admin") {
+  for (const etapaGroup of etapaGroups) {
+    if (etapaGroup.kind === "admin") {
       groups.push(
         summarize(
           {
-            id: tramoGroup.id,
+            id: etapaGroup.id,
             label: ADMIN_GROUP_LABEL,
             kind: "admin",
-            tramo: null,
+            etapa: null,
             phase: null,
-            tasks: tramoGroup.phases.flatMap((p) => p.tasks),
+            tasks: etapaGroup.phases.flatMap((p) => p.tasks),
           },
           options.today,
         ),
       );
       continue;
     }
-    if (tramoGroup.kind === "sin_tramo" || !tramoGroup.tramo) {
+    if (etapaGroup.kind === "sin_etapa" || !etapaGroup.etapa) {
       groups.push(
         summarize(
           {
-            id: tramoGroup.id,
-            label: tramoGroup.name,
-            kind: "sin_tramo",
-            tramo: null,
+            id: etapaGroup.id,
+            label: etapaGroup.name,
+            kind: "sin_etapa",
+            etapa: null,
             phase: null,
-            tasks: tramoGroup.phases.flatMap((p) => p.tasks),
+            tasks: etapaGroup.phases.flatMap((p) => p.tasks),
           },
           options.today,
         ),
       );
       continue;
     }
-    const tramo = tramoGroup.tramo;
-    const name = tramoName(tramo);
-    if (mode === "tramo") {
+    const etapa = etapaGroup.etapa;
+    const name = etapaName(etapa);
+    if (mode === "etapa") {
       groups.push(
         summarize(
-          { id: tramo.id, label: name, kind: "tramo", tramo, phase: null, tasks: tramoGroup.phases.flatMap((p) => p.tasks) },
+          { id: etapa.id, label: name, kind: "etapa", etapa, phase: null, tasks: etapaGroup.phases.flatMap((p) => p.tasks) },
           options.today,
         ),
       );
       continue;
     }
-    for (const phaseGroup of tramoGroup.phases) {
+    for (const phaseGroup of etapaGroup.phases) {
       groups.push(
         summarize(
           {
-            id: `${tramo.id}:${phaseGroup.id}`,
-            label: multiTramo ? `${name} · ${phaseGroup.name}` : phaseGroup.name,
+            id: `${etapa.id}:${phaseGroup.id}`,
+            label: multiEtapa ? `${name} · ${phaseGroup.name}` : phaseGroup.name,
             kind: "fase",
-            tramo,
+            etapa,
             phase: phaseGroup.phase,
             tasks: phaseGroup.tasks,
           },
@@ -369,7 +369,7 @@ export function buildTasksTable(groups: ProjectTaskGroup[], today: string): Reco
 export type ProjectGroupRow = Record<string, unknown> & { id: string; group: ProjectTaskGroupSummary };
 
 /**
- * Per-group summary ("Avance por fase" / "Avance por tramo"): name, tareas,
+ * Per-group summary ("Avance por fase" / "Avance por etapa"): name, tareas,
  * avance and the "Agregar tarea" action in every style; the status breakdown
  * and the totals row only in Analítico.
  */
@@ -468,20 +468,20 @@ export function summarizeProjectTasks(
 }
 
 const NO_PHASE_GROUP_ID = "__sin_fase__";
-const SIN_TRAMO_GROUP_ID = "__sin_tramo__";
+const SIN_ETAPA_GROUP_ID = "__sin_etapa__";
 const ADMIN_GROUP_ID = "__administracion__";
 
 /** The id of the group a task falls in, as `groupProjectTasks` builds them. */
 export function projectTaskGroupId(task: Pick<ProjectTask, "kind" | "workflow" | "phase">, mode: ProjectTaskGroupMode): string {
   if (task.kind === "admin") return ADMIN_GROUP_ID;
-  if (!task.workflow) return SIN_TRAMO_GROUP_ID;
-  if (mode === "tramo") return task.workflow.id;
+  if (!task.workflow) return SIN_ETAPA_GROUP_ID;
+  if (mode === "etapa") return task.workflow.id;
   return `${task.workflow.id}:${task.phase?.id ?? NO_PHASE_GROUP_ID}`;
 }
 
 /**
  * The loaded rows under their groups, in the summary's group order (the
- * server pages in tramo → fase order, so a group fills up as pages load). A
+ * server pages in etapa → fase order, so a group fills up as pages load). A
  * row whose group the summary doesn't know yet (a task created meanwhile)
  * gets a group of its own until the summary refreshes.
  */
@@ -506,8 +506,8 @@ export function groupLoadedTasks(rows: ProjectTask[], summary: Pick<ProyectoTare
     out.push({
       id,
       label,
-      kind: sample.kind === "admin" ? "admin" : sample.workflow ? (summary.mode === "fase" ? "fase" : "tramo") : "sin_tramo",
-      tramo: sample.workflow ?? null,
+      kind: sample.kind === "admin" ? "admin" : sample.workflow ? (summary.mode === "fase" ? "fase" : "etapa") : "sin_etapa",
+      etapa: sample.workflow ?? null,
       phase: sample.phase ?? null,
       tasks,
       total: tasks.length,
@@ -536,7 +536,7 @@ export function projectTasksListFilters(
   const mostrar =
     query.estado === "vencidas" ? "en_retraso" : query.estado === "abiertas" || options.hideCompleted ? "abiertas" : undefined;
   return {
-    tramo: null,
+    etapa: null,
     proyecto: projectId,
     responsable,
     estado: query.estado === "completadas" ? "completado" : null,

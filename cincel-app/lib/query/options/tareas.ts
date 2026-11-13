@@ -6,13 +6,13 @@ import {
   searchProjectTasksAction,
 } from "@/lib/actions/page-data/tareas-actions";
 import { listSubtasksAction, listTaskDependenciesAction } from "@/lib/actions/tasks-actions";
-import { previewStartTramoAction } from "@/lib/actions/tramo-start-actions";
+import { previewStartEtapaAction } from "@/lib/actions/etapa-start-actions";
 import { fetchWorkflowAction } from "@/lib/actions/workflows-actions";
 import { STALE, qk, type TareasListFilters } from "@/lib/query/keys";
 import { effectiveMostrar, esencialResponsable, responsableFilter, type TareasQuery } from "@/lib/tareas/query";
 import type { PresentationStyle } from "@/lib/types/redesign";
 import type {
-  StartTramoPreview,
+  StartEtapaPreview,
   TaskDetail,
   TaskListRow,
   TaskRef,
@@ -51,38 +51,38 @@ import type {
 // ── Start slot (Query Migration 4d, #958) ────────────────────────────────────
 
 /**
- * The Lista start slot of one tramo (`qk.tareas.startSlot(tramoId)`), 30 s
- * stale. Mounted only with exactly one tramo selected. Null when the tramo is
+ * The Lista start slot of one etapa (`qk.tareas.startSlot(etapaId)`), 30 s
+ * stale. Mounted only with exactly one etapa selected. Null when the etapa is
  * missing or inactive.
  */
-export function tareasStartSlotOptions(tramoId: string) {
+export function tareasStartSlotOptions(etapaId: string) {
   return queryOptions<TareasStartSlotData | null>({
-    queryKey: qk.tareas.startSlot(tramoId),
-    queryFn: () => getTareasStartSlotData({ tramoId }),
+    queryKey: qk.tareas.startSlot(etapaId),
+    queryFn: () => getTareasStartSlotData({ etapaId }),
     staleTime: STALE.screen,
   });
 }
 
 /**
- * The Iniciar tramo sheet's preview (`qk.tareas.startPreview(projectId,
+ * The Iniciar etapa sheet's preview (`qk.tareas.startPreview(projectId,
  * workflowId)`): a read, never a mutation. staleTime 0, so every opening
  * reflects the current board; the caller adds `enabled: open`.
  */
-export function startTramoPreviewOptions(projectId: string, workflowId: string) {
-  return queryOptions<StartTramoPreview>({
+export function startEtapaPreviewOptions(projectId: string, workflowId: string) {
+  return queryOptions<StartEtapaPreview>({
     queryKey: qk.tareas.startPreview(projectId, workflowId),
-    queryFn: () => previewStartTramoAction(projectId, workflowId),
+    queryFn: () => previewStartEtapaAction(projectId, workflowId),
     staleTime: 0,
   });
 }
 
 /**
- * What starting or undoing a tramo invalidates (plan §3 "Tramo start"): the
- * tramo's start slot, every Tareas view (list, board, facets and the other
+ * What starting or undoing an etapa invalidates (plan §3 "Etapa start"): the
+ * etapa's start slot, every Tareas view (list, board, facets and the other
  * start slots under the `tareas` prefix), the project list and the
  * project's detail keys, the project options, Inicio and the shell badges.
  */
-export function tramoStartInvalidations(target: { projectId: string; workflowId: string }): QueryKey[] {
+export function etapaStartInvalidations(target: { projectId: string; workflowId: string }): QueryKey[] {
   return [
     qk.tareas.startSlot(target.workflowId),
     qk.tareas.all,
@@ -103,7 +103,7 @@ export function tramoStartInvalidations(target: { projectId: string; workflowId:
 export function tareasListFiltersOf(query: TareasQuery): TareasListFilters {
   const mostrar = effectiveMostrar(query);
   return {
-    tramo: query.tramo,
+    etapa: query.etapa,
     proyecto: query.proyecto,
     responsable: query.responsable,
     estado: (query.estado as TaskStatus | null) ?? null,
@@ -140,14 +140,14 @@ export function taskDeleteInvalidations(projectId: string | null | undefined): Q
 // ── TaskSheet (Query Migration 4b, #956) ─────────────────────────────────────
 
 /**
- * The active fases of one tramo (the sheet's Fase select), under the
- * `catalog.workflows` prefix like `newTaskWorkflowsKey`, so a tramo edit that
+ * The active fases of one etapa (the sheet's Fase select), under the
+ * `catalog.workflows` prefix like `newTaskWorkflowsKey`, so an etapa edit that
  * invalidates `qk.catalog.workflows()` refreshes it. Seeded by
  * `taskSheetOptions`.
  */
 export const taskPhasesKey = (workflowId: string) => [...qk.catalog.workflows(), "phases", workflowId] as const;
 
-/** Active fases of a tramo in catalog order. */
+/** Active fases of an etapa in catalog order. */
 export function activeWorkflowPhases(workflow: WorkflowDetail | null | undefined): WorkflowPhaseRef[] {
   if (!workflow) return [];
   return workflow.phases
@@ -160,7 +160,7 @@ export function activeWorkflowPhases(workflow: WorkflowDetail | null | undefined
  * Writes what `getTaskSheetData` returned besides the task into the keys the
  * sheet reads: `catalog.taskStatuses`, `catalog.workflows`,
  * `catalog.assignableStaff(workflowId)`, `catalog.projectSpaces(pid)` (not for
- * an admin task, which gets none) and the tramo's fases.
+ * an admin task, which gets none) and the etapa's fases.
  */
 export function seedTaskSheet(client: QueryClient, data: TaskSheetData): void {
   const { task } = data;
@@ -190,7 +190,7 @@ export function taskSheetOptions(id: string) {
   });
 }
 
-/** A tramo's active fases (`taskPhasesKey`), 5 min stale; read from the seeded key, fetched only when it is gone. */
+/** An etapa's active fases (`taskPhasesKey`), 5 min stale; read from the seeded key, fetched only when it is gone. */
 export function taskPhasesOptions(workflowId: string) {
   return queryOptions<WorkflowPhaseRef[]>({
     queryKey: taskPhasesKey(workflowId),
@@ -332,7 +332,7 @@ export function tareasPageKeyInputOf(query: TareasQuery, estilo: PresentationSty
 
 function filtersOfPageKey(q: TareasPageKeyInput): TareasListFilters {
   return {
-    tramo: q.tramo,
+    etapa: q.etapa,
     proyecto: q.proyecto,
     responsable: q.responsable,
     estado: q.estado,
@@ -369,14 +369,14 @@ export function seedTareasPage(client: QueryClient, q: TareasPageKeyInput, data:
   for (const group of data.groups ?? []) {
     client.setQueryData<TareasListPages>(qk.tareas.list(group.filters), { pages: [group.page], pageParams: [null] });
   }
-  return { facets: data.facets, tramos: data.tramos, staff: data.staff };
+  return { facets: data.facets, etapas: data.etapas, staff: data.staff };
 }
 
 /**
  * One `/tareas` view (`qk.tareas.page(q)`), 30 s stale, the previous view
  * kept on screen while the next loads: one `getTareasPageData` call that
  * also seeds `tareas.facets(f)`, `tareas.board(f)` / `tareas.list(f)` and
- * keeps the facets, tramos and staff. The query function only reads
+ * keeps the facets, etapas and staff. The query function only reads
  * (no server writes). Exported for the sidebar hover prefetch.
  */
 export function tareasPageOptions(q: TareasPageKeyInput) {
@@ -587,7 +587,7 @@ export const TAREAS_SUMMARY_PREFIX: QueryKey = [...qk.tareas.all, "summary"];
 
 /**
  * The Tareas Analítico counts (`qk.tareas.summary(f)`): per project and
- * tramo, per project and in total, over every matching task. Seeded by the
+ * etapa, per project and in total, over every matching task. Seeded by the
  * Analítico page bundle; 30 s stale, the previous filters' counts stay on
  * screen while the next load.
  */

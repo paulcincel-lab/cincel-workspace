@@ -5,7 +5,7 @@
  * migrated database (`npm run db:migrate`). Every row it creates carries a
  * per-run marker and is deleted afterwards.
  *
- * - Estatus, Puestos, Tramos and Permisos page data as a viewer without the
+ * - Estatus, Puestos, Etapas and Permisos page data as a viewer without the
  *   segment capability (a non-admin) → FORBIDDEN; a guest → FORBIDDEN.
  * - Permisos page data carries no emails and no profile fields.
  * - Puestos page data runs ≤ 5 statements (`countQueries`).
@@ -80,7 +80,7 @@ describe.skipIf(!url)("ajustes catalog page data (test DB)", async () => {
   const PAGE_DATA: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     ["estatus", () => actions.getAjustesEstatusPageData({})],
     ["puestos", () => actions.getAjustesPuestosPageData({})],
-    ["tramos", () => actions.getAjustesTramosPageData({})],
+    ["etapas", () => actions.getAjustesEtapasPageData({})],
     ["permisos", () => actions.getAjustesPermisosPageData({})],
   ];
 
@@ -119,7 +119,7 @@ describe.skipIf(!url)("ajustes catalog page data (test DB)", async () => {
     expect(count).toBeLessThanOrEqual(5);
     const mine = result.positions.find((position) => position.id === positionIds[0]);
     expect(mine?.staffCount).toBe(1);
-    // The fase picker gets the active tramos with their active fases.
+    // The fase picker gets the active etapas with their active fases.
     for (const workflow of result.workflows) {
       expect(workflow.active).toBe(true);
       expect(workflow.phases.every((phase) => phase.active && phase.workflowId === workflow.id)).toBe(true);
@@ -135,7 +135,7 @@ describe.skipIf(!url)("ajustes catalog page data (test DB)", async () => {
   });
 
   it("Etapas page data includes inactive etapas for an Administrador", async () => {
-    const data = await asViewer(asAdmin, () => actions.getAjustesTramosPageData({}));
+    const data = await asViewer(asAdmin, () => actions.getAjustesEtapasPageData({}));
     const ids = data.workflows.map((workflow) => workflow.id);
     const rows = await db.select({ id: schema.workflows.id }).from(schema.workflows).where(eq(schema.workflows.active, false));
     for (const row of rows) {

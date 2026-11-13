@@ -1,7 +1,7 @@
 /**
  * E2E: /proyectos in Visual (#992, #1042), "Todos los proyectos": every
  * active project is a card in the grid (the "Requieren atención" card, the
- * tramo only as its chip), whatever its tramo; there is no tramo board and no
+ * etapa only as its chip), whatever its etapa; there is no etapa board and no
  * drag. A click on a card opens the project.
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
@@ -14,25 +14,25 @@ import { BASE_URL, withDb } from "./helpers/redesign";
 const PROJECT_NAME = `Grid Visual E2E ${Date.now()}`;
 
 let projectId = "";
-let tramos: Record<"diseno" | "construccion", string> = { diseno: "", construccion: "" };
+let etapas: Record<"diseno" | "construccion", string> = { diseno: "", construccion: "" };
 
 /** An active project in Diseño (Construcción started too). */
 async function seedProject(): Promise<void> {
   await withDb(async (sql) => {
     const rows = await sql<{ id: string; key: string }[]>`
       select id, key from core.workflows where key in ('diseno', 'construccion') and deleted_at is null`;
-    tramos = {
+    etapas = {
       diseno: rows.find((r) => r.key === "diseno")!.id,
       construccion: rows.find((r) => r.key === "construccion")!.id,
     };
     const [project] = await sql<{ id: string }[]>`
       insert into core.projects (name, current_workflow_id, status, address_city)
-      values (${PROJECT_NAME}, ${tramos.diseno}, 'activo', 'CDMX')
+      values (${PROJECT_NAME}, ${etapas.diseno}, 'activo', 'CDMX')
       returning id`;
     projectId = project.id;
     await sql`
       insert into core.project_stages (project_id, workflow_id)
-      values (${projectId}, ${tramos.diseno}), (${projectId}, ${tramos.construccion})`;
+      values (${projectId}, ${etapas.diseno}), (${projectId}, ${etapas.construccion})`;
   });
 }
 
@@ -61,11 +61,11 @@ test.describe("Proyectos · Visual · Todos los proyectos", () => {
   test("the project is a card in the grid with its etapa chip; a click opens it", async ({ page }) => {
     await page.goto(`${BASE_URL}/proyectos?estilo=visual`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Todos los proyectos" })).toBeVisible({ timeout: 30_000 });
-    // No tramo board.
+    // No etapa board.
     await expect(page.getByRole("heading", { name: "Tablero del portafolio" })).toHaveCount(0);
     await expect(page.getByText("Arrastra un proyecto para moverlo de etapa")).toHaveCount(0);
     await expect(page.locator('[data-slot="board-column"]')).toHaveCount(0);
-    // The summary is about the portfolio, not the tramos.
+    // The summary is about the portfolio, not the etapas.
     const summary = page.getByRole("region", { name: "Resumen del portafolio" });
     await expect(summary.locator('[data-slot="portfolio-summary"]')).toHaveCount(4);
 

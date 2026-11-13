@@ -100,14 +100,14 @@ describe("InicioAnalitico", () => {
   });
 
   it("Atención grouping and tfoot", () => {
-    const summary = attentionSummary(ANALITICO_DATA.attention, ANALITICO_DATA.projectsProgress, ANALITICO_DATA.tasksByTramo);
+    const summary = attentionSummary(ANALITICO_DATA.attention, ANALITICO_DATA.projectsProgress, ANALITICO_DATA.tasksByEtapa);
     // Vencidas and bloqueadas only, projects by overdue desc.
     expect(summary.projects.map((p) => [p.name, p.overdue, p.daysLate, p.overduePct])).toEqual([
       ["Oficina Polanco", 3, 24, 67],
       ["Depto Roma", 1, 4, 25],
     ]);
-    // Tramos by days late desc, with their sums.
-    expect(summary.projects[0].tramos.map((t) => [t.label, t.overdue, t.daysLate, t.tasks.map((x) => x.id)])).toEqual([
+    // Etapas by days late desc, with their sums.
+    expect(summary.projects[0].etapas.map((t) => [t.label, t.overdue, t.daysLate, t.tasks.map((x) => x.id)])).toEqual([
       ["Diseño", 2, 15, ["t-1", "t-3"]],
       ["Presale", 1, 9, ["t-2"]],
       ["Construcción", 0, 0, ["t-4"]],
@@ -152,7 +152,7 @@ describe("InicioAnalitico", () => {
     await settle();
     const nav = screen.getByRole("navigation", { name: "Ir a sección" });
     fireEvent.click(within(nav).getByRole("link", { name: /Por etapa/ }));
-    expect(section("s-tramos").contains(document.activeElement)).toBe(true);
+    expect(section("s-etapas").contains(document.activeElement)).toBe(true);
     // A collapsed section opens when reached from "Ir a".
     act(() => useInicioDashboard.getState().setCollapsed("attention", true));
     fireEvent.click(within(nav).getByRole("link", { name: /Atención/ }));
@@ -181,12 +181,12 @@ describe("InicioAnalitico", () => {
   });
 
   it("offers Quitar filtros when nothing matches", () => {
-    useInicioDashboard.getState().setFilter("tramo", "decoracion");
+    useInicioDashboard.getState().setFilter("etapa", "decoracion");
     renderAnalitico();
     const buttons = screen.getAllByRole("button", { name: "Quitar filtros" });
     expect(buttons.length).toBeGreaterThan(0);
     fireEvent.click(buttons[0]);
-    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, tramo: null });
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, etapa: null });
   });
 
   it("shows each section's empty copy", () => {
@@ -195,7 +195,7 @@ describe("InicioAnalitico", () => {
       attention: [],
       weeklyPace: ANALITICO_DATA.weeklyPace.map((w) => ({ ...w, created: 0, completed: 0 })),
       workload: [],
-      tasksByTramo: [],
+      tasksByEtapa: [],
       todayAgenda: [],
     });
     for (const copy of ["Todo al día", "Sin movimiento en el rango", "Sin tareas asignadas", "Sin tareas abiertas", "Sin eventos ni entregas hoy"]) {

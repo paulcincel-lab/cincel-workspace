@@ -5,7 +5,7 @@
  */
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveClientsCapabilities } from "@/lib/auth/permissions";
-import { canSeeAdminData } from "@/lib/tramos/compat";
+import { canSeeAdminData } from "@/lib/etapas/compat";
 import type { ProjectDetail } from "@/lib/types/core";
 
 /** Whether the viewer is on the project team (responsable, coordinador or miembro). */

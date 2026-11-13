@@ -36,7 +36,7 @@ import {
   type TareasQuery,
 } from "@/lib/tareas/query";
 import { BASE_STATUS_LABEL, parseStatusValue } from "@/lib/tasks/status-options";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +76,7 @@ const CHIP_CLASS = "h-8 rounded-full px-3 text-[12.5px] font-medium";
 export type TareasVisualProps = {
   query: TareasQuery;
   facets: TareasFacets;
-  tramos: WorkflowRef[];
+  etapas: WorkflowRef[];
   /** "Nueva tarea" (the Estilo switch is added by `PageHeader`). */
   actions: ReactNode;
   /** The search box text (debounced into `?q=` by the page). */
@@ -86,7 +86,7 @@ export type TareasVisualProps = {
   onQuery(patch: Partial<TareasQuery>): void;
   /** "No hay tareas con estos filtros" with "Quitar filtros". */
   empty: EmptyStateProps;
-  /** Project Flow's start slot under the header (only with one tramo filter). */
+  /** Project Flow's start slot under the header (only with one etapa filter). */
   startSlot?: ReactNode;
 };
 
@@ -101,7 +101,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * Tareas · Visual (frame `Tareas-Visual`, Estilos #986): the team board.
  * Header, a "Resumen" row (KPI tiles with 7-day sparklines from
  * `tareas.trend(f)`, the "Por estatus" donut over the board totals and the
- * "Esta semana" strip), the filter pills (Mostrar, tramo, Solo mías, search)
+ * "Esta semana" strip), the filter pills (Mostrar, etapa, Solo mías, search)
  * and the kanban (`TaskBoardWidget`): drag or "Mover a…" moves a card
  * (optimistic, rolled back with a toast), 4 cards per column before "Ver N
  * más", and a quick-add at the foot of every column in its status. `n`
@@ -111,7 +111,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export function TareasVisual({
   query,
   facets,
-  tramos,
+  etapas,
   actions,
   search,
   onSearch,
@@ -155,7 +155,7 @@ export function TareasVisual({
   // ── Quick-add per column: the column fixes the status; the project comes from the filter or the line.
   const quickAdd = useQuickAddCreate();
   const onCreate = useCallback((draft: QuickAddDraft) => quickAdd.create(draft), [quickAdd]);
-  const tramoId = query.tramo ? (tramos.find((t) => t.key === query.tramo)?.id ?? null) : null;
+  const etapaId = query.etapa ? (etapas.find((t) => t.key === query.etapa)?.id ?? null) : null;
   const columnLabel = useCallback(
     (key: string) => {
       const parsed = parseStatusValue(key);
@@ -173,7 +173,7 @@ export function TareasVisual({
             context={{
               label: columnLabel(columnKey),
               projectId: query.proyecto,
-              tramoId,
+              etapaId,
               status: columnKey,
               placeholder: TAREAS_VISUAL_QUICK_ADD_PLACEHOLDER,
             }}
@@ -181,7 +181,7 @@ export function TareasVisual({
           />
         </div>
       ) : null,
-    [capabilities.canCreateActivity, columnLabel, query.proyecto, tramoId, onCreate],
+    [capabilities.canCreateActivity, columnLabel, query.proyecto, etapaId, onCreate],
   );
 
   // ── `n`: focus the first column's quick-add (not while typing in a field).
@@ -278,7 +278,7 @@ export function TareasVisual({
       <TareasVisualFilters
         query={query}
         facets={facets}
-        tramos={tramos}
+        etapas={etapas}
         search={search}
         onSearch={onSearch}
         onQuery={onQuery}
@@ -290,19 +290,19 @@ export function TareasVisual({
 
 /**
  * The Visual filter row (`role="group" aria-label="Filtros"`): Mostrar
- * (Todas, Abiertas, En retraso; single-select, Todas also clears the tramo),
- * the tramo pills (single-select, a second click clears it), Solo mías
+ * (Todas, Abiertas, En retraso; single-select, Todas also clears the etapa),
+ * the etapa pills (single-select, a second click clears it), Solo mías
  * (`responsable=yo`), Proyecto (multi-select, #1045) and the search. Pills
  * are `aria-pressed` buttons.
  */
 function TareasVisualFilters({
   query,
   facets,
-  tramos,
+  etapas,
   search,
   onSearch,
   onQuery,
-}: Pick<TareasVisualProps, "query" | "facets" | "tramos" | "search" | "onSearch" | "onQuery">) {
+}: Pick<TareasVisualProps, "query" | "facets" | "etapas" | "search" | "onSearch" | "onQuery">) {
   const mostrarCount = (key: TareasMostrar) => facets.mostrar?.[key] ?? (key === "todas" ? facets.total : undefined);
   const soloMias = query.responsable === "yo";
   // "Ocultar completadas" (#1039): hides the Completado column; remembered per user and in the URL.
@@ -326,7 +326,7 @@ function TareasVisualFilters({
             variant={pressed ? "default" : "outline"}
             aria-pressed={pressed}
             className={CHIP_CLASS}
-            onClick={() => onQuery(chip.key === "todas" ? { mostrar: "todas", tramo: null } : { mostrar: chip.key })}
+            onClick={() => onQuery(chip.key === "todas" ? { mostrar: "todas", etapa: null } : { mostrar: chip.key })}
           >
             {late ? <span aria-hidden="true" className="size-2 rounded-full bg-destructive" /> : null}
             {chip.label}
@@ -339,26 +339,26 @@ function TareasVisualFilters({
         );
       })}
       <span aria-hidden="true" className="h-5 w-px bg-border" />
-      {tramos.map((tramo) => {
-        const pressed = query.tramo === tramo.key;
+      {etapas.map((etapa) => {
+        const pressed = query.etapa === etapa.key;
         return (
           <Button
-            key={tramo.key}
+            key={etapa.key}
             type="button"
             size="sm"
             variant={pressed ? "default" : "outline"}
             aria-pressed={pressed}
             className={CHIP_CLASS}
-            onClick={() => onQuery({ tramo: pressed ? null : tramo.key })}
+            onClick={() => onQuery({ etapa: pressed ? null : etapa.key })}
           >
             <span
               aria-hidden="true"
               className="size-2 rounded-full"
-              style={{ backgroundColor: tramoColorVar(tramo.key, tramo.sortOrder) }}
+              style={{ backgroundColor: etapaColorVar(etapa.key, etapa.sortOrder) }}
             />
-            {tramo.name}
+            {etapa.name}
             <span data-slot="chip-count" className="font-mono">
-              {formatCount(facets.byTramo[tramo.key] ?? 0)}
+              {formatCount(facets.byEtapa[etapa.key] ?? 0)}
             </span>
           </Button>
         );

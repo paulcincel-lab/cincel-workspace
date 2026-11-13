@@ -59,17 +59,17 @@ export const WorkflowTaskTemplateInputSchema = z.object({
   active: z.boolean().optional(),
 });
 
-export const StartTramoAssignmentSchema = z.discriminatedUnion("mode", [
+export const StartEtapaAssignmentSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("self") }),
   z.object({ mode: z.literal("by_phase"), managers: z.record(uuid, uuid.nullable()) }),
   z.object({ mode: z.literal("none") }),
 ]);
 
-export const StartTramoInputSchema = z.object({
+export const StartEtapaInputSchema = z.object({
   projectId: uuid,
   workflowId: uuid,
   phaseIds: z.array(uuid).max(50),
-  assignment: StartTramoAssignmentSchema,
+  assignment: StartEtapaAssignmentSchema,
   autoStart: z.boolean().optional(),
 });
 

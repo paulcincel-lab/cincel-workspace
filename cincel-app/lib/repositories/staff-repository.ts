@@ -86,7 +86,7 @@ type StaffPositionsDto = Required<Pick<Staff, "positions" | "candidatePhases">>;
 /**
  * Puestos and candidate fases per staff id (BE §7.2): `positions` are the
  * person's live puestos in catalog order; `candidatePhases` the distinct
- * active fases of their live, active puestos, in tramo then catalog order.
+ * active fases of their live, active puestos, in etapa then catalog order.
  */
 export async function loadStaffPositions(staffIds: string[]): Promise<Map<string, StaffPositionsDto>> {
   const out = new Map<string, StaffPositionsDto>(staffIds.map((id) => [id, { positions: [], candidatePhases: [] }]));
@@ -195,7 +195,7 @@ export async function reorderStaff(orderedIds: string[]): Promise<void> {
 
 /**
  * Staff who can be assigned to a task. When `workflowId` is given, staff
- * holding a live, active puesto that lists an active fase of that tramo come
+ * holding a live, active puesto that lists an active fase of that etapa come
  * first (`suggested = true`), then everyone by name.
  */
 export async function listAssignableStaff(
@@ -226,12 +226,12 @@ export async function listAssignableStaff(
 }
 
 /**
- * Open tasks per responsable in one tramo, and how many of them are overdue
+ * Open tasks per responsable in one etapa, and how many of them are overdue
  * (commitment date, else delivery date, before `todayIso`). Open = live,
  * unarchived, not completado and no closing custom status, on a live
  * project. One grouped count; people without open tasks are absent.
  */
-export async function countOpenTasksInTramo(
+export async function countOpenTasksInEtapa(
   workflowId: string,
   todayIso: string
 ): Promise<Map<string, { open: number; overdue: number }>> {
@@ -263,7 +263,7 @@ export async function countOpenTasksInTramo(
   return out;
 }
 
-/** The subset of `ids` that are live, active staff (start-tramo manager check). */
+/** The subset of `ids` that are live, active staff (start-etapa manager check). */
 export async function liveActiveStaffIds(ids: string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const rows = await db

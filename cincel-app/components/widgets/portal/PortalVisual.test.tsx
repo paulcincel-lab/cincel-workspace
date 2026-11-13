@@ -9,7 +9,7 @@ import type {
   PortalProjectDTO,
   PortalScheduleDTO,
   PortalTeamMemberDTO,
-  PortalTramoDTO,
+  PortalEtapaDTO,
 } from "@/lib/types/portal";
 
 import { PortalVisual, portalDayMonth, portalMailto, portalMonthYear } from "./PortalVisual";
@@ -34,7 +34,7 @@ const schedule: PortalScheduleDTO = {
     { key: "PA::Acabados", planta: "Planta alta", seccion: "Acabados", start: "2026-12-01", end: "2027-01-20", progressPct: 0 },
   ],
 };
-const tramos: PortalTramoDTO[] = [
+const etapas: PortalEtapaDTO[] = [
   { key: "presale", name: "Presale", state: "completado", progressPct: 100, startMonth: "2026-01" },
   { key: "diseno", name: "Diseño", state: "en_curso", progressPct: 62, startMonth: "2026-06" },
   { key: "construccion", name: "Construcción", state: "por_iniciar", progressPct: 0, startMonth: null },
@@ -77,7 +77,7 @@ function overview(over: Partial<Parameters<typeof buildPortalOverview>[0]> = {})
   return buildPortalOverview({
     project,
     schedule,
-    tramos,
+    etapas,
     files: folders[0].files,
     folders,
     team,
@@ -92,7 +92,7 @@ describe("PortalVisual", () => {
   it("renders hero, fases, entregas, documentos, equipo", () => {
     render(<PortalVisual project={project} data={overview()} />);
 
-    // Hero: address, name, tramo chip, next delivery, ring.
+    // Hero: address, name, etapa chip, next delivery, ring.
     expect(screen.getByText("Av. Presidente Masaryk 120, Polanco")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: "Oficina Polanco" })).toBeTruthy();
     expect(screen.getByText("En Diseño")).toBeTruthy();
@@ -103,7 +103,7 @@ describe("PortalVisual", () => {
     );
     expect(document.body.textContent).not.toContain("FOTO DEL PROYECTO");
 
-    // Fases: one bar per tramo with its state.
+    // Fases: one bar per etapa with its state.
     const fases = screen.getByRole("region", { name: "Fases" });
     const bars = within(fases).getAllByRole("progressbar");
     expect(bars.map((b) => [b.getAttribute("aria-label"), b.getAttribute("aria-valuenow")])).toEqual([
@@ -166,7 +166,7 @@ describe("PortalVisual", () => {
   });
 
   it("without etapas hides Fases and the chip; the caption keeps only the date", () => {
-    render(<PortalVisual project={project} data={overview({ tramos: [] })} />);
+    render(<PortalVisual project={project} data={overview({ etapas: [] })} />);
     expect(screen.queryByRole("region", { name: "Fases" })).toBeNull();
     expect(screen.queryByText(/^En /)).toBeNull();
     expect(screen.getByText(/Entrega final estimada/).textContent).toBe("Entrega final estimada abr 2027");
@@ -185,8 +185,8 @@ describe("PortalVisual", () => {
   });
 
   it("shows a por iniciar etapa's start month when it has one", () => {
-    const withMonth = tramos.map((t) => (t.key === "construccion" ? { ...t, startMonth: "2026-12" } : t));
-    render(<PortalVisual project={project} data={overview({ tramos: withMonth })} />);
+    const withMonth = etapas.map((t) => (t.key === "construccion" ? { ...t, startMonth: "2026-12" } : t));
+    render(<PortalVisual project={project} data={overview({ etapas: withMonth })} />);
     expect(screen.getByText("Por iniciar · dic 2026")).toBeTruthy();
   });
 

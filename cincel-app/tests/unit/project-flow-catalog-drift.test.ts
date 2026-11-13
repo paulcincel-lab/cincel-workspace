@@ -32,12 +32,12 @@ const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 const list = (v: unknown): Loose[] => (Array.isArray(v) ? (v as Loose[]) : []);
 
 function workflowKeyOf(row: Loose): string | undefined {
-  return str(row.workflowKey) ?? str(row.tramoKey) ?? str(row.tramo) ?? str(row.workflow);
+  return str(row.workflowKey) ?? str(row.etapaKey) ?? str(row.etapa) ?? str(row.workflow);
 }
 
 /**
  * Flattens `DEFAULT_CATALOG` into fase and template rows. Accepts the nested
- * form (tramos → phases → templates, as an array or keyed by workflow key) and
+ * form (etapas → phases → templates, as an array or keyed by workflow key) and
  * the flat form (`{ phases, templates }` with workflow and fase keys per row).
  */
 function flattenCatalog(catalog: unknown): FlatCatalog {
@@ -61,7 +61,7 @@ function flattenCatalog(catalog: unknown): FlatCatalog {
     }
   };
 
-  // A flat array of template rows, each naming its tramo and fase.
+  // A flat array of template rows, each naming its etapa and fase.
   if (Array.isArray(catalog) && (catalog as Loose[]).every((r) => typeof r.title === "string")) {
     for (const t of catalog as Loose[]) {
       const workflowKey = workflowKeyOf(t) ?? "";
@@ -76,10 +76,10 @@ function flattenCatalog(catalog: unknown): FlatCatalog {
   }
 
   if (Array.isArray(catalog)) {
-    for (const tramo of catalog as Loose[]) {
-      const workflowKey = workflowKeyOf(tramo) ?? str(tramo.key);
-      if (!workflowKey || !Array.isArray(tramo.phases)) throw new Error("DEFAULT_CATALOG: unknown tramo shape");
-      addNested(workflowKey, list(tramo.phases));
+    for (const etapa of catalog as Loose[]) {
+      const workflowKey = workflowKeyOf(etapa) ?? str(etapa.key);
+      if (!workflowKey || !Array.isArray(etapa.phases)) throw new Error("DEFAULT_CATALOG: unknown etapa shape");
+      addNested(workflowKey, list(etapa.phases));
     }
     return { phases, templates };
   }
@@ -140,33 +140,33 @@ function readBackfillSql(): string {
 }
 
 const flat = flattenCatalog(DEFAULT_CATALOG);
-const byTramo = (key: string) => flat.templates.filter((t) => t.workflowKey === key);
+const byEtapa = (key: string) => flat.templates.filter((t) => t.workflowKey === key);
 
 describe("DEFAULT_CATALOG", () => {
   it("has 14 fases and 10/29/12 templates", () => {
     expect(flat.phases).toHaveLength(14);
-    expect(byTramo("presale")).toHaveLength(10);
-    expect(byTramo("diseno")).toHaveLength(29);
-    expect(byTramo("construccion")).toHaveLength(12);
+    expect(byEtapa("presale")).toHaveLength(10);
+    expect(byEtapa("diseno")).toHaveLength(29);
+    expect(byEtapa("construccion")).toHaveLength(12);
     expect(flat.templates).toHaveLength(51);
   });
 
   it("matches the BE §5.1 fases and §5.2 titles in seed order", () => {
-    for (const tramo of EXPECTED_CATALOG) {
+    for (const etapa of EXPECTED_CATALOG) {
       expect(
-        flat.phases.filter((p) => p.workflowKey === tramo.workflowKey).map((p) => [p.key, p.name]),
-        tramo.workflowKey
-      ).toEqual(tramo.phases.map((p) => [p.key, p.name]));
+        flat.phases.filter((p) => p.workflowKey === etapa.workflowKey).map((p) => [p.key, p.name]),
+        etapa.workflowKey
+      ).toEqual(etapa.phases.map((p) => [p.key, p.name]));
       expect(
-        byTramo(tramo.workflowKey).map((t) => [t.phaseKey, t.title]),
-        tramo.workflowKey
-      ).toEqual(tramo.phases.flatMap((p) => p.titles.map((title) => [p.key, title])));
+        byEtapa(etapa.workflowKey).map((t) => [t.phaseKey, t.title]),
+        etapa.workflowKey
+      ).toEqual(etapa.phases.flatMap((p) => p.titles.map((title) => [p.key, title])));
     }
   });
 
   it("gives every template a legacyTitle equal to the TS description at the same position", () => {
     for (const [workflowKey, legacy] of Object.entries(LEGACY_TS_TEMPLATES)) {
-      const rows = byTramo(workflowKey);
+      const rows = byEtapa(workflowKey);
       expect(rows.map((t) => t.legacyTitle), workflowKey).toEqual(legacy.map((l) => l.description));
     }
   });
@@ -174,7 +174,7 @@ describe("DEFAULT_CATALOG", () => {
   it("keeps the TS fase of each template (accent-insensitive)", () => {
     const key = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
     for (const [workflowKey, legacy] of Object.entries(LEGACY_TS_TEMPLATES)) {
-      const rows = byTramo(workflowKey);
+      const rows = byEtapa(workflowKey);
       expect(rows.map((t) => key(t.phaseName)), workflowKey).toEqual(legacy.map((l) => key(l.phase)));
     }
   });

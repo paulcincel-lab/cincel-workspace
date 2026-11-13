@@ -18,19 +18,19 @@ import {
   resolvePhaseId,
   resolveWorkflowId,
   toUserTaskInput,
-  tramoFases,
+  etapaFases,
 } from "./new-task-form";
 
 /**
  * Task creation shared by `NewTaskDialog` and the smart quick-add
- * (`QuickAddRow`): the tramo catalog key, the keys a created task makes
+ * (`QuickAddRow`): the etapa catalog key, the keys a created task makes
  * stale, the create → board status → subtareas sequence and the quick-add
  * hooks (create without a toast, undo).
  */
 
 /**
- * The tramo catalog with its fases and task templates (the Fase field and
- * "Usar plantilla del tramo" need them). Kept under the `catalog.workflows`
+ * The etapa catalog with its fases and task templates (the Fase field and
+ * "Usar plantilla de la etapa" need them). Kept under the `catalog.workflows`
  * prefix, so every invalidation of `qk.catalog.workflows()` refreshes it.
  */
 export const newTaskWorkflowsKey = () => [...qk.catalog.workflows(), "detail"] as const;
@@ -90,15 +90,15 @@ export async function createTaskWithExtras({ input, statusKey, subtasks, estimat
 }
 
 /**
- * The `createTaskWithExtras` input for a quick-add draft: its tramo (else the
- * first active one) on the tramo's first fase, the assignee as responsable,
+ * The `createTaskWithExtras` input for a quick-add draft: its etapa (else the
+ * first active one) on the etapa's first fase, the assignee as responsable,
  * the date as delivery date, the priority (media by default) and the board
  * column as `statusKey`. Throws `INVALID` without a project.
  */
 export function quickAddTaskVars(draft: QuickAddDraft, workflows: readonly WorkflowDetail[]): CreateTaskVars {
   if (!draft.projectId) throw new Error("INVALID");
-  const workflowId = resolveWorkflowId(draft.tramoId, workflows);
-  const fases = tramoFases(workflows.find((w) => w.id === workflowId));
+  const workflowId = resolveWorkflowId(draft.etapaId, workflows);
+  const fases = etapaFases(workflows.find((w) => w.id === workflowId));
   const resolved = {
     ...draftFromDefaults({ title: draft.title }),
     projectId: draft.projectId,
@@ -144,7 +144,7 @@ export function useQuickAddUndo(projectId: string | null, parentTaskId?: string)
 
 /**
  * Quick-add creation: `create(draft)` maps the draft through
- * `quickAddTaskVars` (loading the tramo catalog if needed) and runs
+ * `quickAddTaskVars` (loading the etapa catalog if needed) and runs
  * `createTaskWithExtras` with the same invalidations as the dialog; no
  * success toast (the row's status line replaces it), errors as a toast.
  * `undo(id)` deletes a task it created.

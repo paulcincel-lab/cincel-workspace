@@ -36,7 +36,7 @@ const VISUAL_AND_ESENCIAL: RecordColumn["hideOn"] = ["visual", "esencial"];
 export const LISTA_COLUMNS: RecordColumn[] = [
   { key: "tarea", label: "Tarea" },
   { key: "proyecto", label: "Proyecto" },
-  { key: "tramo", label: "Etapa" },
+  { key: "etapa", label: "Etapa" },
   { key: "fase", label: "Fase", hideOn: VISUAL_AND_ESENCIAL },
   { key: "responsable", label: "Responsable" },
   { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL, hideOn: ["esencial"] },
@@ -148,7 +148,7 @@ export function listaRow(task: TaskListItem, today: string, summary: ProjectSumm
     estatus: BASE_STATUS_LABEL[task.status],
     tarea: task.title,
     proyecto: task.project.name,
-    tramo: task.workflow?.name ?? null,
+    etapa: task.workflow?.name ?? null,
     fase: task.phase?.name ?? null,
     responsable: task.manager?.name ?? null,
     // The cell renders the avatars (`PeopleStack`); the names are its text value.
@@ -221,14 +221,14 @@ export function withSubtaskRows(
 }
 
 /**
- * The tasks the Lista view shows: the page loads them without the tramo and
+ * The tasks the Lista view shows: the page loads them without the etapa and
  * proyecto filters (they feed the chip counts and the Proyecto options), so
- * the view narrows them here. `tramo` is a key or a comma list of keys.
+ * the view narrows them here. `etapa` is a key or a comma list of keys.
  */
-export function listaTasks(tasks: TaskListItem[], filters: { tramo: string | null; proyecto: string | null }): TaskListItem[] {
-  const keys = filters.tramo
+export function listaTasks(tasks: TaskListItem[], filters: { etapa: string | null; proyecto: string | null }): TaskListItem[] {
+  const keys = filters.etapa
     ? new Set(
-        filters.tramo
+        filters.etapa
           .split(",")
           .map((k) => k.trim())
           .filter(Boolean),

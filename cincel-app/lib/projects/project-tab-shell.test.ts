@@ -59,7 +59,7 @@ describe("loadProjectShell", () => {
     expect(shell?.project).toEqual({
       id: PROJECT,
       name: "Casa Lomas",
-      tramo: null,
+      etapa: null,
       projectType: null,
       addressCity: "CDMX",
       manager: null,

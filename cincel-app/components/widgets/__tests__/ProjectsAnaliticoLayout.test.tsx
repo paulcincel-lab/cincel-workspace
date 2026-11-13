@@ -12,12 +12,12 @@ vi.mock("next/navigation", () => ({
 // A refetch after a save (invalidation) stays in flight, so the cache keeps what the test wrote.
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => ({ getProyectosPageData: vi.fn(() => new Promise(() => {})) }));
 const actions = vi.hoisted(() => ({
-  setProjectCurrentTramoAction: vi.fn(),
+  setProjectCurrentEtapaAction: vi.fn(),
   updateProjectAction: vi.fn(),
   fetchCatalogStaff: vi.fn(),
 }));
 vi.mock("@/lib/actions/projects-actions", () => ({
-  setProjectCurrentTramoAction: actions.setProjectCurrentTramoAction,
+  setProjectCurrentEtapaAction: actions.setProjectCurrentEtapaAction,
   updateProjectAction: actions.updateProjectAction,
 }));
 vi.mock("@/lib/actions/tasks-actions", () => ({}));
@@ -36,14 +36,14 @@ vi.mock("@/lib/actions/page-data/catalog-actions", () => ({ fetchCatalogStaff: a
 const toasts = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toasts }));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
     canSeeAdminData: () => false,
-    listTramos: async () => [],
-    tramoLabel: (key: string) => key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    listEtapas: async () => [],
+    etapaLabel: (key: string) => key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
   };
 });
@@ -83,8 +83,8 @@ function projectLinks(container: HTMLElement): string[] {
   return [...container.querySelectorAll<HTMLAnchorElement>('a[href^="/proyectos/"]')].map((a) => a.getAttribute("href")!);
 }
 
-/** The Tramo filter chips (the summary bar's legend has buttons with the same names). */
-function tramoChips(): HTMLElement {
+/** The Etapa filter chips (the summary bar's legend has buttons with the same names). */
+function etapaChips(): HTMLElement {
   return screen.getByRole("group", { name: "Etapa" });
 }
 
@@ -132,9 +132,9 @@ describe("ProjectsAnaliticoLayout", () => {
     expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas", { scroll: false });
     expect(projectLinks(container)).toEqual(["/proyectos/p-lomas"]);
 
-    fireEvent.click(within(tramoChips()).getByRole("button", { name: /^Diseño/, pressed: false }));
+    fireEvent.click(within(etapaChips()).getByRole("button", { name: /^Diseño/, pressed: false }));
     expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&etapa=diseno", { scroll: false });
-    expect(within(tramoChips()).getByRole("button", { name: /^Diseño/, pressed: true })).toBeTruthy();
+    expect(within(etapaChips()).getByRole("button", { name: /^Diseño/, pressed: true })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Incluir pausados/ }));
     expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&etapa=diseno&pausados=1", { scroll: false });
@@ -154,7 +154,7 @@ describe("ProjectsAnaliticoLayout", () => {
     nav.params = new URLSearchParams("mostrar=nada&etapa=presale,inventado&mios=1");
     const { container } = renderLayout();
     expect(screen.getByRole("radio", { name: /Todos/ }).getAttribute("aria-checked")).toBe("true");
-    expect(within(tramoChips()).getByRole("button", { name: /^Presale/, pressed: true })).toBeTruthy();
+    expect(within(etapaChips()).getByRole("button", { name: /^Presale/, pressed: true })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Solo míos/, pressed: true })).toBeTruthy();
     expect(projectLinks(container)).toEqual(["/proyectos/p-andares"]);
   });
@@ -168,7 +168,7 @@ describe("ProjectsAnaliticoLayout", () => {
     expect(projectToggle("Casa Lomas").getAttribute("aria-expanded")).toBe("true");
     const detail = container.querySelector<HTMLElement>('[data-slot="project-tasks"][data-project="p-lomas"]')!;
     expect(detail).toBeTruthy();
-    // The Tareas columns without Tramo.
+    // The Tareas columns without Etapa.
     const nested = within(detail).getByRole("grid");
     const headers = within(nested).getAllByRole("columnheader").map((th) => th.textContent?.trim());
     expect(headers).toContain("Tarea");
@@ -179,7 +179,7 @@ describe("ProjectsAnaliticoLayout", () => {
     );
     expect(within(detail).getByRole("link", { name: "Ver todas en el proyecto" }).getAttribute("href")).toBe("/proyectos/p-lomas/tareas");
     // The outer grid does not reach into the nested table.
-    expect(document.querySelector('td[data-cell-row="p-lomas"][data-cell-column="tramo"]')?.closest("[data-row-detail]")).toBeNull();
+    expect(document.querySelector('td[data-cell-row="p-lomas"][data-cell-column="etapa"]')?.closest("[data-row-detail]")).toBeNull();
 
     fireEvent.click(projectToggle("Casa Lomas"));
     expect(container.querySelector('[data-slot="project-tasks"]')).toBeNull();
@@ -202,7 +202,7 @@ describe("ProjectsAnaliticoLayout", () => {
     expect(screen.queryByRole("navigation", { name: "Ir a etapa" })).toBeNull();
   });
 
-  it("a etapa segment of the summary bar filters by that etapa", () => {
+  it("an etapa segment of the summary bar filters by that etapa", () => {
     const { container } = renderLayout();
     const legend = screen.getByRole("list", { name: "Filtrar por etapa" });
     const diseno = within(legend).getByRole("button", { name: /Diseño/ });
@@ -239,7 +239,7 @@ describe("ProjectsAnaliticoLayout", () => {
   it("no-match row and Quitar filtros", () => {
     const { container } = renderLayout();
     fireEvent.click(screen.getByRole("radio", { name: /Atrasados vs plan/ }));
-    fireEvent.click(within(tramoChips()).getByRole("button", { name: /^Presale/, pressed: false }));
+    fireEvent.click(within(etapaChips()).getByRole("button", { name: /^Presale/, pressed: false }));
     expect(screen.getByText("Ningún proyecto coincide con los filtros.")).toBeTruthy();
     expect(projectLinks(container)).toEqual([]);
     // KPIs follow the visible rows.
@@ -300,9 +300,9 @@ describe("ProjectsAnaliticoLayout", () => {
       renderLayout();
       const headers = screen.getAllByRole("columnheader").map((th) => th.textContent ?? "");
       expect(headers.slice(0, 3).map((h) => h.trim())).toEqual(["Proyecto", "Etapa actual", "Responsable"]);
-      expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
+      expect(cell("p-lomas", "etapa").textContent).toBe("Diseño");
       expect(cell("p-lomas", "manager").textContent).toBe("Ana López");
-      expect(cell("p-lomas", "tramo").dataset.cellState).toBe("editable");
+      expect(cell("p-lomas", "etapa").dataset.cellState).toBe("editable");
       for (const column of ["real", "deviation", "open", "overdue", "overduePct", "avgDelayDays", "nextDelivery"]) {
         expect(cell("p-lomas", column).dataset.cellState).toBe("inert");
       }
@@ -310,35 +310,35 @@ describe("ProjectsAnaliticoLayout", () => {
 
     it("locks the project cells for a viewer who can't change them", () => {
       renderLayout({ canChangeProjectStage: false, canEditProjectGeneral: false });
-      expect(cell("p-lomas", "tramo").dataset.cellState).toBe("locked");
+      expect(cell("p-lomas", "etapa").dataset.cellState).toBe("locked");
       expect(cell("p-lomas", "manager").dataset.cellState).toBe("locked");
       // Rest state is the same text.
-      expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
+      expect(cell("p-lomas", "etapa").textContent).toBe("Diseño");
     });
 
-    it("changing Etapa actual updates the row at once and saves through setProjectCurrentTramoAction", async () => {
+    it("changing Etapa actual updates the row at once and saves through setProjectCurrentEtapaAction", async () => {
       let resolve!: (value: unknown) => void;
-      actions.setProjectCurrentTramoAction.mockReturnValue(new Promise((r) => (resolve = r)));
+      actions.setProjectCurrentEtapaAction.mockReturnValue(new Promise((r) => (resolve = r)));
       renderLayout();
-      fireEvent.click(cell("p-lomas", "tramo"));
-      // The project's started tramos.
+      fireEvent.click(cell("p-lomas", "etapa"));
+      // The project's started etapas.
       await waitFor(() => expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Presale", "Diseño"]));
       fireEvent.click(screen.getByRole("option", { name: "Presale" }));
 
-      await waitFor(() => expect(actions.setProjectCurrentTramoAction).toHaveBeenCalledWith("p-lomas", "w1"));
+      await waitFor(() => expect(actions.setProjectCurrentEtapaAction).toHaveBeenCalledWith("p-lomas", "w1"));
       // Optimistic: the cell reads Presale before the server answers; the row stays a row.
-      await waitFor(() => expect(cell("p-lomas", "tramo").textContent).toBe("Presale"));
+      await waitFor(() => expect(cell("p-lomas", "etapa").textContent).toBe("Presale"));
       await act(async () => resolve({ ok: true, data: {} }));
       expect(toasts).toHaveBeenCalledWith("Etapa actual guardado.", expect.anything());
     });
 
     it("a refused etapa change puts the row back", async () => {
-      actions.setProjectCurrentTramoAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
+      actions.setProjectCurrentEtapaAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
       renderLayout();
-      fireEvent.click(cell("p-lomas", "tramo"));
+      fireEvent.click(cell("p-lomas", "etapa"));
       fireEvent.click(await screen.findByRole("option", { name: "Presale" }));
       await waitFor(() => expect(toasts.error).toHaveBeenCalled());
-      expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
+      expect(cell("p-lomas", "etapa").textContent).toBe("Diseño");
     });
 
     it("Responsable saves the manager through updateProjectAction", async () => {

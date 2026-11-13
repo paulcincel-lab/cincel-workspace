@@ -237,8 +237,8 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
         "paceScope",
         "projectsProgress",
         "sections",
-        "tasksByTramo",
-        "tasksByTramoAssignee",
+        "tasksByEtapa",
+        "tasksByEtapaAssignee",
         "todayAgenda",
         "weeklyPace",
         "workload",
@@ -285,14 +285,14 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
   });
 
   it("returns 12 ascending weeks of pace and etapa groups with diasProm", async () => {
-    const { weeklyPace, tasksByTramo } = await fetchInicio();
+    const { weeklyPace, tasksByEtapa } = await fetchInicio();
     expect(weeklyPace).toHaveLength(12);
     for (let i = 1; i < weeklyPace.length; i++) expect(weeklyPace[i].weekStart > weeklyPace[i - 1].weekStart).toBe(true);
     expect(weeklyPace[11]).toMatchObject({ created: 5, completed: 1 });
     expect(weeklyPace.slice(0, 11).every((w) => w.created === 0 && w.completed === 0)).toBe(true);
 
-    expect(tasksByTramo).toEqual([
-      expect.objectContaining({ key: "sin-tramo", label: "Sin etapa", value: 4, secondary: 1, extra: { diasProm: 0 } }),
+    expect(tasksByEtapa).toEqual([
+      expect.objectContaining({ key: "sin-etapa", label: "Sin etapa", value: 4, secondary: 1, extra: { diasProm: 0 } }),
     ]);
   });
 
@@ -322,11 +322,11 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
     for (const scope of ["managed_projects", "global"]) {
       session.dataScope = scope;
       const data = await fetchInicio();
-      for (const field of ["kpis", "attention", "myDay", "projectsProgress", "workload", "tasksByTramo"] as const) {
+      for (const field of ["kpis", "attention", "myDay", "projectsProgress", "workload", "tasksByEtapa"] as const) {
         expect(mentionsAny(data[field], [...adminIds(), `Inicio ${run} admin`]), `${scope} ${field}`).toEqual([]);
         expect(mentionsAny(data[field], [clientName, origin]), `${scope} ${field}`).toEqual([]);
       }
-      expect(data.tasksByTramo.some((s) => s.key === "admin")).toBe(false);
+      expect(data.tasksByEtapa.some((s) => s.key === "admin")).toBe(false);
       expect(data.workload.find((p) => p.id === colab.id)).toMatchObject({ open: 4, overdue: 1 });
     }
   });
@@ -336,7 +336,7 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
     session.dataScope = "global";
     const data = await fetchInicio();
     expect(data.attention.map((a) => a.id)).toEqual(expect.arrayContaining([t.overdue, t.admin, t.adminToday]));
-    expect(data.tasksByTramo.some((s) => s.key === "admin")).toBe(true);
+    expect(data.tasksByEtapa.some((s) => s.key === "admin")).toBe(true);
     // Shapes never carry client or origin fields, even for admins.
     expect(mentionsAny(data, [clientName, origin])).toEqual([]);
   });

@@ -56,21 +56,21 @@ vi.mock("@/lib/db/client", () => ({
 }));
 
 const flow = vi.hoisted(() => ({
-  tramoBoard: vi.fn(),
-  previewStartTramo: vi.fn(),
-  startTramo: vi.fn(),
-  undoStartTramo: vi.fn(),
+  etapaBoard: vi.fn(),
+  previewStartEtapa: vi.fn(),
+  startEtapa: vi.fn(),
+  undoStartEtapa: vi.fn(),
 }));
-vi.mock("@/lib/project-flow/readiness", () => ({ tramoBoard: flow.tramoBoard }));
-vi.mock("@/lib/project-flow/start-tramo", () => ({
-  previewStartTramo: flow.previewStartTramo,
-  startTramo: flow.startTramo,
-  undoStartTramo: flow.undoStartTramo,
+vi.mock("@/lib/project-flow/readiness", () => ({ etapaBoard: flow.etapaBoard }));
+vi.mock("@/lib/project-flow/start-etapa", () => ({
+  previewStartEtapa: flow.previewStartEtapa,
+  startEtapa: flow.startEtapa,
+  undoStartEtapa: flow.undoStartEtapa,
 }));
 
 const workflowsRepo = vi.hoisted(() => ({
   listWorkflows: vi.fn(),
-  listTramosNav: vi.fn(),
+  listEtapasNav: vi.fn(),
   setWorkflowAutoStart: vi.fn(),
 }));
 vi.mock("@/lib/repositories/workflows-repository", () => workflowsRepo);
@@ -113,7 +113,7 @@ import { GOOGLE_MANAGED_REFUSAL } from "@/lib/types/workspace-access";
 import * as positionsActionsModule from "./positions-actions";
 import * as projectsActionsModule from "./projects-actions";
 import * as staffActionsModule from "./staff-actions";
-import * as tramoStartActionsModule from "./tramo-start-actions";
+import * as etapaStartActionsModule from "./etapa-start-actions";
 import * as workflowsActionsModule from "./workflows-actions";
 
 const {
@@ -124,8 +124,8 @@ const {
   reorderProjectSpacesAction,
 } = unwrapActions(projectsActionsModule);
 const { setStaffPositionsAction } = unwrapActions(staffActionsModule);
-const { fetchTramoBoardAction, previewStartTramoAction, startTramoAction, undoStartTramoAction } =
-  unwrapActions(tramoStartActionsModule);
+const { fetchEtapaBoardAction, previewStartEtapaAction, startEtapaAction, undoStartEtapaAction } =
+  unwrapActions(etapaStartActionsModule);
 const {
   createPositionAction,
   deletePositionAction,
@@ -136,7 +136,7 @@ const {
 } = unwrapActions(positionsActionsModule);
 const {
   createWorkflowPhaseAction,
-  fetchTramosNavAction,
+  fetchEtapasNavAction,
   fetchWorkflowsAction,
   reorderWorkflowPhasesAction,
   setWorkflowAutoStartAction,
@@ -177,15 +177,15 @@ describe("workflows-actions (§7.1)", () => {
 
   it("lists the etapas nav for any staff session", async () => {
     caps.canManageWorkflows = false;
-    workflowsRepo.listTramosNav.mockResolvedValue([{ id: W, key: "diseno", name: "Diseño", sortOrder: 1 }]);
-    await expect(fetchTramosNavAction()).resolves.toHaveLength(1);
+    workflowsRepo.listEtapasNav.mockResolvedValue([{ id: W, key: "diseno", name: "Diseño", sortOrder: 1 }]);
+    await expect(fetchEtapasNavAction()).resolves.toHaveLength(1);
   });
 
   it("creates a fase with a trimmed name and revalidates nothing", async () => {
     phasesRepo.createPhase.mockResolvedValue({ id: F1 });
     await createWorkflowPhaseAction(W, { name: "  Cobro " });
     expect(phasesRepo.createPhase).toHaveBeenCalledWith(W, { name: "Cobro" }, "actor-1");
-    // Ajustes › Tramos and Puestos read through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
+    // Ajustes › Etapas and Puestos read through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -380,7 +380,7 @@ describe("ActionResult (user-facing mutations)", () => {
   });
 });
 
-describe("tramo-start-actions (§7.4)", () => {
+describe("etapa-start-actions (§7.4)", () => {
   const input = {
     projectId: P,
     workflowId: W,
@@ -389,77 +389,77 @@ describe("tramo-start-actions (§7.4)", () => {
   };
 
   beforeEach(() => {
-    flow.startTramo.mockResolvedValue({ batchId: B, createdCount: 2 });
+    flow.startEtapa.mockResolvedValue({ batchId: B, createdCount: 2 });
     staffRepo.liveActiveStaffIds.mockImplementation(async (ids: string[]) => new Set(ids.filter((id) => id === S1)));
   });
 
   it("reads need canViewActivities", async () => {
     caps.canViewActivities = false;
-    await expect(fetchTramoBoardAction(W)).rejects.toThrow("FORBIDDEN");
-    await expect(previewStartTramoAction(P, W)).rejects.toThrow("FORBIDDEN");
+    await expect(fetchEtapaBoardAction(W)).rejects.toThrow("FORBIDDEN");
+    await expect(previewStartEtapaAction(P, W)).rejects.toThrow("FORBIDDEN");
   });
 
   it("the preview needs canViewProjects and writes nothing", async () => {
     caps.canViewProjects = false;
-    await expect(previewStartTramoAction(P, W)).rejects.toThrow("FORBIDDEN");
-    expect(flow.previewStartTramo).not.toHaveBeenCalled();
+    await expect(previewStartEtapaAction(P, W)).rejects.toThrow("FORBIDDEN");
+    expect(flow.previewStartEtapa).not.toHaveBeenCalled();
     caps.canViewProjects = true;
-    await previewStartTramoAction(P, W);
-    expect(flow.previewStartTramo).toHaveBeenCalledWith(expect.anything(), P, W);
+    await previewStartEtapaAction(P, W);
+    expect(flow.previewStartEtapa).toHaveBeenCalledWith(expect.anything(), P, W);
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("start and undo return an ActionResult", async () => {
-    await expect(tramoStartActionsModule.startTramoAction(input)).resolves.toEqual({
+    await expect(etapaStartActionsModule.startEtapaAction(input)).resolves.toEqual({
       ok: true,
       data: { batchId: B, createdCount: 2 },
     });
     caps.canCreateActivity = false;
-    await expect(tramoStartActionsModule.startTramoAction(input)).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
-    await expect(tramoStartActionsModule.undoStartTramoAction(B)).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
+    await expect(etapaStartActionsModule.startEtapaAction(input)).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
+    await expect(etapaStartActionsModule.undoStartEtapaAction(B)).resolves.toEqual({ ok: false, error: "FORBIDDEN" });
   });
 
   it("passes the viewer scope to the board", async () => {
     caps.admin = false;
-    await fetchTramoBoardAction(W);
-    expect(flow.tramoBoard).toHaveBeenCalledWith(expect.anything(), W, { staffId: "actor-1", isAdmin: false });
-    await expect(fetchTramoBoardAction("bad")).rejects.toThrow("INVALID");
+    await fetchEtapaBoardAction(W);
+    expect(flow.etapaBoard).toHaveBeenCalledWith(expect.anything(), W, { staffId: "actor-1", isAdmin: false });
+    await expect(fetchEtapaBoardAction("bad")).rejects.toThrow("INVALID");
   });
 
   it("start and undo need canCreateActivity", async () => {
     caps.canCreateActivity = false;
-    await expect(startTramoAction(input)).rejects.toThrow("FORBIDDEN");
-    await expect(undoStartTramoAction(B)).rejects.toThrow("FORBIDDEN");
-    expect(flow.startTramo).not.toHaveBeenCalled();
+    await expect(startEtapaAction(input)).rejects.toThrow("FORBIDDEN");
+    await expect(undoStartEtapaAction(B)).rejects.toThrow("FORBIDDEN");
+    expect(flow.startEtapa).not.toHaveBeenCalled();
   });
 
   it("autoStart is admin only", async () => {
     caps.admin = false;
-    await expect(startTramoAction({ ...input, autoStart: true })).rejects.toThrow("FORBIDDEN");
-    await expect(startTramoAction(input)).resolves.toMatchObject({ batchId: B });
+    await expect(startEtapaAction({ ...input, autoStart: true })).rejects.toThrow("FORBIDDEN");
+    await expect(startEtapaAction(input)).resolves.toMatchObject({ batchId: B });
   });
 
   it("validates the input shape", async () => {
-    await expect(startTramoAction({ ...input, projectId: "bad" })).rejects.toThrow("INVALID: projectId");
+    await expect(startEtapaAction({ ...input, projectId: "bad" })).rejects.toThrow("INVALID: projectId");
     await expect(
-      startTramoAction({ ...input, assignment: { mode: "other" } as unknown as typeof input.assignment })
+      startEtapaAction({ ...input, assignment: { mode: "other" } as unknown as typeof input.assignment })
     ).rejects.toThrow("INVALID");
     await expect(
-      startTramoAction({ ...input, phaseIds: Array.from({ length: 51 }, () => F1) })
+      startEtapaAction({ ...input, phaseIds: Array.from({ length: 51 }, () => F1) })
     ).rejects.toThrow("INVALID: phaseIds");
   });
 
   it("by_phase managers must be live, active staff", async () => {
     await expect(
-      startTramoAction({ ...input, assignment: { mode: "by_phase", managers: { [F1]: S1, [F2]: S2 } } })
+      startEtapaAction({ ...input, assignment: { mode: "by_phase", managers: { [F1]: S1, [F2]: S2 } } })
     ).rejects.toThrow("INVALID: managers");
-    await startTramoAction({ ...input, assignment: { mode: "by_phase", managers: { [F1]: S1, [F2]: null } } });
-    expect(flow.startTramo).toHaveBeenCalledTimes(1);
+    await startEtapaAction({ ...input, assignment: { mode: "by_phase", managers: { [F1]: S1, [F2]: null } } });
+    expect(flow.startEtapa).toHaveBeenCalledTimes(1);
   });
 
   it("starts in a transaction as a manual trigger and revalidates", async () => {
-    await startTramoAction({ ...input, autoStart: true });
-    expect(flow.startTramo).toHaveBeenCalledWith(tx, {
+    await startEtapaAction({ ...input, autoStart: true });
+    expect(flow.startEtapa).toHaveBeenCalledWith(tx, {
       projectId: P,
       workflowId: W,
       phaseIds: [F1, F2],
@@ -478,8 +478,8 @@ describe("tramo-start-actions (§7.4)", () => {
   });
 
   it("undoes a batch in a transaction", async () => {
-    await undoStartTramoAction(B);
-    expect(flow.undoStartTramo).toHaveBeenCalledWith(tx, B, "actor-1");
-    await expect(undoStartTramoAction("bad")).rejects.toThrow("INVALID");
+    await undoStartEtapaAction(B);
+    expect(flow.undoStartEtapa).toHaveBeenCalledWith(tx, B, "actor-1");
+    await expect(undoStartEtapaAction("bad")).rejects.toThrow("INVALID");
   });
 });

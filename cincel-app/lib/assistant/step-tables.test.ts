@@ -90,8 +90,8 @@ describe("step tables", () => {
     ])!;
     expect(table.groups[0]!.id).toBe(FLAT_GROUP_ID);
     expect(table.groups[0]!.rows).toEqual([
-      { id: "Ana Ruiz-0", persona: "Ana Ruiz", tramo: "Diseño", abiertas: 6, carga: 120 },
-      { id: "Jorge Mena-1", persona: "Jorge Mena", tramo: null, abiertas: 4, carga: 80 },
+      { id: "Ana Ruiz-0", persona: "Ana Ruiz", etapa: "Diseño", abiertas: 6, carga: 120 },
+      { id: "Jorge Mena-1", persona: "Jorge Mena", etapa: null, abiertas: 4, carga: 80 },
     ]);
     // Strict thresholds: > 100 critical, 80–100 warning.
     const rule = table.heat!.find((h) => h.key === "carga")!;

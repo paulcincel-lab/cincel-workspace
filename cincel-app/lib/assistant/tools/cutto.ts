@@ -105,7 +105,7 @@ const CUTTO_COPY: Record<string, string> = {
   NOT_FOUND: "No se encontró en Cutto.",
   NO_EMAIL: "Esa persona no tiene correo registrado en Cincel.",
   NO_PROJECT: "Indica el proyecto.",
-  NO_TRAMO: "El proyecto no tiene una etapa actual; asígnalo antes de crear tareas.",
+  NO_ETAPA: "El proyecto no tiene una etapa actual; asígnalo antes de crear tareas.",
   NO_ACTION_ITEMS: "La reunión no tiene acuerdos para convertir en tareas.",
 };
 
@@ -398,7 +398,7 @@ const meeting_to_tasks = defineTool({
     const resolved = await resolveProject(input.project, ctx.context);
     if (!resolved.ok) return resolved;
     const { project } = resolved;
-    if (!project.currentWorkflowId) return fail("NO_TRAMO");
+    if (!project.currentWorkflowId) return fail("NO_ETAPA");
     let items: { text: string; assigneeEmail?: string }[];
     try {
       items = await client.getMeetingActionItems({ meetingId: input.meetingId });

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * The Ajustes catalog mutations (Query Migration 9b, #964) return
  * `ActionResult`, so their codes survive production builds: estatus,
- * puestos, and the tramos templates, fases and auto start.
+ * puestos, and the etapas templates, fases and auto start.
  */
 
 const viewer = vi.hoisted(() => ({ access: "Administrador" as string }));
@@ -157,7 +157,7 @@ describe("etapas mutations", () => {
     }
   });
 
-  it("keeps NAME_TAKEN for the copy table (tramosErrorText)", async () => {
+  it("keeps NAME_TAKEN for the copy table (etapasErrorText)", async () => {
     phasesRepo.createPhase.mockRejectedValue(new Error("NAME_TAKEN"));
     await expect(createWorkflowPhaseAction(W, { name: "Cobro" })).resolves.toEqual({ ok: false, error: "NAME_TAKEN" });
   });
@@ -173,7 +173,7 @@ describe("etapas mutations", () => {
     const row = { id: F, workflowId: W, name: "Cobro" };
     phasesRepo.createPhase.mockResolvedValue(row);
     await expect(createWorkflowPhaseAction(W, { name: "Cobro" })).resolves.toEqual({ ok: true, data: row });
-    // Ajustes › Tramos and Puestos read through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
+    // Ajustes › Etapas and Puestos read through TanStack Query; Tareas reads `qk.tareas.*` (Phase 4).
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

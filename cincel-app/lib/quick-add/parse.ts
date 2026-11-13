@@ -1,5 +1,5 @@
 /**
- * Smart quick-add parser (pure, client-safe): `@persona`, `#tramo`, dates,
+ * Smart quick-add parser (pure, client-safe): `@persona`, `#etapa`, dates,
  * `!prioridad`, `~2h` / `~30m` (horas estimadas) and `/` commands, written on the last line of a list, column
  * or card (`QuickAddRow`).
  *
@@ -11,16 +11,16 @@
 import type { TaskPriority } from "@/lib/types/core";
 
 export type QuickAddPerson = { id: string; name: string; suggested?: boolean; openCount?: number; overdueCount?: number };
-export type QuickAddTramo = { id: string; key: string; name: string };
+export type QuickAddEtapa = { id: string; key: string; name: string };
 export type QuickAddParseContext = {
   /** YYYY-MM-DD, org time zone */
   today: string;
   people: readonly QuickAddPerson[];
-  tramos: readonly QuickAddTramo[];
+  etapas: readonly QuickAddEtapa[];
   meId: string | null;
 };
 export type QuickAddToken = {
-  kind: "person" | "tramo" | "date" | "priority" | "hours";
+  kind: "person" | "etapa" | "date" | "priority" | "hours";
   start: number;
   end: number;
   raw: string;
@@ -32,7 +32,7 @@ export type QuickAddToken = {
 export type ParsedQuickAdd = {
   title: string;
   assigneeId?: string;
-  tramoId?: string;
+  etapaId?: string;
   dueDate?: string;
   priority?: TaskPriority;
   /** Planned hours from a `~2h` / `~30m` token (0 < x <= 80). */
@@ -185,7 +185,7 @@ function matchDate(tokens: readonly RawToken[], i: number, today: string): DateM
   return null;
 }
 
-// ── People, tramos, priority ────────────────────────────────────────────────
+// ── People, etapas, priority ────────────────────────────────────────────────
 
 const byName = (a: QuickAddPerson, b: QuickAddPerson) => a.name.localeCompare(b.name, "es-MX");
 
@@ -214,12 +214,12 @@ export function personHandle(person: QuickAddPerson, people: readonly QuickAddPe
   return `@${words.join("")}`;
 }
 
-function matchTramos(query: string, tramos: readonly QuickAddTramo[]): QuickAddTramo[] {
+function matchEtapas(query: string, etapas: readonly QuickAddEtapa[]): QuickAddEtapa[] {
   if (!query) return [];
-  const forms = (t: QuickAddTramo) => [normalizeQuickAdd(t.key), normalizeQuickAdd(t.name)];
-  const exact = tramos.filter((t) => forms(t).includes(query));
+  const forms = (t: QuickAddEtapa) => [normalizeQuickAdd(t.key), normalizeQuickAdd(t.name)];
+  const exact = etapas.filter((t) => forms(t).includes(query));
   if (exact.length > 0 || query.length < 2) return exact;
-  return tramos.filter((t) => forms(t).some((f) => f.startsWith(query)));
+  return etapas.filter((t) => forms(t).some((f) => f.startsWith(query)));
 }
 
 const PRIORITIES: readonly { value: TaskPriority; label: string }[] = [
@@ -288,14 +288,14 @@ export function parseQuickAdd(text: string, ctx: QuickAddParseContext): ParsedQu
     }
 
     if (sigil === "#") {
-      const found = matchTramos(t.norm.slice(1), ctx.tramos);
+      const found = matchEtapas(t.norm.slice(1), ctx.etapas);
       if (found.length === 1) {
-        push(i, { kind: "tramo", status: "resolved", value: found[0].id, label: found[0].name });
-        out.tramoId = found[0].id;
+        push(i, { kind: "etapa", status: "resolved", value: found[0].id, label: found[0].name });
+        out.etapaId = found[0].id;
       } else if (found.length > 1) {
-        push(i, { kind: "tramo", status: "ambiguous", candidates: found.map((w) => ({ id: w.id, label: w.name })) });
+        push(i, { kind: "etapa", status: "ambiguous", candidates: found.map((w) => ({ id: w.id, label: w.name })) });
       } else {
-        push(i, { kind: "tramo", status: "unknown" });
+        push(i, { kind: "etapa", status: "unknown" });
       }
       continue;
     }

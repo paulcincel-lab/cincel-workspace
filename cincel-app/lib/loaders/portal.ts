@@ -6,7 +6,7 @@ import { listPortalFolder, listPortalFolderGroups } from "@/lib/portal/files";
 import type { PortalProjectTab } from "@/lib/portal/project-tabs";
 import {
   getPortalProject,
-  getPortalProjectTramos,
+  getPortalProjectEtapas,
   getPortalSchedule,
   getPortalTeam,
   listPortalProjects,
@@ -19,7 +19,7 @@ import type {
   PortalProjectDTO,
   PortalScheduleDTO,
   PortalTeamMemberDTO,
-  PortalTramoDTO,
+  PortalEtapaDTO,
 } from "@/lib/types/portal";
 
 /**
@@ -42,7 +42,7 @@ export type PortalProjectData = {
   /** Cronograma and Resumen; null otherwise, and when the project has no schedule. */
   schedule: PortalScheduleDTO | null;
   /** Resumen only; empty otherwise. */
-  tramos: PortalTramoDTO[];
+  etapas: PortalEtapaDTO[];
   /** Resumen only: the top of `02 Cliente`; null on other tabs, when not ready or when Drive fails. */
   documents: PortalFileDTO[] | null;
   /** Resumen only: the client folder one level deep ("General" first); null like `documents`. */
@@ -97,10 +97,10 @@ export async function loadPortalProjectData(
   }
 
   const isResumen = input.tab === "resumen";
-  const [project, schedule, tramos, shared, team, ownUploads] = await Promise.all([
+  const [project, schedule, etapas, shared, team, ownUploads] = await Promise.all([
     getPortalProject(access),
     isResumen || input.tab === "cronograma" ? getPortalSchedule(access) : Promise.resolve(null),
-    isResumen ? getPortalProjectTramos(access) : Promise.resolve([]),
+    isResumen ? getPortalProjectEtapas(access) : Promise.resolve([]),
     isResumen ? loadSharedDocuments(access) : Promise.resolve(NO_DOCUMENTS),
     isResumen ? getPortalTeam(access) : Promise.resolve([]),
     // "Subido por": files this client uploaded show "Tú", the rest "Cincel" (no staff names, no Drive owners).
@@ -111,5 +111,5 @@ export async function loadPortalProjectData(
   const documentFolders =
     shared.documentFolders &&
     shared.documentFolders.map((group) => ({ ...group, files: markPortalClientUploads(group.files, ownUploads) }));
-  return { project, schedule, tramos, documents, documentFolders, team };
+  return { project, schedule, etapas, documents, documentFolders, team };
 }

@@ -1,6 +1,6 @@
 /**
  * E2E: Tareas › Analítico, "Ocultar completadas" (#1039). The switch hides
- * the completed tasks of the table, the tramo group says "1 completada
+ * the completed tasks of the table, the etapa group says "1 completada
  * oculta · Mostrar", the URL carries `?completadas=0`, and the choice is
  * remembered across reloads (a URL without the param follows the saved
  * preference). "Mostrar" turns it off again.

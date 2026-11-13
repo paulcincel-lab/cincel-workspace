@@ -11,7 +11,7 @@ import { loadProyectoShell } from "@/lib/loaders/proyectos-shell";
 import type { ProjectTabShell } from "@/lib/projects/project-tab-shell";
 import { Hydrate } from "@/lib/query/hydrate";
 import { qk } from "@/lib/query/keys";
-import { catalogContactsOptions, catalogStaffOptions, catalogTramosOptions } from "@/lib/query/options/catalog";
+import { catalogContactsOptions, catalogStaffOptions, catalogEtapasOptions } from "@/lib/query/options/catalog";
 import { proyectoFichaOptions, proyectoHistoryOptions, seedFichaKeys } from "@/lib/query/options/proyectos";
 import { proyectoShellOptions } from "@/lib/query/options/proyectos-shell";
 import { getQueryClient, prefetch } from "@/lib/query/server";
@@ -86,8 +86,8 @@ export default async function ProjectFichaPage({ params }: { params: Promise<{ i
     caps.canEditProjectGeneral
       ? prefetch(qc, catalogContactsOptions(), () => loadCatalogContacts(user, {}))
       : null,
-    // The tramos card lists tramos to start, and "Asignar tramo" for admins.
-    caps.canChangeProjectStage || isAdmin ? prefetch(qc, catalogTramosOptions(), () => loadCatalogWorkflows()) : null,
+    // The etapas card lists etapas to start, and "Asignar etapa" for admins.
+    caps.canChangeProjectStage || isAdmin ? prefetch(qc, catalogEtapasOptions(), () => loadCatalogWorkflows()) : null,
   ]);
 
   return (

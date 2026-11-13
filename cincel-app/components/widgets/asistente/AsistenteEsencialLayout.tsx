@@ -49,7 +49,7 @@ import {
   unwrapOutput,
   type ToolApprovalGroup,
 } from "@/lib/assistant/tool-steps";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorVar } from "@/lib/etapas/etapa-color";
 import type { AssistantMessageMeta, AssistantUIMessage, ContextChip } from "@/lib/types/asistente";
 import type { AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
 
@@ -463,7 +463,7 @@ function AssistantMessage({
   );
 }
 
-/** A read tool's task rows: tramo dot, title link and colored lateness; 6 rows, then a link to Tareas. */
+/** A read tool's task rows: etapa dot, title link and colored lateness; 6 rows, then a link to Tareas. */
 function TaskList({ tool }: { tool: ToolPart }) {
   const list = taskListOf(tool.output);
   if (!list) return null;
@@ -477,7 +477,7 @@ function TaskList({ tool }: { tool: ToolPart }) {
               title={row.title}
               href={row.href}
               leading={
-                <span aria-hidden className="size-[7px] shrink-0 rounded-full" style={{ backgroundColor: tramoColorVar(row.tramo) }} />
+                <span aria-hidden className="size-[7px] shrink-0 rounded-full" style={{ backgroundColor: etapaColorVar(row.etapa) }} />
               }
               status={row.trailing ? { kind: "text", label: row.trailing.label, tone: row.trailing.tone } : null}
             />

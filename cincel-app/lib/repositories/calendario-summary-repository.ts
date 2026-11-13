@@ -87,7 +87,7 @@ export async function loadSummaryData(
     await eventItemsInRange(
       user,
       { from: input.from, to: addDays(input.to, MEETING_LOOKAHEAD_DAYS) },
-      { mostrar: "todo", quien: "yo", proyectos: [], tramo: null, responsable: null },
+      { mostrar: "todo", quien: "yo", proyectos: [], etapa: null, responsable: null },
       { canViewTeam: false },
     )
   ).items;

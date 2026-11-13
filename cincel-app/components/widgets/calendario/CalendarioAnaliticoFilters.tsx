@@ -5,13 +5,13 @@ import { useMemo, type ReactNode } from "react";
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { IncludeSupportSwitch } from "@/components/widgets/IncludeSupportSwitch";
 import { ProjectFilter } from "@/components/widgets/ProjectFilter";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type { CalMostrar } from "@/lib/types/calendario";
 
-import { CALENDARIO_FILTER_COPY, FILTER_MOSTRAR, TRAMO_ALL, TRAMO_NONE, type CalendarioFiltersProps } from "./calendario-filters-model";
+import { CALENDARIO_FILTER_COPY, FILTER_MOSTRAR, ETAPA_ALL, ETAPA_NONE, type CalendarioFiltersProps } from "./calendario-filters-model";
 
-/** Analítico filters (`Analitico`): a `FilterCard` with MOSTRAR, RESPONSABLE and TRAMO, plus Proyecto and "Incluir apoyo" (FE §3). */
-export function CalendarioAnaliticoFilters({ filters, canViewTeam, projects, tramos, onChange }: CalendarioFiltersProps): ReactNode {
+/** Analítico filters (`Analitico`): a `FilterCard` with MOSTRAR, RESPONSABLE and ETAPA, plus Proyecto and "Incluir apoyo" (FE §3). */
+export function CalendarioAnaliticoFilters({ filters, canViewTeam, projects, etapas, onChange }: CalendarioFiltersProps): ReactNode {
   const copy = CALENDARIO_FILTER_COPY;
   const groups = useMemo<FilterGroup[]>(
     () => [
@@ -23,17 +23,17 @@ export function CalendarioAnaliticoFilters({ filters, canViewTeam, projects, tra
         options: canViewTeam ? [{ value: "yo", label: copy.yo }, { value: "todos", label: copy.todos }] : [{ value: "yo", label: copy.yo }],
       },
       {
-        id: "tramo",
-        label: copy.tramo,
-        value: filters.tramo ?? TRAMO_ALL,
+        id: "etapa",
+        label: copy.etapa,
+        value: filters.etapa ?? ETAPA_ALL,
         options: [
-          { value: TRAMO_ALL, label: copy.todos },
-          ...tramos.map((t) => ({ value: t.id, label: t.name, color: tramoColorVar(t.key, t.sortOrder) })),
-          { value: TRAMO_NONE, label: copy.sinTramo },
+          { value: ETAPA_ALL, label: copy.todos },
+          ...etapas.map((t) => ({ value: t.id, label: t.name, color: etapaColorVar(t.key, t.sortOrder) })),
+          { value: ETAPA_NONE, label: copy.sinEtapa },
         ],
       },
     ],
-    [copy, filters.mostrar, filters.quien, filters.tramo, canViewTeam, tramos],
+    [copy, filters.mostrar, filters.quien, filters.etapa, canViewTeam, etapas],
   );
 
   return (
@@ -43,7 +43,7 @@ export function CalendarioAnaliticoFilters({ filters, canViewTeam, projects, tra
         onChange={(groupId, value) => {
           if (groupId === "mostrar") onChange({ mostrar: value as CalMostrar });
           else if (groupId === "responsable") onChange({ quien: value === "todos" ? "todos" : "yo" });
-          else if (groupId === "tramo") onChange({ tramo: value === TRAMO_ALL ? null : value });
+          else if (groupId === "etapa") onChange({ etapa: value === ETAPA_ALL ? null : value });
         }}
         extra={
           <>

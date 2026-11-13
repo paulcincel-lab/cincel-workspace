@@ -33,7 +33,7 @@ export function replaceMiEspacioParam(key: string, value: string | null): void {
 export const ESTADO_PARAM = "estado";
 export const ESTADO_RETRASO = "retraso";
 /** `?etapa=<key>` (old links: `?tramo=`): tasks of one etapa; absent = every etapa. */
-export const TRAMO_PARAM = "etapa";
+export const ETAPA_PARAM = "etapa";
 /** `?q=`: searches task, checklist and notification titles. */
 export const SEARCH_PARAM = "q";
 /** `?abiertos=<projectId>,<projectId>`: the expanded project groups; absent = all, empty = none. */
@@ -43,7 +43,7 @@ export type MiEspacioEstado = "abiertas" | "retraso";
 
 export type MiEspacioFilters = {
   estado: MiEspacioEstado;
-  tramo: string | null;
+  etapa: string | null;
   q: string;
   /** Expanded project ids; null = every project. */
   abiertos: string[] | null;
@@ -54,7 +54,7 @@ export function parseMiEspacioFilters(params: URLSearchParams | null): MiEspacio
   const abiertos = params?.get(ABIERTOS_PARAM) ?? null;
   return {
     estado: params?.get(ESTADO_PARAM) === ESTADO_RETRASO ? "retraso" : "abiertas",
-    tramo: readEtapaParam(params) || null,
+    etapa: readEtapaParam(params) || null,
     q: params?.get(SEARCH_PARAM) ?? "",
     abiertos: abiertos === null ? null : abiertos.split(",").filter(Boolean),
   };

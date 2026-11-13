@@ -46,8 +46,8 @@ export type ActionErrorContext = {
   entity?: "project" | "phase" | "position" | "space" | "template";
   /** `INVALID`: "status" for the "Cuenta como completada" rule; anything else is generic. */
   invalid?: "status" | "other";
-  /** `TOUCHED`: the tramo name. */
-  tramoName?: string;
+  /** `TOUCHED`: the etapa name. */
+  etapaName?: string;
   /** `NAME_TAKEN` on a template: the fase name. */
   phaseName?: string;
 };
@@ -127,7 +127,7 @@ function codeText(code: string, context: ActionErrorContext): string {
     case "NOT_STARTED":
       return "Esa etapa aún no se inicia en el proyecto.";
     case "TOUCHED":
-      return `No se puede deshacer: ya se editó una de las tareas creadas o ${context.tramoName ?? "la etapa"} se inició de nuevo después.`;
+      return `No se puede deshacer: ya se editó una de las tareas creadas o ${context.etapaName ?? "la etapa"} se inició de nuevo después.`;
     case "IN_USE":
       return "Este puesto se asigna desde un grupo de Google. Quita el grupo en Configuración → Google primero.";
     case "INVALID":

@@ -14,7 +14,7 @@ import { ProgressListWidget } from "@/components/widgets/ProgressListWidget";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { cuttoLinks } from "@/lib/integrations/cutto-links";
 import { personasDetailOptions } from "@/lib/query/options/personas";
-import { tramoLabel } from "@/lib/tramos/compat";
+import { etapaLabel } from "@/lib/etapas/compat";
 import type { PersonaDetail as PersonaDetailData } from "@/lib/types/redesign";
 import type { KpiDatum, PersonDatum } from "@/lib/types/widgets";
 
@@ -46,16 +46,16 @@ function fullName(detail: PersonaDetailData): string {
   return last ? `${detail.staff.name} ${last}` : detail.person.name;
 }
 
-/** "Puesto · Tramo", from the person's puesto and tramo when present. */
+/** "Puesto · Etapa", from the person's puesto and etapa when present. */
 function headerDescription(person: PersonDatum): string | undefined {
-  const parts = [person.puesto?.trim() || null, person.tramo ? tramoLabel(person.tramo) : null].filter(
+  const parts = [person.puesto?.trim() || null, person.etapa ? etapaLabel(person.etapa) : null].filter(
     (p): p is string => Boolean(p),
   );
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 /**
- * Persona detalle (redesign FE §3.6, §4.7): header (avatar, puesto, tramo,
+ * Persona detalle (redesign FE §3.6, §4.7): header (avatar, puesto, etapa,
  * contact links incl. "Abrir chat en Cutto"), stats (`KpiWidget`), tareas asignadas
  * (`AttentionListWidget`), proyectos (`ProgressListWidget`) and the week's
  * availability as a single-row `PeopleWidget`, then "Actividad reciente"

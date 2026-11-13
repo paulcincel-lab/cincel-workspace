@@ -85,7 +85,7 @@ describe("createProjectAction (name only)", () => {
     );
   });
 
-  it("refuses a starting etapa without the start-tramo capability", async () => {
+  it("refuses a starting etapa without the start-etapa capability", async () => {
     activities.canCreateActivity = false;
     await expect(createProjectAction({ name: "Casa Valle", startWorkflowId: null })).rejects.toThrow("FORBIDDEN");
     expect(repo.createProject).not.toHaveBeenCalled();

@@ -4,7 +4,7 @@
  * and shows under "Puesto"; the access role ("Acceso") is a separate field
  * of the collaborator editor and never shows as the puesto. There is no
  * "Áreas" field or column anymore, and picking a puesto shows its candidate
- * fases as "{tramo} · {fase}".
+ * fases as "{etapa} · {fase}".
  *
  * IMPORTANT: Run only against an ephemeral or local environment (never shared staging).
  */
@@ -20,20 +20,20 @@ const PUESTO = `Puesto E2E ${RUN_ID}`;
 const AREAS = /^Áreas?$/;
 
 let member: E2EUser;
-/** The candidate fase linked to the puesto, as the editor prints it: "{tramo} · {fase}". */
+/** The candidate fase linked to the puesto, as the editor prints it: "{etapa} · {fase}". */
 let candidateLabel = "";
 
 /** A puesto with one candidate fase (the first Presale fase) and a Colaborador who holds it. */
 async function seedPuestoAndMember(): Promise<void> {
   member = await createStaffUser({ tag: "Equipo", role: "Colaborador" });
   await withDb(async (sql) => {
-    const [phase] = await sql<{ id: string; name: string; tramo: string }[]>`
-      select p.id, p.name, w.name as tramo
+    const [phase] = await sql<{ id: string; name: string; etapa: string }[]>`
+      select p.id, p.name, w.name as etapa
       from core.workflow_phases p join core.workflows w on w.id = p.workflow_id
       where w.key = 'presale' and w.deleted_at is null and p.active
       order by p.sort_order limit 1`;
     if (!phase) throw new Error("seeded Presale fases not found");
-    candidateLabel = `${phase.tramo} · ${phase.name}`;
+    candidateLabel = `${phase.etapa} · ${phase.name}`;
     const [position] = await sql<{ id: string }[]>`
       insert into core.positions (name, sort_order, active) values (${PUESTO}, 999, true) returning id`;
     await sql`insert into core.position_phases (position_id, phase_id) values (${position.id}, ${phase.id})`;
@@ -59,7 +59,7 @@ test.describe("Equipo · Puestos y Acceso", () => {
 
   test("the team table shows the puesto under Puesto, never the access role, and has no Áreas column", async ({ page }) => {
     await page.goto(`${BASE_URL}/personas?estilo=analitico`, { waitUntil: "domcontentloaded" });
-    const table = page.getByRole("table", { name: "Personas por tramo" });
+    const table = page.getByRole("table", { name: "Personas por etapa" });
     await expect(table).toBeVisible({ timeout: 30_000 });
     await expect(table.getByRole("columnheader", { name: "Puesto", exact: true })).toBeVisible();
     await expect(table.getByRole("columnheader", { name: AREAS })).toHaveCount(0);

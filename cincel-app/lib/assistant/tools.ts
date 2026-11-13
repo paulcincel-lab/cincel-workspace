@@ -18,7 +18,7 @@ import {
   setProjectContactsAction,
   updateProjectAction,
 } from "@/lib/actions/projects-actions";
-import { startTramoAction } from "@/lib/actions/tramo-start-actions";
+import { startEtapaAction } from "@/lib/actions/etapa-start-actions";
 import { createUserTaskAction, assignTaskAction, mergeTasksAction } from "@/lib/actions/tasks-actions";
 import { listViewerProjects, listViewerTasks } from "@/lib/assistant/reads";
 import { fetchContactsAction, createContactAction, mergeContactsAction } from "@/lib/actions/contacts-actions";
@@ -48,7 +48,7 @@ import type {
 const RISK_NOTE =
   "riesgo derivado del avance y de tareas vencidas/bloqueadas (Alto/Medio/Bajo)";
 
-// Default tramo keys (core.workflows.key) seeded on a fresh install.
+// Default etapa keys (core.workflows.key) seeded on a fresh install.
 const WORKFLOW_ENUM = z.enum(["presale", "diseno", "construccion"]);
 const ONBOARD_WORKFLOW_ENUM = WORKFLOW_ENUM;
 const WORKFLOW_LABELS: Record<string, string> = {
@@ -174,7 +174,7 @@ export const list_activities_due = tool({
       description: t.title,
       project: t.project.name,
       workflow: t.workflow?.name ?? null,
-      // Tramo identity for the tramo color (`tramoColorSlot`) of the Analítico data panel.
+      // Etapa identity for the etapa color (`etapaColorSlot`) of the Analítico data panel.
       workflowKey: t.workflow?.key ?? null,
       workflowSortOrder: t.workflow?.sortOrder ?? null,
       phase: t.phase?.name ?? null,
@@ -188,11 +188,11 @@ export const list_activities_due = tool({
   },
 });
 
-/** The tramo with the most open tasks (first one met on a tie); null without any. */
-function mainWorkflowOf(tramos: Map<string, number> | undefined): string | null {
+/** The etapa with the most open tasks (first one met on a tie); null without any. */
+function mainWorkflowOf(etapas: Map<string, number> | undefined): string | null {
   let best: string | null = null;
   let most = 0;
-  for (const [name, count] of tramos ?? []) {
+  for (const [name, count] of etapas ?? []) {
     if (count > most) {
       best = name;
       most = count;
@@ -210,15 +210,15 @@ export const team_workload_summary = tool({
     const openTasks = await listViewerTasks({ status: ["pendiente", "en_proceso", "bloqueado"] });
 
     const byManager = new Map<string, number>();
-    // Open tasks per person and tramo: the tramo with the most is the person's `mainWorkflow`.
-    const tramosByManager = new Map<string, Map<string, number>>();
+    // Open tasks per person and etapa: the etapa with the most is the person's `mainWorkflow`.
+    const etapasByManager = new Map<string, Map<string, number>>();
     for (const t of openTasks) {
       if (!t.manager) continue;
       byManager.set(t.manager.id, (byManager.get(t.manager.id) ?? 0) + 1);
       if (!t.workflow) continue;
-      const tramos = tramosByManager.get(t.manager.id) ?? new Map<string, number>();
-      tramos.set(t.workflow.name, (tramos.get(t.workflow.name) ?? 0) + 1);
-      tramosByManager.set(t.manager.id, tramos);
+      const etapas = etapasByManager.get(t.manager.id) ?? new Map<string, number>();
+      etapas.set(t.workflow.name, (etapas.get(t.workflow.name) ?? 0) + 1);
+      etapasByManager.set(t.manager.id, etapas);
     }
 
     return members.slice(0, 100).map((m) => {
@@ -233,7 +233,7 @@ export const team_workload_summary = tool({
         capacity: m.capacity,
         activeTasks,
         occupancyPct: Math.round((activeTasks / cap) * 100),
-        mainWorkflow: mainWorkflowOf(tramosByManager.get(m.id)),
+        mainWorkflow: mainWorkflowOf(etapasByManager.get(m.id)),
       };
     });
   },
@@ -510,7 +510,7 @@ export const onboard_client = tool({
         }),
       );
 
-    // No tramo on create: the chosen tramo starts below with the managers.
+    // No etapa on create: the chosen etapa starts below with the managers.
     const project = unwrapActionResult(await createProjectAction({ name: projectName, startWorkflowId: null }));
 
     // The project's client is admin only (`clientId`); other roles link the
@@ -527,7 +527,7 @@ export const onboard_client = tool({
     const phaseIds = workflowResolved.value.phases.filter((p) => p.active).map((p) => p.id);
     if (phaseIds.length > 0) {
       unwrapActionResult(
-        await startTramoAction({
+        await startEtapaAction({
           projectId: project.id,
           workflowId: workflowResolved.value.id,
           phaseIds,

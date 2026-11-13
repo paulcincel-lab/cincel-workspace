@@ -236,7 +236,7 @@ describe.skipIf(!url)("task sheet page data (test DB)", async () => {
       expect(data?.task.history[1].eventAt).toBe("2026-11-01T10:00:00.123Z");
       expect(data?.task.attachments[0]).toMatchObject({ fileName: "nota.txt", uploadedBy: { id: viewerId } });
       expect(data?.task.links).toHaveLength(1);
-      // Active fases of the task's tramo, by sortOrder; the inactive one is left out.
+      // Active fases of the task's etapa, by sortOrder; the inactive one is left out.
       expect(data?.phases.map((p) => p.id)).toEqual([phaseId, expect.any(String)]);
       expect(data?.phases.map((p) => p.id)).not.toContain(inactivePhaseId);
       expect(data?.workflows.some((w) => w.id === workflowId)).toBe(true);

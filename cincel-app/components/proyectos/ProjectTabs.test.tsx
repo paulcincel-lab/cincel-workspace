@@ -23,8 +23,8 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
 vi.mock("@/components/shell/EstiloSwitch", () => ({
   EstiloSwitch: () => <div data-testid="estilo-switch" />,
 }));
-vi.mock("@/components/widgets/TramoBadge", () => ({
-  TramoBadge: ({ tramo }: { tramo: { name: string } }) => <span data-testid="tramo-chip">{tramo.name}</span>,
+vi.mock("@/components/widgets/EtapaBadge", () => ({
+  EtapaBadge: ({ etapa }: { etapa: { name: string } }) => <span data-testid="etapa-chip">{etapa.name}</span>,
 }));
 
 import type { SessionAccess } from "@/lib/auth/session";
@@ -38,7 +38,7 @@ import { ProjectTabs, type ProjectTabsProps, newTaskHref, projectDescription, re
 const PROJECT: ProjectTabsProps["project"] = {
   id: "p1",
   name: "Local Espinopapa",
-  tramo: { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 },
+  etapa: { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 },
   projectType: "Local comercial",
   addressCity: "CDMX",
   manager: { id: "s1", name: "Paul Langarica" },
@@ -125,7 +125,7 @@ describe("ProjectTabs", () => {
   });
 
   it("hides «Nueva tarea» without create permission and leaves out missing description parts", () => {
-    renderTabs({ project: { id: "p1", name: "Sin datos", tramo: null } });
+    renderTabs({ project: { id: "p1", name: "Sin datos", etapa: null } });
     expect(screen.queryByRole("button", { name: "Nueva tarea" })).toBeNull();
     expect(screen.queryByText(/entrega final/)).toBeNull();
     expect(projectDescription({ clientName: null, addressCity: "CDMX", endDate: null }).map((p) => p.text)).toEqual(["CDMX"]);

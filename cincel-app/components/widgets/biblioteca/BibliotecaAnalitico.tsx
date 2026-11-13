@@ -36,7 +36,7 @@ import { getDriveId } from "@/lib/google/drive-url";
 import { mutationErrorText, useActionMutation } from "@/lib/query/mutation";
 import { BIBLIOTECA_LINKS_PREFIX, bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
 import { useRecentDocs } from "@/lib/stores/recent-docs-store";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorVar } from "@/lib/etapas/etapa-color";
 import type { ResourceAppliesTo, ResourceLink, ResourceLinkInput } from "@/lib/types/resource";
 
 /**
@@ -139,17 +139,17 @@ function addCreated(client: QueryClient, created: ResourceLink): void {
   );
 }
 
-const TRAMO_DOTS: Record<ResourceAppliesTo, string[]> = {
+const ETAPA_DOTS: Record<ResourceAppliesTo, string[]> = {
   general: ["var(--muted-foreground)"],
-  diseno: [tramoColorVar({ key: "diseno", sortOrder: 0 })],
-  construccion: [tramoColorVar({ key: "construccion", sortOrder: 0 })],
-  ambos: [tramoColorVar({ key: "diseno", sortOrder: 0 }), tramoColorVar({ key: "construccion", sortOrder: 0 })],
+  diseno: [etapaColorVar({ key: "diseno", sortOrder: 0 })],
+  construccion: [etapaColorVar({ key: "construccion", sortOrder: 0 })],
+  ambos: [etapaColorVar({ key: "diseno", sortOrder: 0 }), etapaColorVar({ key: "construccion", sortOrder: 0 })],
 };
 
-function TramoCell({ value }: { value: ResourceAppliesTo }) {
+function EtapaCell({ value }: { value: ResourceAppliesTo }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      {TRAMO_DOTS[value].map((color) => (
+      {ETAPA_DOTS[value].map((color) => (
         <span key={color} aria-hidden="true" className="size-[7px] shrink-0 rounded-full" style={{ backgroundColor: color }} />
       ))}
       {appliesToLabel(value)}
@@ -542,8 +542,8 @@ export function BibliotecaAnalitico(props: BibliotecaLayoutProps): ReactNode {
           </span>
         );
       }
-      case "tramo":
-        return <TramoCell value={row.tramo} />;
+      case "etapa":
+        return <EtapaCell value={row.etapa} />;
       case "responsable":
         return row.responsable ?? "—";
       case "actualizado": {

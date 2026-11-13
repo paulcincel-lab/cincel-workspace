@@ -7,7 +7,7 @@ import type { ContactType, ProjectSpace, ProjectStatus, TaskStatusOption, Workfl
 
 /**
  * `catalog.projectOptions`: live projects, by name. `currentWorkflowId` is the
- * project's current tramo, the new-task dialog's default tramo.
+ * project's current etapa, the new-task dialog's default etapa.
  */
 export type CatalogProjectOption = { id: string; name: string; status: ProjectStatus; currentWorkflowId: string | null };
 
@@ -16,9 +16,9 @@ export type CatalogStaffOption = { id: string; name: string };
 
 /**
  * `catalog.assignableStaff(workflowId)`: suggested first, then by name. With a
- * tramo, `openCount` / `overdueCount` are the person's open tasks in that
- * tramo and how many of them are overdue (due before today in the org time
- * zone); absent without a tramo.
+ * etapa, `openCount` / `overdueCount` are the person's open tasks in that
+ * etapa and how many of them are overdue (due before today in the org time
+ * zone); absent without an etapa.
  */
 export type CatalogAssignableStaffOption = {
   id: string;

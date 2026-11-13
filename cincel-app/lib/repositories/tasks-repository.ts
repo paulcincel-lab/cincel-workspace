@@ -21,7 +21,7 @@ import {
 } from "@/lib/db/schema";
 import { foldText } from "@/lib/search/search";
 import { closedAtPatch } from "@/lib/project-flow/closing";
-import { TASK_TRAMO_CHANGE_FORBIDDEN, flowError } from "@/lib/project-flow/errors";
+import { TASK_ETAPA_CHANGE_FORBIDDEN, flowError } from "@/lib/project-flow/errors";
 import { completionsFromStatusEvents } from "@/lib/dashboard/task-trend";
 import { assertAdminAssignees, todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import type { AdminTaskFilters } from "@/lib/validation/project-flow";
@@ -34,15 +34,15 @@ import { normalizeTaskLinkUrl } from "@/lib/tasks/task-links";
 import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
 import {
   EMPTY_SUMMARY_COUNTS,
-  SIN_TRAMO_LABEL,
-  SIN_TRAMO_SORT,
+  SIN_ETAPA_LABEL,
+  SIN_ETAPA_SORT,
   compareSummaryProjects,
-  compareSummaryTramos,
+  compareSummaryEtapas,
   type TareasSummary,
   type TareasSummaryCounts,
   type TareasSummaryProject,
   type TareasSummaryUnfilteredProject,
-  summaryTramoKey,
+  summaryEtapaKey,
 } from "@/lib/tareas/summary";
 import {
   EMPTY_MY_TASKS_COUNTS,
@@ -342,7 +342,7 @@ function mostrarCondition(mostrar: TaskFilters["mostrar"], today?: string): SQL 
  * The list filters. With `topLevelOnly` (#1047): top-level tasks only (no
  * parent, or a soft-deleted one), each matching itself or through a live
  * child that matches (the parent then shows as the child's context). The
- * parent keeps the scope filters (live, archived, kind, project, tramo).
+ * parent keeps the scope filters (live, archived, kind, project, etapa).
  */
 export function whereFilters(f: TaskFilters, viewer: ViewerScope) {
   if (!f.topLevelOnly) return rowFilters(f, viewer);
@@ -625,7 +625,7 @@ async function selectTaskList(filters: TaskFilters, viewer: ViewerScope, slim: b
         page.ranked ? lte(page.ranked.subquery.rowNumber, page.ranked.perColumn) : undefined
       )
     )
-    // Tramo, then fase, then manual order (BE §8.6); tasks without one go last.
+    // Etapa, then fase, then manual order (BE §8.6); tasks without one go last.
     .orderBy(
       ...(page.orderBy ?? [
         sql`${workflows.sortOrder} asc nulls last`,
@@ -734,7 +734,7 @@ const SORT_LAST = 2147483647;
 /** Sorts after every real date (nulls last). */
 const DATE_LAST = "9999-12-31";
 
-/** Keyset of the paged order: tramo, fase and manual order, commitment date, id. */
+/** Keyset of the paged order: etapa, fase and manual order, commitment date, id. */
 type TaskPageSortKey = [number, number, number, string, string];
 
 /** The paged order's keys as SQL: the `selectTaskList` order with nulls last and `id` as the tie-break. */
@@ -896,7 +896,7 @@ const subtaskCountSql = (): SQL =>
   sql`(select count(*)::int from core.tasks st where st.parent_task_id = ${tasks.id} and st.deleted_at is null and not st.archived)`;
 
 /**
- * The key of a column sort (every column but "tramo" and "retraso" asc,
+ * The key of a column sort (every column but "etapa" and "retraso" asc,
  * which keep their own cursors): optional null flag, the value, then `id`.
  * The value of an empty row is coalesced so comparisons never see null; the
  * flag already puts it last.
@@ -906,7 +906,7 @@ export function columnSortParts(column: TaskSortColumn, today?: string): ColumnS
   switch (column) {
     case "titulo":
       return [{ expr: sql`lower(${tasks.title})`, cast: "text" }, id];
-    case "tramo":
+    case "etapa":
       return [nullsLastFlag(workflows.sortOrder), { expr: sql`coalesce(${workflows.sortOrder}, 0)`, cast: "int" }, id];
     case "fase":
       return [nullsLastFlag(workflowPhases.sortOrder), { expr: sql`coalesce(${workflowPhases.sortOrder}, 0)`, cast: "int" }, id];
@@ -996,7 +996,7 @@ export function decodeColumnSortCursor(cursor: string, column: TaskSortColumn, d
  * same statement, so only the page's tasks are read.
  *
  * `orderBy`:
- * - "tramo" (default): the board/list order (tramo, fase, manual order,
+ * - "etapa" (default): the board/list order (etapa, fase, manual order,
  *   commitment date, id; nulls last);
  * - "retraso" (Tareas Analítico): overdue tasks first by due date (most days
  *   late first), then the open ones by due date, then the closed ones; the
@@ -1009,13 +1009,13 @@ export function decodeColumnSortCursor(cursor: string, column: TaskSortColumn, d
 export async function listTasksPage(
   filters: TaskFilters,
   viewer: ViewerScope,
-  opts: { cursor: string | null; limit: number; orderBy?: "tramo" | TaskSortColumn; orderDir?: TaskSortDir; columnKey?: string }
+  opts: { cursor: string | null; limit: number; orderBy?: "etapa" | TaskSortColumn; orderDir?: TaskSortDir; columnKey?: string }
 ): Promise<TaskRowsPage> {
   const limit = Math.max(1, Math.floor(opts.limit));
   const dir: TaskSortDir = opts.orderDir ?? "asc";
   // "retraso" ascending keeps its own cursor (#988); every other column sort uses `columnSortParts` (#1044).
   const retraso = opts.orderBy === "retraso" && dir === "asc";
-  const column = opts.orderBy && opts.orderBy !== "tramo" && !retraso ? opts.orderBy : null;
+  const column = opts.orderBy && opts.orderBy !== "etapa" && !retraso ? opts.orderBy : null;
   const today = filters.today ?? todayInAppTimeZone();
   const parts = column ? columnSortParts(column, today) : null;
   let after: SQL | undefined;
@@ -1199,10 +1199,10 @@ export async function listBoardColumns(
 
 export type TaskFacets = {
   total: number;
-  byTramo: Record<string, number>;
-  /** `open` / `overdue`: the project's open and overdue tasks in the selected tramo, for the Proyecto dropdown (#1045). */
+  byEtapa: Record<string, number>;
+  /** `open` / `overdue`: the project's open and overdue tasks in the selected etapa, for the Proyecto dropdown (#1045). */
   projects: { id: string; name: string; count: number; open?: number; overdue?: number }[];
-  /** "Mostrar" counts: the tasks in the selected tramo and project with each choice (they ignore `mostrar`). */
+  /** "Mostrar" counts: the tasks in the selected etapa and project with each choice (they ignore `mostrar`). */
   mostrar?: { todas: number; abiertas: number; en_retraso: number };
   /** The tasks in that scope the viewer manages. */
   mine?: number;
@@ -1210,14 +1210,14 @@ export type TaskFacets = {
 
 /**
  * The Tareas chip counts and Proyecto options in one `GROUP BY workflow_id,
- * project_id`, from `filters` without their tramo and proyecto (so picking a
+ * project_id`, from `filters` without their etapa and proyecto (so picking a
  * chip or a project never hides the other choices), exactly as the client
  * computed them from every task:
- * - `total` ("Todas") and `byTramo` (per tramo key): the tasks in the selected
- *   project (`scope.projectId`), any tramo;
- * - `projects`: the projects with tasks in the selected tramo
+ * - `total` ("Todas") and `byEtapa` (per etapa key): the tasks in the selected
+ *   project (`scope.projectId`), any etapa;
+ * - `projects`: the projects with tasks in the selected etapa
  *   (`scope.workflowKey`), any project, by name, with their open and overdue
- *   tasks; the selected projects are kept even when the tramo leaves them
+ *   tasks; the selected projects are kept even when the etapa leaves them
  *   with no task.
  *
  * Several projects (`scope.projectIds`, the Proyecto multi-select) count as
@@ -1260,28 +1260,28 @@ export async function taskFacets(
 
   let total = 0;
   let mine = 0;
-  const byTramo: Record<string, number> = {};
+  const byEtapa: Record<string, number> = {};
   const mostrar = { todas: 0, abiertas: 0, en_retraso: 0 };
   const projectCounts = new Map<string, { id: string; name: string; count: number; open: number; overdue: number }>();
   for (const g of groups) {
     const count = Number(g.count);
     const isSelected = selected.has(g.projectId);
     const inProject = selected.size === 0 || isSelected;
-    const inTramo = scope.workflowKey === null || g.workflowKey === scope.workflowKey;
+    const inEtapa = scope.workflowKey === null || g.workflowKey === scope.workflowKey;
     if (inProject) {
       total += count;
-      if (g.workflowKey) byTramo[g.workflowKey] = (byTramo[g.workflowKey] ?? 0) + count;
+      if (g.workflowKey) byEtapa[g.workflowKey] = (byEtapa[g.workflowKey] ?? 0) + count;
     }
-    if (inProject && inTramo) {
+    if (inProject && inEtapa) {
       mostrar.todas += Number(g.all);
       mostrar.abiertas += Number(g.open);
       mostrar.en_retraso += Number(g.overdue);
       mine += Number(g.mine);
     }
     // A project the Mostrar choice leaves without tasks drops out of the options (the selected one stays).
-    if ((inTramo && count > 0) || isSelected) {
+    if ((inEtapa && count > 0) || isSelected) {
       const entry = projectCounts.get(g.projectId) ?? { id: g.projectId, name: g.projectName, count: 0, open: 0, overdue: 0 };
-      if (inTramo) {
+      if (inEtapa) {
         entry.count += count;
         entry.open += Number(g.open);
         entry.overdue += Number(g.overdue);
@@ -1290,7 +1290,7 @@ export async function taskFacets(
     }
   }
   const projectsOut = [...projectCounts.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
-  return { total, byTramo, projects: projectsOut, mostrar, mine };
+  return { total, byEtapa, projects: projectsOut, mostrar, mine };
 }
 
 /**
@@ -1534,17 +1534,17 @@ async function loadLiveTask(id: string): Promise<TaskRow> {
 }
 
 /**
- * A user task on a project, in a tramo (`workflowId` required: INVALID when
- * missing or not a live tramo), optionally in one of its fases
+ * A user task on a project, in an etapa (`workflowId` required: INVALID when
+ * missing or not a live etapa), optionally in one of its fases
  * (PHASE_MISMATCH) and one of the project's espacios (SPACE_MISMATCH). Never
- * writes `project_stages`: only startTramo starts a tramo (BE §7.5).
+ * writes `project_stages`: only startEtapa starts an etapa (BE §7.5).
  */
 export async function createUserTask(input: UserTaskInput, actorId: string): Promise<TaskDetail> {
   if (!input.workflowId) throw flowError("INVALID", "workflowId");
   return insertUserTask(input, actorId, null);
 }
 
-/** Throws INVALID unless `workflowId` is a live (not deleted) tramo. */
+/** Throws INVALID unless `workflowId` is a live (not deleted) etapa. */
 async function assertLiveWorkflow(workflowId: string): Promise<void> {
   const [row] = await db
     .select({ id: workflows.id })
@@ -1565,10 +1565,10 @@ async function insertUserTask(
   const workflowId = input.workflowId ?? null;
   const phaseId = input.phaseId ?? null;
   const spaceId = input.spaceId ?? null;
-  // A subtask takes its parent's tramo and fase as they are (the FK already ties them).
+  // A subtask takes its parent's etapa and fase as they are (the FK already ties them).
   if (workflowId && !parentTaskId) await assertLiveWorkflow(workflowId);
   if (phaseId && !parentTaskId) {
-    // A fase needs a tramo (tasks_phase_needs_workflow_check).
+    // A fase needs an etapa (tasks_phase_needs_workflow_check).
     if (!workflowId) throw flowError("PHASE_MISMATCH");
     await assertPhaseInWorkflow(db, phaseId, workflowId);
   }
@@ -1636,12 +1636,12 @@ export async function loadSubtaskParent(parentId: string): Promise<TaskRow> {
 }
 
 /**
- * A `usuario` child task with the parent's project, tramo and fase; `spaceId`
+ * A `usuario` child task with the parent's project, etapa and fase; `spaceId`
  * allowed (must be an espacio of the project). One level only.
  */
 export async function createSubtask(parentId: string, input: SubtaskInput, actorId: string): Promise<TaskDetail> {
   const parent = await loadSubtaskParent(parentId);
-  // An admin parent makes an admin child: no tramo, fase or espacio; administrator assignees only.
+  // An admin parent makes an admin child: no etapa, fase or espacio; administrator assignees only.
   if (parent.kind === "admin") {
     return insertAdminTask(
       {
@@ -1725,26 +1725,26 @@ export async function listSubtasks(parentId: string, viewer: ViewerScope): Promi
 }
 
 /**
- * Tramo, fase and espacio rules of updateTask (BE §7.5, #1022):
- * - `workflowId` on a usuario task: setting a tramo on a task without one is
- *   open to task writers; changing an existing tramo needs `canMoveTramo`
- *   (admins) → `FORBIDDEN: task tramo change`. Clearing it, an unknown or
- *   deleted tramo, or a workflow task (tied to its template's tramo) →
- *   INVALID. Sending the current tramo again is a no-op.
+ * Etapa, fase and espacio rules of updateTask (BE §7.5, #1022):
+ * - `workflowId` on a usuario task: setting an etapa on a task without one is
+ *   open to task writers; changing an existing etapa needs `canMoveEtapa`
+ *   (admins) → `FORBIDDEN: task etapa change`. Clearing it, an unknown or
+ *   deleted etapa, or a workflow task (tied to its template's etapa) →
+ *   INVALID. Sending the current etapa again is a no-op.
  * - A move clears `phaseId` unless the same patch sets a fase of the new
- *   tramo (a fase belongs to exactly one tramo, so the old one never fits).
- * - `phaseId` must be a fase of the task's tramo (the new one when set in the
+ *   etapa (a fase belongs to exactly one etapa, so the old one never fits).
+ * - `phaseId` must be a fase of the task's etapa (the new one when set in the
  *   same patch) → PHASE_MISMATCH; null clears it.
  * - `spaceId` must be an espacio of the task's project → SPACE_MISMATCH.
  * - On an admin task, `phaseId` / `spaceId` / `workflowId` → ADMIN_TASK.
  *
- * Returns the tramo the task left when it moved, else null.
+ * Returns the etapa the task left when it moved, else null.
  */
 async function applyFlowPatch(
   before: TaskRow,
   patch: TaskPatch,
   set: Partial<TaskRow>,
-  canMoveTramo: boolean
+  canMoveEtapa: boolean
 ): Promise<string | null> {
   const isAdmin = before.kind === "admin";
   if (isAdmin && (patch.phaseId || patch.spaceId || patch.workflowId)) throw flowError("ADMIN_TASK");
@@ -1753,7 +1753,7 @@ async function applyFlowPatch(
   let movedFrom: string | null = null;
   if (patch.workflowId !== undefined && patch.workflowId !== before.workflowId) {
     if (isAdmin || before.kind !== "usuario" || !patch.workflowId) throw flowError("INVALID", "workflowId");
-    if (before.workflowId && !canMoveTramo) throw new Error(TASK_TRAMO_CHANGE_FORBIDDEN);
+    if (before.workflowId && !canMoveEtapa) throw new Error(TASK_ETAPA_CHANGE_FORBIDDEN);
     await assertLiveWorkflow(patch.workflowId);
     set.workflowId = patch.workflowId;
     workflowId = patch.workflowId;
@@ -1779,7 +1779,7 @@ async function applyFlowPatch(
 }
 
 /**
- * Admin task rules on a patch (BE §7.5): no fase, espacio or tramo
+ * Admin task rules on a patch (BE §7.5): no fase, espacio or etapa
  * (`ADMIN_TASK`) and an administrator manager (`ASSIGNEE_NOT_ADMIN`).
  * Clearing one of them (null) is a no-op.
  */
@@ -1788,15 +1788,15 @@ async function assertAdminTaskPatch(patch: TaskPatch): Promise<void> {
   if (patch.managerId) await requireAdminAssignees([patch.managerId]);
 }
 
-/** History field of a tramo move; before/after hold the tramo names ("Movió la tarea de Diseño a Construcción"). */
-const TRAMO_MOVE_HISTORY_FIELD = "tramo";
+/** History field of an etapa move; before/after hold the etapa names ("Movió la tarea de Diseño a Construcción"). */
+const ETAPA_MOVE_HISTORY_FIELD = "etapa";
 
-const TASK_FIELDS_BUT_TRAMO = TASK_TRACKED_FIELDS.filter((f) => f !== "workflowId");
+const TASK_FIELDS_BUT_ETAPA = TASK_TRACKED_FIELDS.filter((f) => f !== "workflowId");
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/** Name of each tramo id (deleted ones included: the history keeps the name it had). */
-async function tramoNames(tx: Tx, ids: string[]): Promise<Map<string, string>> {
+/** Name of each etapa id (deleted ones included: the history keeps the name it had). */
+async function etapaNames(tx: Tx, ids: string[]): Promise<Map<string, string>> {
   const rows = await tx
     .select({ id: workflows.id, name: workflows.name })
     .from(workflows)
@@ -1805,12 +1805,12 @@ async function tramoNames(tx: Tx, ids: string[]): Promise<Map<string, string>> {
 }
 
 /**
- * A tramo move inside one transaction: the task row, its live usuario
- * subtasks (same tramo; a subtask on the parent's old fase follows the
+ * An etapa move inside one transaction: the task row, its live usuario
+ * subtasks (same etapa; a subtask on the parent's old fase follows the
  * parent's new fase, any other fase is cleared) and one history entry per
- * moved task with the tramo names instead of the raw `workflowId` change.
+ * moved task with the etapa names instead of the raw `workflowId` change.
  */
-async function moveTaskTramo(
+async function moveTaskEtapa(
   before: TaskRow,
   set: Partial<TaskRow>,
   movedFrom: string,
@@ -1819,7 +1819,7 @@ async function moveTaskTramo(
   const toWorkflowId = set.workflowId!;
   await db.transaction(async (tx) => {
     const [after] = await tx.update(tasks).set(set).where(eq(tasks.id, before.id)).returning();
-    // Workflow children stay: their template ties them to their tramo (tasks_template_fk).
+    // Workflow children stay: their template ties them to their etapa (tasks_template_fk).
     const children = (
       await tx
         .select()
@@ -1827,19 +1827,19 @@ async function moveTaskTramo(
         .where(and(eq(tasks.parentTaskId, before.id), eq(tasks.kind, "usuario"), isNull(tasks.deletedAt)))
     ).filter((child) => child.workflowId !== toWorkflowId);
     const fromIds = children.map((c) => c.workflowId).filter((w): w is string => w !== null);
-    const names = await tramoNames(tx, [...new Set([movedFrom, toWorkflowId, ...fromIds])]);
+    const names = await etapaNames(tx, [...new Set([movedFrom, toWorkflowId, ...fromIds])]);
     const moveEvent = (entityId: string, fromId: string | null) =>
       tx.insert(historyEvents).values({
         entity: "task",
         entityId,
         kind: "cambio",
         actorId,
-        field: TRAMO_MOVE_HISTORY_FIELD,
+        field: ETAPA_MOVE_HISTORY_FIELD,
         beforeValue: fromId ? (names.get(fromId) ?? null) : null,
         afterValue: names.get(toWorkflowId) ?? null,
       });
     await recordChanges(
-      { entity: "task", entityId: before.id, actorId, before, after: after!, fields: TASK_FIELDS_BUT_TRAMO },
+      { entity: "task", entityId: before.id, actorId, before, after: after!, fields: TASK_FIELDS_BUT_ETAPA },
       tx
     );
     await moveEvent(before.id, movedFrom);
@@ -1852,7 +1852,7 @@ async function moveTaskTramo(
         .where(eq(tasks.id, child.id))
         .returning();
       await recordChanges(
-        { entity: "task", entityId: child.id, actorId, before: child, after: moved!, fields: TASK_FIELDS_BUT_TRAMO },
+        { entity: "task", entityId: child.id, actorId, before: child, after: moved!, fields: TASK_FIELDS_BUT_ETAPA },
         tx
       );
       await moveEvent(child.id, child.workflowId);
@@ -1860,7 +1860,7 @@ async function moveTaskTramo(
   });
 }
 
-/** The live task's tramo id (null without one); TASK_NOT_FOUND when gone. */
+/** The live task's etapa id (null without one); TASK_NOT_FOUND when gone. */
 export async function taskWorkflowId(id: string): Promise<string | null> {
   return (await loadLiveTask(id)).workflowId;
 }
@@ -1874,21 +1874,21 @@ export async function taskBulkFields(
 }
 
 /**
- * `opts.canMoveTramo`: the actor may change a task's existing tramo (admins,
- * #1022); without it such a patch is `FORBIDDEN: task tramo change`.
+ * `opts.canMoveEtapa`: the actor may change a task's existing etapa (admins,
+ * #1022); without it such a patch is `FORBIDDEN: task etapa change`.
  */
 export async function updateTask(
   id: string,
   patch: TaskPatch,
   actorId: string,
-  opts: { canMoveTramo?: boolean } = {}
+  opts: { canMoveEtapa?: boolean } = {}
 ): Promise<TaskDetail> {
   const before = await loadLiveTask(id);
   if (before.kind === "admin") await assertAdminTaskPatch(patch);
   const set: Partial<TaskRow> = {};
   if (patch.title !== undefined) set.title = patch.title.trim() || before.title;
   if (patch.notes !== undefined) set.notes = clean(patch.notes);
-  const movedFrom = await applyFlowPatch(before, patch, set, opts.canMoveTramo ?? false);
+  const movedFrom = await applyFlowPatch(before, patch, set, opts.canMoveEtapa ?? false);
   if (patch.priority !== undefined) set.priority = patch.priority;
   if (patch.estimatedHours !== undefined) set.estimatedHours = patch.estimatedHours;
   // Picking a built-in status leaves any custom one.
@@ -1903,11 +1903,11 @@ export async function updateTask(
   if (patch.deliveryDate !== undefined) set.deliveryDate = clean(patch.deliveryDate);
 
   if (movedFrom) {
-    await moveTaskTramo(before, set, movedFrom, actorId);
+    await moveTaskEtapa(before, set, movedFrom, actorId);
     return (await getTask(id))!;
   }
 
-  // A patch that changes nothing (e.g. the current tramo sent again) writes nothing.
+  // A patch that changes nothing (e.g. the current etapa sent again) writes nothing.
   const [after] =
     Object.keys(set).length > 0 ? await db.update(tasks).set(set).where(eq(tasks.id, id)).returning() : [before];
   await recordChanges({ entity: "task", entityId: id, actorId, before, after, fields: TASK_TRACKED_FIELDS });
@@ -2393,13 +2393,13 @@ export async function listTaskTrendSource(
   };
 }
 
-export type TaskDueDay = { date: string; due: number; tramoKey: string | null };
+export type TaskDueDay = { date: string; due: number; etapaKey: string | null };
 
 /**
  * Tareas Visual "Esta semana": the open tasks matching `filters` whose due
  * date (`coalesce(commitment_date, delivery_date)`) falls in `[from, to]`,
- * per day, with the tramo most of them are in (`mode()` over
- * `workflows.key`, null when none has a tramo). Open = not `completado` and
+ * per day, with the etapa most of them are in (`mode()` over
+ * `workflows.key`, null when none has an etapa). Open = not `completado` and
  * not in a live custom status that closes. Days with no task are left out.
  */
 export async function taskDueByDay(
@@ -2412,7 +2412,7 @@ export async function taskDueByDay(
     .select({
       date: sql<string>`(${due})::text`,
       due: sql<number>`count(*)::int`,
-      tramoKey: sql<string | null>`mode() within group (order by ${workflows.key})`,
+      etapaKey: sql<string | null>`mode() within group (order by ${workflows.key})`,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -2430,7 +2430,7 @@ export async function taskDueByDay(
     )
     .groupBy(due)
     .orderBy(due);
-  return rows.map((r) => ({ date: r.date, due: Number(r.due), tramoKey: r.tramoKey ?? null }));
+  return rows.map((r) => ({ date: r.date, due: Number(r.due), etapaKey: r.etapaKey ?? null }));
 }
 
 export type TaskProjectCounts = { projectId: string; projectName: string; open: number; overdue: number; completed: number };
@@ -2500,7 +2500,7 @@ function summaryCounts(r: { total: number; open: number; overdue: number; blocke
 
 /**
  * Tareas Analítico counts (`qk.tareas.summary(f)`) in one statement:
- * `GROUP BY GROUPING SETS ((project, tramo), (project), ())`, with
+ * `GROUP BY GROUPING SETS ((project, etapa), (project), ())`, with
  * `grouping()` telling the levels apart. Open = not completado and no
  * closing custom status; overdue = open and `coalesce(commitment_date,
  * delivery_date) < today` (`today` in America/Mexico_City, `YYYY-MM-DD`);
@@ -2508,8 +2508,8 @@ function summaryCounts(r: { total: number; open: number; overdue: number; blocke
  * as the rows (`whereFilters`: admin tasks only for administrators who ask).
  *
  * `unfiltered` is the same filters without `mostrar` (one more grouped read,
- * only when `mostrar` is set). Projects by overdue desc, then name; tramos by
- * sort order with "Sin tramo" last.
+ * only when `mostrar` is set). Projects by overdue desc, then name; etapas by
+ * sort order with "Sin etapa" last.
  */
 export async function taskSummary(filters: TaskFilters, viewer: ViewerScope, today: string): Promise<TareasSummary> {
   const f: TaskFilters = { ...filters, today };
@@ -2523,7 +2523,7 @@ export async function taskSummary(filters: TaskFilters, viewer: ViewerScope, tod
       workflowName: workflows.name,
       workflowSortOrder: workflows.sortOrder,
       projectLevel: sql<number>`grouping(${tasks.projectId})::int`,
-      tramoLevel: sql<number>`grouping(${tasks.workflowId})::int`,
+      etapaLevel: sql<number>`grouping(${tasks.workflowId})::int`,
       ...counts,
     })
     .from(tasks)
@@ -2559,7 +2559,7 @@ export async function taskSummary(filters: TaskFilters, viewer: ViewerScope, tod
   const projectOf = (id: string, name: string): TareasSummaryProject => {
     let entry = byProject.get(id);
     if (!entry) {
-      entry = { project: { id, name }, ...EMPTY_SUMMARY_COUNTS, tramos: [] };
+      entry = { project: { id, name }, ...EMPTY_SUMMARY_COUNTS, etapas: [] };
       byProject.set(id, entry);
     }
     return entry;
@@ -2571,19 +2571,19 @@ export async function taskSummary(filters: TaskFilters, viewer: ViewerScope, tod
       continue;
     }
     const entry = projectOf(r.projectId, r.projectName);
-    if (Number(r.tramoLevel) === 1) {
+    if (Number(r.etapaLevel) === 1) {
       Object.assign(entry, c);
       continue;
     }
-    entry.tramos.push({
-      tramo: r.workflowId
-        ? { id: r.workflowId, key: r.workflowKey ?? null, name: r.workflowName ?? SIN_TRAMO_LABEL, sortOrder: r.workflowSortOrder ?? SIN_TRAMO_SORT }
-        : { id: null, key: null, name: SIN_TRAMO_LABEL, sortOrder: SIN_TRAMO_SORT },
+    entry.etapas.push({
+      etapa: r.workflowId
+        ? { id: r.workflowId, key: r.workflowKey ?? null, name: r.workflowName ?? SIN_ETAPA_LABEL, sortOrder: r.workflowSortOrder ?? SIN_ETAPA_SORT }
+        : { id: null, key: null, name: SIN_ETAPA_LABEL, sortOrder: SIN_ETAPA_SORT },
       ...c,
     });
   }
   const projectsOut = [...byProject.values()].filter((p) => p.total > 0);
-  for (const p of projectsOut) p.tramos.sort(compareSummaryTramos);
+  for (const p of projectsOut) p.etapas.sort(compareSummaryEtapas);
   projectsOut.sort(compareSummaryProjects);
   totals.projects = projectsOut.length;
 
@@ -2591,15 +2591,15 @@ export async function taskSummary(filters: TaskFilters, viewer: ViewerScope, tod
   const sourceRows =
     unfilteredRows ??
     projectsOut.flatMap((p) =>
-      p.tramos.map((t) => ({ id: p.project.id, name: p.project.name, workflowId: t.tramo.id, total: t.total }))
+      p.etapas.map((t) => ({ id: p.project.id, name: p.project.name, workflowId: t.etapa.id, total: t.total }))
     );
   const unfilteredById = new Map<string, TareasSummaryUnfilteredProject>();
   for (const r of sourceRows) {
-    const entry = unfilteredById.get(r.id) ?? { id: r.id, name: r.name, total: 0, byTramo: {} };
+    const entry = unfilteredById.get(r.id) ?? { id: r.id, name: r.name, total: 0, byEtapa: {} };
     const n = Number(r.total);
     entry.total += n;
-    const key = summaryTramoKey(r.workflowId);
-    entry.byTramo[key] = (entry.byTramo[key] ?? 0) + n;
+    const key = summaryEtapaKey(r.workflowId);
+    entry.byEtapa[key] = (entry.byEtapa[key] ?? 0) + n;
     unfilteredById.set(r.id, entry);
   }
   const projectList = [...unfilteredById.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -2623,10 +2623,10 @@ function commitmentDaysLateSql(today: string): SQL {
 
 /**
  * Mi espacio's task counts (`qk.me.tasksSummary(input)`) in one statement:
- * `GROUP BY GROUPING SETS ((project, tramo), (project), (tramo), ())` over
+ * `GROUP BY GROUPING SETS ((project, etapa), (project), (etapa), ())` over
  * the tasks of `scope` (mine: Responsable or apoyo, live, not archived),
- * with `FILTER` columns for every open task (KPIs, Tramo chips, board
- * columns, Esencial cards) and for the ones `match` narrows to (tramo,
+ * with `FILTER` columns for every open task (KPIs, Etapa chips, board
+ * columns, Esencial cards) and for the ones `match` narrows to (etapa,
  * search, En retraso: the Analítico groups). Mi espacio's date rule: the
  * commitment date only; overdue = open and committed before `today`.
  * Closed tasks are counted per group for "Ocultar completadas" off.
@@ -2653,7 +2653,7 @@ export async function myTaskSummary(
       workflowName: workflows.name,
       workflowSortOrder: workflows.sortOrder,
       projectLevel: sql<number>`grouping(${tasks.projectId})::int`,
-      tramoLevel: sql<number>`grouping(${tasks.workflowId})::int`,
+      etapaLevel: sql<number>`grouping(${tasks.workflowId})::int`,
       openAll: sql<number>`(count(*) filter (where ${open}))::int`,
       overdueAll: sql<number>`(count(*) filter (where ${overdue}))::int`,
       dueToday: sql<number>`(count(*) filter (where ${open} and ${tasks.commitmentDate} = ${today}::date))::int`,
@@ -2689,7 +2689,7 @@ export async function myTaskSummary(
   const summary: MyTasksSummary = {
     today,
     all: { open: 0, overdue: 0, dueToday: 0, buckets: { hoy: 0, semana: 0, despues: 0 }, projects: 0 },
-    tramos: [],
+    etapas: [],
     shown: { ...EMPTY_MY_TASKS_COUNTS, projects: 0 },
     projects: [],
     esencial: [],
@@ -2698,15 +2698,15 @@ export async function myTaskSummary(
   const projectOf = (id: string, name: string): MyTasksSummaryProject => {
     let entry = byProject.get(id);
     if (!entry) {
-      entry = { project: { id, name }, ...EMPTY_MY_TASKS_COUNTS, tramos: [] };
+      entry = { project: { id, name }, ...EMPTY_MY_TASKS_COUNTS, etapas: [] };
       byProject.set(id, entry);
     }
     return entry;
   };
   for (const r of rows) {
     const projectLevel = Number(r.projectLevel) === 1;
-    const tramoLevel = Number(r.tramoLevel) === 1;
-    if (projectLevel && tramoLevel) {
+    const etapaLevel = Number(r.etapaLevel) === 1;
+    if (projectLevel && etapaLevel) {
       const openAll = Number(r.openAll);
       const overdueAll = Number(r.overdueAll);
       const dueToday = Number(r.dueToday);
@@ -2719,17 +2719,17 @@ export async function myTaskSummary(
       };
       summary.shown = { ...counts(r), projects: 0 };
     } else if (projectLevel) {
-      // A tramo across projects: the Tramo chips count every open task of mine.
+      // An etapa across projects: the Etapa chips count every open task of mine.
       if (r.workflowId && r.workflowKey && Number(r.openAll) > 0) {
-        summary.tramos.push({
+        summary.etapas.push({
           id: r.workflowId,
           key: r.workflowKey,
           name: r.workflowName ?? "",
-          sortOrder: r.workflowSortOrder ?? SIN_TRAMO_SORT,
+          sortOrder: r.workflowSortOrder ?? SIN_ETAPA_SORT,
           open: Number(r.openAll),
         });
       }
-    } else if (tramoLevel) {
+    } else if (etapaLevel) {
       const entry = projectOf(r.projectId, r.projectName);
       Object.assign(entry, counts(r));
       if (Number(r.openAll) > 0) {
@@ -2743,19 +2743,19 @@ export async function myTaskSummary(
     } else {
       const c = counts(r);
       if (c.open + c.closed === 0) continue;
-      projectOf(r.projectId, r.projectName).tramos.push({
-        tramo: r.workflowId
-          ? { id: r.workflowId, key: r.workflowKey ?? null, name: r.workflowName ?? SIN_TRAMO_LABEL, sortOrder: r.workflowSortOrder ?? SIN_TRAMO_SORT }
-          : { id: null, key: null, name: SIN_TRAMO_LABEL, sortOrder: SIN_TRAMO_SORT },
+      projectOf(r.projectId, r.projectName).etapas.push({
+        etapa: r.workflowId
+          ? { id: r.workflowId, key: r.workflowKey ?? null, name: r.workflowName ?? SIN_ETAPA_LABEL, sortOrder: r.workflowSortOrder ?? SIN_ETAPA_SORT }
+          : { id: null, key: null, name: SIN_ETAPA_LABEL, sortOrder: SIN_ETAPA_SORT },
         ...c,
       });
     }
   }
   const byName = (a: string, b: string) => a.localeCompare(b, "es");
-  summary.tramos.sort((a, b) => a.sortOrder - b.sortOrder || byName(a.name, b.name));
+  summary.etapas.sort((a, b) => a.sortOrder - b.sortOrder || byName(a.name, b.name));
   summary.projects = [...byProject.values()].filter((p) => p.open + p.closed > 0);
   for (const p of summary.projects) {
-    p.tramos.sort((a, b) => a.tramo.sortOrder - b.tramo.sortOrder || byName(a.tramo.name, b.tramo.name));
+    p.etapas.sort((a, b) => a.etapa.sortOrder - b.etapa.sortOrder || byName(a.etapa.name, b.etapa.name));
   }
   summary.projects.sort((a, b) => Number(b.overdue > 0) - Number(a.overdue > 0) || byName(a.project.name, b.project.name));
   summary.shown.projects = summary.projects.filter((p) => p.open > 0).length;

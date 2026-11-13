@@ -9,7 +9,7 @@ import { LOCK_REASON, type CellOption } from "@/components/widgets/editable-cell
 import type { ActivitiesCapabilities } from "@/lib/auth/permissions";
 import type { TareasListFilters } from "@/lib/query/keys";
 import type { TareasListPages } from "@/lib/query/options/tareas";
-import { SIN_TRAMO_KEY } from "@/lib/tareas/summary";
+import { SIN_ETAPA_KEY } from "@/lib/tareas/summary";
 import {
   BASE_STATUSES,
   BASE_STATUS_COLOR,
@@ -18,7 +18,7 @@ import {
   parseStatusValue,
   statusSelectValue,
 } from "@/lib/tasks/status-options";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type {
   ProjectSpaceRef,
   StaffRef,
@@ -36,7 +36,7 @@ import { hoursFieldText, hoursOfCellValue } from "./task-hours";
 /** The task columns that edit in place. */
 export type TaskCellField =
   | "tarea"
-  | "tramo"
+  | "etapa"
   | "fase"
   | "estatus"
   | "responsable"
@@ -75,8 +75,8 @@ export type TaskCellTask = Pick<
 
 /** The lists the editors offer. */
 export type TaskCellCatalogs = {
-  tramos: WorkflowRef[];
-  /** Active fases of a tramo (empty until loaded). */
+  etapas: WorkflowRef[];
+  /** Active fases of an etapa (empty until loaded). */
   phasesOf(workflowId: string): WorkflowPhaseRef[];
   statuses: TaskStatusOption[];
   staff: StaffRef[];
@@ -115,7 +115,7 @@ export function taskCellValue(task: TaskCellTask, field: TaskCellField): string 
   switch (field) {
     case "tarea":
       return task.title;
-    case "tramo":
+    case "etapa":
       return task.workflowId;
     case "fase":
       return task.phaseId;
@@ -146,10 +146,10 @@ export function taskCellLock(task: TaskCellTask, field: TaskCellField, viewer: T
   if (field === "responsable") return caps.canChangeResponsible ? true : LOCK_REASON.responsible;
   if (!caps.canCreateActivity) return LOCK_REASON.taskWriter;
   const adminTask = task.kind === "admin";
-  if (field === "tramo") {
+  if (field === "etapa") {
     if (adminTask) return LOCK_REASON.adminTask;
-    // Setting a missing tramo is open to task writers; moving the task is admins only.
-    return task.workflowId !== null && !viewer.admin ? LOCK_REASON.tramo : true;
+    // Setting a missing etapa is open to task writers; moving the task is admins only.
+    return task.workflowId !== null && !viewer.admin ? LOCK_REASON.etapa : true;
   }
   if (field === "fase") {
     if (adminTask) return LOCK_REASON.adminTask;
@@ -171,10 +171,10 @@ function statusColor(token: string): string {
  */
 export function taskCellOptions(task: TaskCellTask, field: TaskCellField, catalogs: TaskCellCatalogs): CellOption[] {
   switch (field) {
-    case "tramo":
-      return [...catalogs.tramos]
+    case "etapa":
+      return [...catalogs.etapas]
         .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((t) => ({ value: t.id, label: t.name, color: tramoColorVar(t.key, t.sortOrder) }));
+        .map((t) => ({ value: t.id, label: t.name, color: etapaColorVar(t.key, t.sortOrder) }));
     case "fase": {
       const phases = task.workflowId ? catalogs.phasesOf(task.workflowId) : [];
       return phases.map((p) => ({ value: p.id, label: p.name }));
@@ -206,16 +206,16 @@ export function taskWithChange<T extends TaskCellTask>(
   task: T,
   field: TaskCellField,
   value: string | null,
-  catalogs: Pick<TaskCellCatalogs, "tramos" | "phasesOf" | "statuses" | "staff" | "spacesOf">,
+  catalogs: Pick<TaskCellCatalogs, "etapas" | "phasesOf" | "statuses" | "staff" | "spacesOf">,
 ): T {
   switch (field) {
     case "tarea":
       return value ? { ...task, title: value.trim() } : task;
-    case "tramo": {
+    case "etapa": {
       if (value === task.workflowId) return task;
-      const tramo = catalogs.tramos.find((t) => t.id === value) ?? null;
-      // A fase belongs to one tramo: moving the task clears it (the server does the same).
-      return { ...task, workflowId: value, workflow: tramo, phaseId: null, phase: null };
+      const etapa = catalogs.etapas.find((t) => t.id === value) ?? null;
+      // A fase belongs to one etapa: moving the task clears it (the server does the same).
+      return { ...task, workflowId: value, workflow: etapa, phaseId: null, phase: null };
     }
     case "fase": {
       const phase = value && task.workflowId ? catalogs.phasesOf(task.workflowId).find((p) => p.id === value) : undefined;
@@ -261,7 +261,7 @@ export function taskCellAction(task: TaskCellTask, field: TaskCellField, value: 
       const title = value?.trim();
       return title ? { kind: "update", patch: { title } } : { kind: "none" };
     }
-    case "tramo":
+    case "etapa":
       return value ? { kind: "update", patch: { workflowId: value } } : { kind: "none" };
     case "fase":
       return { kind: "update", patch: { phaseId: value } };
@@ -321,20 +321,20 @@ export function taskWithSupport<T extends Pick<TaskCellTask, "support">>(task: T
   return { ...task, support };
 }
 
-/** Whether a task's tramo passes a `tareas.list` tramo filter (a key, a comma list or "Sin tramo"). */
-export function matchesTramoFilter(filter: string | null, tramoKey: string | null): boolean {
+/** Whether a task's etapa passes a `tareas.list` etapa filter (a key, a comma list or "Sin etapa"). */
+export function matchesEtapaFilter(filter: string | null, etapaKey: string | null): boolean {
   if (!filter) return true;
   const keys = filter
     .split(",")
     .map((k) => k.trim())
     .filter(Boolean);
-  return keys.some((k) => (k === SIN_TRAMO_KEY ? tramoKey === null : k === tramoKey));
+  return keys.some((k) => (k === SIN_ETAPA_KEY ? etapaKey === null : k === etapaKey));
 }
 
 /**
- * One `tareas.list(f)` cache with a task changed: the row (and, after a tramo
- * move, its subtasks) patched with `patch`, dropped from a list whose tramo
- * filter it no longer passes, and put first in a tramo-scoped list of its
+ * One `tareas.list(f)` cache with a task changed: the row (and, after an etapa
+ * move, its subtasks) patched with `patch`, dropped from a list whose etapa
+ * filter it no longer passes, and put first in an etapa-scoped list of its
  * project it now joins (`moved`, the patched row, when it came from another
  * list). The same object when nothing changes.
  */
@@ -345,7 +345,7 @@ export function patchTaskListPages(
   patch: <R extends TaskCellTask>(row: R) => R,
   options: { subtasks?: boolean; moved?: TareasListPages["pages"][number]["rows"][number] } = {},
 ): TareasListPages {
-  const tramoFilter = filters?.tramo ?? null;
+  const etapaFilter = filters?.etapa ?? null;
   let changed = false;
   let found = false;
   const pages = data.pages.map((page) => {
@@ -357,7 +357,7 @@ export function patchTaskListPages(
       const next = patch(row);
       if (next === row) return [row];
       pageChanged = true;
-      return matchesTramoFilter(tramoFilter, next.workflow?.key ?? null) ? [next] : [];
+      return matchesEtapaFilter(etapaFilter, next.workflow?.key ?? null) ? [next] : [];
     });
     if (!pageChanged) return page;
     changed = true;
@@ -367,11 +367,11 @@ export function patchTaskListPages(
   if (
     !found &&
     moved &&
-    tramoFilter &&
+    etapaFilter &&
     pages.length > 0 &&
     (!filters?.proyecto || filters.proyecto === moved.projectId) &&
     (!filters?.proyectos?.length || filters.proyectos.includes(moved.projectId)) &&
-    matchesTramoFilter(tramoFilter, moved.workflow?.key ?? null)
+    matchesEtapaFilter(etapaFilter, moved.workflow?.key ?? null)
   ) {
     changed = true;
     pages[0] = { ...pages[0], rows: [moved, ...pages[0].rows] };

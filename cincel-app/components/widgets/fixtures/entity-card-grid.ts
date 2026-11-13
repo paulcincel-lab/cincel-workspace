@@ -5,7 +5,7 @@
  */
 import type { EntityCard, RecordTableData } from "@/lib/types/widgets";
 
-/** Proyectos: cards with a tramo (tinted head), progress, badges and meta. */
+/** Proyectos: cards with an etapa (tinted head), progress, badges and meta. */
 export const entityCardProjectsFixture: EntityCard[] = [
   {
     id: "p-local-espinopapa",
@@ -13,7 +13,7 @@ export const entityCardProjectsFixture: EntityCard[] = [
     subtitle: "Local comercial · CDMX",
     href: "/proyectos/p-local-espinopapa",
     iconName: "folder-kanban",
-    tramo: "construccion",
+    etapa: "construccion",
     progress: 82,
     badges: [{ label: "14 vencidas", tone: "critical" }],
     meta: [
@@ -27,7 +27,7 @@ export const entityCardProjectsFixture: EntityCard[] = [
     title: "Guadalajara 83",
     subtitle: "Departamento · Condesa",
     href: "/proyectos/p-guadalajara-83",
-    tramo: "diseno",
+    etapa: "diseno",
     progress: 58,
     badges: [{ label: "En tiempo", tone: "ok" }],
     meta: [
@@ -41,7 +41,7 @@ export const entityCardProjectsFixture: EntityCard[] = [
     title: "Salim Ortopedia",
     subtitle: "Consultorio · Polanco",
     href: "/proyectos/p-salim-ortopedia",
-    tramo: "presale",
+    etapa: "presale",
     progress: 24,
     badges: [{ label: "Sin anticipo", tone: "warn" }],
     meta: [
@@ -52,7 +52,7 @@ export const entityCardProjectsFixture: EntityCard[] = [
   },
 ];
 
-/** Biblioteca index: no tramo, icon chip by `iconName`, meta only. */
+/** Biblioteca index: no etapa, icon chip by `iconName`, meta only. */
 export const entityCardLibraryFixture: EntityCard[] = [
   {
     id: "s-book",

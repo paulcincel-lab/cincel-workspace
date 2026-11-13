@@ -16,14 +16,14 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
   removeStorage: vi.fn(),
   readJsonStorage: vi.fn((_key: string, fallback: unknown) => fallback),
 }));
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const slots: Record<string, number> = { presale: 1, diseno: 2, construccion: 3, decoracion: 4 };
   return {
     canSeeAdminData: () => true,
-    listTramos: async () => [],
-    tramoLabel: (key: string) => key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    listEtapas: async () => [],
+    etapaLabel: (key: string) => key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
   };
 });
@@ -91,11 +91,11 @@ vi.mock("@/lib/quick-add/parse", () => ({
   },
 }));
 
-// The empty state's Iniciar tramo sheet (#1043) reads these; no test here starts a tramo.
-vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  previewStartTramoAction: vi.fn(() => new Promise(() => {})),
-  startTramoAction: vi.fn(),
-  undoStartTramoAction: vi.fn(),
+// The empty state's Iniciar etapa sheet (#1043) reads these; no test here starts an etapa.
+vi.mock("@/lib/actions/etapa-start-actions", () => ({
+  previewStartEtapaAction: vi.fn(() => new Promise(() => {})),
+  startEtapaAction: vi.fn(),
+  undoStartEtapaAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
   getTareasStartSlotData: vi.fn(() => new Promise(() => {})),
@@ -106,7 +106,7 @@ import { StyleProvider } from "@/components/shell/StyleProvider";
 import { ResumenAnaliticoLayout, NO_SCHEDULE_TEXT } from "@/components/widgets/ResumenAnaliticoLayout";
 import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
-import { TASK_ROWS, TRAMOS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { TASK_ROWS, ETAPAS, fixtureProject, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
 import { seedResumenTasks } from "@/tests/unit/fixtures/resumen-summary";
 
 beforeAll(() => {
@@ -152,8 +152,8 @@ function renderLayout(input: ProjectSummaryInput = fixtureSummaryInput(), option
   );
 }
 
-function quickAdd(tramo = "Construcción") {
-  return screen.getByLabelText(`Nueva tarea en ${tramo}`) as HTMLInputElement;
+function quickAdd(etapa = "Construcción") {
+  return screen.getByLabelText(`Nueva tarea en ${etapa}`) as HTMLInputElement;
 }
 
 describe("ResumenAnaliticoLayout", () => {
@@ -170,7 +170,7 @@ describe("ResumenAnaliticoLayout", () => {
     for (const heading of ["Etapas y fases", "Avance contra plan", "Carga del equipo", "Tareas por etapa"]) {
       expect(screen.getByRole("heading", { level: 2, name: heading })).toBeTruthy();
     }
-    expect(document.getElementById("s-tramos")).toBeTruthy();
+    expect(document.getElementById("s-etapas")).toBeTruthy();
     expect(document.getElementById("s-avance")).toBeTruthy();
     expect(document.getElementById("s-equipo")).toBeTruthy();
     expect(document.getElementById("s-tareas")).toBeTruthy();
@@ -191,7 +191,7 @@ describe("ResumenAnaliticoLayout", () => {
     fireEvent.click(more);
     await waitFor(() =>
       expect(actions.getTareasListPage).toHaveBeenCalledWith({
-        filters: expect.objectContaining({ proyecto: "p1", tramo: "construccion", orderBy: "retraso" }),
+        filters: expect.objectContaining({ proyecto: "p1", etapa: "construccion", orderBy: "retraso" }),
         cursor: "next",
         orderBy: "retraso",
       }),
@@ -272,27 +272,27 @@ describe("ResumenAnaliticoLayout", () => {
   it("Etapas y fases: the empty state without a started etapa; only started etapas plus the Siguiente hint (#1043)", () => {
     renderLayout(
       fixtureSummaryInput({
-        project: fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [], stages: [] }),
+        project: fixtureProject({ needsEtapa: true, currentWorkflowId: null, currentWorkflow: null, etapas: [], stages: [] }),
       }),
     );
-    const section = document.getElementById("s-tramos")!;
+    const section = document.getElementById("s-etapas")!;
     expect(section.textContent).toContain("Este proyecto aún no tiene etapa.");
     expect(within(section).getByRole("button", { name: "Iniciar una etapa" })).toBeTruthy();
     expect(within(section).queryByText("Levantamiento")).toBeNull();
     cleanup();
 
-    const diseno = TRAMOS[1]!;
+    const diseno = ETAPAS[1]!;
     renderLayout(
       fixtureSummaryInput({
         project: fixtureProject({
           currentWorkflowId: diseno.id,
           currentWorkflow: diseno,
-          tramos: [{ ...diseno, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
+          etapas: [{ ...diseno, startedAt: "2026-06-01T00:00:00.000Z", closedAt: null, current: true }],
           stages: [diseno],
         }),
       }),
     );
-    const started = document.getElementById("s-tramos")!;
+    const started = document.getElementById("s-etapas")!;
     expect(started.textContent).toContain("Siguiente: Construcción");
     expect(started.textContent).toContain("Anteproyecto");
     expect(within(started).queryByText("Levantamiento")).toBeNull();
@@ -335,8 +335,8 @@ describe("ResumenAnaliticoLayout", () => {
         expect(taskCell("t-obra-1", column).dataset.cellState).toBe("editable");
       }
       expect(taskCell("t-obra-1", "daysLate").dataset.cellState).toBe("inert");
-      // "Tramos y fases": every number and date is calculated, so the table is no grid at all.
-      expect(document.querySelector("#s-tramos [data-grid-cell]")).toBeNull();
+      // "Etapas y fases": every number and date is calculated, so the table is no grid at all.
+      expect(document.querySelector("#s-etapas [data-grid-cell]")).toBeNull();
     });
 
     it("keeps the task link: the open icon opens the task", () => {

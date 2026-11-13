@@ -145,8 +145,8 @@ describe("toToolSteps", () => {
     ]);
     const first = groups[1]!;
     expect(first.kind === "approval" && first.preview).toEqual([
-      { op: "+", title: "Revisión 1", tramo: { key: "diseno", name: "Diseño", sortOrder: 2 }, date: "vie 13 nov" },
-      { op: "+", title: "Revisión 2", tramo: { key: "diseno", name: "Diseño", sortOrder: 2 }, date: "vie 13 nov" },
+      { op: "+", title: "Revisión 1", etapa: { key: "diseno", name: "Diseño", sortOrder: 2 }, date: "vie 13 nov" },
+      { op: "+", title: "Revisión 2", etapa: { key: "diseno", name: "Diseño", sortOrder: 2 }, date: "vie 13 nov" },
     ]);
     expect(first.steps.map((s) => s.approvalId)).toEqual(["ap-1", "ap-2"]);
   });

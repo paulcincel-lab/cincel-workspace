@@ -4,7 +4,7 @@
  * into the `PersonDatum` shape the people widgets render.
  */
 import type { Group } from "@/components/widgets/GroupedTable";
-import { tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import type { PeopleOverviewRow, PersonProjectLoad, PresentationStyle, WeekLoad } from "@/lib/types/redesign";
 import type { ContactListItem, Staff, WorkflowRef } from "@/lib/types/core";
 import type { Availability, PersonDatum } from "@/lib/types/widgets";
@@ -50,16 +50,16 @@ export function puestoOf(member: Pick<Staff, "positions">): string | null {
   return names.length > 0 ? names.join(", ") : null;
 }
 
-/** Tramo key of the person's first candidate fase, matched by tramo name; null without one. */
-export function tramoOf(member: Pick<Staff, "candidatePhases">, tramos: WorkflowRef[]): string | null {
+/** Etapa key of the person's first candidate fase, matched by etapa name; null without one. */
+export function etapaOf(member: Pick<Staff, "candidatePhases">, etapas: WorkflowRef[]): string | null {
   const workflowName = member.candidatePhases?.[0]?.workflowName;
   if (!workflowName) return null;
-  const match = tramos.find((t) => t.name.trim().toLocaleLowerCase("es-MX") === workflowName.trim().toLocaleLowerCase("es-MX"));
+  const match = etapas.find((t) => t.name.trim().toLocaleLowerCase("es-MX") === workflowName.trim().toLocaleLowerCase("es-MX"));
   return match?.key ?? null;
 }
 
 /** One `PersonDatum` per active staff member, in the staff order. */
-export function buildTeamPeople(staff: Staff[], overview: PeopleOverviewRow[], tramos: WorkflowRef[]): TeamPeople {
+export function buildTeamPeople(staff: Staff[], overview: PeopleOverviewRow[], etapas: WorkflowRef[]): TeamPeople {
   const rowsById = new Map(overview.map((row) => [row.staffId, row]));
   const people: PersonDatum[] = [];
   const emails: Record<string, string | null> = {};
@@ -72,7 +72,7 @@ export function buildTeamPeople(staff: Staff[], overview: PeopleOverviewRow[], t
       name,
       initials: initialsOf(name),
       puesto: puestoOf(member),
-      tramo: tramoOf(member, tramos),
+      etapa: etapaOf(member, etapas),
       open: row?.open ?? 0,
       overdue: row?.overdue ?? 0,
       weekHours: row ? row.weekHours : null,
@@ -237,13 +237,13 @@ export function isAbsentToday(p: PersonDatum, today: string): boolean {
 }
 
 /**
- * Someone to take a task instead of `from`: same tramo, not absent today,
+ * Someone to take a task instead of `from`: same etapa, not absent today,
  * libre or ocupado, lowest `occupancyPct`; a tie goes to the name (es).
  */
 export function suggestAssignee(people: PersonDatum[], from: PersonDatum, today: string): PersonDatum | null {
-  if (!from.tramo) return null;
+  if (!from.etapa) return null;
   const candidates = people.filter((p) => {
-    if (p.id === from.id || p.tramo !== from.tramo) return false;
+    if (p.id === from.id || p.etapa !== from.etapa) return false;
     const status = personStatus(p, today);
     if (status.kind === "ausente") return false;
     const bucket = loadBucket(p.occupancyPct ?? 0);
@@ -286,7 +286,7 @@ export function teamPillCounts(people: PersonDatum[], today: string): Record<Tea
   return counts;
 }
 
-/** People of one pill (none → all) whose name, puesto or tramo contains `q` (accent- and case-insensitive). */
+/** People of one pill (none → all) whose name, puesto or etapa contains `q` (accent- and case-insensitive). */
 export function filterTeam(
   people: PersonDatum[],
   { estado, q }: { estado: TeamEstado | null; q: string | null },
@@ -296,9 +296,9 @@ export function filterTeam(
   return people.filter((p) => {
     if (estado && pillOf(p, today) !== estado) return false;
     if (!needle) return true;
-    // Tramo keys are the normalized tramo names ("diseno" ↔ "Diseño"), so the key itself is searched.
-    const tramo = (p.tramo ?? "").replace(/[-_]+/g, " ");
-    const haystack = [p.name, p.puesto ?? "", tramo].map(normalizeSearch).join(" ");
+    // Etapa keys are the normalized etapa names ("diseno" ↔ "Diseño"), so the key itself is searched.
+    const etapa = (p.etapa ?? "").replace(/[-_]+/g, " ");
+    const haystack = [p.name, p.puesto ?? "", etapa].map(normalizeSearch).join(" ");
     return haystack.includes(needle);
   });
 }
@@ -339,30 +339,30 @@ export function saturationSummary(people: PersonDatum[], today: string): Saturat
   return { top, nearLimit, candidate: suggestAssignee(people, top, today) };
 }
 
-// ── Personas · Analítico (people grouped by tramo, 4-week capacity) ────────
+// ── Personas · Analítico (people grouped by etapa, 4-week capacity) ────────
 
 /** Analítico `?estado=` filter (the Esencial pills are `TeamEstado`). */
 export type TeamAnaliticoEstado = "todas" | "sobrecargadas" | "con-capacidad";
 export type TeamAlcance = "todo" | "mi-equipo";
 
-/** Filters of the Analítico table (`?estado=`, `?tramo=`, `?alcance=`, `?q=`). */
+/** Filters of the Analítico table (`?estado=`, `?etapa=`, `?alcance=`, `?q=`). */
 export type TeamAnaliticoFilters = {
   estado: TeamAnaliticoEstado;
-  /** Tramo key, `"sin-tramo"` for people without one, or null for all. */
-  tramo: string | null;
+  /** Etapa key, `"sin-etapa"` for people without one, or null for all. */
+  etapa: string | null;
   alcance: TeamAlcance;
   q: string;
 };
 
-export const TEAM_ANALITICO_DEFAULT_FILTERS: TeamAnaliticoFilters = { estado: "todas", tramo: null, alcance: "todo", q: "" };
+export const TEAM_ANALITICO_DEFAULT_FILTERS: TeamAnaliticoFilters = { estado: "todas", etapa: null, alcance: "todo", q: "" };
 
-/** Group id (and `?tramo=` value) of the people without tramo. */
-export const SIN_TRAMO = "sin-tramo";
+/** Group id (and `?etapa=` value) of the people without etapa. */
+export const SIN_ETAPA = "sin-etapa";
 
 export type TeamFilterCounts = {
   estado: Record<TeamAnaliticoEstado, number>;
-  /** Per tramo key (and `SIN_TRAMO`), plus `todos`. */
-  tramo: Record<string, number>;
+  /** Per etapa key (and `SIN_ETAPA`), plus `todos`. */
+  etapa: Record<string, number>;
   alcance: Record<TeamAlcance, number>;
 };
 
@@ -395,10 +395,10 @@ function matchesEstado(person: PersonDatum, estado: TeamAnaliticoEstado, today: 
   return true;
 }
 
-function matchesTramo(person: PersonDatum, tramo: string | null): boolean {
-  if (!tramo) return true;
-  if (tramo === SIN_TRAMO) return !person.tramo;
-  return person.tramo === tramo;
+function matchesEtapa(person: PersonDatum, etapa: string | null): boolean {
+  if (!etapa) return true;
+  if (etapa === SIN_ETAPA) return !person.etapa;
+  return person.etapa === etapa;
 }
 
 function matchesAlcance(person: PersonDatum, alcance: TeamAlcance): boolean {
@@ -420,7 +420,7 @@ export function filterTeamAnalitico(
   return people.filter(
     (p) =>
       matchesEstado(p, filters.estado, today) &&
-      matchesTramo(p, filters.tramo) &&
+      matchesEtapa(p, filters.etapa) &&
       matchesAlcance(p, filters.alcance) &&
       matchesQuery(p, filters.q),
   );
@@ -432,14 +432,14 @@ export function filterTeamAnalitico(
  */
 export function teamFilterCounts(people: PersonDatum[], filters: TeamAnaliticoFilters, today: string): TeamFilterCounts {
   const searched = people.filter((p) => matchesQuery(p, filters.q));
-  const forEstado = searched.filter((p) => matchesTramo(p, filters.tramo) && matchesAlcance(p, filters.alcance));
-  const forTramo = searched.filter((p) => matchesEstado(p, filters.estado, today) && matchesAlcance(p, filters.alcance));
-  const forAlcance = searched.filter((p) => matchesEstado(p, filters.estado, today) && matchesTramo(p, filters.tramo));
+  const forEstado = searched.filter((p) => matchesEtapa(p, filters.etapa) && matchesAlcance(p, filters.alcance));
+  const forEtapa = searched.filter((p) => matchesEstado(p, filters.estado, today) && matchesAlcance(p, filters.alcance));
+  const forAlcance = searched.filter((p) => matchesEstado(p, filters.estado, today) && matchesEtapa(p, filters.etapa));
 
-  const tramo: Record<string, number> = { todos: forTramo.length };
-  for (const p of forTramo) {
-    const key = p.tramo || SIN_TRAMO;
-    tramo[key] = (tramo[key] ?? 0) + 1;
+  const etapa: Record<string, number> = { todos: forEtapa.length };
+  for (const p of forEtapa) {
+    const key = p.etapa || SIN_ETAPA;
+    etapa[key] = (etapa[key] ?? 0) + 1;
   }
   return {
     estado: {
@@ -447,7 +447,7 @@ export function teamFilterCounts(people: PersonDatum[], filters: TeamAnaliticoFi
       sobrecargadas: forEstado.filter(isOverloaded).length,
       "con-capacidad": forEstado.filter((p) => hasCapacity(p, today)).length,
     },
-    tramo,
+    etapa,
     alcance: { todo: forAlcance.length, "mi-equipo": forAlcance.filter((p) => matchesAlcance(p, "mi-equipo")).length },
   };
 }
@@ -479,27 +479,27 @@ function personasText(n: number): string {
 }
 
 /**
- * One group per tramo that has people (tramo order), then "Sin tramo" last
- * for people without tramo. People are sorted by
+ * One group per etapa that has people (etapa order), then "Sin etapa" last
+ * for people without etapa. People are sorted by
  * load desc, then name. Metrics: people, abiertas, vencidas, carga promedio.
  */
-export function tramoGroups(people: PersonDatum[], tramos: WorkflowRef[]): Group<PersonRow>[] {
-  const ordered = [...tramos].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"));
+export function etapaGroups(people: PersonDatum[], etapas: WorkflowRef[]): Group<PersonRow>[] {
+  const ordered = [...etapas].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"));
   const known = new Set(ordered.map((t) => t.key));
   const unknown: string[] = [];
   const buckets = new Map<string, PersonDatum[]>();
   for (const p of people) {
-    const key = p.tramo || SIN_TRAMO;
-    if (key !== SIN_TRAMO && !known.has(key) && !unknown.includes(key)) unknown.push(key);
+    const key = p.etapa || SIN_ETAPA;
+    if (key !== SIN_ETAPA && !known.has(key) && !unknown.includes(key)) unknown.push(key);
     const list = buckets.get(key) ?? [];
     list.push(p);
     buckets.set(key, list);
   }
-  // A tramo key outside the list (e.g. while it loads) keeps its own group, after the known ones.
+  // An etapa key outside the list (e.g. while it loads) keeps its own group, after the known ones.
   const entries: Array<{ id: string; label: string; color?: string }> = [
-    ...ordered.map((t) => ({ id: t.key, label: t.name, color: tramoColorVar(t.key, t.sortOrder) })),
-    ...unknown.map((key) => ({ id: key, label: tramoLabel(key), color: tramoColorVar(key) })),
-    { id: SIN_TRAMO, label: "Sin etapa" },
+    ...ordered.map((t) => ({ id: t.key, label: t.name, color: etapaColorVar(t.key, t.sortOrder) })),
+    ...unknown.map((key) => ({ id: key, label: etapaLabel(key), color: etapaColorVar(key) })),
+    { id: SIN_ETAPA, label: "Sin etapa" },
   ];
   const groups: Group<PersonRow>[] = [];
   for (const entry of entries) {
@@ -636,7 +636,7 @@ function csvField(value: string | number): string {
 
 /**
  * The visible people as CSV (UTF-8 with BOM, `;` separator), one row per
- * person: Persona; Puesto; Tramo; Abiertas; Vencidas; Carga %; the 4 week
+ * person: Persona; Puesto; Etapa; Abiertas; Vencidas; Carga %; the 4 week
  * loads ("Vac." for a whole-week absence); Disponibilidad.
  */
 export function personasCsv(rows: PersonDatum[], today: string = localToday()): string {
@@ -653,7 +653,7 @@ export function personasCsv(rows: PersonDatum[], today: string = localToday()): 
       [
         p.name,
         p.puesto ?? "",
-        p.tramo ? tramoLabel(p.tramo) : "",
+        p.etapa ? etapaLabel(p.etapa) : "",
         p.open,
         p.overdue,
         p.occupancyPct ?? 0,

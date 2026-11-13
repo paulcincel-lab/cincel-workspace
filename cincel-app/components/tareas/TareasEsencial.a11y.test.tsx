@@ -30,7 +30,7 @@ vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
   resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: true }),
 }));
 vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
-  getTareasPageData: vi.fn(async () => ({ facets: { total: 0, byTramo: {}, projects: [] }, tramos: [], staff: [] })),
+  getTareasPageData: vi.fn(async () => ({ facets: { total: 0, byEtapa: {}, projects: [] }, etapas: [], staff: [] })),
   getTareasFacets: vi.fn(),
   getTareasByProject: vi.fn(),
   getTareasListPage: vi.fn(async () => ({ rows: [], nextCursor: null, total: 0 })),

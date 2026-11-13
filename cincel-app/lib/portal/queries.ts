@@ -16,13 +16,13 @@ import {
   tasks,
   workflows,
 } from "@/lib/db/schema";
-import type { PortalProjectDTO, PortalScheduleDTO, PortalTeamMemberDTO, PortalTramoDTO } from "@/lib/types/portal";
+import type { PortalProjectDTO, PortalScheduleDTO, PortalTeamMemberDTO, PortalEtapaDTO } from "@/lib/types/portal";
 
 import {
   toPortalProjectDTO,
   toPortalScheduleDTO,
   toPortalTeamMemberDTO,
-  toPortalTramosDTO,
+  toPortalEtapasDTO,
   type PortalScheduleTaskRow,
 } from "./dto";
 import type { PortalProjectAccess } from "./session-store";
@@ -43,7 +43,7 @@ import type { PortalProjectAccess } from "./session-store";
  */
 
 const manager = alias(staff, "manager");
-const scheduleTramo = alias(workflows, "schedule_tramo");
+const scheduleEtapa = alias(workflows, "schedule_etapa");
 
 /**
  * Progress of the project's first snapshot this month (Mexico City calendar), for `progressDeltaMonth`;
@@ -114,7 +114,7 @@ export async function getPortalProject(access: PortalProjectAccess): Promise<Por
  * has no schedule. One query: the schedule row left-joined with its tasks.
  * Only the columns the section summary needs are read: no `tarea`,
  * `responsable`, flags, payment rows, imprevistos or adicionales. The real
- * dates and the linked tramo's key feed Real / Desvío and "Fases por tramo".
+ * dates and the linked etapa's key feed Real / Desvío and "Fases por etapa".
  */
 export async function getPortalSchedule(access: PortalProjectAccess): Promise<PortalScheduleDTO> {
   const rows = await db
@@ -129,11 +129,11 @@ export async function getPortalSchedule(access: PortalProjectAccess): Promise<Po
       status: scheduleTasks.status,
       startedOn: scheduleTasks.startedOn,
       finishedOn: scheduleTasks.finishedOn,
-      tramoKey: scheduleTramo.key,
+      etapaKey: scheduleEtapa.key,
     })
     .from(projectSchedules)
     .leftJoin(scheduleTasks, eq(scheduleTasks.scheduleId, projectSchedules.id))
-    .leftJoin(scheduleTramo, and(eq(scheduleTramo.id, scheduleTasks.workflowId), isNull(scheduleTramo.deletedAt)))
+    .leftJoin(scheduleEtapa, and(eq(scheduleEtapa.id, scheduleTasks.workflowId), isNull(scheduleEtapa.deletedAt)))
     .where(eq(projectSchedules.projectId, access.projectId))
     .orderBy(asc(scheduleTasks.sortOrder));
   if (rows.length === 0) return null;
@@ -145,18 +145,18 @@ export async function getPortalSchedule(access: PortalProjectAccess): Promise<Po
       row.inicio === null || row.fin === null || row.status === null) continue;
     tasks.push({ planta: row.planta, seccion: row.seccion, seccionOrder: row.seccionOrder, sortOrder: row.sortOrder,
       inicio: row.inicio, fin: row.fin, status: row.status, startedOn: row.startedOn, finishedOn: row.finishedOn,
-      tramoKey: row.tramoKey });
+      etapaKey: row.etapaKey });
   }
   return toPortalScheduleDTO(tasks);
 }
 
 /**
- * The tramo catalog with the project's state and progress in each (FE §3.11 `PhaseStepper`, Portal Visual
- * Fases). One query: the catalog with the project's stage dates (the current tramo comes with the access row),
- * left-joined with, per tramo, the number of live tasks of this project and how many are closed. Only those
+ * The etapa catalog with the project's state and progress in each (FE §3.11 `PhaseStepper`, Portal Visual
+ * Fases). One query: the catalog with the project's stage dates (the current etapa comes with the access row),
+ * left-joined with, per etapa, the number of live tasks of this project and how many are closed. Only those
  * counts leave the aggregate: no task titles, statuses or staff.
  */
-export async function getPortalProjectTramos(access: PortalProjectAccess): Promise<PortalTramoDTO[]> {
+export async function getPortalProjectEtapas(access: PortalProjectAccess): Promise<PortalEtapaDTO[]> {
   const progress = db
     .select({
       workflowId: tasks.workflowId,
@@ -166,7 +166,7 @@ export async function getPortalProjectTramos(access: PortalProjectAccess): Promi
     .from(tasks)
     .where(and(eq(tasks.projectId, access.projectId), isNull(tasks.deletedAt), eq(tasks.archived, false)))
     .groupBy(tasks.workflowId)
-    .as("portal_tramo_progress");
+    .as("portal_etapa_progress");
 
   const rows = await db
     .select({
@@ -189,7 +189,7 @@ export async function getPortalProjectTramos(access: PortalProjectAccess): Promi
     .where(isNull(workflows.deletedAt))
     .orderBy(asc(workflows.sortOrder), asc(workflows.name));
 
-  return toPortalTramosDTO(
+  return toPortalEtapasDTO(
     rows,
     access.currentWorkflowId,
     rows.map((r) => ({ workflowId: r.id, total: r.total ?? 0, done: r.done ?? 0 }))

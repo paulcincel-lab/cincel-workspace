@@ -19,7 +19,7 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
   const { inArray } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
-  const { getPortalProject, getPortalProjectTramos, getPortalSchedule, getPortalTeam, listPortalProjects } =
+  const { getPortalProject, getPortalProjectEtapas, getPortalSchedule, getPortalTeam, listPortalProjects } =
     await import("./queries");
   const { findPortalProjectAccess } = await import("./session-store");
   const { loadPortalProjectData } = await import("@/lib/loaders/portal");
@@ -115,7 +115,7 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
       { ...t(3, "Acabados", "progress"), startedOn: "2026-02-04" },
     ]);
 
-    // Tramo progress: one tramo under way on the granted project, with tasks on it and on another project.
+    // Etapa progress: one etapa under way on the granted project, with tasks on it and on another project.
     const [wf] = await db
       .insert(schema.workflows)
       .values({ key: `portal-${run}`, name: `Etapa ${run}`, sortOrder: 900 })
@@ -165,12 +165,12 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
   });
 
   it("etapa progress counts closed tasks of the project only", async () => {
-    const tramos = await getPortalProjectTramos(await access(clientUserId, p.granted));
-    const mine = tramos.find((x) => x.key === `portal-${run}`);
+    const etapas = await getPortalProjectEtapas(await access(clientUserId, p.granted));
+    const mine = etapas.find((x) => x.key === `portal-${run}`);
     // 2 closed of 4 live tasks; deleted, archived and the other project's tasks are left out.
     expect(mine).toEqual({ key: `portal-${run}`, name: `Etapa ${run}`, state: "en_curso", progressPct: 50,
       startMonth: "2026-06" });
-    expect(JSON.stringify(tramos)).not.toContain("Tarea secreta");
+    expect(JSON.stringify(etapas)).not.toContain("Tarea secreta");
   });
 
   it("team excludes deleted staff", async () => {
@@ -220,7 +220,7 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
 
   it("sections carry real dates once every task finished, and the linked etapa's key", async () => {
     const schedule = await getPortalSchedule(await access(clientUserId, p.granted));
-    expect(schedule?.sections.map((s) => [s.seccion, s.actualStart, s.actualEnd, s.tramoKey])).toEqual([
+    expect(schedule?.sections.map((s) => [s.seccion, s.actualStart, s.actualEnd, s.etapaKey])).toEqual([
       ["Preliminares", "2026-02-01", null, `portal-${run}`],
       ["Acabados", "2026-02-04", null, null],
     ]);

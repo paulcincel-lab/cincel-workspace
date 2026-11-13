@@ -1,0 +1,66 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
+import { seedSessionUser } from "@/tests/helpers/session-user";
+
+const caps = vi.hoisted(() => ({ canCreateActivity: true }));
+const actions = vi.hoisted(() => ({
+  previewStartEtapaAction: vi.fn(),
+  startEtapaAction: vi.fn(),
+  undoStartEtapaAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/etapa-start-actions", () => actions);
+vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
+  getTareasStartSlotData: vi.fn().mockResolvedValue({ board: { ready: [], upcoming: [] }, candidates: [], canStart: true }),
+}));
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
+  resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: caps.canCreateActivity }),
+}));
+
+import { RESUMEN_NO_ETAPA } from "@/lib/proyectos/project-summary";
+import { ETAPAS } from "@/tests/unit/fixtures/project-summary";
+
+import { ProjectNoEtapa } from "./ProjectNoEtapa";
+
+/** A real mouse press on a base-ui Select option: pointerdown, then click (base-ui ignores a bare click). */
+function pressOption(option: HTMLElement) {
+  fireEvent.pointerDown(option, { pointerType: "mouse" });
+  fireEvent.click(option);
+}
+
+function renderEmpty() {
+  return renderWithQueryClient(<ProjectNoEtapa projectId="p1" etapas={ETAPAS} />, { client: createTestQueryClient() });
+}
+
+beforeEach(() => {
+  caps.canCreateActivity = true;
+  actions.previewStartEtapaAction.mockReset().mockReturnValue(new Promise(() => {}));
+  seedSessionUser({ member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" });
+});
+afterEach(cleanup);
+
+describe("ProjectNoEtapa", () => {
+  it("shows the empty state; without the permission there is no button", () => {
+    caps.canCreateActivity = false;
+    renderEmpty();
+    expect(screen.getByText(RESUMEN_NO_ETAPA)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Iniciar una etapa" })).toBeNull();
+  });
+
+  it("opens the Iniciar etapa sheet with an etapa picker and nothing preselected", async () => {
+    renderEmpty();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar una etapa" }));
+
+    expect(await screen.findByText("Iniciar etapa")).toBeTruthy();
+    const picker = screen.getByRole("combobox", { name: "Etapa" });
+    expect(picker.textContent).toContain("Elige una etapa");
+    expect(actions.previewStartEtapaAction).not.toHaveBeenCalled();
+
+    fireEvent.click(picker);
+    pressOption(await screen.findByRole("option", { name: "Diseño" }));
+    await waitFor(() => expect(actions.previewStartEtapaAction).toHaveBeenCalledWith("p1", "w-diseno"));
+  });
+});

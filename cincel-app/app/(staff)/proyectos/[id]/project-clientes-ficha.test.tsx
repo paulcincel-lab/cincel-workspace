@@ -80,7 +80,7 @@ beforeEach(() => {
     state.shell
       ? {
           detail: DETAIL,
-          project: { id: "p1", name: "Casa Lomas", tramo: null },
+          project: { id: "p1", name: "Casa Lomas", etapa: null },
           counts: { tareas: 7, archivos: 0, clientes: 2 },
           canManagePortal: state.manageAccess,
         }

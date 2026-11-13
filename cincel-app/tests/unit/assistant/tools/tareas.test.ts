@@ -177,7 +177,7 @@ const SAMPLE_INPUT: Record<string, unknown> = {
   add_task_comment: { taskId: TASK_ID, text: "Ya quedó el corte" },
   add_subtask: { taskId: TASK_ID, title: "Cortes" },
   create_tasks_from_notes: { text: "- Revisar planos\n- Cotizar acero", project: "Ensenada" },
-  rebalance_workload: { tramo: "Diseño", maxPerPerson: 3 },
+  rebalance_workload: { etapa: "Diseño", maxPerPerson: 3 },
 };
 
 const UNTRUSTED_TURN: ModelMessage[] = [
@@ -489,7 +489,7 @@ describe("rebalance_workload", () => {
     actions.listViewerTasks.mockResolvedValue([openTask("1", "a"), openTask("2", "a"), openTask("3", "a", { priority: "baja" })]);
     actions.fetchAssignableStaffAction.mockResolvedValue(people.map((p) => ({ ...p, active: true, suggested: !!p.suggested })));
     actions.assignTaskAction.mockResolvedValue({});
-    const result = (await run("rebalance_workload", { tramo: "diseno" })) as { moved: unknown[] };
+    const result = (await run("rebalance_workload", { etapa: "diseno" })) as { moved: unknown[] };
     expect(actions.listViewerTasks).toHaveBeenCalledWith({ status: ["pendiente", "en_proceso", "bloqueado"], workflowId: "w1" });
     expect(actions.assignTaskAction).toHaveBeenCalledWith("3", "c");
     expect(result.moved).toHaveLength(1);

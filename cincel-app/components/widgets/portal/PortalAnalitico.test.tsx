@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { buildPortalOverview } from "@/lib/portal/overview";
-import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalTramoDTO } from "@/lib/types/portal";
+import type { PortalFileDTO, PortalProjectDTO, PortalScheduleDTO, PortalEtapaDTO } from "@/lib/types/portal";
 
 import { PortalAnalitico } from "./PortalAnalitico";
 
@@ -27,13 +27,13 @@ const schedule: PortalScheduleDTO = {
     { key: "PB::Muros", planta: "PB", seccion: "Muros", start: "2026-10-27", end: "2026-11-20", progressPct: 50 },
   ],
 };
-const tramos: PortalTramoDTO[] = [{ key: "diseno", name: "Diseño", state: "en_curso", progressPct: 60, startMonth: "2026-03" }];
+const etapas: PortalEtapaDTO[] = [{ key: "diseno", name: "Diseño", state: "en_curso", progressPct: 60, startMonth: "2026-03" }];
 const files: PortalFileDTO[] = [
   { id: "f1", name: "Contrato.pdf", mimeType: "application/pdf", sizeBytes: 120_000, modifiedAt: "2026-11-05T00:00:00Z", kind: "file", deliveredAs: "original" },
 ];
 
 function overview(over: Partial<Parameters<typeof buildPortalOverview>[0]> = {}) {
-  return buildPortalOverview({ project, schedule, tramos, files, today: "2026-11-07", ...over });
+  return buildPortalOverview({ project, schedule, etapas, files, today: "2026-11-07", ...over });
 }
 
 beforeEach(() => {

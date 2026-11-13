@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
 import { Card } from "@/components/ui/shadcn/card";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { assignTaskAction } from "@/lib/actions/tasks-actions";
 import { areaTintClass } from "@/lib/areas/area-color";
 import { addIsoDays, fourWeeks, localIsoDate } from "@/lib/people/aggregates";
@@ -26,7 +26,7 @@ import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
 import { personasDetailOptions } from "@/lib/query/options/personas";
 import { taskAssignInvalidations } from "@/lib/query/options/tareas";
-import { tramoColorSlot, tramoColorVar, tramoLabel } from "@/lib/tramos/compat";
+import { etapaColorSlot, etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import { TIME_TRACKING_TIME_ZONE } from "@/lib/time-tracking/local-time";
 import type { TaskDetail, WorkflowRef } from "@/lib/types/core";
 import type { WeekLoad } from "@/lib/types/redesign";
@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 /**
  * Personas · Equipo in Visual (Estilos Phase 5, frame `Personas-Visual`):
  * the "Quién está saturado" banner with a one-click reassign, three summary
- * cards (team load, people per tramo, upcoming vacations), the team board
+ * cards (team load, people per etapa, upcoming vacations), the team board
  * (load ring per person) and the 4-week load heatmap. Every number comes from
  * `personas.equipo()`; load is open tasks ÷ weekly capacity (no hours), with
  * the one threshold set of `loadBucket`. Mounted by `EquipoView` in the
@@ -45,8 +45,8 @@ import { cn } from "@/lib/utils";
  */
 export type PeopleLoadBoardProps = {
   people: PersonDatum[];
-  /** Active tramos in order (`personas.equipo().tramos`); without them, the tramos the people have. */
-  tramos?: WorkflowRef[];
+  /** Active etapas in order (`personas.equipo().etapas`); without them, the etapas the people have. */
+  etapas?: WorkflowRef[];
   /** `activities.canChangeResponsible`: the banner's reassign button. */
   canAssign: boolean;
   /** Per-person actions under each board card (Ver tareas, Correo, Cutto). */
@@ -104,24 +104,24 @@ function capacityOf(person: PersonDatum): number {
   return pct > 0 ? Math.round((person.open * 100) / pct) : 0;
 }
 
-/** The banner's second line: overdue tasks (tramo and projects) or, without any, open vs capacity. */
+/** The banner's second line: overdue tasks (etapa and projects) or, without any, open vs capacity. */
 export function saturationLine(person: PersonDatum): string {
   if (person.overdue <= 0) {
     return `${plural(person.open, "tarea abierta", "tareas abiertas")} para una capacidad de ${capacityOf(person)}.`;
   }
-  const tramo = person.tramo ? ` en ${tramoLabel(person.tramo)}` : "";
+  const etapa = person.etapa ? ` en ${etapaLabel(person.etapa)}` : "";
   const projects = (person.projects ?? []).filter((p) => p.overdue > 0).map((p) => p.name);
   const list = projects.length > 0 ? ` · ${namesList(projects)}` : "";
-  return `${plural(person.overdue, "tarea vencida", "tareas vencidas")}${tramo}${list}.`;
+  return `${plural(person.overdue, "tarea vencida", "tareas vencidas")}${etapa}${list}.`;
 }
 
 /**
  * The task the banner moves: the open, not overdue task with the latest due
- * date whose tramo equals the candidate's. Undated tasks are left out.
+ * date whose etapa equals the candidate's. Undated tasks are left out.
  */
-export function taskToMove(tasks: AttentionItem[], tramo: string | null | undefined, today: string): AttentionItem | null {
-  if (!tramo) return null;
-  const eligible = tasks.filter((t) => t.due !== null && t.due >= today && t.tramo === tramo);
+export function taskToMove(tasks: AttentionItem[], etapa: string | null | undefined, today: string): AttentionItem | null {
+  if (!etapa) return null;
+  const eligible = tasks.filter((t) => t.due !== null && t.due >= today && t.etapa === etapa);
   eligible.sort((a, b) => (a.due! < b.due! ? 1 : a.due! > b.due! ? -1 : a.title.localeCompare(b.title, "es")));
   return eligible[0] ?? null;
 }
@@ -147,25 +147,25 @@ export function teamLoad(people: PersonDatum[]): { counts: Record<LoadBucket, nu
   return { counts, total: people.length - away, away };
 }
 
-/** "Personas por tramo": one row per active tramo, in order, and "Sin tramo" only when someone has none. */
-export function tramoRows(
+/** "Personas por etapa": one row per active etapa, in order, and "Sin etapa" only when someone has none. */
+export function etapaRows(
   people: PersonDatum[],
-  tramos: WorkflowRef[] | undefined,
+  etapas: WorkflowRef[] | undefined,
 ): { key: string | null; label: string; count: number; color: string }[] {
   const known: { key: string; name: string; sortOrder?: number }[] =
-    tramos && tramos.length > 0
-      ? tramos
-      : [...new Set(people.flatMap((p) => (p.tramo ? [p.tramo] : [])))]
-          .map((key) => ({ key, name: tramoLabel(key) }))
+    etapas && etapas.length > 0
+      ? etapas
+      : [...new Set(people.flatMap((p) => (p.etapa ? [p.etapa] : [])))]
+          .map((key) => ({ key, name: etapaLabel(key) }))
           .sort((a, b) => a.name.localeCompare(b.name, "es"));
   const rows: { key: string | null; label: string; count: number; color: string }[] = known.map((t) => ({
     key: t.key,
-    label: tramoColorSlot(t.key) ? tramoLabel(t.key) : t.name,
-    count: people.filter((p) => p.tramo === t.key).length,
-    color: tramoColorVar(t.key, t.sortOrder),
+    label: etapaColorSlot(t.key) ? etapaLabel(t.key) : t.name,
+    count: people.filter((p) => p.etapa === t.key).length,
+    color: etapaColorVar(t.key, t.sortOrder),
   }));
   const keys = new Set(known.map((t) => t.key));
-  const none = people.filter((p) => !p.tramo || !keys.has(p.tramo)).length;
+  const none = people.filter((p) => !p.etapa || !keys.has(p.etapa)).length;
   if (none > 0) rows.push({ key: null, label: "Sin etapa", count: none, color: "var(--muted-foreground)" });
   return rows;
 }
@@ -234,7 +234,7 @@ const LINK_CLASS =
 
 // ── Widget ──────────────────────────────────────────────────────────────────
 
-export function PeopleLoadBoard({ people, tramos, canAssign, actions, today, loading = false }: PeopleLoadBoardProps) {
+export function PeopleLoadBoard({ people, etapas, canAssign, actions, today, loading = false }: PeopleLoadBoardProps) {
   if (loading) return <PeopleLoadBoardSkeleton />;
   const day = today ?? localIsoDate(new Date(), TIME_TRACKING_TIME_ZONE);
   const summary = saturationSummary(people, day);
@@ -252,7 +252,7 @@ export function PeopleLoadBoard({ people, tramos, canAssign, actions, today, loa
       ) : null}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <TeamLoadCard people={people} />
-        <TramoCard people={people} tramos={tramos} />
+        <EtapaCard people={people} etapas={etapas} />
         <VacationsCard people={people} today={day} />
       </div>
       <section aria-label="Equipo" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -312,7 +312,7 @@ function SaturationBanner({
   const wantsButton = canAssign && candidate !== null;
   // Prefetched as soon as the banner renders; a failure only hides the button.
   const detail = useQuery({ ...personasDetailOptions(top.id), enabled: wantsButton });
-  const task = wantsButton ? taskToMove(detail.data?.tasks ?? [], candidate!.tramo, today) : null;
+  const task = wantsButton ? taskToMove(detail.data?.tasks ?? [], candidate!.etapa, today) : null;
 
   // Move and undo refresh the same keys: the team, both people's detail and the task views.
   const move = useActionMutation<MoveVars, TaskDetail>(({ taskId, to }) => assignTaskAction(taskId, to), {
@@ -436,14 +436,14 @@ function TeamLoadCard({ people }: { people: PersonDatum[] }) {
   );
 }
 
-function TramoCard({ people, tramos }: { people: PersonDatum[]; tramos?: WorkflowRef[] }) {
-  const rows = tramoRows(people, tramos);
+function EtapaCard({ people, etapas }: { people: PersonDatum[]; etapas?: WorkflowRef[] }) {
+  const rows = etapaRows(people, etapas);
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <SummaryCard title="Personas por etapa" index={1}>
       <ul className="flex flex-col gap-2 text-[12.5px]">
         {rows.map((row, i) => (
-          <li key={row.key ?? "sin-tramo"} className="flex items-center gap-2.5">
+          <li key={row.key ?? "sin-etapa"} className="flex items-center gap-2.5">
             <span className="w-[92px] shrink-0 truncate" title={row.label}>
               {row.label}
             </span>
@@ -549,7 +549,7 @@ function BoardCard({
   const bucket = loadBucket(pct);
   const status = personStatus(person, today);
   const ribbon = status.kind === "ausente" || status.kind === "sale";
-  const tramoSlot = person.tramo ? tramoColorSlot(person.tramo) : null;
+  const etapaSlot = person.etapa ? etapaColorSlot(person.etapa) : null;
   return (
     <Card
       className="anim-in lift relative items-center gap-2.5 rounded-lg px-[18px] pt-[22px] pb-[18px] text-center"
@@ -569,7 +569,7 @@ function BoardCard({
           aria-hidden="true"
           className={cn(
             "absolute inset-[14px] flex items-center justify-center rounded-full text-[22px] font-semibold",
-            areaTintClass(tramoSlot),
+            areaTintClass(etapaSlot),
           )}
         >
           {person.initials}
@@ -592,8 +592,8 @@ function BoardCard({
           {person.puesto}
         </span>
       ) : null}
-      {person.tramo ? (
-        <TramoBadge tramo={{ id: person.tramo, key: person.tramo, name: tramoLabel(person.tramo), sortOrder: 0 }} />
+      {person.etapa ? (
+        <EtapaBadge etapa={{ id: person.etapa, key: person.etapa, name: etapaLabel(person.etapa), sortOrder: 0 }} />
       ) : null}
       <span className="text-[12.5px] text-foreground">{countsLine(person)}</span>
       {actions ? <div className="mt-auto flex flex-wrap justify-center pt-1">{actions(person)}</div> : null}

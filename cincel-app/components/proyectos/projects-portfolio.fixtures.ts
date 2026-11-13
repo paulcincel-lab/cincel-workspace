@@ -1,6 +1,6 @@
 /**
  * Fixtures of the /proyectos list tests (redesign FE §17): two active
- * projects in different tramos, one paused without a tramo, one archived
+ * projects in different etapas, one paused without an etapa, one archived
  * (not listed), and their portfolio rows.
  */
 import type { ProyectosPageData } from "@/lib/loaders/proyectos";
@@ -10,7 +10,7 @@ import type { PortfolioRow } from "@/lib/types/redesign";
 /** The fixtures' "today" (project timezone): Casa Lomas delivers two days later. */
 export const FIXTURE_TODAY = "2026-11-10";
 
-export const TRAMOS: WorkflowRef[] = [
+export const ETAPAS: WorkflowRef[] = [
   { id: "w1", key: "presale", name: "Presale", sortOrder: 1 },
   { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 },
   { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 },
@@ -38,9 +38,9 @@ function project(patch: Partial<ProjectListItem> & Pick<ProjectListItem, "id" | 
     updatedAt: "2026-11-01T00:00:00.000Z",
     client: null,
     currentWorkflow: null,
-    tramos: [],
+    etapas: [],
     activePhase: null,
-    needsTramo: false,
+    needsEtapa: false,
     stages: [],
     manager: null,
     coordinator: null,
@@ -58,10 +58,10 @@ export const PROJECTS: ProjectListItem[] = [
     addressState: "Jalisco",
     progress: 40,
     currentWorkflowId: "w2",
-    currentWorkflow: TRAMOS[1],
-    tramos: [
-      { ...TRAMOS[0], startedAt: "2026-09-01", closedAt: "2026-10-01", current: false },
-      { ...TRAMOS[1], startedAt: "2026-10-01", closedAt: null, current: true },
+    currentWorkflow: ETAPAS[1],
+    etapas: [
+      { ...ETAPAS[0], startedAt: "2026-09-01", closedAt: "2026-10-01", current: false },
+      { ...ETAPAS[1], startedAt: "2026-10-01", closedAt: null, current: true },
     ],
     manager: { id: "s1", name: "Ana López" },
     coordinator: { id: "s2", name: "Luis Paz" },
@@ -78,12 +78,12 @@ export const PROJECTS: ProjectListItem[] = [
     addressCity: "Zapopan",
     progress: 10,
     currentWorkflowId: "w1",
-    currentWorkflow: TRAMOS[0],
-    tramos: [{ ...TRAMOS[0], startedAt: "2026-10-15", closedAt: null, current: true }],
+    currentWorkflow: ETAPAS[0],
+    etapas: [{ ...ETAPAS[0], startedAt: "2026-10-15", closedAt: null, current: true }],
     manager: { id: "s1", name: "Ana López" },
     taskCounts: { total: 10, open: 8, blocked: 1 },
   }),
-  project({ id: "p-pausado", name: "Oficina Centro", status: "pausado", needsTramo: true, progress: 0 }),
+  project({ id: "p-pausado", name: "Oficina Centro", status: "pausado", needsEtapa: true, progress: 0 }),
   project({ id: "p-archivado", name: "Casa Antigua", status: "completado", progress: 100 }),
 ];
 
@@ -132,7 +132,7 @@ export function portfolioPageData(patch: Partial<ProyectosPageData> = {}): Proye
   return {
     projects: PROJECTS,
     portfolio: PORTFOLIO_NON_ADMIN,
-    tramos: TRAMOS,
+    etapas: ETAPAS,
     presaleAutoStart: false,
     canSeeAdminData: false,
     canCreateProject: true,

@@ -409,7 +409,7 @@ export const create_tasks_from_notes = defineTool({
     const result = {
       ok: true as const,
       project: project.name,
-      tramo: project.currentWorkflow.name,
+      etapa: project.currentWorkflow.name,
       count: created.length,
       tasks: created,
     };
@@ -421,7 +421,7 @@ export const create_tasks_from_notes = defineTool({
 // ── rebalance_workload ──────────────────────────────────────────────────────
 
 const rebalanceSchema = z.object({
-  tramo: z.string().trim().min(2).optional().describe("Etapa a repartir (p. ej. Diseño); por defecto todos"),
+  etapa: z.string().trim().min(2).optional().describe("Etapa a repartir (p. ej. Diseño); por defecto todos"),
   maxPerPerson: z
     .number()
     .int()
@@ -454,7 +454,7 @@ type Person = Pick<Staff, "id" | "name" | "capacity"> & { suggested?: boolean };
 
 /**
  * Who gets which task (pure). The pool is everyone who already holds open work
- * in scope plus the staff suggested for the tramo. Only `pendiente` tasks move
+ * in scope plus the staff suggested for the etapa. Only `pendiente` tasks move
  * (work in progress or blocked stays with its owner): lowest priority first,
  * then no date, then the latest date. Each goes to the person with the lowest
  * load-to-limit ratio who still has room.
@@ -527,6 +527,7 @@ export const rebalance_workload = defineTool({
   description:
     "Reparte las tareas abiertas entre el equipo cuando alguien rebasa su capacidad (o el máximo indicado): mueve tareas pendientes de menor prioridad a quien tiene espacio, dentro de una etapa o en todos. Pide confirmación al usuario antes de reasignar.",
   schema: rebalanceSchema,
+  legacyInputNames: { tramo: "etapa" },
   capability: isLead,
   available: always,
   confirm: true,
@@ -534,9 +535,9 @@ export const rebalance_workload = defineTool({
   summarize: toolSummaries.rebalance_workload,
   async run(ctx, input) {
     let workflow: WorkflowDetail | null = null;
-    if (input.tramo) {
-      workflow = findWorkflow(await fetchWorkflowsAction(), input.tramo);
-      if (!workflow) return failure("NOT_FOUND", `No existe la etapa "${input.tramo}".`);
+    if (input.etapa) {
+      workflow = findWorkflow(await fetchWorkflowsAction(), input.etapa);
+      if (!workflow) return failure("NOT_FOUND", `No existe la etapa "${input.etapa}".`);
     }
 
     const [tasks, staff] = await Promise.all([
@@ -566,7 +567,7 @@ export const rebalance_workload = defineTool({
 
     return {
       ok: true as const,
-      tramo: workflow?.name ?? null,
+      etapa: workflow?.name ?? null,
       moved: done.map((m) => ({ title: m.title, project: m.project, from: m.from.name, to: m.to.name })),
       loads: plan.loads.map(({ name, limit, before, after }) => ({ name, limit, before, after })),
       stillOver: plan.stillOver,

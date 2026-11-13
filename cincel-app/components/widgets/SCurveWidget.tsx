@@ -18,7 +18,7 @@ export type SCurveWidgetProps = {
   schedule: { tasks: ScheduleTask[]; payments: PaymentRow[] } | null;
   /** YYYY-MM-DD (project timezone). */
   today: string;
-  /** Real line and legend color: the current tramo's (a CSS token value). */
+  /** Real line and legend color: the current etapa's (a CSS token value). */
   color?: string;
   title?: string;
   /** Classes and style of the card (the layout's entrance motion). */

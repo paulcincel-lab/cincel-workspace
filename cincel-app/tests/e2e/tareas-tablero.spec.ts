@@ -256,7 +256,7 @@ test.describe("Tareas", () => {
 
     const rsc = await countRscRequests(page, async () => {
       await page.getByRole("group", { name: "Filtros" }).getByRole("button", { name: /^Presale/ }).click();
-      await expect(page).toHaveURL(/[?&]tramo=presale/);
+      await expect(page).toHaveURL(/[?&]etapa=presale/);
       await page.getByRole("searchbox", { name: "Buscar tareas" }).fill(`sin coincidencias ${RUN_ID}`);
       await expect(page).toHaveURL(/[?&]q=sin/, { timeout: 5_000 });
       await expect(page.getByText("No hay tareas con estos filtros")).toBeVisible({ timeout: 15_000 });

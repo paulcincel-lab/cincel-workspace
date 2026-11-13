@@ -256,9 +256,9 @@ describe("me.tasks (#1051)", () => {
     );
     const client = createTestQueryClient();
     const plain = qk.me.tasksSummary(MY_TASKS_ALL);
-    const searched = qk.me.tasksSummary({ tramo: null, q: "late" });
+    const searched = qk.me.tasksSummary({ etapa: null, q: "late" });
     client.setQueryData(plain, fake.summary(MY_TASKS_ALL));
-    client.setQueryData(searched, fake.summary({ tramo: null, q: "late" }));
+    client.setQueryData(searched, fake.summary({ etapa: null, q: "late" }));
 
     const before = meTaskRowOf(fake.tasks[0]!);
     const after = { ...before, status: "completado" as const };

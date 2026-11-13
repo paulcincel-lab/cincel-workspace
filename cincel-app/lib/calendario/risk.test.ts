@@ -33,7 +33,7 @@ function meeting(over: Partial<CalEventItem> = {}): CalEventItem {
     end: "2026-11-11T11:00:00-06:00",
     allDay: false,
     project: OBRA,
-    tramo: null,
+    etapa: null,
     location: null,
     meetUrl: null,
     attendees: [],

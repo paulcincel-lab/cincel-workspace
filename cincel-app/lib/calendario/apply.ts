@@ -173,7 +173,7 @@ async function applyOne(user: AuthenticatedUser, title: string, change: Proposal
             projectId: change.draft.projectId,
             title: change.draft.title,
             notes: change.draft.sourceText || null,
-            workflowId: change.draft.tramoId,
+            workflowId: change.draft.etapaId ?? change.draft.tramoId ?? null, // `tramoId`: proposals saved before the rename
             managerId,
             commitmentDate: change.draft.commitmentDate,
           }),

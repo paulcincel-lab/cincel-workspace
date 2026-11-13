@@ -82,7 +82,7 @@ describe("Proyecto filter list filters (#1045)", () => {
     });
   });
 
-  it("a etapa group is one project: it drops the multi-select", () => {
+  it("an etapa group is one project: it drops the multi-select", () => {
     const f = tareasListFiltersOf({ ...DEFAULT_TAREAS_QUERY, ...proyectosPatch([A, B]) });
     const group = tareasGroupFilters(f, A, null);
     expect(group).not.toHaveProperty("proyectos");

@@ -2,12 +2,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   const slots: Record<string, number> = { presale: 1, diseno: 2, construccion: 3 };
   return {
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
   };
 });
 
@@ -85,7 +85,7 @@ describe("KpiWidget · Visual chip, sparkline and context line (frame Dashboard)
       value: 6,
       delta: { value: 1, good: true, caption: "vs. semana pasada", label: "+1 este mes", tone: "good" },
       series7: [1, 1, 3, 3, 3, 5, 5],
-      split: [{ tramo: "presale", share: 0.33 }],
+      split: [{ etapa: "presale", share: 0.33 }],
       caption: "Por área: Presale 2 · Diseño 1 · Construcción 2 · Decoración 1",
     },
     {
@@ -94,7 +94,7 @@ describe("KpiWidget · Visual chip, sparkline and context line (frame Dashboard)
       value: 31,
       delta: { value: 4, good: false, caption: "vs. semana pasada", label: "+4 vs. semana", tone: "bad" },
       series7: [19, 22, 21, 25, 26, 28, 31],
-      split: [{ tramo: "construccion", share: 0.45 }],
+      split: [{ etapa: "construccion", share: 0.45 }],
       caption: "Construcción concentra 14 de 31",
     },
     {

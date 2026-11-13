@@ -39,8 +39,8 @@ const proposal: Proposal = {
   deferred: [], createdAt: "2026-11-11T10:00:00Z", expiresAt: "2026-11-12T10:00:00Z",
   changes: [
     { changeId: "c1", type: "decision", minutesId: "m1", text: "cocina en cuarzo blanco" },
-    { changeId: "c2", type: "task_create", draft: { title: "Cotizar cuarzo", projectId: "pr", managerId: "s1", commitmentDate: "2026-11-14", tramoId: null, sourceText: "" } },
-    { changeId: "c3", type: "task_create", draft: { title: "Llamar al cliente", projectId: "pr", managerId: null, commitmentDate: null, tramoId: null, sourceText: "" } },
+    { changeId: "c2", type: "task_create", draft: { title: "Cotizar cuarzo", projectId: "pr", managerId: "s1", commitmentDate: "2026-11-14", etapaId: null, sourceText: "" } },
+    { changeId: "c3", type: "task_create", draft: { title: "Llamar al cliente", projectId: "pr", managerId: null, commitmentDate: null, etapaId: null, sourceText: "" } },
   ],
 };
 

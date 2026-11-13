@@ -76,7 +76,7 @@ export function resolveDue(due: string | null, meetingDate: string): string | nu
   const text = (due ?? "").trim();
   if (!text) return null;
   if (validIso(text)) return text;
-  const parsed = parseQuickAdd(text, { today: meetingDate, people: [], tramos: [], meId: null });
+  const parsed = parseQuickAdd(text, { today: meetingDate, people: [], etapas: [], meId: null });
   return parsed.dueDate && validIso(parsed.dueDate) ? parsed.dueDate : null;
 }
 
@@ -135,7 +135,7 @@ export function buildMinutesProposal(input: BuildMinutesInput): BuiltMinutes {
           projectId: meeting.projectId as string,
           managerId,
           commitmentDate: resolveDue(task.due, meeting.date),
-          tramoId: null,
+          etapaId: null,
           sourceText: `Minuta "${meeting.title}" (${minutesId})${notes.length ? ` · ${notes.join(" · ")}` : ""}`.slice(0, 2000),
         },
       });

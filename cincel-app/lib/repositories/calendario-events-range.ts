@@ -13,7 +13,7 @@ import { sql, type SQL } from "drizzle-orm";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { db } from "@/lib/db/client";
-import { tramoColorSlot } from "@/lib/tramos/compat";
+import { etapaColorSlot } from "@/lib/etapas/compat";
 import type {
   AttendeeResponse,
   CalDay,
@@ -21,16 +21,16 @@ import type {
   CalItem,
   CalKpis,
   CalendarioFilters,
-  CalTramoRef,
+  CalEtapaRef,
   MinutesState,
 } from "@/lib/types/calendario";
 
-export type EventRangeFilters = Pick<CalendarioFilters, "mostrar" | "quien" | "proyectos" | "tramo" | "responsable">;
+export type EventRangeFilters = Pick<CalendarioFilters, "mostrar" | "quien" | "proyectos" | "etapa" | "responsable">;
 
 /** Per-day numbers of the meetings in a range. */
 export type EventDayAggregate = { events: number; meetingHours: number; overlaps: number };
 
-const DEFAULT_FILTERS: EventRangeFilters = { mostrar: "todo", quien: "yo", proyectos: [], tramo: null, responsable: null };
+const DEFAULT_FILTERS: EventRangeFilters = { mostrar: "todo", quien: "yo", proyectos: [], etapa: null, responsable: null };
 
 /** Administrador and Dirección see every Cincel meeting (BE §8.2). */
 function seesAllMeetings(user: AuthenticatedUser): boolean {
@@ -80,8 +80,8 @@ function eventWhere(user: AuthenticatedUser, filters: EventRangeFilters, canView
     sql`ev.deleted_at is null`,
   ];
   if (filters.proyectos.length > 0) parts.push(sql`ev.project_id in (${uuidList(filters.proyectos)})`);
-  if (filters.tramo === "none") parts.push(sql`ev.workflow_id is null`);
-  else if (filters.tramo) parts.push(sql`ev.workflow_id = ${filters.tramo}::uuid`);
+  if (filters.etapa === "none") parts.push(sql`ev.workflow_id is null`);
+  else if (filters.etapa) parts.push(sql`ev.workflow_id = ${filters.etapa}::uuid`);
   if (quien === "todos" && filters.responsable) parts.push(INVOLVED(filters.responsable));
   return sql.join(parts, sql` and `);
 }
@@ -203,9 +203,9 @@ function minutesState(status: EventRow["minutes_status"]): MinutesState {
   return status ?? "ninguna";
 }
 
-function tramoOf(row: EventRow): CalTramoRef | null {
+function etapaOf(row: EventRow): CalEtapaRef | null {
   if (!row.workflow_id) return null;
-  const slot = row.workflow_color_slot ?? (row.workflow_key ? tramoColorSlot(row.workflow_key) : null);
+  const slot = row.workflow_color_slot ?? (row.workflow_key ? etapaColorSlot(row.workflow_key) : null);
   return {
     id: row.workflow_id,
     key: row.workflow_key,
@@ -227,7 +227,7 @@ function rowToItem(row: EventRow, attendees: AttendeeRow[], user: AuthenticatedU
     end: withOffset(row.end_local, Number(row.end_offset_min)),
     allDay: row.all_day,
     project: row.project_id ? { id: row.project_id, name: row.project_name ?? "" } : null,
-    tramo: tramoOf(row),
+    etapa: etapaOf(row),
     location: row.location,
     meetUrl: row.meet_url,
     attendees: attendees.map((a) => ({ name: a.name, staffId: a.staff_id, response: a.response })),

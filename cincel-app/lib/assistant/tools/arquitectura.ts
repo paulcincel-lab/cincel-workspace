@@ -8,7 +8,7 @@ import "server-only";
  *
  * - `available(ctx)`: Rule 3 reads the `IMPLEMENTED` flags of the actions a
  *   tool calls. Every action this group calls predates the redesign
- *   (projects, schedule, workflows, tramo start, tasks) and has no flag, so
+ *   (projects, schedule, workflows, etapa start, tasks) and has no flag, so
  *   the tools are always available; environment gaps (no vision model, no
  *   Drive grant, no cost table) are explained by the tool itself.
  * - Computations run server-side. The file tools read Drive with the staff
@@ -31,7 +31,7 @@ import { addProjectCommentAction, fetchProjectAction } from "@/lib/actions/proje
 import { listViewerProjects } from "@/lib/assistant/reads";
 import { fetchScheduleAction } from "@/lib/actions/schedule-actions";
 import { updateTaskAction } from "@/lib/actions/tasks-actions";
-import { previewStartTramoAction, startTramoAction } from "@/lib/actions/tramo-start-actions";
+import { previewStartEtapaAction, startEtapaAction } from "@/lib/actions/etapa-start-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import {
   estimateParametricCost,
@@ -58,7 +58,7 @@ import { sortSections } from "@/lib/cronograma/sections";
 import { db } from "@/lib/db/client";
 import { tasks } from "@/lib/db/schema";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
-import { flowToday, offsetDate } from "@/lib/project-flow/start-tramo";
+import { flowToday, offsetDate } from "@/lib/project-flow/start-etapa";
 import { getAppSetting } from "@/lib/repositories/app-settings-repository";
 import { recordComment } from "@/lib/repositories/history-repository";
 import type { ProjectDetail, WorkflowDetail } from "@/lib/types/core";
@@ -551,16 +551,16 @@ async function runScheduleFromTemplate(ctx: ToolRunContext, input: z.output<type
   const workflow = pickWorkflow(await fetchWorkflowsAction(), input.template);
   if (!workflow.ok) return workflow;
 
-  const preview = await previewStartTramoAction(project.id, workflow.value.id);
+  const preview = await previewStartEtapaAction(project.id, workflow.value.id);
   const phaseIds = preview.phases.filter((p) => p.templates.length > 0).map((p) => p.phase.id);
   if (phaseIds.length === 0) {
     return fail("NOTHING_TO_CREATE", `Las tareas de la plantilla ${workflow.value.name} ya están en ${project.name}.`);
   }
 
-  // startTramo dates template tasks from the project's start date (or today); shift them to `startDate`.
+  // startEtapa dates template tasks from the project's start date (or today); shift them to `startDate`.
   const base = detail.value.startDate ?? flowToday();
   const result = unwrapActionResult(
-    await startTramoAction({
+    await startEtapaAction({
       projectId: project.id,
       workflowId: workflow.value.id,
       phaseIds,

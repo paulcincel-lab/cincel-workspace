@@ -109,7 +109,7 @@ describe("tableroTable", () => {
       id: "t1",
       tarea: "Levantamiento",
       proyecto: "Casa Lomas",
-      tramo: "Diseño",
+      etapa: "Diseño",
       fase: "Anteproyecto",
       responsable: "Ana Ruiz",
       estatus: "Pendiente",
@@ -120,8 +120,8 @@ describe("tableroTable", () => {
     });
     // Custom status name wins; delivery date is the fallback due date.
     expect(table.rows[1]).toMatchObject({ estatus: "En revisión", prioridad: "Baja", vence: "2026-11-05", diasRetraso: 2 });
-    // Missing tramo / fase / responsable / subtareas stay empty.
-    expect(table.rows[3]).toMatchObject({ tramo: null, fase: null, responsable: null, subtareas: null, diasRetraso: 0 });
+    // Missing etapa / fase / responsable / subtareas stay empty.
+    expect(table.rows[3]).toMatchObject({ etapa: null, fase: null, responsable: null, subtareas: null, diasRetraso: 0 });
   });
 
   it("adds a totals row and delay heat", () => {

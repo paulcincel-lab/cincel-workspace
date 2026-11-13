@@ -46,7 +46,7 @@ describe.skipIf(!url)("Tareas by project (test DB)", async () => {
   const colaborador = () => ({ id: meId, access: "Colaborador" as const });
   const admin = () => ({ id: meId, access: "Administrador" as const });
   const filters = (extra: Partial<TareasListFilters> = {}): TareasListFilters => ({
-    tramo: null,
+    etapa: null,
     proyecto: null,
     responsable: "yo",
     estado: null,

@@ -635,7 +635,7 @@ export function templateUseHref(link: Pick<ResourceLink, "url" | "drive">): stri
 // ── Sección ─────────────────────────────────────────────────────────────────
 
 export type TipoFilter = ResourceLinkType;
-export type TramoFilter = "general" | "diseno" | "construccion";
+export type EtapaFilter = "general" | "diseno" | "construccion";
 
 export const TIPO_LABEL: Record<ResourceLinkType, string> = {
   drive_folder: "Carpeta",
@@ -643,7 +643,7 @@ export const TIPO_LABEL: Record<ResourceLinkType, string> = {
   web: "Enlace web",
 };
 
-export const TRAMO_FILTER_LABEL: Record<TramoFilter, string> = {
+export const ETAPA_FILTER_LABEL: Record<EtapaFilter, string> = {
   general: "General",
   diseno: "Diseño",
   construccion: "Construcción",
@@ -661,28 +661,28 @@ export function parseTipo(value: string | string[] | undefined): TipoFilter | nu
   return v === "drive_folder" || v === "drive_file" || v === "web" ? v : null;
 }
 
-export function parseTramo(value: string | string[] | undefined): TramoFilter | null {
+export function parseEtapa(value: string | string[] | undefined): EtapaFilter | null {
   const v = Array.isArray(value) ? value[0] : value;
   return v === "general" || v === "diseno" || v === "construccion" ? v : null;
 }
 
-function appliesToTramo(link: ResourceLink, tramo: TramoFilter): boolean {
-  if (link.appliesTo === tramo) return true;
-  if (link.appliesTo === "ambos") return tramo === "diseno" || tramo === "construccion";
-  return link.subsection === tramo;
+function appliesToEtapa(link: ResourceLink, etapa: EtapaFilter): boolean {
+  if (link.appliesTo === etapa) return true;
+  if (link.appliesTo === "ambos") return etapa === "diseno" || etapa === "construccion";
+  return link.subsection === etapa;
 }
 
-/** The section's rows after the tipo / tramo filters and the search text. */
+/** The section's rows after the tipo / etapa filters and the search text. */
 export function filterSectionLinks(
   links: ResourceLink[],
   section: ResourceSection,
-  filters: { tipo?: TipoFilter | null; tramo?: TramoFilter | null; query?: string },
+  filters: { tipo?: TipoFilter | null; etapa?: EtapaFilter | null; query?: string },
 ): ResourceLink[] {
   const query = normalize(filters.query ?? "");
   return links
     .filter((link) => link.section === section)
     .filter((link) => !filters.tipo || link.linkType === filters.tipo)
-    .filter((link) => !filters.tramo || appliesToTramo(link, filters.tramo))
+    .filter((link) => !filters.etapa || appliesToEtapa(link, filters.etapa))
     .filter((link) => matchesQuery(query, link.title, link.owner?.name))
     .sort(byOrder);
 }
@@ -705,7 +705,7 @@ export const SECTION_TABLE_COLUMNS: RecordTableData["columns"] = [
   { key: "favorito", label: "Favorito", width: 72 },
   { key: "nombre", label: "Nombre" },
   { key: "tipo", label: "Tipo" },
-  { key: "tramo", label: "Etapa" },
+  { key: "etapa", label: "Etapa" },
   { key: "actualizado", label: "Actualizado", format: "date" },
   { key: "acciones", label: "Acciones", align: "right" },
 ];
@@ -719,7 +719,7 @@ export function sectionTable(rows: ResourceLink[], favoriteIds: ReadonlySet<stri
       favorito: favoriteIds.has(link.id),
       nombre: link.title,
       tipo: TIPO_LABEL[link.linkType],
-      tramo: APPLIES_TO_LABEL[link.appliesTo],
+      etapa: APPLIES_TO_LABEL[link.appliesTo],
       actualizado: link.updatedAt,
       acciones: "",
     })),
@@ -843,7 +843,7 @@ const CLASE_TIPO: Record<Exclude<BibliotecaTipo, "todos">, DocumentTipo> = {
   video: "Video",
 };
 
-/** Label of a document's tramo (`appliesTo`). */
+/** Label of a document's etapa (`appliesTo`). */
 export function appliesToLabel(appliesTo: ResourceAppliesTo): string {
   return APPLIES_TO_LABEL[appliesTo];
 }
@@ -872,7 +872,7 @@ export type BibliotecaRow = {
   href: string;
   nombre: string;
   tipo: DocumentTipo;
-  tramo: ResourceAppliesTo;
+  etapa: ResourceAppliesTo;
   responsable: string | null;
   /** ISO `updatedAt`. */
   actualizado: string;
@@ -1059,7 +1059,7 @@ export function buildBibliotecaTable(
     href: href(link),
     nombre: link.title,
     tipo: documentTipo(link),
-    tramo: link.appliesTo,
+    etapa: link.appliesTo,
     responsable: link.owner?.name ?? null,
     actualizado: link.updatedAt,
     stale: isStale(link.updatedAt, o.now),
@@ -1155,7 +1155,7 @@ export function buildBibliotecaTable(
   const columns: RecordColumn[] = [
     { key: "nombre", label: "Nombre", width: 300 },
     { key: "tipo", label: "Tipo", width: 100 },
-    { key: "tramo", label: "Etapa", width: 170 },
+    { key: "etapa", label: "Etapa", width: 170 },
     { key: "responsable", label: "Responsable", width: 150 },
     { key: "actualizado", label: "Actualizado", format: "date", width: 110 },
     ...(hasSize ? [{ key: "sizeBytes", label: "Tamaño", align: "right" as const, mono: true, width: 90 }] : []),

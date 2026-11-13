@@ -41,8 +41,8 @@ vi.mock("@/lib/assistant/reads", () => ({
   listViewerTasks: (...args: unknown[]) => listViewerTasksMock(...args),
 }));
 
-vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  startTramoAction: vi.fn(),
+vi.mock("@/lib/actions/etapa-start-actions", () => ({
+  startEtapaAction: vi.fn(),
 }));
 
 const fetchStaffActionMock = vi.fn();

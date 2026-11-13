@@ -31,7 +31,7 @@ import { listReminders } from "@/lib/my-space/reminder-service";
 import { todayTomorrowRange } from "@/lib/my-space/today-tomorrow";
 import { listTasksPage, myTaskSummary } from "@/lib/repositories/tasks-repository";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
-import { SIN_TRAMO_KEY } from "@/lib/tareas/summary";
+import { SIN_ETAPA_KEY } from "@/lib/tareas/summary";
 import type { TareasRowsPage } from "@/lib/tareas/page-data";
 import type { TaskFilters, TaskKind, ViewerScope } from "@/lib/types/core";
 import type { MiEspacioGmail, MiEspacioPageData, MiEspacioTasksSeed } from "@/lib/types/mi-espacio";
@@ -67,10 +67,10 @@ function myTasksScope(user: AuthenticatedUser, viewer: ViewerScope): TaskFilters
   return { involvesStaffId: user.member.id, ...(viewer.isAdmin ? { kind: ALL_KINDS } : {}) };
 }
 
-/** The tramo of a key (`SIN_TRAMO_KEY`: none); null when no live tramo has it (the list is empty). */
-async function tramoFilter(key: string | null | undefined): Promise<TaskFilters | null> {
+/** The etapa of a key (`SIN_ETAPA_KEY`: none); null when no live etapa has it (the list is empty). */
+async function etapaFilter(key: string | null | undefined): Promise<TaskFilters | null> {
   if (!key) return {};
-  if (key === SIN_TRAMO_KEY) return { withoutWorkflow: true };
+  if (key === SIN_ETAPA_KEY) return { withoutWorkflow: true };
   const [row] = await db
     .select({ id: workflows.id })
     .from(workflows)
@@ -79,14 +79,14 @@ async function tramoFilter(key: string | null | undefined): Promise<TaskFilters 
   return row ? { workflowId: row.id } : null;
 }
 
-const NO_TRAMO_ID = "00000000-0000-0000-0000-000000000000";
+const NO_ETAPA_ID = "00000000-0000-0000-0000-000000000000";
 
 const EMPTY_PAGE: TareasRowsPage = { rows: [], nextCursor: null, total: 0 };
 
 /**
  * `qk.me.tasksSummary(input)` loader: Mi espacio's task counts in one
  * grouped statement (`myTaskSummary`), owner-scoped by the session's staff
- * id. A tramo key no live tramo has narrows to nothing.
+ * id. An etapa key no live etapa has narrows to nothing.
  */
 export async function loadMyTasksSummary(
   user: AuthenticatedUser,
@@ -95,11 +95,11 @@ export async function loadMyTasksSummary(
 ): Promise<MyTasksSummary> {
   const viewer = viewerScopeOf(user);
   const today = todayInAppTimeZone(now);
-  // A key no live tramo has: an id no task has, so the groups count nothing (the KPIs still count everything).
-  const tramo = (await tramoFilter(input.tramo)) ?? { workflowId: NO_TRAMO_ID };
+  // A key no live etapa has: an id no task has, so the groups count nothing (the KPIs still count everything).
+  const etapa = (await etapaFilter(input.etapa)) ?? { workflowId: NO_ETAPA_ID };
   const commitment = meTasksCommitmentWindow({ ...(input.retraso ? { retraso: true } : {}) }, today);
   const match: TaskFilters = {
-    ...tramo,
+    ...etapa,
     ...(input.q ? { search: input.q, searchFolded: true as const } : {}),
     ...(commitment ? { commitment } : {}),
   };
@@ -108,7 +108,7 @@ export async function loadMyTasksSummary(
 
 /**
  * `qk.me.tasksList(f)` page loader: my tasks (open ones unless `cerradas`,
- * subtasks as rows), narrowed by project, tramo, search, board column or En
+ * subtasks as rows), narrowed by project, etapa, search, board column or En
  * retraso, in the "retraso" or "vence" order, `limit` rows after `cursor`
  * (the first page of a board column or an Esencial card is shorter).
  */
@@ -120,12 +120,12 @@ export async function loadMyTasksPage(
   const viewer = viewerScopeOf(user);
   const f = input.filters;
   const today = todayInAppTimeZone(now);
-  const tramo = await tramoFilter(f.tramo);
-  if (!tramo) return EMPTY_PAGE;
+  const etapa = await etapaFilter(f.etapa);
+  if (!etapa) return EMPTY_PAGE;
   const commitment = meTasksCommitmentWindow(f, today);
   const filters: TaskFilters = {
     ...myTasksScope(user, viewer),
-    ...tramo,
+    ...etapa,
     ...(f.cerradas ? {} : { mostrar: "abiertas" as const }),
     ...(f.proyecto ? { projectId: f.proyecto } : {}),
     ...(f.q ? { search: f.q, searchFolded: true as const } : {}),
@@ -153,7 +153,7 @@ async function loadMyTasksSeed(
   }
   if (opts.style === "analitico") {
     lists = summary.projects
-      .flatMap((p) => p.tramos.map((t) => meTasksGroupFilters(opts.input, p.project.id, t.tramo.key, opts.withClosed)))
+      .flatMap((p) => p.etapas.map((t) => meTasksGroupFilters(opts.input, p.project.id, t.etapa.key, opts.withClosed)))
       .slice(0, ME_ANALITICO_SEEDED_GROUPS);
   }
   const pages = await Promise.all(lists.map((filters) => loadMyTasksPage(user, { filters, cursor: null }, now)));

@@ -11,7 +11,7 @@ import type {
   PortalScheduleDTO,
   PortalScheduleSectionDTO,
   PortalTeamMemberDTO,
-  PortalTramoDTO,
+  PortalEtapaDTO,
 } from "@/lib/types/portal";
 
 export type PortalProjectRow = {
@@ -44,8 +44,8 @@ export type PortalScheduleTaskRow = {
   /** `schedule_tasks.started_on` / `finished_on`: the row's real dates, null until it moves. */
   startedOn?: string | null;
   finishedOn?: string | null;
-  /** The key of the row's tramo (`schedule_tasks.workflow_id` → `workflows.key`), null while unlinked. */
-  tramoKey?: string | null;
+  /** The key of the row's etapa (`schedule_tasks.workflow_id` → `workflows.key`), null while unlinked. */
+  etapaKey?: string | null;
 };
 
 function joinNonBlank(parts: (string | null | undefined)[], sep: string): string | null {
@@ -78,7 +78,7 @@ export function toPortalProjectDTO(row: PortalProjectRow): PortalProjectDTO {
  * the order they first appear in (by `sortOrder`); within a planta, sections
  * follow `seccionOrder`. Real dates: `actualStart` is the first `startedOn`,
  * `actualEnd` the last `finishedOn` once every task of the section has one
- * (null while any is open). `tramoKey` is the first linked task's tramo.
+ * (null while any is open). `etapaKey` is the first linked task's etapa.
  */
 export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): PortalScheduleDTO {
   if (tasks === null) return null;
@@ -94,7 +94,7 @@ export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): Port
     let g = groups.get(key);
     if (!g) {
       g = { key, planta: t.planta, seccion: t.seccion, start: t.inicio, end: t.fin, progressPct: 0,
-        actualStart: null, actualEnd: null, tramoKey: null, order: t.seccionOrder, total: 0, done: 0, finished: 0,
+        actualStart: null, actualEnd: null, etapaKey: null, order: t.seccionOrder, total: 0, done: 0, finished: 0,
         lastFinish: null };
       groups.set(key, g);
     }
@@ -105,7 +105,7 @@ export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): Port
       g.finished += 1;
       if (g.lastFinish === null || t.finishedOn > g.lastFinish) g.lastFinish = t.finishedOn;
     }
-    if (!g.tramoKey && t.tramoKey) g.tramoKey = t.tramoKey;
+    if (!g.etapaKey && t.etapaKey) g.etapaKey = t.etapaKey;
     if (t.inicio < g.start) g.start = t.inicio;
     if (t.fin > g.end) g.end = t.fin;
     if (t.seccionOrder < g.order) g.order = t.seccionOrder;
@@ -126,14 +126,14 @@ export function toPortalScheduleDTO(tasks: PortalScheduleTaskRow[] | null): Port
       progressPct: g.total ? Math.round((g.done / g.total) * 100) : 0,
       actualStart: g.actualStart ?? null,
       actualEnd: g.total > 0 && g.finished === g.total ? g.lastFinish : null,
-      tramoKey: g.tramoKey ?? null,
+      etapaKey: g.etapaKey ?? null,
     }));
 
   return { sections };
 }
 
-/** The tramo columns the portal reads, joined with the project's `project_stages` row (null when not started). */
-export type PortalTramoRow = {
+/** The etapa columns the portal reads, joined with the project's `project_stages` row (null when not started). */
+export type PortalEtapaRow = {
   id: string;
   key: string;
   name: string;
@@ -143,8 +143,8 @@ export type PortalTramoRow = {
   closedAt: Date | string | null;
 };
 
-/** Live task counts of one tramo in the project (`tasks.workflow_id`); only the counts leave the query. */
-export type PortalTramoProgressRow = { workflowId: string | null; total: number | string; done: number | string };
+/** Live task counts of one etapa in the project (`tasks.workflow_id`); only the counts leave the query. */
+export type PortalEtapaProgressRow = { workflowId: string | null; total: number | string; done: number | string };
 
 function toMonth(value: Date | string | null): string | null {
   if (value === null) return null;
@@ -153,17 +153,17 @@ function toMonth(value: Date | string | null): string | null {
 }
 
 /**
- * Tramos in catalog order with the project's state in each: the project's current tramo and any started,
+ * Etapas in catalog order with the project's state in each: the project's current etapa and any started,
  * still-open one are `en_curso`; a started and closed one is `completado`; the rest `por_iniciar`. Inactive
- * tramos the project never started are left out. `progressPct` is 100 for `completado`, 0 for `por_iniciar`
- * and closed over live tasks for `en_curso`; `startMonth` is the month the tramo started. Only `key`, `name`,
+ * etapas the project never started are left out. `progressPct` is 100 for `completado`, 0 for `por_iniciar`
+ * and closed over live tasks for `en_curso`; `startMonth` is the month the etapa started. Only `key`, `name`,
  * `state`, `progressPct` and `startMonth` reach the DTO.
  */
-export function toPortalTramosDTO(
-  rows: PortalTramoRow[],
+export function toPortalEtapasDTO(
+  rows: PortalEtapaRow[],
   currentWorkflowId: string | null,
-  progress: PortalTramoProgressRow[] = [],
-): PortalTramoDTO[] {
+  progress: PortalEtapaProgressRow[] = [],
+): PortalEtapaDTO[] {
   const counts = new Map<string, { total: number; done: number }>();
   for (const p of progress) {
     if (p.workflowId === null) continue;
@@ -173,7 +173,7 @@ export function toPortalTramosDTO(
     .filter((r) => r.active || r.startedAt !== null || r.id === currentWorkflowId)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"))
     .map((r) => {
-      const state: PortalTramoDTO["state"] =
+      const state: PortalEtapaDTO["state"] =
         r.id === currentWorkflowId
           ? "en_curso"
           : r.startedAt === null
@@ -241,8 +241,8 @@ export const PORTAL_DTO_ALLOWED_KEYS = {
   project: ["address", "code", "endDate", "id", "manager", "name", "progressDeltaMonth", "progressPct", "startDate", "status"],
   projectManager: ["email", "name"],
   schedule: ["sections"],
-  scheduleSection: ["actualEnd", "actualStart", "end", "key", "planta", "progressPct", "seccion", "start", "tramoKey"],
-  tramo: ["key", "name", "progressPct", "startMonth", "state"],
+  scheduleSection: ["actualEnd", "actualStart", "end", "etapaKey", "key", "planta", "progressPct", "seccion", "start"],
+  etapa: ["key", "name", "progressPct", "startMonth", "state"],
   file: ["deliveredAs", "id", "kind", "mimeType", "modifiedAt", "name", "sizeBytes", "uploadedBy"],
   folderGroup: ["files", "folderId", "name"],
   teamMember: ["email", "name", "role"],

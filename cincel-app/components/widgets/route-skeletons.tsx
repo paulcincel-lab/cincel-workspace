@@ -78,7 +78,7 @@ export function ProjectsVisualSkeleton(): ReactNode {
   );
 }
 
-/** Loading layout: 130 px tramo block, then 5 rows + quick-add | 110 px + 3 rows. */
+/** Loading layout: 130 px etapa block, then 5 rows + quick-add | 110 px + 3 rows. */
 export function ResumenEsencialSkeleton(): ReactNode {
   return (
     <div role="status" aria-busy="true" aria-label="Cargando…" className="flex flex-col gap-5">

@@ -75,7 +75,7 @@ beforeEach(() => {
     state.shell
       ? {
           detail: { id: ID },
-          project: { id: ID, name: "Casa Lomas", tramo: null },
+          project: { id: ID, name: "Casa Lomas", etapa: null },
           counts: { tareas: 7, archivos: 0, clientes: 2 },
           canManagePortal: true,
         }

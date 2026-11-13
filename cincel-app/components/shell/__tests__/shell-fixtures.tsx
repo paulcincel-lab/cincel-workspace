@@ -49,7 +49,7 @@ export const FULL_NAV: NavModel = {
     navItem("biblioteca"),
     navItem("asistente"),
   ],
-  tramos: [
+  etapas: [
     { key: "presale", name: "Presale", colorVar: "var(--chart-1)", href: "/tareas?etapa=presale" },
     { key: "diseno", name: "Diseño", colorVar: "var(--chart-2)", href: "/tareas?etapa=diseno" },
     { key: "construccion", name: "Construcción", colorVar: "var(--chart-3)", href: "/tareas?etapa=construccion" },
@@ -57,7 +57,7 @@ export const FULL_NAV: NavModel = {
   footer: [navItem("ajustes")],
 };
 
-export const EMPTY_NAV: NavModel = { items: [], tramos: [], footer: [] };
+export const EMPTY_NAV: NavModel = { items: [], etapas: [], footer: [] };
 
 export const TODAY_ON: TodayStatus = {
   state: "on",

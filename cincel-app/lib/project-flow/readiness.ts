@@ -1,14 +1,14 @@
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
-import type { TramoBoard, TramoCandidateProject, ViewerScope, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
+import type { EtapaBoard, EtapaCandidateProject, ViewerScope, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 
-import { projects, projectStages, taskStatuses, tasks, tramoStartBatches, workflowPhases, workflows } from "../db/schema";
+import { projects, projectStages, taskStatuses, tasks, etapaStartBatches, workflowPhases, workflows } from "../db/schema";
 
 import { READINESS } from "./catalog";
 import type { FlowExecutor } from "./db";
 import { flowError } from "./errors";
-import { batchTouchedSql } from "./start-tramo";
+import { batchTouchedSql } from "./start-etapa";
 
 /** Live tasks of the gate fase on one project, counted (BE §9.1). */
 export type GateCounts = {
@@ -22,11 +22,11 @@ export type GateCounts = {
   maxClosedAt: Date | null;
 };
 
-/** What `readinessBucket` knows about one project not started in tramo T. */
+/** What `readinessBucket` knows about one project not started in etapa T. */
 export type ReadinessFacts = {
-  /** False for the first tramo (no rule). */
+  /** False for the first etapa (no rule). */
   hasRule: boolean;
-  /** The rule's `after` tramo is the first active tramo. */
+  /** The rule's `after` etapa is the first active etapa. */
   afterIsFirst: boolean;
   /** `project_stages(P).started_at`; null when the project has no stage for P. */
   afterStageStartedAt: Date | null;
@@ -47,7 +47,7 @@ export function readinessBucket(facts: ReadinessFacts): ReadinessVerdict {
   if (!facts.hasRule) return { bucket: "ready", readySince: facts.projectCreatedAt };
 
   if (!facts.afterStageStartedAt) {
-    // Upcoming projects are only listed when stage P exists or P is the first tramo.
+    // Upcoming projects are only listed when stage P exists or P is the first etapa.
     return facts.afterIsFirst ? { bucket: "upcoming", open: 0, total: 0 } : { bucket: "hidden" };
   }
 
@@ -60,20 +60,20 @@ export function readinessBucket(facts: ReadinessFacts): ReadinessVerdict {
   return { bucket: "upcoming", open: total - closed, total };
 }
 
-function byName(a: TramoCandidateProject, b: TramoCandidateProject): number {
+function byName(a: EtapaCandidateProject, b: EtapaCandidateProject): number {
   return a.project.name.localeCompare(b.project.name, "es");
 }
 
 /**
- * The "Listos para iniciar" / "Próximos" / started lists of one tramo
+ * The "Listos para iniciar" / "Próximos" / started lists of one etapa
  * (BE §9.1, §9.2). One query per bucket with grouped counts; no N+1.
  * Throws `NOT_FOUND` when the workflow is missing or inactive.
  */
-export async function tramoBoard(db: FlowExecutor, workflowId: string, viewer: ViewerScope): Promise<TramoBoard> {
+export async function etapaBoard(db: FlowExecutor, workflowId: string, viewer: ViewerScope): Promise<EtapaBoard> {
   // Admin data (client, origin, admin tasks) never reaches the board, so every viewer gets the same lists.
   void viewer;
 
-  const tramos = await db
+  const etapas = await db
     .select({
       id: workflows.id,
       key: workflows.key,
@@ -85,40 +85,40 @@ export async function tramoBoard(db: FlowExecutor, workflowId: string, viewer: V
     .where(isNull(workflows.deletedAt))
     .orderBy(asc(workflows.sortOrder), asc(workflows.name));
 
-  const toRef = (w: (typeof tramos)[number]): WorkflowRef => ({
+  const toRef = (w: (typeof etapas)[number]): WorkflowRef => ({
     id: w.id,
     key: w.key,
     name: w.name,
     sortOrder: w.sortOrder,
   });
-  const tramoById = new Map(tramos.map((w) => [w.id, toRef(w)]));
+  const etapaById = new Map(etapas.map((w) => [w.id, toRef(w)]));
 
-  const target = tramos.find((w) => w.id === workflowId && w.active);
+  const target = etapas.find((w) => w.id === workflowId && w.active);
   if (!target) throw flowError("NOT_FOUND");
   const workflow = toRef(target);
-  const firstActive = tramos.find((w) => w.active) ?? null;
+  const firstActive = etapas.find((w) => w.active) ?? null;
 
-  // Resolve the rule by keys, so renames don't break it. A rule whose tramo
-  // or fase is gone behaves like the first tramo.
+  // Resolve the rule by keys, so renames don't break it. A rule whose etapa
+  // or fase is gone behaves like the first etapa.
   const rule = READINESS[target.key] ?? null;
-  const afterTramo = rule ? (tramos.find((w) => w.key === rule.after) ?? null) : null;
+  const afterEtapa = rule ? (etapas.find((w) => w.key === rule.after) ?? null) : null;
   let gatePhase: WorkflowPhaseRef | null = null;
-  if (rule && afterTramo) {
+  if (rule && afterEtapa) {
     const [phase] = await db
       .select({ id: workflowPhases.id, name: workflowPhases.name, sortOrder: workflowPhases.sortOrder })
       .from(workflowPhases)
-      .where(and(eq(workflowPhases.workflowId, afterTramo.id), eq(workflowPhases.key, rule.phaseKey)))
+      .where(and(eq(workflowPhases.workflowId, afterEtapa.id), eq(workflowPhases.key, rule.phaseKey)))
       .limit(1);
     gatePhase = phase ?? null;
   }
-  const hasRule = afterTramo != null && gatePhase != null;
-  const afterIsFirst = afterTramo != null && afterTramo.id === firstActive?.id;
+  const hasRule = afterEtapa != null && gatePhase != null;
+  const afterIsFirst = afterEtapa != null && afterEtapa.id === firstActive?.id;
 
   // ── Candidates: live active/paused projects with no stage row for T ──────
   const stageT = alias(projectStages, "stage_t");
   const stageP = alias(projectStages, "stage_p");
   const gateId = hasRule && gatePhase ? gatePhase.id : null;
-  const afterId = hasRule && afterTramo ? afterTramo.id : null;
+  const afterId = hasRule && afterEtapa ? afterEtapa.id : null;
 
   const isClosed = sql`${tasks.status} = 'completado'`;
   const candidates = await db
@@ -151,8 +151,8 @@ export async function tramoBoard(db: FlowExecutor, workflowId: string, viewer: V
     .where(and(isNull(projects.deletedAt), inArray(projects.status, ["activo", "pausado"]), isNull(stageT.projectId)))
     .groupBy(projects.id, stageP.startedAt);
 
-  const ready: TramoCandidateProject[] = [];
-  const upcoming: TramoCandidateProject[] = [];
+  const ready: EtapaCandidateProject[] = [];
+  const upcoming: EtapaCandidateProject[] = [];
   for (const row of candidates) {
     const verdict = readinessBucket({
       hasRule,
@@ -163,15 +163,15 @@ export async function tramoBoard(db: FlowExecutor, workflowId: string, viewer: V
     });
     const base = {
       project: { id: row.id, name: row.name },
-      currentTramo: row.currentWorkflowId ? (tramoById.get(row.currentWorkflowId) ?? null) : null,
+      currentEtapa: row.currentWorkflowId ? (etapaById.get(row.currentWorkflowId) ?? null) : null,
     };
     if (verdict.bucket === "ready") {
       ready.push({ ...base, readySince: verdict.readySince.toISOString(), pending: null });
-    } else if (verdict.bucket === "upcoming" && afterTramo && gatePhase) {
+    } else if (verdict.bucket === "upcoming" && afterEtapa && gatePhase) {
       upcoming.push({
         ...base,
         readySince: null,
-        pending: { tramo: toRef(afterTramo), phase: gatePhase, open: verdict.open, total: verdict.total },
+        pending: { etapa: toRef(afterEtapa), phase: gatePhase, open: verdict.open, total: verdict.total },
       });
     }
   }
@@ -182,12 +182,12 @@ export async function tramoBoard(db: FlowExecutor, workflowId: string, viewer: V
   // One query: the batch comes from a lateral join and "touched" is the same
   // check `isBatchTouched` runs, so the board costs no query per batch.
   const latestBatch = sql`(
-    select ${tramoStartBatches.id} as id, ${tramoStartBatches.createdCount} as created_count
-    from ${tramoStartBatches}
-    where ${tramoStartBatches.projectId} = ${projects.id}
-      and ${tramoStartBatches.workflowId} = ${workflowId}
-      and ${tramoStartBatches.undoneAt} is null
-    order by ${tramoStartBatches.createdAt} desc, ${tramoStartBatches.id} desc
+    select ${etapaStartBatches.id} as id, ${etapaStartBatches.createdCount} as created_count
+    from ${etapaStartBatches}
+    where ${etapaStartBatches.projectId} = ${projects.id}
+      and ${etapaStartBatches.workflowId} = ${workflowId}
+      and ${etapaStartBatches.undoneAt} is null
+    order by ${etapaStartBatches.createdAt} desc, ${etapaStartBatches.id} desc
     limit 1
   )`;
   const startedRows = await db.execute<{
@@ -205,7 +205,7 @@ export async function tramoBoard(db: FlowExecutor, workflowId: string, viewer: V
     order by ${projects.name} asc
   `);
 
-  const started: TramoBoard["started"] = [...startedRows].map((r) => ({
+  const started: EtapaBoard["started"] = [...startedRows].map((r) => ({
     projectId: r.project_id,
     batchId: r.batch_id ?? null,
     createdCount: r.batch_id ? Number(r.created_count ?? 0) : 0,

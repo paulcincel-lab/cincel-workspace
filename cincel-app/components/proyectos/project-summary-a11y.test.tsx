@@ -52,15 +52,15 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
   removeStorage: vi.fn(),
   readJsonStorage: vi.fn((_key: string, fallback: unknown) => fallback),
 }));
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   return {
     canSeeAdminData: () => true,
-    listTramos: async () => [],
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    listEtapas: async () => [],
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
   };
 });
@@ -127,7 +127,7 @@ function Page({ style, restricted }: { style: PresentationStyle; restricted: boo
             project={{
               id: input.project.id,
               name: input.project.name,
-              tramo: input.project.currentWorkflow,
+              etapa: input.project.currentWorkflow,
               projectType: input.project.projectType,
               addressCity: input.project.addressCity,
               manager: input.project.manager,

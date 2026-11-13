@@ -125,14 +125,14 @@ const TREND: TareasTrend = {
     days: ["09", "10", "11", "12", "13", "14", "15"].map((d, i) => ({
       date: `2026-11-${d}`,
       due: i === 2 ? 2 : 0,
-      tramoKey: i === 2 ? "presale" : null,
+      etapaKey: i === 2 ? "presale" : null,
     })),
   },
 };
 
 const FACETS: TareasFacets = {
   total: 4,
-  byTramo: { presale: 4 },
+  byEtapa: { presale: 4 },
   projects: [],
   mostrar: { todas: 4, abiertas: 3, en_retraso: 1 },
   mine: 4,
@@ -142,7 +142,7 @@ function seededClient() {
   const client = createTestQueryClient();
   client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY, "visual")), {
     facets: FACETS,
-    tramos: [{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }],
+    etapas: [{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }],
     staff: [],
   });
   client.setQueryData(qk.tareas.board(F), boardData());
@@ -156,7 +156,7 @@ function renderVisual() {
       <TareasVisual
         query={QUERY}
         facets={FACETS}
-        tramos={[{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }]}
+        etapas={[{ id: "w1", key: "presale", name: "Presale", sortOrder: 1 }]}
         actions={<button type="button">Nueva tarea</button>}
         search=""
         onSearch={vi.fn()}

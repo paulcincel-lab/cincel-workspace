@@ -1,6 +1,6 @@
 /**
- * Shared fixture for `StatusChip` and `TramoBadge` (redesign FE §4.10.1): the
- * same statuses and tramos render in Visual, Esencial and Analítico.
+ * Shared fixture for `StatusChip` and `EtapaBadge` (redesign FE §4.10.1): the
+ * same statuses and etapas render in Visual, Esencial and Analítico.
  */
 import type { WorkflowRef } from "@/lib/types/core";
 import type { TaskStatusRef } from "@/lib/types/redesign";
@@ -32,17 +32,17 @@ export const STATUS_EXPECTED: Record<keyof typeof STATUS_FIXTURE, { label: strin
   entregado: { label: "Entregado", token: "chart-1" },
 };
 
-export const TRAMO_FIXTURE = {
+export const ETAPA_FIXTURE = {
   presale: { id: "wf-presale", key: "presale", name: "Presale", sortOrder: 1 },
   diseno: { id: "wf-diseno", key: "diseno", name: "Diseño", sortOrder: 2 },
   construccion: { id: "wf-construccion", key: "construccion", name: "Construcción", sortOrder: 3 },
   decoracion: { id: "wf-decoracion", key: "decoracion", name: "Decoración", sortOrder: 4 },
-  /** A tramo outside the known four: own name, neutral color. */
+  /** An etapa outside the known four: own name, neutral color. */
   otro: { id: "wf-otro", key: "mantenimiento", name: "Mantenimiento", sortOrder: 9 },
 } satisfies Record<string, WorkflowRef>;
 
-/** Expected label and color slot per fixture tramo. */
-export const TRAMO_EXPECTED: Record<keyof typeof TRAMO_FIXTURE, { label: string; slot: number | null }> = {
+/** Expected label and color slot per fixture etapa. */
+export const ETAPA_EXPECTED: Record<keyof typeof ETAPA_FIXTURE, { label: string; slot: number | null }> = {
   presale: { label: "Presale", slot: 1 },
   diseno: { label: "Diseño", slot: 2 },
   construccion: { label: "Construcción", slot: 3 },

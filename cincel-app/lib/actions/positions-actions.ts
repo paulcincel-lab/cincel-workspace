@@ -73,7 +73,7 @@ async function deletePositionActionImpl(id: string): Promise<void> {
   await positionsRepository.softDeletePosition(parseInput(UuidSchema, id));
 }
 
-/** Replaces the candidate fases (any tramo). Errors: FORBIDDEN, NOT_FOUND (unknown ids). */
+/** Replaces the candidate fases (any etapa). Errors: FORBIDDEN, NOT_FOUND (unknown ids). */
 export async function setPositionPhasesAction(
   ...args: Parameters<typeof setPositionPhasesActionImpl>
 ): Promise<ActionResult<Awaited<ReturnType<typeof setPositionPhasesActionImpl>>>> {

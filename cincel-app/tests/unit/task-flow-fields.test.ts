@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Tasks with tramo, fase and espacio (project flow BE §7.5, §8.6) against a
+ * Tasks with etapa, fase and espacio (project flow BE §7.5, §8.6) against a
  * real Postgres: createUserTask, updateTask, createSubtask and listTasks.
  * Runs only when TEST_DATABASE_URL points at a migrated database; every test
  * runs inside a transaction that is rolled back.
@@ -59,9 +59,9 @@ type Ctx = {
   projectId: string;
   otherProjectId: string;
   staffId: string;
-  /** Tramo with sort_order 1 and fases Anteproyecto (0), Ejecutivo (1). */
+  /** Etapa with sort_order 1 and fases Anteproyecto (0), Ejecutivo (1). */
   workflowId: string;
-  /** Tramo with sort_order 0. */
+  /** Etapa with sort_order 0. */
   firstWorkflowId: string;
   anteproyectoId: string;
   ejecutivoId: string;
@@ -72,7 +72,7 @@ type Ctx = {
   foreignSpaceId: string;
 };
 
-describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
+describe.skipIf(!url)("tasks with etapa, fase and espacio (test DB)", () => {
   const sql = postgres(url ?? "", { max: 1, onnotice: () => {} });
   const db = drizzle(sql, { schema });
 
@@ -146,19 +146,19 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
   }
 
   describe("createUserTask", () => {
-    it("rejects a task without a tramo, or with a deleted one, as INVALID", async () => {
+    it("rejects a task without an etapa, or with a deleted one, as INVALID", async () => {
       await inTx(async (tx, ctx) => {
         await expect(
-          createUserTask({ projectId: ctx.projectId, title: "Sin tramo", workflowId: null }, ctx.staffId)
+          createUserTask({ projectId: ctx.projectId, title: "Sin etapa", workflowId: null }, ctx.staffId)
         ).rejects.toThrow(/^INVALID/);
         await tx.update(schema.workflows).set({ deletedAt: new Date() }).where(eq(schema.workflows.id, ctx.workflowId));
         await expect(
-          createUserTask({ projectId: ctx.projectId, title: "Tramo borrado", workflowId: ctx.workflowId }, ctx.staffId)
+          createUserTask({ projectId: ctx.projectId, title: "Etapa borrado", workflowId: ctx.workflowId }, ctx.staffId)
         ).rejects.toThrow(/^INVALID/);
       });
     });
 
-    it("returns PHASE_MISMATCH for a fase of another tramo and SPACE_MISMATCH for another project's espacio", async () => {
+    it("returns PHASE_MISMATCH for a fase of another etapa and SPACE_MISMATCH for another project's espacio", async () => {
       await inTx(async (_tx, ctx) => {
         await expect(
           createUserTask(
@@ -175,7 +175,7 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
       });
     });
 
-    it("stores tramo, fase and espacio and writes no project_stages row", async () => {
+    it("stores etapa, fase and espacio and writes no project_stages row", async () => {
       await inTx(async (tx, ctx) => {
         const task = await createUserTask(
           {
@@ -206,23 +206,23 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
   });
 
   describe("updateTask", () => {
-    it("rejects a non-admin changing the tramo of a task that already has one", async () => {
+    it("rejects a non-admin changing the etapa of a task that already has one", async () => {
       await inTx(async (tx, ctx) => {
-        const task = await addTask(tx, ctx, "Con tramo", { workflowId: ctx.workflowId });
-        // Only admins move a task between tramos (#1022).
+        const task = await addTask(tx, ctx, "Con etapa", { workflowId: ctx.workflowId });
+        // Only admins move a task between etapas (#1022).
         await expect(updateTask(task.id, { workflowId: ctx.firstWorkflowId }, ctx.staffId)).rejects.toThrow(
-          /^FORBIDDEN: task tramo change/
+          /^FORBIDDEN: task etapa change/
         );
-        // Sending the same tramo again is a no-op.
+        // Sending the same etapa again is a no-op.
         await expect(updateTask(task.id, { workflowId: ctx.workflowId }, ctx.staffId)).resolves.toMatchObject({
           workflowId: ctx.workflowId,
         });
       });
     });
 
-    it("sets the tramo of a task with none and checks a fase sent with it against the new tramo", async () => {
+    it("sets the etapa of a task with none and checks a fase sent with it against the new etapa", async () => {
       await inTx(async (tx, ctx) => {
-        const legacy = await addTask(tx, ctx, "Sin tramo");
+        const legacy = await addTask(tx, ctx, "Sin etapa");
         await expect(
           updateTask(legacy.id, { workflowId: ctx.workflowId, phaseId: ctx.foreignPhaseId }, ctx.staffId)
         ).rejects.toThrow("PHASE_MISMATCH");
@@ -235,7 +235,7 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
       });
     });
 
-    it("moves fase and espacio within the task's tramo and project, and records them", async () => {
+    it("moves fase and espacio within the task's etapa and project, and records them", async () => {
       await inTx(async (tx, ctx) => {
         const task = await addTask(tx, ctx, "Mover", { workflowId: ctx.workflowId, phaseId: ctx.anteproyectoId });
         await expect(updateTask(task.id, { phaseId: ctx.foreignPhaseId }, ctx.staffId)).rejects.toThrow(
@@ -266,7 +266,7 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
   });
 
   describe("createSubtask", () => {
-    it("inherits the parent's tramo and fase and takes an espacio of the project", async () => {
+    it("inherits the parent's etapa and fase and takes an espacio of the project", async () => {
       await inTx(async (tx, ctx) => {
         const parent = await addTask(tx, ctx, "Padre", { workflowId: ctx.workflowId, phaseId: ctx.ejecutivoId });
         const child = await createSubtask(parent.id, { title: "Hija", spaceId: ctx.cocinaId }, ctx.staffId);
@@ -304,16 +304,16 @@ describe.skipIf(!url)("tasks with tramo, fase and espacio (test DB)", () => {
       });
     });
 
-    it("orders by tramo, then fase, then manual order; missing ones go last", async () => {
+    it("orders by etapa, then fase, then manual order; missing ones go last", async () => {
       await inTx(async (tx, ctx) => {
-        const noTramo = await addTask(tx, ctx, "Sin tramo");
+        const noEtapa = await addTask(tx, ctx, "Sin etapa");
         const ejec = await addTask(tx, ctx, "Ejecutivo 1", { workflowId: ctx.workflowId, phaseId: ctx.ejecutivoId, sortOrder: 0 });
         const noPhase = await addTask(tx, ctx, "Sin fase", { workflowId: ctx.workflowId });
         const ante2 = await addTask(tx, ctx, "Ante 2", { workflowId: ctx.workflowId, phaseId: ctx.anteproyectoId, sortOrder: 2 });
         const ante1 = await addTask(tx, ctx, "Ante 1", { workflowId: ctx.workflowId, phaseId: ctx.anteproyectoId, sortOrder: 1 });
         const first = await addTask(tx, ctx, "Presale", { workflowId: ctx.firstWorkflowId, phaseId: ctx.foreignPhaseId });
         const rows = await listTasks({ projectId: ctx.projectId }, UNSCOPED_VIEWER);
-        expect(rows.map((t) => t.id)).toEqual([first.id, ante1.id, ante2.id, ejec.id, noPhase.id, noTramo.id]);
+        expect(rows.map((t) => t.id)).toEqual([first.id, ante1.id, ante2.id, ejec.id, noPhase.id, noEtapa.id]);
       });
     });
   });

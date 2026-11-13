@@ -28,7 +28,7 @@ vi.mock("@/components/tareas/quick-add-create", async (importOriginal) => ({
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { TaskListRow } from "@/lib/types/core";
-import { TRAMOS, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
+import { ETAPAS, fixtureSummaryInput } from "@/tests/unit/fixtures/project-summary";
 import { seedResumenTasks } from "@/tests/unit/fixtures/resumen-summary";
 
 import { ResumenEsencialLayout } from "../ResumenEsencialLayout";
@@ -41,7 +41,7 @@ const TASKS = [
     archived: false,
     commitmentDate: "2026-11-01",
     workflowId: "w-construccion",
-    workflow: TRAMOS[2],
+    workflow: ETAPAS[2],
     phase: null,
     manager: { id: "s1", name: "Paul Langarica" },
     parentTaskId: null,

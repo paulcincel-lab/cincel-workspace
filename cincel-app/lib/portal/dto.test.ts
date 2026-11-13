@@ -114,11 +114,11 @@ describe("toPortalScheduleDTO", () => {
     expect(dto).toEqual({
       sections: [
         { key: "Planta baja::Preliminares", planta: "Planta baja", seccion: "Preliminares", start: "2026-02-02",
-          end: "2026-02-10", progressPct: 33, actualStart: null, actualEnd: null, tramoKey: null },
+          end: "2026-02-10", progressPct: 33, actualStart: null, actualEnd: null, etapaKey: null },
         { key: "Planta baja::Albañilerías", planta: "Planta baja", seccion: "Albañilerías", start: "2026-02-11",
-          end: "2026-02-20", progressPct: 100, actualStart: null, actualEnd: null, tramoKey: null },
+          end: "2026-02-20", progressPct: 100, actualStart: null, actualEnd: null, etapaKey: null },
         { key: "Planta alta::Preliminares", planta: "Planta alta", seccion: "Preliminares", start: "2026-03-01",
-          end: "2026-03-05", progressPct: 0, actualStart: null, actualEnd: null, tramoKey: null },
+          end: "2026-03-05", progressPct: 0, actualStart: null, actualEnd: null, etapaKey: null },
       ],
     });
   });
@@ -140,7 +140,7 @@ describe("toPortalScheduleDTO", () => {
     const keys = keysDeep(dto);
     for (const k of FORBIDDEN_KEYS) expect(keys).not.toContain(k);
     expect(Object.keys(dto!.sections[0]).sort()).toEqual(
-      ["actualEnd", "actualStart", "end", "key", "planta", "progressPct", "seccion", "start", "tramoKey"]);
+      ["actualEnd", "actualStart", "end", "etapaKey", "key", "planta", "progressPct", "seccion", "start"]);
     const json = JSON.stringify(dto);
     expect(json).not.toContain("Demolición de muro secreto");
     expect(json).not.toContain("Juan Contratista");
@@ -159,12 +159,12 @@ describe("toPortalScheduleDTO", () => {
     expect(closed!.sections[0]).toMatchObject({ actualStart: "2026-02-03", actualEnd: "2026-02-12" });
   });
 
-  it("tramoKey is the first linked task's etapa", () => {
+  it("etapaKey is the first linked task's etapa", () => {
     const dto = toPortalScheduleDTO([
-      task({ sortOrder: 1, tramoKey: null }),
-      task({ sortOrder: 2, tramoKey: "construccion" }),
-      task({ sortOrder: 3, tramoKey: "diseno" }),
+      task({ sortOrder: 1, etapaKey: null }),
+      task({ sortOrder: 2, etapaKey: "construccion" }),
+      task({ sortOrder: 3, etapaKey: "diseno" }),
     ]);
-    expect(dto!.sections[0].tramoKey).toBe("construccion");
+    expect(dto!.sections[0].etapaKey).toBe("construccion");
   });
 });

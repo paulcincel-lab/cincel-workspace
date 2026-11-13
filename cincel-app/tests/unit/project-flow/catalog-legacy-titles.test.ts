@@ -7,7 +7,7 @@
  * Diseño (29) and Construcción (12), in their original order. It replaces the
  * TS template files, so this test reads nothing from them: every
  * `DEFAULT_CATALOG` row carries one of these titles as its `legacyTitle`, per
- * tramo, and the fixture keeps the old spelling that 0024 step 5e links
+ * etapa, and the fixture keeps the old spelling that 0024 step 5e links
  * existing tasks by.
  */
 import { describe, expect, it } from "vitest";
@@ -19,28 +19,28 @@ import legacy from "./__fixtures__/legacy-titles.json";
 type LegacyRow = { phase: string; legacyTitle: string };
 const FIXTURE = legacy as Record<string, LegacyRow[]>;
 
-const TRAMO_KEYS = ["presale", "diseno", "construccion"] as const;
-type TramoKey = (typeof TRAMO_KEYS)[number];
-const isTramoKey = (v: unknown): v is TramoKey =>
-  typeof v === "string" && (TRAMO_KEYS as readonly string[]).includes(v);
+const ETAPA_KEYS = ["presale", "diseno", "construccion"] as const;
+type EtapaKey = (typeof ETAPA_KEYS)[number];
+const isEtapaKey = (v: unknown): v is EtapaKey =>
+  typeof v === "string" && (ETAPA_KEYS as readonly string[]).includes(v);
 
-type CatalogRow = { tramo: TramoKey | null; title: string; legacyTitle: string };
+type CatalogRow = { etapa: EtapaKey | null; title: string; legacyTitle: string };
 
 /**
  * Every template row of the catalog (an object with string `title` and
- * `legacyTitle`) with the tramo it sits under: the nearest enclosing object
- * whose `workflowKey`/`key` is a tramo key, or a property named after one.
+ * `legacyTitle`) with the etapa it sits under: the nearest enclosing object
+ * whose `workflowKey`/`key` is an etapa key, or a property named after one.
  * Reads the shape loosely so the guard doesn't depend on how the catalog nests.
  */
-function catalogRows(node: unknown, tramo: TramoKey | null = null): CatalogRow[] {
-  if (Array.isArray(node)) return node.flatMap((n) => catalogRows(n, tramo));
+function catalogRows(node: unknown, etapa: EtapaKey | null = null): CatalogRow[] {
+  if (Array.isArray(node)) return node.flatMap((n) => catalogRows(n, etapa));
   if (node === null || typeof node !== "object") return [];
   const obj = node as Record<string, unknown>;
-  const own = isTramoKey(obj.workflowKey) ? obj.workflowKey : isTramoKey(obj.key) ? obj.key : tramo;
+  const own = isEtapaKey(obj.workflowKey) ? obj.workflowKey : isEtapaKey(obj.key) ? obj.key : etapa;
   if (typeof obj.title === "string" && typeof obj.legacyTitle === "string") {
-    return [{ tramo: own, title: obj.title, legacyTitle: obj.legacyTitle }];
+    return [{ etapa: own, title: obj.title, legacyTitle: obj.legacyTitle }];
   }
-  return Object.entries(obj).flatMap(([k, v]) => catalogRows(v, isTramoKey(k) ? k : own));
+  return Object.entries(obj).flatMap(([k, v]) => catalogRows(v, isEtapaKey(k) ? k : own));
 }
 
 const sorted = (xs: string[]) => [...xs].sort((a, b) => a.localeCompare(b));
@@ -50,7 +50,7 @@ const key = (s: string) =>
 
 describe("frozen legacy title fixture", () => {
   it("holds 10 / 29 / 12 old templates for Presale, Diseño and Construcción", () => {
-    expect(Object.keys(FIXTURE).sort()).toEqual([...TRAMO_KEYS].sort());
+    expect(Object.keys(FIXTURE).sort()).toEqual([...ETAPA_KEYS].sort());
     expect(FIXTURE.presale).toHaveLength(10);
     expect(FIXTURE.diseno).toHaveLength(29);
     expect(FIXTURE.construccion).toHaveLength(12);
@@ -79,11 +79,11 @@ describe("catalog drift guard: legacyTitle", () => {
     for (const row of rows) expect(row.legacyTitle.trim(), row.title).not.toBe("");
   });
 
-  it("every legacyTitle equals an old template title of its tramo, and none is missing", () => {
-    for (const tramo of TRAMO_KEYS) {
-      const fromCatalog = rows.filter((r) => r.tramo === tramo).map((r) => r.legacyTitle);
-      const frozen = FIXTURE[tramo].map((r) => r.legacyTitle);
-      expect(sorted(fromCatalog), tramo).toEqual(sorted(frozen));
+  it("every legacyTitle equals an old template title of its etapa, and none is missing", () => {
+    for (const etapa of ETAPA_KEYS) {
+      const fromCatalog = rows.filter((r) => r.etapa === etapa).map((r) => r.legacyTitle);
+      const frozen = FIXTURE[etapa].map((r) => r.legacyTitle);
+      expect(sorted(fromCatalog), etapa).toEqual(sorted(frozen));
     }
   });
 

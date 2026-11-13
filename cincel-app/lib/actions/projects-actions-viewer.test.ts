@@ -38,8 +38,8 @@ const detail = {
 const repo = vi.hoisted(() => ({
   listProjects: vi.fn(async () => []),
   getProject: vi.fn(async () => null),
-  setProjectCurrentTramo: vi.fn(),
-  assignProjectTramo: vi.fn(),
+  setProjectCurrentEtapa: vi.fn(),
+  assignProjectEtapa: vi.fn(),
 }));
 vi.mock("@/lib/repositories/projects-repository", () => repo);
 
@@ -47,14 +47,14 @@ import * as projectsActionsModule from "./projects-actions";
 const {
   fetchProjectAction,
   fetchProjectsAction,
-  setProjectCurrentTramoAction,
+  setProjectCurrentEtapaAction,
 } = unwrapActions(projectsActionsModule);
 
 beforeEach(() => {
   vi.clearAllMocks();
   session.access = "Colaborador";
-  repo.setProjectCurrentTramo.mockResolvedValue(detail);
-  repo.assignProjectTramo.mockResolvedValue(detail);
+  repo.setProjectCurrentEtapa.mockResolvedValue(detail);
+  repo.assignProjectEtapa.mockResolvedValue(detail);
 });
 
 describe("project reads", () => {
@@ -74,7 +74,7 @@ describe("project reads", () => {
 
 describe("current etapa changes", () => {
   it("return no client or origin to a non-admin", async () => {
-    expect(await setProjectCurrentTramoAction(PROJECT, WORKFLOW)).toMatchObject({
+    expect(await setProjectCurrentEtapaAction(PROJECT, WORKFLOW)).toMatchObject({
       clientId: null,
       origin: null,
       originStaffId: null,
@@ -85,6 +85,6 @@ describe("current etapa changes", () => {
 
   it("keep them for an administrator", async () => {
     session.access = "Administrador";
-    expect(await setProjectCurrentTramoAction(PROJECT, WORKFLOW)).toMatchObject({ clientId: "c1", client: { name: "Cliente" } });
+    expect(await setProjectCurrentEtapaAction(PROJECT, WORKFLOW)).toMatchObject({ clientId: "c1", client: { name: "Cliente" } });
   });
 });

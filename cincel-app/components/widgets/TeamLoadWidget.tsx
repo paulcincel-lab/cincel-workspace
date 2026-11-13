@@ -3,20 +3,20 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
-import { heatTone, ringOffset, tramoTone } from "@/components/widgets/resumen-tones";
+import { heatTone, ringOffset, etapaTone } from "@/components/widgets/resumen-tones";
 import type { TeamLoadCard } from "@/lib/proyectos/project-summary";
 import type { WorkflowRef } from "@/lib/types/core";
 
 /**
  * "Equipo y carga" (Visual Resumen): two columns of people, each a 56 px load
  * ring (heat color by `OCCUPANCY_HEAT`, soft track) around a 40 px avatar
- * tinted by the person's dominant tramo, the name and a line in the heat
+ * tinted by the person's dominant etapa, the name and a line in the heat
  * color: "{load} % · {n} vencidas" / "· {n} bloqueada" / "· al día" (counts
  * are this project's). At most `max` people, then "+{n}" linking to `moreHref`.
  */
 export type TeamLoadWidgetProps = {
   people: TeamLoadCard[];
-  tramoCatalog?: WorkflowRef[];
+  etapaCatalog?: WorkflowRef[];
   max?: number;
   moreHref?: string;
 };
@@ -38,7 +38,7 @@ export function teamLoadLine(person: Pick<TeamLoadCard, "loadPct" | "overdueHere
 
 const R = 22;
 
-export function TeamLoadWidget({ people, tramoCatalog = [], max = 6, moreHref }: TeamLoadWidgetProps): ReactNode {
+export function TeamLoadWidget({ people, etapaCatalog = [], max = 6, moreHref }: TeamLoadWidgetProps): ReactNode {
   const shown = people.slice(0, max);
   const rest = people.length - shown.length;
   return (
@@ -46,7 +46,7 @@ export function TeamLoadWidget({ people, tramoCatalog = [], max = 6, moreHref }:
       <ul className="grid grid-cols-2 gap-4">
         {shown.map((person) => {
           const heat = heatTone(person.loadPct);
-          const tint = tramoTone(person.tramoKey, tramoCatalog);
+          const tint = etapaTone(person.etapaKey, etapaCatalog);
           const pct = Math.max(0, Math.min(100, Math.round(person.loadPct)));
           return (
             <li key={person.id} className="flex min-w-0 items-center gap-3">

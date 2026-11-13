@@ -35,9 +35,9 @@ async function orFallback<T>(read: Promise<T>, fallback: T, what: string): Promi
   }
 }
 
-/** Active tramos in order, without keyless rows (what `listTramos` returns), read straight from the repository. */
-export async function tramoCatalog(): Promise<WorkflowRef[]> {
-  const rows = await workflowsRepository.listTramosNav();
+/** Active etapas in order, without keyless rows (what `listEtapas` returns), read straight from the repository. */
+export async function etapaCatalog(): Promise<WorkflowRef[]> {
+  const rows = await workflowsRepository.listEtapasNav();
   return rows
     .filter((row) => row.key.trim() !== "")
     .map((row) => ({ id: row.id, key: row.key, name: row.name, sortOrder: row.sortOrder }))
@@ -60,10 +60,10 @@ async function rootFiles(staffId: string, projectId: string): Promise<{ items: S
 }
 
 /**
- * Active catalog fases of every tramo, by workflow id, in `sort_order`: one
- * statement. The Esencial tramo line reads "fase {i} de {n}" from it.
+ * Active catalog fases of every etapa, by workflow id, in `sort_order`: one
+ * statement. The Esencial etapa line reads "fase {i} de {n}" from it.
  */
-async function phasesByTramo(): Promise<Record<string, WorkflowPhaseRef[]>> {
+async function phasesByEtapa(): Promise<Record<string, WorkflowPhaseRef[]>> {
   const rows = await db
     .select({
       id: workflowPhases.id,
@@ -74,11 +74,11 @@ async function phasesByTramo(): Promise<Record<string, WorkflowPhaseRef[]>> {
     .from(workflowPhases)
     .where(eq(workflowPhases.active, true))
     .orderBy(asc(workflowPhases.workflowId), asc(workflowPhases.sortOrder));
-  const byTramo: Record<string, WorkflowPhaseRef[]> = {};
+  const byEtapa: Record<string, WorkflowPhaseRef[]> = {};
   for (const row of rows) {
-    (byTramo[row.workflowId] ??= []).push({ id: row.id, name: row.name, sortOrder: row.sortOrder });
+    (byEtapa[row.workflowId] ??= []).push({ id: row.id, name: row.name, sortOrder: row.sortOrder });
   }
-  return byTramo;
+  return byEtapa;
 }
 
 /** The ids of the project's own staff: responsable, coordinación and active miembros. */
@@ -155,7 +155,7 @@ async function projectTasks(projectId: string, user: AuthenticatedUser): Promise
  * Reads: the project (deduped with the shell per request), one portfolio
  * row (`listPortfolioRows({ projectIds: [id] })`), the schedule (the
  * Cronograma's source), the slim task rows, spaces, the team's staff rows,
- * tramos, the root Drive listing and the team load (`teamLoad`: open tasks
+ * etapas, the root Drive listing and the team load (`teamLoad`: open tasks
  * across all projects against capacity, two statements).
  */
 export async function loadProjectResumen(projectId: string, user: AuthenticatedUser): Promise<ProjectSummaryInput | null> {
@@ -174,7 +174,7 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
   const now = new Date();
   const today = zonedIsoDate(now, PROJECT_TIMEZONE);
 
-  const [tasks, portfolio, schedule, drive, spaces, team, tramos, phases, teamLoad] = await Promise.all([
+  const [tasks, portfolio, schedule, drive, spaces, team, etapas, phases, teamLoad] = await Promise.all([
     orFallback(projectTasks(detail.id, user), [], "tasks"),
     orFallback(
       listPortfolioRows({ includeAdminData: isAdmin, now, projectIds: [detail.id] }).then((rows) => rows[0] ?? null),
@@ -189,8 +189,8 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
       {},
       "staff",
     ),
-    orFallback(tramoCatalog(), [], "tramos"),
-    orFallback(phasesByTramo(), {}, "fases"),
+    orFallback(etapaCatalog(), [], "etapas"),
+    orFallback(phasesByEtapa(), {}, "fases"),
     orFallback(teamLoadOf(detail, isAdmin), {}, "team load"),
   ]);
 
@@ -201,7 +201,7 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
   return {
     project: scopeProjectForResumen(detail, showClientContacts),
     portfolio: portfolio ? { ...portfolio, budgetSpentPct: isAdmin ? portfolio.budgetSpentPct : null } : null,
-    tramoCatalog: tramos,
+    etapaCatalog: etapas,
     taskStats,
     // `getScheduleForProject` never reads payments for non-admins; `[]` keeps the rule here as well.
     schedule: schedule ? { tasks: schedule.tasks, payments: isAdmin ? schedule.payments : [] } : null,
@@ -212,7 +212,7 @@ export async function loadProjectResumen(projectId: string, user: AuthenticatedU
     showBudget: isAdmin,
     showClientContacts,
     today,
-    phasesByTramo: phases,
+    phasesByEtapa: phases,
     teamLoad,
   };
 }

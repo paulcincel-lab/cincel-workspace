@@ -3,7 +3,7 @@
  * codes stored in the database — display labels live in the UI.
  */
 
-import type { TramoColorSlot } from "@/lib/tramos/tramo-color";
+import type { EtapaColorSlot } from "@/lib/etapas/etapa-color";
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 export type ContactType = "cliente" | "socio" | "proveedor";
@@ -12,9 +12,9 @@ export type ProviderSubtype = "contratista" | "colaborador" | "tienda";
 export type ProviderStatus = "activo" | "inactivo" | "pausado" | "prospecto" | "lista_negra";
 export type StaffKind = "empleado" | "freelance" | "servicio_social";
 export type ProjectStatus = "activo" | "pausado" | "completado" | "cancelado";
-/** `admin`: admin-only task, no tramo / fase / espacio, administrators only (project flow). */
+/** `admin`: admin-only task, no etapa / fase / espacio, administrators only (project flow). */
 export type TaskKind = "workflow" | "usuario" | "admin";
-/** When a tramo starts by itself (BE §3.2). The UI shows it as one switch: `manual` = off. */
+/** When an etapa starts by itself (BE §3.2). The UI shows it as one switch: `manual` = off. */
 export type WorkflowAutoStart = "on_create" | "on_ready" | "manual";
 export type TaskStatus = "pendiente" | "en_proceso" | "completado" | "bloqueado";
 export type TaskPriority = "alta" | "media" | "baja";
@@ -113,7 +113,7 @@ export type PositionRef = { id: string; name: string };
 export type Position = PositionRef & {
   sortOrder: number;
   active: boolean;
-  /** Candidate fases, in tramo then catalog order. Suggestions only. */
+  /** Candidate fases, in etapa then catalog order. Suggestions only. */
   phases: Array<WorkflowPhaseRef & { workflowId: string; workflowName: string }>;
   staffCount: number;
   /** Referenced by a Google group mapping (can't be deleted: IN_USE). */
@@ -206,7 +206,7 @@ export type ContactInput = {
 };
 
 // ── Method ──────────────────────────────────────────────────────────────────
-/** A tramo (Presale, Diseño, Construcción). */
+/** An etapa (Presale, Diseño, Construcción). */
 export type Workflow = {
   id: string;
   key: string;
@@ -215,11 +215,11 @@ export type Workflow = {
   active: boolean;
   sortOrder: number;
   autoStart: WorkflowAutoStart;
-  /** The tramo's chosen color slot (1–5); null = derived from its key / sortOrder (`tramoColorSlot`). */
-  colorSlot?: TramoColorSlot | null;
+  /** The etapa's chosen color slot (1–5); null = derived from its key / sortOrder (`etapaColorSlot`). */
+  colorSlot?: EtapaColorSlot | null;
 };
 
-/** A fase of a tramo's catalog. */
+/** A fase of an etapa's catalog. */
 export type WorkflowPhaseRef = { id: string; name: string; sortOrder: number };
 export type WorkflowPhase = WorkflowPhaseRef & {
   workflowId: string;
@@ -229,8 +229,8 @@ export type WorkflowPhase = WorkflowPhaseRef & {
 };
 export type WorkflowPhaseInput = { name: string; active?: boolean };
 
-/** Read-only: when this tramo's projects become "Listos para iniciar". Null for the first tramo. */
-export type TramoReadiness = { afterWorkflow: WorkflowRef; afterPhase: WorkflowPhaseRef } | null;
+/** Read-only: when this etapa's projects become "Listos para iniciar". Null for the first etapa. */
+export type EtapaReadiness = { afterWorkflow: WorkflowRef; afterPhase: WorkflowPhaseRef } | null;
 
 export type WorkflowTaskTemplate = {
   id: string;
@@ -256,7 +256,7 @@ export type WorkflowDetail = Workflow & {
   /** Catalog order. */
   phases: WorkflowPhase[];
   templates: WorkflowTaskTemplate[];
-  readiness: TramoReadiness;
+  readiness: EtapaReadiness;
 };
 
 export type WorkflowInput = {
@@ -266,11 +266,11 @@ export type WorkflowInput = {
   active?: boolean;
   sortOrder?: number;
   /** 1–5, or null to go back to the derived color. */
-  colorSlot?: TramoColorSlot | null;
+  colorSlot?: EtapaColorSlot | null;
 };
 
 export type WorkflowTaskTemplateInput = {
-  /** Required: a fase of the template's tramo (else PHASE_MISMATCH). */
+  /** Required: a fase of the template's etapa (else PHASE_MISMATCH). */
   phaseId: string;
   title: string;
   notes?: string | null;
@@ -318,12 +318,12 @@ export type WorkflowRef = {
   key: string;
   name: string;
   sortOrder: number;
-  /** The tramo's chosen color slot, when the read carries it (`tramoColorSlot` prefers it). */
-  colorSlot?: TramoColorSlot | null;
+  /** The etapa's chosen color slot, when the read carries it (`etapaColorSlot` prefers it). */
+  colorSlot?: EtapaColorSlot | null;
 };
 
-/** A tramo started on a project. */
-export type ProjectTramo = WorkflowRef & { startedAt: string | null; closedAt: string | null; current: boolean };
+/** An etapa started on a project. */
+export type ProjectEtapa = WorkflowRef & { startedAt: string | null; closedAt: string | null; current: boolean };
 
 // ── Espacios ────────────────────────────────────────────────────────────────
 export type ProjectSpaceRef = { id: string; name: string };
@@ -333,13 +333,13 @@ export type ProjectListItem = Project & {
   /** Null: no client, or the viewer isn't admin. */
   client: ContactRef | null;
   currentWorkflow: WorkflowRef | null;
-  /** Started tramos in tramo order, with dates and `current`. Replaces `stages`. */
-  tramos: ProjectTramo[];
-  /** First catalog fase of the current tramo with open tasks. */
+  /** Started etapas in etapa order, with dates and `current`. Replaces `stages`. */
+  etapas: ProjectEtapa[];
+  /** First catalog fase of the current etapa with open tasks. */
   activePhase: WorkflowPhaseRef | null;
-  /** No current tramo (migration flag "Asignar tramo"). */
-  needsTramo: boolean;
-  /** @deprecated Every stage the project is in, in workflow order; use `tramos`. */
+  /** No current etapa (migration flag "Asignar etapa"). */
+  needsEtapa: boolean;
+  /** @deprecated Every stage the project is in, in workflow order; use `etapas`. */
   stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
@@ -363,9 +363,9 @@ export type ProjectDetail = Project & {
   /** Null: no client, or the viewer isn't admin. */
   client: ContactRef | null;
   currentWorkflow: WorkflowRef | null;
-  tramos: ProjectTramo[];
-  needsTramo: boolean;
-  /** @deprecated Every stage the project is in, in workflow order; use `tramos`. */
+  etapas: ProjectEtapa[];
+  needsEtapa: boolean;
+  /** @deprecated Every stage the project is in, in workflow order; use `etapas`. */
   stages: WorkflowRef[];
   manager: StaffRef | null;
   coordinator: StaffRef | null;
@@ -379,18 +379,18 @@ export type ProjectDetail = Project & {
 };
 
 /**
- * "+ Nuevo proyecto" (FE §3.4): the name, plus the starting tramo (#1034).
- * `startWorkflowId` missing: the first tramo starts when its auto-start is
- * `on_create`; `null`: no tramo starts; an id: that tramo starts with
+ * "+ Nuevo proyecto" (FE §3.4): the name, plus the starting etapa (#1034).
+ * `startWorkflowId` missing: the first etapa starts when its auto-start is
+ * `on_create`; `null`: no etapa starts; an id: that etapa starts with
  * `phaseIds` (every active fase when missing), unassigned.
  */
 export type ProjectCreateInput = { name: string; startWorkflowId?: string | null; phaseIds?: string[] };
 
-/** The create dialog's "Tramo inicial" options: active tramos in catalog order with their active fases. */
+/** The create dialog's "Etapa inicial" options: active etapas in catalog order with their active fases. */
 export type ProjectCreateStartOptions = {
-  /** What a create without the field starts: the first tramo when its auto-start is on, else null ("Ninguno"). */
+  /** What a create without the field starts: the first etapa when its auto-start is on, else null ("Ninguno"). */
   defaultWorkflowId: string | null;
-  tramos: Array<WorkflowRef & { phases: Array<WorkflowPhaseRef & { templateCount: number }> }>;
+  etapas: Array<WorkflowRef & { phases: Array<WorkflowPhaseRef & { templateCount: number }> }>;
 };
 
 export type ProjectInput = {
@@ -420,7 +420,7 @@ export type Task = {
   kind: TaskKind;
   templateId: string | null;
   workflowId: string | null;
-  /** A fase of the task's tramo; null = "Sin fase · revisar". */
+  /** A fase of the task's etapa; null = "Sin fase · revisar". */
   phaseId: string | null;
   /** An espacio of the task's project. */
   spaceId: string | null;
@@ -585,7 +585,7 @@ export type UserTaskInput = {
   projectId: string;
   title: string;
   notes?: string | null;
-  /** The task's tramo. Required: null (or an unknown tramo) → INVALID. */
+  /** The task's etapa. Required: null (or an unknown etapa) → INVALID. */
   workflowId: string | null;
   /** Must belong to `workflowId` (PHASE_MISMATCH). */
   phaseId?: string | null;
@@ -599,10 +599,10 @@ export type UserTaskInput = {
   deliveryDate?: string | null;
 };
 
-/** Input for a child task: project, fase and tramo come from the parent; `spaceId` allowed. */
+/** Input for a child task: project, fase and etapa come from the parent; `spaceId` allowed. */
 export type SubtaskInput = Omit<UserTaskInput, "projectId" | "phaseId" | "workflowId">;
 
-/** "+ Tarea de administración": no tramo, fase or espacio; administrator assignees only. */
+/** "+ Tarea de administración": no etapa, fase or espacio; administrator assignees only. */
 export type AdminTaskInput = Omit<UserTaskInput, "workflowId" | "phaseId" | "spaceId">;
 
 export type TaskPatch = Partial<
@@ -621,11 +621,11 @@ export type TaskPatch = Partial<
     | "workflowId"
   >
 > & { /** Planned hours (Calendario BE §3.5); null clears it. */ estimatedHours?: number | null };
-// `workflowId`: setting a tramo on a task without one is open to task writers;
-// changing an existing tramo is admins only (`FORBIDDEN: task tramo change`)
-// and clears `phaseId` when the fase isn't in the new tramo, subtasks moving
+// `workflowId`: setting an etapa on a task without one is open to task writers;
+// changing an existing etapa is admins only (`FORBIDDEN: task etapa change`)
+// and clears `phaseId` when the fase isn't in the new etapa, subtasks moving
 // with the parent (#1022). Admin tasks reject it (ADMIN_TASK); an unknown
-// tramo or one of another project is INVALID.
+// etapa or one of another project is INVALID.
 
 /**
  * One bulk change of the task tables' selection bar (#1040), one field per
@@ -654,7 +654,7 @@ export type TaskBulkResult = {
 export type TaskFilters = {
   projectId?: string;
   workflowId?: string;
-  /** Only the tasks without a tramo (`workflow_id is null`). */
+  /** Only the tasks without an etapa (`workflow_id is null`). */
   withoutWorkflow?: boolean;
   phaseId?: string;
   spaceId?: string;
@@ -693,26 +693,26 @@ export type TaskFilters = {
   topLevelOnly?: boolean;
 };
 
-// ── Starting a tramo (FE §7.1, BE §9) ────────────────────────────────────────
-export type TramoCandidateProject = {
+// ── Starting an etapa (FE §7.1, BE §9) ────────────────────────────────────────
+export type EtapaCandidateProject = {
   project: { id: string; name: string };
-  currentTramo: WorkflowRef | null;
+  currentEtapa: WorkflowRef | null;
   /** ISO; null in "Próximos". */
   readySince: string | null;
   /** "Próximos" only. */
-  pending: { tramo: WorkflowRef; phase: WorkflowPhaseRef; open: number; total: number } | null;
+  pending: { etapa: WorkflowRef; phase: WorkflowPhaseRef; open: number; total: number } | null;
 };
 
-export type TramoBoard = {
+export type EtapaBoard = {
   workflow: WorkflowRef;
   /** Not started here, readiness met. */
-  ready: TramoCandidateProject[];
+  ready: EtapaCandidateProject[];
   /** Not started here, readiness not met. */
-  upcoming: TramoCandidateProject[];
-  /** Projects with this tramo started; drives "Deshacer inicio" on the project block. */
+  upcoming: EtapaCandidateProject[];
+  /** Projects with this etapa started; drives "Deshacer inicio" on the project block. */
   started: Array<{
     projectId: string;
-    /** Latest start batch of this tramo; null if none. */
+    /** Latest start batch of this etapa; null if none. */
     batchId: string | null;
     createdCount: number;
     /** No created task edited yet, and no later batch. */
@@ -722,7 +722,7 @@ export type TramoBoard = {
 
 export type StaffCandidate = { id: string; name: string; positions: string[]; openTasks: number };
 
-export type StartTramoPreview = {
+export type StartEtapaPreview = {
   project: { id: string; name: string };
   workflow: WorkflowRef;
   alreadyStarted: boolean;
@@ -739,22 +739,22 @@ export type StartTramoPreview = {
   }>;
 };
 
-export type StartTramoAssignment =
+export type StartEtapaAssignment =
   | { mode: "self" }
   | { mode: "by_phase"; managers: Record<string /* phaseId */, string | null> }
   | { mode: "none" };
 
-export type StartTramoInput = {
+export type StartEtapaInput = {
   projectId: string;
   workflowId: string;
   /** Checked fases. */
   phaseIds: string[];
-  assignment: StartTramoAssignment;
+  assignment: StartEtapaAssignment;
   /** Admin only; sets the firm-wide setting. */
   autoStart?: boolean;
 };
 
-export type StartTramoResult = {
+export type StartEtapaResult = {
   /** Null when nothing was created. */
   batchId: string | null;
   createdCount: number;

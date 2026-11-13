@@ -12,7 +12,7 @@ import {
   TaskAttachmentGrid,
   TaskPhaseSelect,
   TaskSpaceSelect,
-  TaskTramoSelect,
+  TaskEtapaSelect,
   sortTaskHistory,
   taskAttachmentError,
   useTaskSheetCatalogs,
@@ -36,7 +36,7 @@ import { Label } from "@/components/ui/shadcn/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { Textarea } from "@/components/ui/shadcn/textarea";
 import { StatusChip } from "@/components/widgets/StatusChip";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { canChangeActivityStatus, resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
 import { actionErrorText } from "@/lib/errors";
@@ -348,14 +348,14 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 
   const importData = useImportData("task", task?.id);
   const catalogs = useTaskSheetCatalogs(task);
-  const { statuses, tramos, staff, phases, spaces } = catalogs;
+  const { statuses, etapas, staff, phases, spaces } = catalogs;
   const taskManager = task?.manager;
   const historyNames = useMemo(() => {
     const names = new Map<string, string>();
-    for (const list of [staff, phases, spaces, tramos, statuses]) for (const o of list) names.set(o.id, o.name);
+    for (const list of [staff, phases, spaces, etapas, statuses]) for (const o of list) names.set(o.id, o.name);
     if (taskManager) names.set(taskManager.id, taskManager.name);
     return names;
-  }, [staff, phases, spaces, tramos, statuses, taskManager]);
+  }, [staff, phases, spaces, etapas, statuses, taskManager]);
 
   // Hooks run before the task loads; the mutations only fire once it has.
   const target = useMemo(() => ({ id: taskId, projectId: task?.projectId ?? "" }), [taskId, task?.projectId]);
@@ -429,7 +429,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const canReassign = capabilities.canChangeResponsible;
 
   const isAdminTask = task.kind === "admin";
-  const showTramoSelect = !isAdminTask && !task.workflowId && tramos.length > 0;
+  const showEtapaSelect = !isAdminTask && !task.workflowId && etapas.length > 0;
   const showPhase = !isAdminTask && Boolean(task.workflowId) && (phases.length > 0 || task.phase !== null);
   const spaceOptions = catalogs.spaces.length > 0 ? catalogs.spaces : task.space ? [task.space] : [];
   const showSpace = !isAdminTask && spaceOptions.length > 0;
@@ -614,10 +614,10 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
           <dt className="text-muted-foreground">Etapa</dt>
           <dd>
             {task.workflow ? (
-              <TramoBadge tramo={task.workflow} variant="chip" />
-            ) : showTramoSelect ? (
-              <TaskTramoSelect
-                tramos={tramos}
+              <EtapaBadge etapa={task.workflow} variant="chip" />
+            ) : showEtapaSelect ? (
+              <TaskEtapaSelect
+                etapas={etapas}
                 disabled={!canEdit || busy}
                 triggerClassName="w-full"
                 onChange={(id) => void patch({ workflowId: id })}

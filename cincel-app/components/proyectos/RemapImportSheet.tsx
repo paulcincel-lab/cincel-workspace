@@ -155,6 +155,7 @@ export function remapChangedTasks(preview: MondayRemapPreview): number {
 }
 
 export function remapCountsText(preview: MondayRemapPreview): string {
+  // `changes.tramo` is the remap CLI summary field (scripts/monday/remap.ts, renamed in #1130).
   const c = preview.changes;
   return (
     `${c.tramo} tareas cambian de etapa, ${c.phase} de fase, ${c.space} de espacio, ` +
@@ -227,7 +228,7 @@ function PreviewResult({ preview }: { preview: MondayRemapPreview }) {
 }
 
 /**
- * "Reacomodar importación" (RD-2): re-sorts an imported project's tasks into tramo / fase / espacio /
+ * "Reacomodar importación" (RD-2): re-sorts an imported project's tasks into etapa / fase / espacio /
  * project / admin from its monday groups. Preview first; any target change clears the preview.
  */
 export function RemapImportSheet({
@@ -275,7 +276,7 @@ export function RemapImportSheet({
     },
     { onFormError: showError },
   );
-  // Apply moves tasks between tramos, fases and espacios: the whole project and the list.
+  // Apply moves tasks between etapas, fases and espacios: the whole project and the list.
   const applyMutation = useActionMutation<MondayRemapInput, number>(
     async (input) => {
       const result = await applyMondayRemapAction(projectId, input);

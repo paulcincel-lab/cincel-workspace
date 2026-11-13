@@ -60,7 +60,7 @@ import { TareasAnalitico } from "./TareasAnalitico";
 import {
   ANALITICO_FACETS,
   ANALITICO_SUMMARY,
-  ANALITICO_TRAMOS,
+  ANALITICO_ETAPAS,
   LOMAS_PRESALE_ROWS,
   analiticoTaskRow,
   seedAnalitico,
@@ -83,7 +83,7 @@ function renderAnalitico(query: TareasQuery = DEFAULT_TAREAS_QUERY, onQuery: (pa
       <TareasAnalitico
         query={query}
         facets={ANALITICO_FACETS}
-        tramos={ANALITICO_TRAMOS}
+        etapas={ANALITICO_ETAPAS}
         staff={[{ id: "s1", name: "Ana Ruiz" }]}
         actions={null}
         search=""
@@ -138,7 +138,7 @@ describe("TareasAnalitico accessibility", () => {
           !b.closest('[data-slot="row-actions-cell"]') &&
           b.dataset.slot !== "row-detail-toggle",
       );
-    // The project header and one button per tramo group.
+    // The project header and one button per etapa group.
     expect(toggles).toHaveLength(3);
     for (const toggle of toggles) {
       expect(toggle.getAttribute("aria-expanded")).toBe("true");
@@ -146,7 +146,7 @@ describe("TareasAnalitico accessibility", () => {
       expect(controlled).toBeTruthy();
       expect(container.querySelector(`[id="${controlled}"]`)).not.toBeNull();
     }
-    // Each tramo group's rows are a tbody of their own.
+    // Each etapa group's rows are a tbody of their own.
     const [, presale] = toggles;
     expect(container.querySelector(`[id="${presale.getAttribute("aria-controls")}"]`)?.tagName).toBe("TBODY");
     // A native table per project with column headers; its editable cells make it a grid.

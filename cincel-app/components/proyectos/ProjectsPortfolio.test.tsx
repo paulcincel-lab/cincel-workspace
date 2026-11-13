@@ -35,8 +35,8 @@ vi.mock("@/lib/actions/page-data/catalog-actions", () => ({
   fetchCatalogTaskStatuses: vi.fn(),
   fetchCatalogWorkflows: vi.fn(),
 }));
-vi.mock("@/lib/tramos/compat", () => ({
-  tramoColorVar: (key: string) => `var(--chart-${key === "presale" ? 1 : key === "diseno" ? 2 : 3})`,
+vi.mock("@/lib/etapas/compat", () => ({
+  etapaColorVar: (key: string) => `var(--chart-${key === "presale" ? 1 : key === "diseno" ? 2 : 3})`,
 }));
 
 // Each layout and the dialog have their own tests; here the layouts only show which one the Estilo picked
@@ -77,15 +77,15 @@ import { useProyectosDashboard } from "@/lib/stores/proyectos-dashboard-store";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
 import { ProjectsPortfolio } from "./ProjectsPortfolio";
-import { PORTFOLIO, PROJECTS, TRAMOS, portfolioPageData } from "./projects-portfolio.fixtures";
+import { PORTFOLIO, PROJECTS, ETAPAS, portfolioPageData } from "./projects-portfolio.fixtures";
 import {
-  NO_TRAMO_KEY,
-  buildTramoSegments,
-  filterByTramo,
+  NO_ETAPA_KEY,
+  buildEtapaSegments,
+  filterByEtapa,
   formatDeliveryDate,
   portfolioById,
   sparklineText,
-  tramoSteps,
+  etapaSteps,
 } from "./projects-portfolio-data";
 
 /**
@@ -273,11 +273,11 @@ describe("ProjectsPortfolio", () => {
 describe("projects portfolio data", () => {
   it("filters by the current etapa, Sin etapa included; null keeps every project", () => {
     const listed = PROJECTS.filter((p) => p.status !== "completado");
-    expect(filterByTramo(listed, "diseno").map((p) => p.id)).toEqual(["p-lomas"]);
-    expect(filterByTramo(listed, "presale").map((p) => p.id)).toEqual(["p-andares"]);
-    expect(filterByTramo(listed, NO_TRAMO_KEY).map((p) => p.id)).toEqual(["p-pausado"]);
-    expect(filterByTramo(listed, "construccion")).toEqual([]);
-    expect(filterByTramo(listed, null)).toBe(listed);
+    expect(filterByEtapa(listed, "diseno").map((p) => p.id)).toEqual(["p-lomas"]);
+    expect(filterByEtapa(listed, "presale").map((p) => p.id)).toEqual(["p-andares"]);
+    expect(filterByEtapa(listed, NO_ETAPA_KEY).map((p) => p.id)).toEqual(["p-pausado"]);
+    expect(filterByEtapa(listed, "construccion")).toEqual([]);
+    expect(filterByEtapa(listed, null)).toBe(listed);
   });
 
   it("formats delivery dates in lowercase es-MX", () => {
@@ -292,7 +292,7 @@ describe("projects portfolio data", () => {
 
   it("counts projects per etapa in etapa order, plus Sin etapa", () => {
     const listed = PROJECTS.filter((p) => p.status !== "completado");
-    const segments = buildTramoSegments(listed, portfolioById(PORTFOLIO), TRAMOS);
+    const segments = buildEtapaSegments(listed, portfolioById(PORTFOLIO), ETAPAS);
     expect(segments.map((s) => [s.label, s.value])).toEqual([
       ["Presale", 1],
       ["Diseño", 1],
@@ -303,7 +303,7 @@ describe("projects portfolio data", () => {
   });
 
   it("marks each etapa done, current or next", () => {
-    expect(tramoSteps(PROJECTS[0], TRAMOS).map((s) => s.state)).toEqual(["done", "current", "next"]);
-    expect(tramoSteps(PROJECTS[2], TRAMOS).map((s) => s.state)).toEqual(["next", "next", "next"]);
+    expect(etapaSteps(PROJECTS[0], ETAPAS).map((s) => s.state)).toEqual(["done", "current", "next"]);
+    expect(etapaSteps(PROJECTS[2], ETAPAS).map((s) => s.state)).toEqual(["next", "next", "next"]);
   });
 });

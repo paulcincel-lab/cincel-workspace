@@ -7,6 +7,7 @@ import { useStyle } from "@/components/shell/StyleProvider";
 import { registerPersistedStore } from "@/components/shell/UiStoresHydrator";
 import { registerUiStoreReset } from "@/lib/query/reset-client-state";
 import type { PresentationStyle } from "@/lib/types/redesign";
+import { normalizeEtapaValue } from "@/lib/ui/etapa-param";
 import { PRESENTATION_STYLES } from "@/lib/ui/style-override";
 
 /**
@@ -110,6 +111,11 @@ export type DashboardStoreDefaults<W extends string, K extends string, F extends
   series?: Partial<Record<W, readonly string[]>>;
   /** The `.v<n>` of the storage key (`dashboardStorageKey`); default 1. */
   storageKeyVersion?: number;
+  /**
+   * Compatibility: a stored widget id or filter key that was renamed (`{ tramoDonut: "etapaDonut" }`).
+   * Read as its current name on rehydrate, so saved choices survive the rename.
+   */
+  legacyKeys?: Readonly<Record<string, string>>;
 };
 
 export type DashboardStore<W extends string, K extends string, F extends string = never> = UseBoundStore<
@@ -241,6 +247,17 @@ export function createDashboardStore<W extends string, K extends string, F exten
   const widgetIds = defaults.widgets ? new Set<string>(defaults.widgets) : null;
   const knownSeries: Partial<Record<string, readonly string[]>> = defaults.series ?? {};
 
+  const legacyKeys = defaults.legacyKeys ?? {};
+  /** The current name of a stored widget id / filter key. */
+  const current = (key: string): string => legacyKeys[key] ?? key;
+  /** An entry under its current name wins over the same entry under an old name. */
+  const renamed = <T,>(entries: Record<string, T>): [string, T][] => {
+    const out = new Map<string, T>();
+    for (const [key, entry] of Object.entries(entries)) if (current(key) === key) out.set(key, entry);
+    for (const [key, entry] of Object.entries(entries)) if (current(key) !== key && !out.has(current(key))) out.set(current(key), entry);
+    return [...out];
+  };
+
   const isWidget = (key: string): key is W => (widgetIds ? widgetIds.has(key) : true);
   const filterKeys: readonly F[] = defaults.filters ?? [];
   const isFilterKey = (key: string): key is F => (filterKeys as readonly string[]).includes(key);
@@ -269,7 +286,7 @@ export function createDashboardStore<W extends string, K extends string, F exten
 
     const collapsed: Partial<Record<W, boolean>> = {};
     if (isRecord(value.collapsed)) {
-      for (const [key, flag] of Object.entries(value.collapsed)) {
+      for (const [key, flag] of renamed(value.collapsed)) {
         if (isWidget(key) && typeof flag === "boolean") collapsed[key] = flag;
       }
     }
@@ -280,7 +297,7 @@ export function createDashboardStore<W extends string, K extends string, F exten
         const picks = value.views[style];
         if (!isRecord(picks)) continue;
         const kept: Partial<Record<W, WidgetView>> = {};
-        for (const [key, view] of Object.entries(picks)) {
+        for (const [key, view] of renamed(picks)) {
           if (isWidget(key) && isWidgetView(view)) kept[key] = view;
         }
         if (Object.keys(kept).length > 0) views[style] = kept;
@@ -289,7 +306,7 @@ export function createDashboardStore<W extends string, K extends string, F exten
 
     const hiddenSeries: Partial<Record<W, string[]>> = {};
     if (isRecord(value.hiddenSeries)) {
-      for (const [key, list] of Object.entries(value.hiddenSeries)) {
+      for (const [key, list] of renamed(value.hiddenSeries)) {
         if (!isWidget(key) || !Array.isArray(list)) continue;
         const names = [...new Set(list.filter((name): name is string => typeof name === "string"))];
         const available = knownSeries[key];
@@ -308,8 +325,8 @@ export function createDashboardStore<W extends string, K extends string, F exten
     if (filterKeys.length > 0) {
       const filters = emptyFilters();
       if (isRecord(value.filters)) {
-        for (const [key, picked] of Object.entries(value.filters)) {
-          if (isFilterKey(key) && typeof picked === "string" && picked !== "") filters[key] = picked;
+        for (const [key, picked] of renamed(value.filters)) {
+          if (isFilterKey(key) && typeof picked === "string" && picked !== "") filters[key] = normalizeEtapaValue(picked); // old saved `sin-tramo` reads as `sin-etapa`
         }
       }
       sanitized.filters = filters;

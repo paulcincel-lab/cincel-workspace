@@ -124,7 +124,7 @@ const ProyectoTareasInput = z.object({ id: UuidSchema });
 
 /**
  * `qk.proyectos.list()`: projects, portfolio rows (`budgetSpentPct` null for
- * non-admins), tramos and the create dialog's flags. Empty lists without
+ * non-admins), etapas and the create dialog's flags. Empty lists without
  * `canViewProjects`.
  */
 export async function getProyectosPageData(input: z.input<typeof ProyectosPageInput> = {}): Promise<ProyectosPageData> {
@@ -132,7 +132,7 @@ export async function getProyectosPageData(input: z.input<typeof ProyectosPageIn
   return loadProyectosPage(await requireCapabilityUser());
 }
 
-/** `qk.proyectos.createStart()`: the create dialog's "Tramo inicial" options; null when the viewer can't pick one. */
+/** `qk.proyectos.createStart()`: the create dialog's "Etapa inicial" options; null when the viewer can't pick one. */
 export async function getProjectCreateStartOptions(
   input: z.input<typeof ProyectosPageInput> = {},
 ): Promise<ProjectCreateStartOptions | null> {

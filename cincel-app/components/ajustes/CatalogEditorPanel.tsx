@@ -44,16 +44,16 @@ export type CatalogEditorPanelProps = {
   onClose(): void;
   footer: ReactNode;
   children: ReactNode;
-  /** Shown before the title (the tramo's color dot). */
+  /** Shown before the title (the etapa's color dot). */
   titleAdornment?: ReactNode;
-  /** The panel's basis width next to the list, in px (340 by default, 360 for Tramos). */
+  /** The panel's basis width next to the list, in px (340 by default, 360 for Etapas). */
   width?: 340 | 360;
   /** Where focus goes back on close (the row's "•••" button); defaults to what had focus on open. */
   returnFocus?: () => HTMLElement | null | undefined;
 };
 
 /**
- * The editor of an Ajustes catalog (Estatus, Puestos, Tramos): at 1024 px and
+ * The editor of an Ajustes catalog (Estatus, Puestos, Etapas): at 1024 px and
  * up an inline card next to the list (`<aside class="drawer">`, sticky at the
  * top, `anim-in`), below it a shadcn `Sheet` (from the right; from the bottom
  * on a phone). Escape and "Cerrar" close it; focus moves to the title on open

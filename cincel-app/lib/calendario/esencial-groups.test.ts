@@ -9,7 +9,7 @@ const TODAY = "2026-11-11";
 function task(id: string, date: string, extra: Partial<CalTaskItem> = {}): CalTaskItem {
   return {
     kind: "task", id: `t:${id}`, taskId: id, title: `Tarea ${id}`, date, dateField: "commitmentDate",
-    project: { id: "p", name: "Madrid 22" }, tramo: { id: "w", key: "diseno", name: "Diseño", colorSlot: 2 }, phase: null,
+    project: { id: "p", name: "Madrid 22" }, etapa: { id: "w", key: "diseno", name: "Diseño", colorSlot: 2 }, phase: null,
     status: "pendiente", statusLabel: "Pendiente", priority: "media", manager: null, support: [],
     overdue: false, completed: false, blocked: false, hours: 1, hoursSource: "default", parentTaskId: null, canEdit: true, ...extra,
   };
@@ -17,7 +17,7 @@ function task(id: string, date: string, extra: Partial<CalTaskItem> = {}): CalTa
 function meeting(id: string, date: string, start: string): CalEventItem {
   return {
     kind: "event", id: `e:${id}`, eventId: id, source: "cincel", title: `Reunión ${id}`, date, start, end: start, allDay: false,
-    project: { id: "p", name: "Madrid 22" }, tramo: null, location: null, meetUrl: null, attendees: [], attendeeCount: 0,
+    project: { id: "p", name: "Madrid 22" }, etapa: null, location: null, meetUrl: null, attendees: [], attendeeCount: 0,
     organizer: null, googleHtmlLink: null, syncedAt: null, syncError: null, minutes: "ninguna", canEdit: true,
   };
 }

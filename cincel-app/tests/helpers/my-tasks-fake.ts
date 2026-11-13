@@ -23,10 +23,10 @@ import {
 } from "@/lib/my-space/my-tasks-summary";
 import { meTaskRowOf, meTasksListOptions, meTasksSummaryOptions } from "@/lib/query/options/mi-espacio";
 import type { TareasRowsPage } from "@/lib/tareas/page-data";
-import { SIN_TRAMO_KEY, SIN_TRAMO_LABEL, SIN_TRAMO_SORT } from "@/lib/tareas/summary";
+import { SIN_ETAPA_KEY, SIN_ETAPA_LABEL, SIN_ETAPA_SORT } from "@/lib/tareas/summary";
 import type { TaskListItem } from "@/lib/types/core";
 
-const SIN = { id: null, key: null, name: SIN_TRAMO_LABEL, sortOrder: SIN_TRAMO_SORT };
+const SIN = { id: null, key: null, name: SIN_ETAPA_LABEL, sortOrder: SIN_ETAPA_SORT };
 
 const due = (t: TaskListItem) => (t.commitmentDate ? t.commitmentDate.slice(0, 10) : null);
 const isOpen = (t: TaskListItem) => t.status !== "completado" && !t.customStatus?.closes;
@@ -47,10 +47,10 @@ function matchesText(t: TaskListItem, q: string | null | undefined): boolean {
   return !q || fold(t.title).includes(fold(q));
 }
 
-function matchesTramo(t: TaskListItem, tramo: string | null | undefined): boolean {
-  if (!tramo) return true;
-  if (tramo === SIN_TRAMO_KEY) return t.workflow === null;
-  return t.workflow?.key === tramo;
+function matchesEtapa(t: TaskListItem, etapa: string | null | undefined): boolean {
+  if (!etapa) return true;
+  if (etapa === SIN_ETAPA_KEY) return t.workflow === null;
+  return t.workflow?.key === etapa;
 }
 
 export type FakeMyTasks = {
@@ -60,7 +60,7 @@ export type FakeMyTasks = {
   page(input: { filters: MeTasksListFilters; cursor: string | null }): TareasRowsPage;
   /** Seeds the summary of `input` and the first page of each list, as the page does. */
   seed(client: QueryClient, input: MyTasksSummaryInput, lists: MeTasksListFilters[]): void;
-  /** Every open Analítico tramo group of `input`. */
+  /** Every open Analítico etapa group of `input`. */
   analiticoLists(input: MyTasksSummaryInput, withClosed?: boolean): MeTasksListFilters[];
   boardLists(): MeTasksListFilters[];
   esencialLists(count?: number): MeTasksListFilters[];
@@ -76,7 +76,7 @@ export function fakeMyTasks(initial: TaskListItem[], today: string): FakeMyTasks
       const open = live.filter(isOpen);
       const late = (t: TaskListItem) => isOpen(t) && due(t) !== null && due(t)! < today;
       const window = meTasksCommitmentWindow(input.retraso ? { retraso: true } : {}, today);
-      const matches = (t: TaskListItem) => matchesTramo(t, input.tramo) && matchesText(t, input.q) && inWindow(t, window);
+      const matches = (t: TaskListItem) => matchesEtapa(t, input.etapa) && matchesText(t, input.q) && inWindow(t, window);
       const countOf = (rows: TaskListItem[]): MyTasksCounts => {
         const m = rows.filter(matches);
         const overdue = m.filter(late);
@@ -94,25 +94,25 @@ export function fakeMyTasks(initial: TaskListItem[], today: string): FakeMyTasks
       const projects = projectIds
         .map((id) => {
           const rows = live.filter((t) => t.projectId === id);
-          const tramoIds = [...new Set(rows.map((t) => t.workflow?.id ?? null))];
-          const tramos = tramoIds
+          const etapaIds = [...new Set(rows.map((t) => t.workflow?.id ?? null))];
+          const etapas = etapaIds
             .map((wid) => {
-              const inTramo = rows.filter((t) => (t.workflow?.id ?? null) === wid);
-              const w = inTramo[0]!.workflow;
-              return { tramo: w ? { id: w.id, key: w.key, name: w.name, sortOrder: w.sortOrder } : SIN, ...countOf(inTramo) };
+              const inEtapa = rows.filter((t) => (t.workflow?.id ?? null) === wid);
+              const w = inEtapa[0]!.workflow;
+              return { etapa: w ? { id: w.id, key: w.key, name: w.name, sortOrder: w.sortOrder } : SIN, ...countOf(inEtapa) };
             })
             .filter((t) => t.open + t.closed > 0)
-            .sort((a, b) => a.tramo.sortOrder - b.tramo.sortOrder || a.tramo.name.localeCompare(b.tramo.name, "es"));
-          return { project: { id, name: rows[0]!.project.name }, ...countOf(rows), tramos };
+            .sort((a, b) => a.etapa.sortOrder - b.etapa.sortOrder || a.etapa.name.localeCompare(b.etapa.name, "es"));
+          return { project: { id, name: rows[0]!.project.name }, ...countOf(rows), etapas };
         })
         .filter((p) => p.open + p.closed > 0)
         .sort((a, b) => Number(b.overdue > 0) - Number(a.overdue > 0) || a.project.name.localeCompare(b.project.name, "es"));
-      const tramoMap = new Map<string, MyTasksSummary["tramos"][number]>();
+      const etapaMap = new Map<string, MyTasksSummary["etapas"][number]>();
       for (const t of open) {
         if (!t.workflow) continue;
-        const entry = tramoMap.get(t.workflow.id) ?? { ...t.workflow, open: 0 };
+        const entry = etapaMap.get(t.workflow.id) ?? { ...t.workflow, open: 0 };
         entry.open += 1;
-        tramoMap.set(t.workflow.id, entry);
+        etapaMap.set(t.workflow.id, entry);
       }
       const esencial = projectIds
         .map((id) => {
@@ -152,7 +152,7 @@ export function fakeMyTasks(initial: TaskListItem[], today: string): FakeMyTasks
           },
           projects: esencial.length,
         },
-        tramos: [...tramoMap.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es")),
+        etapas: [...etapaMap.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es")),
         shown: { ...EMPTY_MY_TASKS_COUNTS, ...shown, projects: projects.filter((p) => p.open > 0).length },
         projects,
         esencial,
@@ -162,7 +162,7 @@ export function fakeMyTasks(initial: TaskListItem[], today: string): FakeMyTasks
       const window = meTasksCommitmentWindow(f, today);
       const rows = fake.tasks
         .filter((t) => !t.archived && (f.cerradas || isOpen(t)))
-        .filter((t) => (!f.proyecto || t.projectId === f.proyecto) && matchesTramo(t, f.tramo) && matchesText(t, f.q))
+        .filter((t) => (!f.proyecto || t.projectId === f.proyecto) && matchesEtapa(t, f.etapa) && matchesText(t, f.q))
         .filter((t) => inWindow(t, window));
       const key = (t: TaskListItem) => {
         const d = due(t) ?? t.deliveryDate ?? "9999-12-31";
@@ -185,14 +185,14 @@ export function fakeMyTasks(initial: TaskListItem[], today: string): FakeMyTasks
     analiticoLists(input, withClosed = false) {
       return fake
         .summary(input)
-        .projects.flatMap((p) => p.tramos.map((t) => meTasksGroupFilters(input, p.project.id, t.tramo.key, withClosed)));
+        .projects.flatMap((p) => p.etapas.map((t) => meTasksGroupFilters(input, p.project.id, t.etapa.key, withClosed)));
     },
     boardLists() {
       return MY_TASK_BUCKETS.map(meTasksBucketFilters);
     },
     esencialLists(count = 3) {
       return fake
-        .summary({ tramo: null, q: null })
+        .summary({ etapa: null, q: null })
         .esencial.slice(0, count)
         .map((p) => meTasksProjectFilters(p.project.id));
     },

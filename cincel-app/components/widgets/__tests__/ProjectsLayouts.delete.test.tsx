@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }) }));
 vi.mock("@/lib/actions/projects-actions", () => ({
-  setProjectCurrentTramoAction: vi.fn(),
+  setProjectCurrentEtapaAction: vi.fn(),
   updateProjectAction: vi.fn(),
   deleteProjectAction: vi.fn(),
   restoreProjectAction: vi.fn(),
@@ -32,14 +32,14 @@ vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
 }));
 vi.mock("@/lib/actions/page-data/catalog-actions", () => ({ fetchCatalogStaff: vi.fn(() => new Promise(() => {})) }));
 vi.mock("@/lib/actions/preferences-actions", () => ({ updateMyPreferencesAction: vi.fn(async () => ({})) }));
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const slots: Record<string, 1 | 2 | 3> = { presale: 1, diseno: 2, construccion: 3 };
   return {
     canSeeAdminData: () => false,
-    listTramos: async () => [],
-    tramoLabel: (key: string) => key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    listEtapas: async () => [],
+    etapaLabel: (key: string) => key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
     phaseLabel: () => null,
   };
 });

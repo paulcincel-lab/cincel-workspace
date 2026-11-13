@@ -10,15 +10,15 @@
  * after that day, else its current status.
  */
 import { zonedIsoMinute } from "@/lib/dates/zoned-formatters";
-import { ADMIN_TRAMO_LABEL } from "@/lib/calendar/calendar-service";
-import { NO_TRAMO_LABEL } from "@/lib/dashboard/donut-groups";
+import { ADMIN_ETAPA_LABEL } from "@/lib/calendar/calendar-service";
+import { NO_ETAPA_LABEL } from "@/lib/dashboard/donut-groups";
 import { localIsoDate, TASK_TREND_TIME_ZONE, type TaskTrendBucket } from "@/lib/dashboard/task-trend";
 import type { DailyCounter } from "@/lib/metrics/series";
 import { isTaskClosed } from "@/lib/tasks/status-options";
 import type { ProjectListItem, Staff, TaskListItem } from "@/lib/types/core";
-import type { InicioData, InicioTramoAssigneeRow, PeopleOverviewRow, PortfolioRow } from "@/lib/types/redesign";
+import type { InicioData, InicioEtapaAssigneeRow, PeopleOverviewRow, PortfolioRow } from "@/lib/types/redesign";
 import { OVERDUE_SHARE_HEAT } from "@/components/tareas/lista-table";
-import type { AgendaItem, AttentionItem, ProgressItem, TramoKey } from "@/lib/types/widgets";
+import type { AgendaItem, AttentionItem, ProgressItem, EtapaKey } from "@/lib/types/widgets";
 
 const DAY_MS = 86_400_000;
 
@@ -31,9 +31,9 @@ export const REVIEW_WINDOW_DAYS = 7;
 /** "Completadas · semana": completions in the day and the 6 before it. */
 export const COMPLETED_WINDOW_DAYS = 7;
 
-/** Group keys of tasks without a tramo (calendar keys, BE §8.8). */
-export const NO_TRAMO_KEY = "sin-tramo";
-export const ADMIN_TRAMO_KEY = "admin";
+/** Group keys of tasks without an etapa (calendar keys, BE §8.8). */
+export const NO_ETAPA_KEY = "sin-etapa";
+export const ADMIN_ETAPA_KEY = "admin";
 
 export const INICIO_KPI = {
   proyectosActivos: { key: "proyectos_activos", label: "Proyectos activos", href: "/proyectos" },
@@ -202,41 +202,41 @@ export function completedInWeek(
   return ids.size;
 }
 
-// ── Tramo grouping ──────────────────────────────────────────────────────────
+// ── Etapa grouping ──────────────────────────────────────────────────────────
 
-/** Tramo group of a task: its workflow key, `admin` for admin tasks, else `sin-tramo`. */
-export function taskTramoKey(task: Pick<TaskListItem, "kind" | "workflow">): string {
+/** Etapa group of a task: its workflow key, `admin` for admin tasks, else `sin-etapa`. */
+export function taskEtapaKey(task: Pick<TaskListItem, "kind" | "workflow">): string {
   if (task.workflow) return task.workflow.key;
-  return task.kind === "admin" ? ADMIN_TRAMO_KEY : NO_TRAMO_KEY;
+  return task.kind === "admin" ? ADMIN_ETAPA_KEY : NO_ETAPA_KEY;
 }
 
-export function taskTramoLabel(task: Pick<TaskListItem, "kind" | "workflow">): string {
+export function taskEtapaLabel(task: Pick<TaskListItem, "kind" | "workflow">): string {
   if (task.workflow) return task.workflow.name;
-  return task.kind === "admin" ? ADMIN_TRAMO_LABEL : NO_TRAMO_LABEL;
+  return task.kind === "admin" ? ADMIN_ETAPA_LABEL : NO_ETAPA_LABEL;
 }
 
-/** Tramo order (workflow sortOrder); no tramo, then admin, last. */
-export function byTramoOrder(
+/** Etapa order (workflow sortOrder); no etapa, then admin, last. */
+export function byEtapaOrder(
   a: Pick<TaskListItem, "kind" | "workflow">,
   b: Pick<TaskListItem, "kind" | "workflow">,
 ): number {
   const rank = (t: Pick<TaskListItem, "kind" | "workflow">) =>
     t.workflow ? t.workflow.sortOrder : t.kind === "admin" ? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER - 1;
-  return rank(a) - rank(b) || taskTramoLabel(a).localeCompare(taskTramoLabel(b), "es");
+  return rank(a) - rank(b) || taskEtapaLabel(a).localeCompare(taskEtapaLabel(b), "es");
 }
 
 /**
- * KPI tramo split: each tramo's share (0–1, 3 decimals) of `items`, in first
- * seen order. Items without a tramo count in the total but get no segment.
+ * KPI etapa split: each etapa's share (0–1, 3 decimals) of `items`, in first
+ * seen order. Items without an etapa count in the total but get no segment.
  */
-export function tramoSplit<T>(items: T[], tramoOf: (item: T) => TramoKey | null): { tramo: TramoKey; share: number }[] {
+export function etapaSplit<T>(items: T[], etapaOf: (item: T) => EtapaKey | null): { etapa: EtapaKey; share: number }[] {
   if (items.length === 0) return [];
-  const counts = new Map<TramoKey, number>();
+  const counts = new Map<EtapaKey, number>();
   for (const item of items) {
-    const tramo = tramoOf(item);
-    if (tramo) counts.set(tramo, (counts.get(tramo) ?? 0) + 1);
+    const etapa = etapaOf(item);
+    if (etapa) counts.set(etapa, (counts.get(etapa) ?? 0) + 1);
   }
-  return [...counts].map(([tramo, n]) => ({ tramo, share: Math.round((n / items.length) * 1000) / 1000 }));
+  return [...counts].map(([etapa, n]) => ({ etapa, share: Math.round((n / items.length) * 1000) / 1000 }));
 }
 
 // ── KPI context lines (frame `Dashboard`) ───────────────────────────────────
@@ -250,14 +250,14 @@ export const KPI_CONTEXT = {
   noOpen: "Sin tareas abiertas",
 } as const;
 
-/** A tramo group of a KPI context line, ordered by `rank`, then label. */
-export type KpiTramoGroup = { key: string; label: string; rank: number };
+/** An etapa group of a KPI context line, ordered by `rank`, then label. */
+export type KpiEtapaGroup = { key: string; label: string; rank: number };
 
-/** Tramo group of a task (as `byTramoOrder`): workflow order, no tramo, then admin. */
-export function taskTramoGroup(task: Pick<TaskListItem, "kind" | "workflow">): KpiTramoGroup {
+/** Etapa group of a task (as `byEtapaOrder`): workflow order, no etapa, then admin. */
+export function taskEtapaGroup(task: Pick<TaskListItem, "kind" | "workflow">): KpiEtapaGroup {
   return {
-    key: taskTramoKey(task),
-    label: taskTramoLabel(task),
+    key: taskEtapaKey(task),
+    label: taskEtapaLabel(task),
     rank: task.workflow
       ? task.workflow.sortOrder
       : task.kind === "admin"
@@ -266,16 +266,16 @@ export function taskTramoGroup(task: Pick<TaskListItem, "kind" | "workflow">): K
   };
 }
 
-/** Tramo group of a project: its current workflow, else "Sin tramo" last. */
-export function projectTramoGroup(project: Pick<ProjectListItem, "currentWorkflow">): KpiTramoGroup {
+/** Etapa group of a project: its current workflow, else "Sin etapa" last. */
+export function projectEtapaGroup(project: Pick<ProjectListItem, "currentWorkflow">): KpiEtapaGroup {
   const wf = project.currentWorkflow;
   return wf
     ? { key: wf.key, label: wf.name, rank: wf.sortOrder }
-    : { key: NO_TRAMO_KEY, label: NO_TRAMO_LABEL, rank: Number.MAX_SAFE_INTEGER };
+    : { key: NO_ETAPA_KEY, label: NO_ETAPA_LABEL, rank: Number.MAX_SAFE_INTEGER };
 }
 
-function tramoCounts<T>(items: T[], groupOf: (item: T) => KpiTramoGroup): (KpiTramoGroup & { count: number })[] {
-  const groups = new Map<string, KpiTramoGroup & { count: number }>();
+function etapaCounts<T>(items: T[], groupOf: (item: T) => KpiEtapaGroup): (KpiEtapaGroup & { count: number })[] {
+  const groups = new Map<string, KpiEtapaGroup & { count: number }>();
   for (const item of items) {
     const group = groupOf(item);
     const entry = groups.get(group.key) ?? { ...group, count: 0 };
@@ -285,19 +285,19 @@ function tramoCounts<T>(items: T[], groupOf: (item: T) => KpiTramoGroup): (KpiTr
   return [...groups.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label, "es"));
 }
 
-/** "Por área: Presale 2 · Diseño 1 · …" in tramo order; `empty` without items. */
-export function tramoCountsLine<T>(items: T[], groupOf: (item: T) => KpiTramoGroup, empty: string): string {
-  const counts = tramoCounts(items, groupOf);
+/** "Por área: Presale 2 · Diseño 1 · …" in etapa order; `empty` without items. */
+export function etapaCountsLine<T>(items: T[], groupOf: (item: T) => KpiEtapaGroup, empty: string): string {
+  const counts = etapaCounts(items, groupOf);
   if (counts.length === 0) return empty;
   return `Por área: ${counts.map((g) => `${g.label} ${g.count}`).join(" · ")}`;
 }
 
 /**
- * "Construcción concentra 14 de 31": the tramo with the most items (ties go
- * to the first in tramo order); `empty` without items.
+ * "Construcción concentra 14 de 31": the etapa with the most items (ties go
+ * to the first in etapa order); `empty` without items.
  */
-export function tramoConcentrationLine<T>(items: T[], groupOf: (item: T) => KpiTramoGroup, empty: string): string {
-  const counts = tramoCounts(items, groupOf);
+export function etapaConcentrationLine<T>(items: T[], groupOf: (item: T) => KpiEtapaGroup, empty: string): string {
+  const counts = etapaCounts(items, groupOf);
   if (counts.length === 0) return empty;
   const top = counts.reduce((best, g) => (g.count > best.count ? g : best));
   return `${top.label} concentra ${top.count} de ${items.length}`;
@@ -470,18 +470,18 @@ export function averageDaysLateOn<T extends { commitmentDate: string | null }>(
 }
 
 /**
- * Open tasks per tramo and responsable (Inicio Analítico filters): one row
- * per (tramo key, managerId) with open and overdue counts and the summed age
- * in days (creation → `today`), in tramo order.
+ * Open tasks per etapa and responsable (Inicio Analítico filters): one row
+ * per (etapa key, managerId) with open and overdue counts and the summed age
+ * in days (creation → `today`), in etapa order.
  */
-export function tramoAssigneeRows<T extends Pick<TaskListItem, "kind" | "workflow" | "createdAt" | "commitmentDate"> & {
+export function etapaAssigneeRows<T extends Pick<TaskListItem, "kind" | "workflow" | "createdAt" | "commitmentDate"> & {
   managerId: string | null;
-}>(openTasks: T[], today: string, tz: string = TASK_TREND_TIME_ZONE): InicioTramoAssigneeRow[] {
-  const rows = new Map<string, InicioTramoAssigneeRow>();
-  for (const task of [...openTasks].sort(byTramoOrder)) {
-    const tramo = taskTramoKey(task);
-    const id = `${tramo}|${task.managerId ?? ""}`;
-    const row = rows.get(id) ?? { tramo, assigneeId: task.managerId, open: 0, overdue: 0, ageDays: 0 };
+}>(openTasks: T[], today: string, tz: string = TASK_TREND_TIME_ZONE): InicioEtapaAssigneeRow[] {
+  const rows = new Map<string, InicioEtapaAssigneeRow>();
+  for (const task of [...openTasks].sort(byEtapaOrder)) {
+    const etapa = taskEtapaKey(task);
+    const id = `${etapa}|${task.managerId ?? ""}`;
+    const row = rows.get(id) ?? { etapa, assigneeId: task.managerId, open: 0, overdue: 0, ageDays: 0 };
     row.open += 1;
     if (task.commitmentDate !== null && task.commitmentDate < today) row.overdue += 1;
     row.ageDays += Math.max(0, isoDaysBetween(localDayOf(task.createdAt, tz), today));

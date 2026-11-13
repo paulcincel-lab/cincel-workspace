@@ -44,8 +44,8 @@ import {
   type TareasMostrar,
   type TareasQuery,
 } from "@/lib/tareas/query";
-import { EMPTY_TAREAS_SUMMARY, summaryTramoKey, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { EMPTY_TAREAS_SUMMARY, summaryEtapaKey, tareasGroupFilters, type TareasSummary } from "@/lib/tareas/summary";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import { TASK_TABLE_SORT_KEYS, describeSort, nextSort, tableSortOf } from "@/lib/tareas/sort";
 import type { TareasListFilters } from "@/lib/query/keys";
 import type { TaskListRow, WorkflowRef } from "@/lib/types/core";
@@ -69,9 +69,9 @@ import {
   projectFooter,
   projectGroupId,
   projectMetrics,
-  tramoCaption,
-  tramoGroupId,
-  tramoMetrics,
+  etapaCaption,
+  etapaGroupId,
+  etapaMetrics,
   type AnaliticoRow,
 } from "./tareas-analitico";
 import { localIsoDate } from "./tablero-table";
@@ -88,7 +88,7 @@ export const ANALITICO_RESPONSABLE_LABEL = "Responsable";
 
 const RESPONSABLE_TODOS = "todos";
 const RESPONSABLE_YO = "yo";
-const TRAMO_TODOS = "todos";
+const ETAPA_TODOS = "todos";
 
 const MOSTRAR_LABEL: Record<TareasMostrar, string> = { todas: "Todas", abiertas: "Abiertas", en_retraso: "En retraso" };
 const MOSTRAR_ORDER: readonly TareasMostrar[] = ["todas", "abiertas", "en_retraso"];
@@ -96,7 +96,7 @@ const MOSTRAR_ORDER: readonly TareasMostrar[] = ["todas", "abiertas", "en_retras
 export type TareasAnaliticoProps = {
   query: TareasQuery;
   facets: TareasFacets;
-  tramos: WorkflowRef[];
+  etapas: WorkflowRef[];
   /** Responsable options: the page's staff (`{id,name}`). */
   staff: TareasStaffOption[];
   /** "Nueva tarea" (the Estilo switch is added by `PageHeader`). */
@@ -110,16 +110,16 @@ export type TareasAnaliticoProps = {
   empty: EmptyStateProps;
   /** Quick-add rows only for viewers who can create tasks. */
   canCreate: boolean;
-  /** Project Flow's start slot under the header (only with one tramo filter). */
+  /** Project Flow's start slot under the header (only with one etapa filter). */
   startSlot?: ReactNode;
 };
 
-/** What one tramo group's rows query reports to the page. */
+/** What one etapa group's rows query reports to the page. */
 type GroupRowsState = { rows: TaskListRow[] | undefined; loading: boolean; error: boolean; hasMore: boolean };
 type GroupRowsActions = { more(): void };
 
 /**
- * One tramo group's rows (`useInfiniteQuery(tareas.list(groupFilters))`,
+ * One etapa group's rows (`useInfiniteQuery(tareas.list(groupFilters))`,
  * "retraso" order, 50 per page; the first groups come seeded by the page
  * bundle). Renders nothing: it reports the rows to the page, which hands them
  * to `GroupedTable`. Mounted only while its group is open.
@@ -167,7 +167,7 @@ const ANALITICO_SORTABLE = ANALITICO_COLUMNS.map((c) => c.key).filter((key) => k
 /** Cells of a full-width row: the data columns, the checkbox column (#1040) and the `⋯` column (#1041). */
 const ANALITICO_SPAN = ANALITICO_COLUMNS.length + 2;
 
-/** The rows of every tramo group, in table order. */
+/** The rows of every etapa group, in table order. */
 function analiticoRows(groups: Group<AnaliticoRow>[]): AnaliticoRow[] {
   return groups.flatMap((group) => [...(group.rows ?? []), ...analiticoRows(group.children ?? [])]);
 }
@@ -177,7 +177,7 @@ function withOpenSubtasks(rows: AnaliticoRow[], detail: RowDetail<AnaliticoRow>)
   return rows.flatMap((row) => [row, ...((detail.hasDetail?.(row) ?? true) && detail.isOpen(row) ? (detail.rows?.(row) ?? []) : [])]);
 }
 
-/** A tramo group's last rows: "n completadas ocultas · Mostrar", then its quick-add (or error) row. */
+/** An etapa group's last rows: "n completadas ocultas · Mostrar", then its quick-add (or error) row. */
 function withHiddenLine(hiddenLine: ReactNode, quickAdd: ReactNode): ReactNode {
   if (!hiddenLine) return quickAdd;
   return (
@@ -194,19 +194,19 @@ function sameState(a: GroupRowsState | undefined, b: GroupRowsState): boolean {
 
 /**
  * Tareas · Analítico (frames `Main`, `Analitico-Vencidas`, Estilos #988):
- * every task in tables grouped project → tramo, ordered by delay. Header,
- * `FilterCard` (Mostrar, Tramo, Responsable, search; synced with the URL),
+ * every task in tables grouped project → etapa, ordered by delay. Header,
+ * `FilterCard` (Mostrar, Etapa, Responsable, search; synced with the URL),
  * `KpiStrip`, then `GroupedTable` with the "Ir a" row, one section per
- * project (overdue desc, then name) and one group per tramo, each with its
+ * project (overdue desc, then name) and one group per etapa, each with its
  * own rows query, a quick-add row (not in En retraso) and a footer. Every
- * count comes from `tareas.summary(f)`. En retraso hides projects and tramos
+ * count comes from `tareas.summary(f)`. En retraso hides projects and etapas
  * without overdue tasks and names the hidden projects. Every group starts
  * expanded; what the viewer collapses is remembered in `useTareasUi`.
  */
 export function TareasAnalitico({
   query,
   facets,
-  tramos,
+  etapas,
   staff,
   actions,
   search,
@@ -217,7 +217,7 @@ export function TareasAnalitico({
   startSlot,
 }: TareasAnaliticoProps) {
   const f = useTareasFilters(query);
-  // ── Header sort (#1044): `?orden=`, applied on the server inside every tramo group.
+  // ── Header sort (#1044): `?orden=`, applied on the server inside every etapa group.
   const sort = useTareasSort(query);
   const tableSort = useMemo(() => tableSortOf(sort), [sort]);
   const onSortChange = useCallback(
@@ -237,7 +237,7 @@ export function TareasAnalitico({
   const today = localIsoDate();
 
   // ── "Ocultar completadas" (#1039): on with the switch or a Mostrar that implies it; the
-  // summary and rows then filter as Abiertas, and each tramo group says how many it hides.
+  // summary and rows then filter as Abiertas, and each etapa group says how many it hides.
   const hiding = isHidingCompleted(query);
   const countsHidden = effectiveMostrar(query) === "abiertas";
   const [, setHidePreference] = useHideCompletedPreference();
@@ -259,7 +259,7 @@ export function TareasAnalitico({
     () =>
       summary.projects.flatMap((p) => [
         projectGroupId(p.project.id),
-        ...p.tramos.map((t) => tramoGroupId(p.project.id, t.tramo.id)),
+        ...p.etapas.map((t) => etapaGroupId(p.project.id, t.etapa.id)),
       ]),
     [summary.projects],
   );
@@ -281,7 +281,7 @@ export function TareasAnalitico({
     [allIds, collapsed, collapsedSet, setCollapsed],
   );
 
-  // ── Rows per open tramo group.
+  // ── Rows per open etapa group.
   const [groupRows, setGroupRows] = useState<Record<string, GroupRowsState>>({});
   const rowActions = useRef(new Map<string, GroupRowsActions>());
   const onGroupState = useCallback((id: string, state: GroupRowsState) => {
@@ -292,9 +292,9 @@ export function TareasAnalitico({
       summary.projects.flatMap((p) =>
         collapsedSet.has(projectGroupId(p.project.id))
           ? []
-          : p.tramos
-              .filter((t) => !collapsedSet.has(tramoGroupId(p.project.id, t.tramo.id)))
-              .map((t) => ({ id: tramoGroupId(p.project.id, t.tramo.id), filters: tareasGroupFilters(f, p.project.id, t.tramo.key, sort) })),
+          : p.etapas
+              .filter((t) => !collapsedSet.has(etapaGroupId(p.project.id, t.etapa.id)))
+              .map((t) => ({ id: etapaGroupId(p.project.id, t.etapa.id), filters: tareasGroupFilters(f, p.project.id, t.etapa.key, sort) })),
       ),
     [summary.projects, collapsedSet, f, sort],
   );
@@ -332,24 +332,24 @@ export function TareasAnalitico({
         caption: projectCaption(summary, p, mostrar),
         metrics: projectMetrics(p),
         footer: projectFooter(p, mostrar),
-        children: p.tramos.map((t) => {
-          const id = tramoGroupId(p.project.id, t.tramo.id);
+        children: p.etapas.map((t) => {
+          const id = etapaGroupId(p.project.id, t.etapa.id);
           const state = groupRows[id];
-          const tramoRef = t.tramo.key ? tramos.find((w) => w.id === t.tramo.id) : undefined;
+          const etapaRef = t.etapa.key ? etapas.find((w) => w.id === t.etapa.id) : undefined;
           const failed = state?.error === true;
-          const allInTramo =
-            summary.unfiltered.projectList?.find((u) => u.id === p.project.id)?.byTramo[summaryTramoKey(t.tramo.id)] ?? t.total;
-          const hidden = countsHidden && !failed ? hiddenCompletedCount(allInTramo, t.total) : 0;
+          const allInEtapa =
+            summary.unfiltered.projectList?.find((u) => u.id === p.project.id)?.byEtapa[summaryEtapaKey(t.etapa.id)] ?? t.total;
+          const hidden = countsHidden && !failed ? hiddenCompletedCount(allInEtapa, t.total) : 0;
           const hiddenLine =
             hidden > 0 ? (
               <HiddenCompletedLine count={hidden} colSpan={ANALITICO_SPAN} onShow={() => onHideCompleted(false)} />
             ) : null;
           return {
             id,
-            label: t.tramo.name,
-            color: t.tramo.key ? tramoColorVar(t.tramo.key, tramoRef?.sortOrder ?? t.tramo.sortOrder) : undefined,
-            caption: tramoCaption(summary, p.project.id, t, mostrar),
-            metrics: tramoMetrics(t, mostrar),
+            label: t.etapa.name,
+            color: t.etapa.key ? etapaColorVar(t.etapa.key, etapaRef?.sortOrder ?? t.etapa.sortOrder) : undefined,
+            caption: etapaCaption(summary, p.project.id, t, mostrar),
+            metrics: etapaMetrics(t, mostrar),
             rows: failed
               ? []
               : state?.rows?.filter((row) => !isHidden(row.id, row.parentTaskId)).map((row) => analiticoRow(row, today)),
@@ -368,10 +368,10 @@ export function TareasAnalitico({
                 variant="row"
                 colSpan={ANALITICO_SPAN}
                 context={{
-                  label: `Nueva tarea en ${t.tramo.name}`,
+                  label: `Nueva tarea en ${t.etapa.name}`,
                   projectId: p.project.id,
-                  tramoId: t.tramo.id,
-                  placeholder: `Nueva tarea en ${t.tramo.name}…`,
+                  etapaId: t.etapa.id,
+                  placeholder: `Nueva tarea en ${t.etapa.name}…`,
                 }}
                 onCreate={onCreate}
               />
@@ -379,7 +379,7 @@ export function TareasAnalitico({
           };
         }),
       })),
-    [summary, mostrar, groupRows, tramos, today, canCreate, late, onCreate, countsHidden, onHideCompleted, isHidden, retryGroup],
+    [summary, mostrar, groupRows, etapas, today, canCreate, late, onCreate, countsHidden, onHideCompleted, isHidden, retryGroup],
   );
 
   // ── Subtasks (#1048): a collapsible block of nested rows under each parent, "+ Subtarea…" last.
@@ -395,7 +395,7 @@ export function TareasAnalitico({
         <QuickAddRow
           variant="row"
           colSpan={ANALITICO_SPAN}
-          context={{ ...subtaskQuickAddCopy(parent.title), projectId: parent.projectId, tramoId: parent.workflowId, parentTaskId: parent.id }}
+          context={{ ...subtaskQuickAddCopy(parent.title), projectId: parent.projectId, etapaId: parent.workflowId, parentTaskId: parent.id }}
           onCreate={onCreate}
         />
       ) : null,
@@ -458,7 +458,7 @@ export function TareasAnalitico({
   );
 
   // ── Editable cells (#1025): every task column but Subtareas and Días de retraso.
-  const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, tramos, staff });
+  const cells = useTaskCellEdits<AnaliticoRow>({ taskOf: taskOfRow, etapas, staff });
   // Horas estimadas (#1084): an optional column, hidden here until the switch is on.
   const [showHours, setShowHours] = useState(false);
   const hoursSwitchId = useId();
@@ -483,22 +483,22 @@ export function TareasAnalitico({
         })),
       },
       {
-        id: "tramo",
+        id: "etapa",
         label: "Etapa",
-        value: query.tramo ?? TRAMO_TODOS,
+        value: query.etapa ?? ETAPA_TODOS,
         options: [
-          { value: TRAMO_TODOS, label: "Todos" },
-          ...tramos.map((t) => ({ value: t.key, label: t.name, color: tramoColorVar(t.key, t.sortOrder) })),
+          { value: ETAPA_TODOS, label: "Todos" },
+          ...etapas.map((t) => ({ value: t.key, label: t.name, color: etapaColorVar(t.key, t.sortOrder) })),
         ],
       },
     ],
-    [mostrar, facets.mostrar, query.tramo, tramos],
+    [mostrar, facets.mostrar, query.etapa, etapas],
   );
 
   const onFilterChange = useCallback(
     (groupId: string, value: string) => {
       if (groupId === "mostrar") onQuery({ mostrar: value as TareasMostrar });
-      else if (groupId === "tramo") onQuery({ tramo: value === TRAMO_TODOS ? null : value });
+      else if (groupId === "etapa") onQuery({ etapa: value === ETAPA_TODOS ? null : value });
     },
     [onQuery],
   );

@@ -5,11 +5,11 @@
 import type { TareasByProject, TareasFacets, TareasProjectGroup } from "@/lib/tareas/page-data";
 import type { TaskListItem, TaskListRow } from "@/lib/types/core";
 
-import { DISENO, LISTA_TRAMOS, PRESALE, makeListaTask } from "./lista-tasks";
+import { DISENO, LISTA_ETAPAS, PRESALE, makeListaTask } from "./lista-tasks";
 
 export const ESENCIAL_TODAY = "2026-11-07";
 export const ESENCIAL_ME = "11111111-1111-4111-8111-111111111111";
-export const ESENCIAL_TRAMOS = LISTA_TRAMOS;
+export const ESENCIAL_ETAPAS = LISTA_ETAPAS;
 
 export function esencialRow(overrides: Partial<TaskListItem> = {}): TaskListRow {
   const { notes: _notes, ...item } = makeListaTask({ managerId: ESENCIAL_ME, ...overrides });
@@ -51,7 +51,7 @@ export const ESENCIAL_DATA: TareasByProject = { groups: [LOMAS_GROUP, ROMA_GROUP
 
 export const ESENCIAL_FACETS: TareasFacets = {
   total: 4,
-  byTramo: { diseno: 3, presale: 1 },
+  byEtapa: { diseno: 3, presale: 1 },
   projects: [
     { id: LOMAS.id, name: LOMAS.name, count: 3 },
     { id: ROMA.id, name: ROMA.name, count: 1 },

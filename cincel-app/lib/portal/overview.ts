@@ -13,12 +13,12 @@ import type {
   PortalProjectDTO,
   PortalScheduleDTO,
   PortalTeamMemberDTO,
-  PortalTramoDTO,
+  PortalEtapaDTO,
 } from "@/lib/types/portal";
 import type { AgendaItem, ProgressItem, RecordTableData } from "@/lib/types/widgets";
 import { formatDateDMY } from "@/lib/utils/date";
 import type { Group } from "@/components/widgets/GroupedTable";
-import { tramoColorSlot, type TramoColorSlot } from "@/lib/tramos/tramo-color";
+import { etapaColorSlot, type EtapaColorSlot } from "@/lib/etapas/etapa-color";
 
 export const PORTAL_OVERVIEW_COPY = {
   fases: "Fases",
@@ -31,7 +31,7 @@ export const PORTAL_OVERVIEW_COPY = {
   descargar: "Descargar",
 } as const;
 
-export const PORTAL_TRAMO_STATE_LABEL: Record<PortalTramoDTO["state"], string> = {
+export const PORTAL_ETAPA_STATE_LABEL: Record<PortalEtapaDTO["state"], string> = {
   completado: "Completado",
   en_curso: "En curso",
   por_iniciar: "Por iniciar",
@@ -39,23 +39,23 @@ export const PORTAL_TRAMO_STATE_LABEL: Record<PortalTramoDTO["state"], string> =
 
 export type PortalStepper = {
   steps: number;
-  /** 1-indexed; 0 while no tramo has started. */
+  /** 1-indexed; 0 while no etapa has started. */
   current: number;
   /** e.g. "Fase actual: Diseño · 2 de 3". */
   label: string;
 };
 
 export type PortalOverviewData = {
-  tramos: PortalTramoDTO[];
+  etapas: PortalEtapaDTO[];
   stepper: PortalStepper | null;
   progress: ProgressItem[];
   entregas: AgendaItem[];
   /** null when the project's client folder can't be listed (not ready, Drive unavailable): no section. */
   documentos: RecordTableData | null;
-  /** The tramo in progress (the hero chip), null when none is. */
-  heroTramo: PortalTramoDTO | null;
-  /** Tramos completado or en curso ("{n} de {total} tramos en marcha"). */
-  tramosActive: number;
+  /** The etapa in progress (the hero chip), null when none is. */
+  heroEtapa: PortalEtapaDTO | null;
+  /** Etapas completado or en curso ("{n} de {total} etapas en marcha"). */
+  etapasActive: number;
   /** The first open delivery (`entregas[0]`), null when there is none. */
   nextEntrega: AgendaItem | null;
   /** The 4 newest files across the folder groups, each with its folder's name; empty when there are none. */
@@ -78,19 +78,19 @@ function clampPct(value: number): number {
   return Math.max(0, Math.min(100, Math.round(Number.isFinite(value) ? value : 0)));
 }
 
-export function buildPortalStepper(tramos: PortalTramoDTO[]): PortalStepper | null {
-  if (tramos.length === 0) return null;
-  const currentIndex = tramos.findIndex((t) => t.state === "en_curso");
+export function buildPortalStepper(etapas: PortalEtapaDTO[]): PortalStepper | null {
+  if (etapas.length === 0) return null;
+  const currentIndex = etapas.findIndex((t) => t.state === "en_curso");
   if (currentIndex !== -1) {
     return {
-      steps: tramos.length,
+      steps: etapas.length,
       current: currentIndex + 1,
-      label: `Fase actual: ${tramos[currentIndex].name} · ${currentIndex + 1} de ${tramos.length}`,
+      label: `Fase actual: ${etapas[currentIndex].name} · ${currentIndex + 1} de ${etapas.length}`,
     };
   }
-  const done = tramos.filter((t) => t.state === "completado").length;
-  if (done === tramos.length) return { steps: tramos.length, current: tramos.length + 1, label: "Todas las fases completadas" };
-  return { steps: tramos.length, current: done, label: done === 0 ? "Por iniciar" : `${done} de ${tramos.length} fases completadas` };
+  const done = etapas.filter((t) => t.state === "completado").length;
+  if (done === etapas.length) return { steps: etapas.length, current: etapas.length + 1, label: "Todas las fases completadas" };
+  return { steps: etapas.length, current: done, label: done === 0 ? "Por iniciar" : `${done} de ${etapas.length} fases completadas` };
 }
 
 /** Overall progress first, then one row per schedule section (partida) in the schedule's order. */
@@ -155,14 +155,14 @@ export function buildPortalDocumentos(files: PortalFileDTO[] | null): RecordTabl
   };
 }
 
-/** The tramo in progress: the first `en_curso` one. */
-export function buildPortalHeroTramo(tramos: PortalTramoDTO[]): PortalTramoDTO | null {
-  return tramos.find((t) => t.state === "en_curso") ?? null;
+/** The etapa in progress: the first `en_curso` one. */
+export function buildPortalHeroEtapa(etapas: PortalEtapaDTO[]): PortalEtapaDTO | null {
+  return etapas.find((t) => t.state === "en_curso") ?? null;
 }
 
-/** Tramos that are done or under way. */
-export function countPortalTramosActive(tramos: PortalTramoDTO[]): number {
-  return tramos.filter((t) => t.state === "completado" || t.state === "en_curso").length;
+/** Etapas that are done or under way. */
+export function countPortalEtapasActive(etapas: PortalEtapaDTO[]): number {
+  return etapas.filter((t) => t.state === "completado" || t.state === "en_curso").length;
 }
 
 /**
@@ -211,7 +211,7 @@ function portalScheduleDTO(schedule: PortalScheduleDTO): PortalScheduleDTO {
       progressPct: s.progressPct,
       ...(s.actualStart !== undefined ? { actualStart: s.actualStart } : {}),
       ...(s.actualEnd !== undefined ? { actualEnd: s.actualEnd } : {}),
-      ...(s.tramoKey !== undefined ? { tramoKey: s.tramoKey } : {}),
+      ...(s.etapaKey !== undefined ? { etapaKey: s.etapaKey } : {}),
     })),
   };
 }
@@ -219,7 +219,7 @@ function portalScheduleDTO(schedule: PortalScheduleDTO): PortalScheduleDTO {
 export function buildPortalOverview(input: {
   project: PortalProjectDTO;
   schedule: PortalScheduleDTO;
-  tramos: PortalTramoDTO[];
+  etapas: PortalEtapaDTO[];
   files: PortalFileDTO[] | null;
   /** The client folder one level deep (`PortalProjectData.documentFolders`). */
   folders?: PortalFolderGroupDTO[] | null;
@@ -231,20 +231,20 @@ export function buildPortalOverview(input: {
 }): PortalOverviewData {
   const entregas = buildPortalEntregas(input.schedule, input.today);
   return {
-    tramos: input.tramos,
-    stepper: buildPortalStepper(input.tramos),
+    etapas: input.etapas,
+    stepper: buildPortalStepper(input.etapas),
     progress: buildPortalProgress(input.project, input.schedule),
     entregas,
     documentos: buildPortalDocumentos(input.files),
-    heroTramo: buildPortalHeroTramo(input.tramos),
-    tramosActive: countPortalTramosActive(input.tramos),
+    heroEtapa: buildPortalHeroEtapa(input.etapas),
+    etapasActive: countPortalEtapasActive(input.etapas),
     nextEntrega: entregas[0] ?? null,
     recentFiles: buildPortalRecentFiles(input.folders ?? null, input.files),
     team: input.team ?? [],
     analitico: {
       project: input.project,
       schedule: portalScheduleDTO(input.schedule),
-      tramos: input.tramos,
+      etapas: input.etapas,
       documents: input.files,
       documentFolders: input.folders ?? null,
       today: input.today,
@@ -255,50 +255,50 @@ export function buildPortalOverview(input: {
 
 /**
  * Portal Esencial status line: where the project is now. `next` is the `YYYY-MM-DD` of the next delivery.
- * `pct` is the tramo's own progress; `general` marks the fallback to the project's overall % when the tramo
- * carries none (copy then says "de avance general"). `sin_tramos` is a project without tramos.
+ * `pct` is the etapa's own progress; `general` marks the fallback to the project's overall % when the etapa
+ * carries none (copy then says "de avance general"). `sin_etapas` is a project without etapas.
  */
 export type PortalStatusSentence =
-  | { kind: "en_curso"; tramo: string; slot: TramoColorSlot | null; pct: number; next: string | null; general?: boolean }
+  | { kind: "en_curso"; etapa: string; slot: EtapaColorSlot | null; pct: number; next: string | null; general?: boolean }
   | { kind: "terminado" }
   | { kind: "por_iniciar"; next: string | null }
-  | { kind: "sin_tramos"; pct: number; next: string | null };
+  | { kind: "sin_etapas"; pct: number; next: string | null };
 
 export function buildPortalStatusSentence(
-  tramos: PortalTramoDTO[],
+  etapas: PortalEtapaDTO[],
   next: AgendaItem | null,
-  /** `project.progressPct`, used when the tramo has no progress of its own. */
+  /** `project.progressPct`, used when the etapa has no progress of its own. */
   projectPct?: number,
 ): PortalStatusSentence {
   const nextDate = next ? next.start.slice(0, 10) : null;
   const general = clampPct(projectPct ?? 0);
-  if (tramos.length === 0) return { kind: "sin_tramos", pct: general, next: nextDate };
+  if (etapas.length === 0) return { kind: "sin_etapas", pct: general, next: nextDate };
 
-  let index = tramos.findIndex((t) => t.state === "en_curso");
+  let index = etapas.findIndex((t) => t.state === "en_curso");
   if (index === -1) {
-    if (tramos.every((t) => t.state === "completado")) return { kind: "terminado" };
-    if (tramos.every((t) => t.state === "por_iniciar")) return { kind: "por_iniciar", next: nextDate };
-    // Between tramos: the last one finished is where the project stands.
-    index = tramos.map((t) => t.state).lastIndexOf("completado");
+    if (etapas.every((t) => t.state === "completado")) return { kind: "terminado" };
+    if (etapas.every((t) => t.state === "por_iniciar")) return { kind: "por_iniciar", next: nextDate };
+    // Between etapas: the last one finished is where the project stands.
+    index = etapas.map((t) => t.state).lastIndexOf("completado");
   }
-  const tramo = tramos[index];
-  const own = (tramo as { progressPct?: number | null }).progressPct;
+  const etapa = etapas[index];
+  const own = (etapa as { progressPct?: number | null }).progressPct;
   const hasOwn = typeof own === "number" && Number.isFinite(own);
   return {
     kind: "en_curso",
-    tramo: tramo.name,
-    slot: tramoColorSlot({ key: tramo.key, sortOrder: index + 1 }),
+    etapa: etapa.name,
+    slot: etapaColorSlot({ key: etapa.key, sortOrder: index + 1 }),
     pct: hasOwn ? clampPct(own) : general,
     next: nextDate,
     ...(hasOwn ? {} : { general: true }),
   };
 }
 
-// ── Analítico (Portal-Analitico): KPIs, phases by tramo, deliverables and files by folder ──────────────────
+// ── Analítico (Portal-Analitico): KPIs, phases by etapa, deliverables and files by folder ──────────────────
 
 export const PORTAL_ANALITICO_COPY = {
   avanceGeneral: "Avance general",
-  tramoActual: "Etapa actual",
+  etapaActual: "Etapa actual",
   entregables: "Entregables",
   desvio: "Desvío",
   documentos: "Documentos",
@@ -306,7 +306,7 @@ export const PORTAL_ANALITICO_COPY = {
   archivosPendientes: "Los archivos aún no están listos.",
   sinDocumentos: "Aún no hay documentos compartidos.",
   carpetaRaiz: "General",
-  sinTramo: "Sin etapa",
+  sinEtapa: "Sin etapa",
 } as const;
 
 export const PORTAL_PHASE_ESTADO = { done: "Completado", open: "En curso", pending: "Por iniciar" } as const;
@@ -315,7 +315,7 @@ export const PORTAL_ENTREGABLE_ESTADO = { done: "Entregado", open: "En curso", p
 export type PortalKpis = {
   avance: number;
   avanceDelta: number | null;
-  tramo: { name: string; pct: number; slot: TramoColorSlot | null } | null;
+  etapa: { name: string; pct: number; slot: EtapaColorSlot | null } | null;
   entregables: { done: number; total: number };
   desvio: number | null;
   documentos: { total: number; nuevosSemana: number };
@@ -332,7 +332,7 @@ export type PortalPhaseRow = {
 export type PortalEntregableRow = {
   key: string;
   entregable: string;
-  tramo: string | null;
+  etapa: string | null;
   fechaPlan: string;
   fechaReal: string | null;
   estado: "Entregado" | "En curso" | "Por iniciar";
@@ -434,16 +434,16 @@ function average(values: number[]): number {
   return values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
 }
 
-/** The project's current tramo: the first `en_curso` one, with its own progress and color slot. */
-function currentTramo(tramos: PortalTramoDTO[]): PortalKpis["tramo"] {
-  const index = tramos.findIndex((t) => t.state === "en_curso");
+/** The project's current etapa: the first `en_curso` one, with its own progress and color slot. */
+function currentEtapa(etapas: PortalEtapaDTO[]): PortalKpis["etapa"] {
+  const index = etapas.findIndex((t) => t.state === "en_curso");
   if (index === -1) return null;
-  const t = tramos[index];
+  const t = etapas[index];
   const own = (t as { progressPct?: number | null }).progressPct;
   return {
     name: t.name,
     pct: clampPct(typeof own === "number" ? own : 0),
-    slot: tramoColorSlot({ key: t.key, sortOrder: index + 1 }),
+    slot: etapaColorSlot({ key: t.key, sortOrder: index + 1 }),
   };
 }
 
@@ -457,7 +457,7 @@ function allPortalFiles(groups: PortalFolderGroupDTO[] | null | undefined, docum
 export type PortalAnaliticoSource = {
   project: PortalProjectDTO;
   schedule: PortalScheduleDTO | null;
-  tramos: PortalTramoDTO[];
+  etapas: PortalEtapaDTO[];
   documents: PortalFileDTO[] | null;
   documentFolders?: PortalFolderGroupDTO[] | null;
 };
@@ -470,7 +470,7 @@ export function buildPortalKpis(d: PortalAnaliticoSource, today: string): Portal
   return {
     avance: clampPct(d.project.progressPct),
     avanceDelta: typeof d.project.progressDeltaMonth === "number" ? Math.round(d.project.progressDeltaMonth) : null,
-    tramo: currentTramo(d.tramos),
+    etapa: currentEtapa(d.etapas),
     entregables: { done: sections.filter((s) => clampPct(s.progressPct) >= 100).length, total: sections.length },
     desvio: hasReal ? (maxOrNull(sections.map((s) => sectionDesvio(s, today, hasReal))) ?? 0) : null,
     documentos: {
@@ -493,35 +493,35 @@ function toPhaseRow(s: PortalSection, today: string, hasReal: boolean): PortalPh
   };
 }
 
-/** Group label and color: the tramo once sections carry `tramoKey`, else the planta (the default until then). */
+/** Group label and color: the etapa once sections carry `etapaKey`, else the planta (the default until then). */
 function phaseGroupOf(
   s: PortalSection,
-  byTramo: boolean,
-  tramos: PortalTramoDTO[],
+  byEtapa: boolean,
+  etapas: PortalEtapaDTO[],
 ): { id: string; label: string; color?: string } {
-  if (!byTramo) return { id: `planta:${s.planta}`, label: s.planta };
-  const index = tramos.findIndex((t) => t.key === s.tramoKey);
-  if (!s.tramoKey) return { id: "tramo:", label: PORTAL_ANALITICO_COPY.sinTramo };
-  const tramo = index === -1 ? null : tramos[index];
-  const slot = tramoColorSlot({ key: s.tramoKey, sortOrder: index + 1 });
-  return { id: `tramo:${s.tramoKey}`, label: tramo?.name ?? s.tramoKey, color: slot ? `var(--chart-${slot})` : undefined };
+  if (!byEtapa) return { id: `planta:${s.planta}`, label: s.planta };
+  const index = etapas.findIndex((t) => t.key === s.etapaKey);
+  if (!s.etapaKey) return { id: "etapa:", label: PORTAL_ANALITICO_COPY.sinEtapa };
+  const etapa = index === -1 ? null : etapas[index];
+  const slot = etapaColorSlot({ key: s.etapaKey, sortOrder: index + 1 });
+  return { id: `etapa:${s.etapaKey}`, label: etapa?.name ?? s.etapaKey, color: slot ? `var(--chart-${slot})` : undefined };
 }
 
 /**
- * Phases (schedule sections) grouped by planta until sections carry a tramo, then by tramo. Each group carries
+ * Phases (schedule sections) grouped by planta until sections carry an etapa, then by etapa. Each group carries
  * its fase count, average progress and worst deviation, or "por iniciar" when none of its fases started.
  */
 export function buildPortalPhaseTable(
   s: PortalScheduleDTO,
   today: string,
-  tramos: PortalTramoDTO[] = [],
+  etapas: PortalEtapaDTO[] = [],
 ): PortalTableGroup<PortalPhaseRow>[] {
   const sections = s?.sections ?? [];
   const hasReal = portalScheduleHasRealDates(s);
-  const byTramo = sections.some((x) => typeof x.tramoKey === "string" && x.tramoKey !== "");
+  const byEtapa = sections.some((x) => typeof x.etapaKey === "string" && x.etapaKey !== "");
   const groups = new Map<string, PortalTableGroup<PortalPhaseRow> & { rows: PortalPhaseRow[] }>();
   for (const section of sections) {
-    const g = phaseGroupOf(section, byTramo, tramos);
+    const g = phaseGroupOf(section, byEtapa, etapas);
     let group = groups.get(g.id);
     if (!group) {
       group = { ...g, metrics: [], rows: [] };
@@ -554,11 +554,11 @@ export function portalPhaseTotals(groups: PortalTableGroup<PortalPhaseRow>[]): {
 export function buildPortalEntregables(
   s: PortalScheduleDTO,
   today: string,
-  tramos: PortalTramoDTO[] = [],
+  etapas: PortalEtapaDTO[] = [],
 ): PortalEntregableRow[] {
   const sections = s?.sections ?? [];
   const hasReal = portalScheduleHasRealDates(s);
-  const byTramo = sections.some((x) => typeof x.tramoKey === "string" && x.tramoKey !== "");
+  const byEtapa = sections.some((x) => typeof x.etapaKey === "string" && x.etapaKey !== "");
   return [...sections]
     .sort((a, b) => a.end.localeCompare(b.end) || a.seccion.localeCompare(b.seccion, "es"))
     .map((section) => {
@@ -566,7 +566,7 @@ export function buildPortalEntregables(
       return {
         key: section.key,
         entregable: section.seccion,
-        tramo: phaseGroupOf(section, byTramo, tramos).label,
+        etapa: phaseGroupOf(section, byEtapa, etapas).label,
         fechaPlan: portalDayMonth(section.end),
         fechaReal: section.actualEnd ? portalDayMonth(section.actualEnd) : null,
         estado:

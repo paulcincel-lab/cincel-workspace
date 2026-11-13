@@ -12,7 +12,7 @@ import {
 
 /**
  * Filters and expanded state of Personas · Analítico, kept in the URL
- * (`?estado`, `?tramo`, `?alcance`, `?q`, `?abiertos`, `?persona`) so they
+ * (`?estado`, `?etapa`, `?alcance`, `?q`, `?abiertos`, `?persona`) so they
  * survive a reload. Read once from the URL; every change updates the local
  * state and swaps the params with `history.replaceState` (no navigation).
  */

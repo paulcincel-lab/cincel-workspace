@@ -7,7 +7,7 @@
 import type { Group, HeatRule } from "@/components/widgets/GroupedTable";
 import type { KpiStripItem } from "@/components/widgets/KpiStrip";
 import { toToolSteps, type ToolStep, type ToolStepGroup, type ToolStepState } from "@/lib/assistant/tool-steps";
-import { tramoColorVar } from "@/lib/tramos/tramo-color";
+import { etapaColorVar } from "@/lib/etapas/etapa-color";
 import type { AssistantMessageMeta, AssistantUIMessage } from "@/lib/types/asistente";
 import type { RecordColumn, RecordTableData } from "@/lib/types/widgets";
 import { CSV_BOM, escapeCsvFormula } from "@/lib/utils/export-service";
@@ -25,7 +25,7 @@ export type GroupedTableColumn = RecordColumn;
 export type StepTable = {
   title: string;
   columns: GroupedTableColumn[];
-  /** One group per tramo, or the single `FLAT_GROUP_ID` group when the table has no groups. */
+  /** One group per etapa, or the single `FLAT_GROUP_ID` group when the table has no groups. */
   groups: Group<StepRow>[];
   /** Footer values by column key (e.g. Σ días). */
   totals?: Record<string, number>;
@@ -250,23 +250,23 @@ export function daysLate(date: string | null, today: string = localToday()): num
   return Math.max(0, Math.round((b - a) / 86_400_000));
 }
 
-const NO_TRAMO_ID = "sin-tramo";
+const NO_ETAPA_ID = "sin-etapa";
 
-/** `list_activities_due` → "tareas vencidas": one group per tramo, days late per task, Σ días. */
+/** `list_activities_due` → "tareas vencidas": one group per etapa, days late per task, Σ días. */
 export function activitiesDueTable(output: unknown, today: string = localToday()): StepTable | null {
   const rows = objectRows(output);
   if (!rows) return null;
-  type Tramo = { id: string; label: string; key: string | null; sortOrder: number | null; rows: StepRow[] };
-  const tramos = new Map<string, Tramo>();
+  type Etapa = { id: string; label: string; key: string | null; sortOrder: number | null; rows: StepRow[] };
+  const etapas = new Map<string, Etapa>();
   for (const row of rows) {
     const key = str(row.workflowKey);
     const label = str(row.workflow) ?? "Sin etapa";
-    const id = key ?? (str(row.workflow) ? `tramo-${label}` : NO_TRAMO_ID);
-    const tramo = tramos.get(id) ?? { id, label, key, sortOrder: num(row.workflowSortOrder), rows: [] };
+    const id = key ?? (str(row.workflow) ? `etapa-${label}` : NO_ETAPA_ID);
+    const etapa = etapas.get(id) ?? { id, label, key, sortOrder: num(row.workflowSortOrder), rows: [] };
     const vence = str(row.commitmentDate);
     const dias = daysLate(vence, today);
-    tramo.rows.push({
-      id: str(row.id) ?? `${id}-${tramo.rows.length}`,
+    etapa.rows.push({
+      id: str(row.id) ?? `${id}-${etapa.rows.length}`,
       taskId: str(row.id),
       tarea: str(row.description) ?? "",
       responsable: str(row.manager),
@@ -275,23 +275,23 @@ export function activitiesDueTable(output: unknown, today: string = localToday()
       dias,
       blocked: row.blocked === true || row.status === "bloqueado",
     });
-    tramos.set(id, tramo);
+    etapas.set(id, etapa);
   }
-  const ordered = [...tramos.values()].sort(
+  const ordered = [...etapas.values()].sort(
     (a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.label.localeCompare(b.label, LOCALE),
   );
-  const groups: Group<StepRow>[] = ordered.map((tramo) => {
-    const total = tramo.rows.reduce((sum, row) => sum + ((row.dias as number | null) ?? 0), 0);
-    const blocked = tramo.rows.some((row) => row.blocked === true);
+  const groups: Group<StepRow>[] = ordered.map((etapa) => {
+    const total = etapa.rows.reduce((sum, row) => sum + ((row.dias as number | null) ?? 0), 0);
+    const blocked = etapa.rows.some((row) => row.blocked === true);
     return {
-      id: tramo.id,
-      label: tramo.label,
-      color: tramo.key ? tramoColorVar({ key: tramo.key, sortOrder: tramo.sortOrder ?? 0 }) : undefined,
+      id: etapa.id,
+      label: etapa.label,
+      color: etapa.key ? etapaColorVar({ key: etapa.key, sortOrder: etapa.sortOrder ?? 0 }) : undefined,
       metrics: [
-        { key: "resumen", value: `${tramo.rows.length} · ${formatCount(total)} d`, tone: "muted" },
+        { key: "resumen", value: `${etapa.rows.length} · ${formatCount(total)} d`, tone: "muted" },
         ...(blocked ? [{ key: "bloqueada", value: "bloqueada", tone: "destructive" as const }] : []),
       ],
-      rows: tramo.rows,
+      rows: etapa.rows,
     };
   });
   const dias = groups.flatMap((group) => group.rows ?? []).reduce((sum, row) => sum + ((row.dias as number | null) ?? 0), 0);
@@ -317,7 +317,7 @@ export function workloadTable(output: unknown): StepTable | null {
     title: "carga por persona",
     columns: [
       { key: "persona", label: "Persona" },
-      { key: "tramo", label: "Etapa" },
+      { key: "etapa", label: "Etapa" },
       { key: "abiertas", label: "Abiertas", format: "count", align: "right", mono: true },
       { key: "carga", label: "Carga", format: "percent", align: "right", mono: true },
     ],
@@ -329,7 +329,7 @@ export function workloadTable(output: unknown): StepTable | null {
         rows: rows.map((row, index) => ({
           id: `${str(row.name) ?? "persona"}-${index}`,
           persona: str(row.name) ?? "",
-          tramo: str(row.mainWorkflow),
+          etapa: str(row.mainWorkflow),
           abiertas: num(row.activeTasks),
           carga: num(row.occupancyPct),
         })),

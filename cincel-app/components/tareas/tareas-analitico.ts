@@ -1,6 +1,6 @@
 /**
  * Tareas · Analítico view model (frames `Main`, `Analitico-Vencidas`): the
- * KPI strip, the project → tramo groups of `GroupedTable`, their captions,
+ * KPI strip, the project → etapa groups of `GroupedTable`, their captions,
  * metrics and footers, the page totals and the hidden-projects note. Every
  * count comes from the summary (`qk.tareas.summary(f)`), never from the
  * loaded rows, so they hold past the first page. Pure and client-safe.
@@ -11,15 +11,15 @@ import { formatDueDate } from "@/lib/proyectos/project-tasks-by-fase";
 import type { TareasMostrar } from "@/lib/tareas/query";
 import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
 import {
-  SIN_TRAMO_LABEL,
+  SIN_ETAPA_LABEL,
   hiddenSummaryProjects,
   pctVencidas,
   retrasoPromedio,
-  summaryTramoKey,
+  summaryEtapaKey,
   type TareasSummary,
   type TareasSummaryCounts,
   type TareasSummaryProject,
-  type TareasSummaryTramo,
+  type TareasSummaryEtapa,
 } from "@/lib/tareas/summary";
 import { isTaskClosed, statusColorToken, taskStatusLabel, type StatusColorToken } from "@/lib/tasks/status-options";
 import type { TaskListRow } from "@/lib/types/core";
@@ -39,7 +39,7 @@ export const ANALITICO_TABLE_LABEL = "Tareas por proyecto y etapa";
 
 export const ANALITICO_COLUMNS: RecordColumn[] = [
   { key: "tarea", label: "Tarea" },
-  { key: "tramo", label: "Etapa" },
+  { key: "etapa", label: "Etapa" },
   { key: "fase", label: "Fase" },
   { key: "responsable", label: "Responsable" },
   { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL },
@@ -68,7 +68,7 @@ const NUMBER = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 
 const plural = (n: number, one: string, many: string) => `${NUMBER.format(n)} ${n === 1 ? one : many}`;
 export const tareasText = (n: number) => plural(n, "tarea", "tareas");
-export const tramosText = (n: number) => plural(n, "etapa", "etapas");
+export const etapasText = (n: number) => plural(n, "etapa", "etapas");
 export const proyectosText = (n: number) => plural(n, "proyecto", "proyectos");
 export const vencidasText = (n: number) => plural(n, "vencida", "vencidas");
 export const abiertasText = (n: number) => plural(n, "abierta", "abiertas");
@@ -117,19 +117,19 @@ export function analiticoKpis(summary: TareasSummary, mostrar: TareasMostrar): K
 /** Group id of a project section. */
 export const projectGroupId = (projectId: string) => `p:${projectId}`;
 
-/** Group id of a tramo group inside a project. */
-export const tramoGroupId = (projectId: string, tramoId: string | null) => `t:${projectId}:${tramoId ?? "none"}`;
+/** Group id of an etapa group inside a project. */
+export const etapaGroupId = (projectId: string, etapaId: string | null) => `t:${projectId}:${etapaId ?? "none"}`;
 
 function unfilteredOf(summary: TareasSummary, projectId: string) {
   return summary.unfiltered.projectList?.find((p) => p.id === projectId) ?? null;
 }
 
-/** "8 tareas · 4 tramos"; En retraso "4 de 8 tareas · 3 tramos". */
+/** "8 tareas · 4 etapas"; En retraso "4 de 8 tareas · 3 etapas". */
 export function projectCaption(summary: TareasSummary, p: TareasSummaryProject, mostrar: TareasMostrar): string {
-  const tramos = tramosText(p.tramos.length);
-  if (mostrar !== "en_retraso") return `${tareasText(p.total)} · ${tramos}`;
+  const etapas = etapasText(p.etapas.length);
+  if (mostrar !== "en_retraso") return `${tareasText(p.total)} · ${etapas}`;
   const all = unfilteredOf(summary, p.project.id)?.total ?? p.total;
-  return `${NUMBER.format(p.total)} de ${tareasText(all)} · ${tramos}`;
+  return `${NUMBER.format(p.total)} de ${tareasText(all)} · ${etapas}`;
 }
 
 /** Header metrics: Abiertas, Vencidas, the "% vencidas" chip and Retraso prom. */
@@ -149,19 +149,19 @@ export function projectMetrics(p: TareasSummaryProject): GroupMetric[] {
 }
 
 /** "2 tareas"; En retraso "1 de 2 tareas". */
-export function tramoCaption(
+export function etapaCaption(
   summary: TareasSummary,
   projectId: string,
-  t: TareasSummaryTramo,
+  t: TareasSummaryEtapa,
   mostrar: TareasMostrar,
 ): string {
   if (mostrar !== "en_retraso") return tareasText(t.total);
-  const all = unfilteredOf(summary, projectId)?.byTramo[summaryTramoKey(t.tramo.id)] ?? t.total;
+  const all = unfilteredOf(summary, projectId)?.byEtapa[summaryEtapaKey(t.etapa.id)] ?? t.total;
   return `${NUMBER.format(t.total)} de ${tareasText(all)}`;
 }
 
 /** "1 abierta · 1 vencida · 9 d · 1 bloqueada"; En retraso "1 vencida · 9 d · bloqueada". */
-export function tramoMetrics(t: TareasSummaryTramo, mostrar: TareasMostrar): GroupMetric[] {
+export function etapaMetrics(t: TareasSummaryEtapa, mostrar: TareasMostrar): GroupMetric[] {
   const out: GroupMetric[] = [];
   if (mostrar !== "en_retraso") out.push({ key: "abiertas", value: abiertasText(t.open) });
   out.push({ key: "vencidas", value: vencidasText(t.overdue), tone: t.overdue > 0 ? "destructive" : "default" });
@@ -223,8 +223,8 @@ export type AnaliticoRow = {
   /** The row's task: the editable cells read and patch it. */
   task: TaskListRow;
   tarea: string;
-  /** Tramo name, or "Sin tramo". */
-  tramo: string;
+  /** Etapa name, or "Sin etapa". */
+  etapa: string;
   /** Fase name, or "Sin fase". */
   fase: string;
   responsable: string;
@@ -247,7 +247,7 @@ export function analiticoRow(row: TaskListRow, today: string): AnaliticoRow {
     id: row.id,
     task: row,
     tarea: row.title,
-    tramo: row.workflow?.name ?? SIN_TRAMO_LABEL,
+    etapa: row.workflow?.name ?? SIN_ETAPA_LABEL,
     fase: row.phase?.name ?? CLEAR_LABEL.phase,
     responsable: row.manager?.name ?? "Sin asignar",
     estatus: taskStatusLabel(row),

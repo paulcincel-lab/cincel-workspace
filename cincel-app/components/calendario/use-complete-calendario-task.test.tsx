@@ -17,7 +17,7 @@ import { useCompleteCalendarioTask } from "./use-complete-calendario-task";
 
 const item: CalTaskItem = {
   kind: "task", id: "t:1", taskId: "1", title: "Ingenierías", date: "2026-11-11", dateField: "commitmentDate",
-  project: { id: "p", name: "Madrid 22" }, tramo: null, phase: null, status: "pendiente", statusLabel: "Pendiente",
+  project: { id: "p", name: "Madrid 22" }, etapa: null, phase: null, status: "pendiente", statusLabel: "Pendiente",
   priority: "media", manager: null, support: [], overdue: false, completed: false, blocked: false, hours: 1,
   hoursSource: "default", parentTaskId: null, canEdit: true,
 };

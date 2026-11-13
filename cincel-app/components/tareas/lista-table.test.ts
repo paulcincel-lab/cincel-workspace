@@ -31,7 +31,7 @@ describe("listaTable", () => {
   it("shows Plazo only in Esencial and keeps the Visual columns", () => {
     expect(column("plazo").hideOn).toEqual(["visual", "analitico"]);
     const visible = LISTA_COLUMNS.filter((c) => !c.hideOn?.includes("visual")).map((c) => c.key);
-    expect(visible).toEqual(["tarea", "proyecto", "tramo", "responsable", "apoyo", "vence", "prioridad", "subtareas"]);
+    expect(visible).toEqual(["tarea", "proyecto", "etapa", "responsable", "apoyo", "vence", "prioridad", "subtareas"]);
     expect(table.rows.map((r) => r.plazo)).toEqual(["Vencida", "Esta semana", "Vencida", "Más adelante", "Completada"]);
   });
 
@@ -52,7 +52,7 @@ describe("listaTable", () => {
     expect(row).toMatchObject({
       tarea: "Levantamiento",
       proyecto: "Casa Lomas",
-      tramo: "Diseño",
+      etapa: "Diseño",
       responsable: "Ana Ruiz",
       vence: "2026-11-01",
       prioridad: "Alta",
@@ -87,10 +87,10 @@ describe("projectSummaries", () => {
 
 describe("listaTasks", () => {
   it("narrows by etapa key(s) and proyecto", () => {
-    expect(listaTasks(LISTA_TASKS, { tramo: null, proyecto: null })).toHaveLength(5);
-    expect(listaTasks(LISTA_TASKS, { tramo: "diseno", proyecto: null }).map((t) => t.id).sort()).toEqual(["t1", "t2"]);
-    expect(listaTasks(LISTA_TASKS, { tramo: "presale,diseno", proyecto: null })).toHaveLength(5);
-    expect(listaTasks(LISTA_TASKS, { tramo: null, proyecto: "p2" }).map((t) => t.id).sort()).toEqual(["t3", "t4", "t5"]);
-    expect(listaTasks(LISTA_TASKS, { tramo: "diseno", proyecto: "p2" })).toEqual([]);
+    expect(listaTasks(LISTA_TASKS, { etapa: null, proyecto: null })).toHaveLength(5);
+    expect(listaTasks(LISTA_TASKS, { etapa: "diseno", proyecto: null }).map((t) => t.id).sort()).toEqual(["t1", "t2"]);
+    expect(listaTasks(LISTA_TASKS, { etapa: "presale,diseno", proyecto: null })).toHaveLength(5);
+    expect(listaTasks(LISTA_TASKS, { etapa: null, proyecto: "p2" }).map((t) => t.id).sort()).toEqual(["t3", "t4", "t5"]);
+    expect(listaTasks(LISTA_TASKS, { etapa: "diseno", proyecto: "p2" })).toEqual([]);
   });
 });

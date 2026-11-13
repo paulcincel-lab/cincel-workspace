@@ -22,7 +22,7 @@ vi.mock("@/lib/actions/page-data/tareas-actions", () => ({
   searchProjectTasksAction: vi.fn(async () => []),
 }));
 vi.mock("@/lib/actions/workflows-actions", () => ({ fetchWorkflowAction: vi.fn(async () => null) }));
-vi.mock("@/lib/actions/tramo-start-actions", () => ({ previewStartTramoAction: vi.fn() }));
+vi.mock("@/lib/actions/etapa-start-actions", () => ({ previewStartEtapaAction: vi.fn() }));
 vi.mock("@/lib/actions/import-actions", () => ({
   getImportDataAction: vi.fn().mockResolvedValue(null),
 }));

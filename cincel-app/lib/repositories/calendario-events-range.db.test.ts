@@ -20,7 +20,7 @@ describe.skipIf(!url)("meetings in the range (test DB)", async () => {
   const repo = await import("@/lib/repositories/calendario-events-range");
 
   const range = { from: "2026-11-12", to: "2026-11-13" };
-  const filters = { mostrar: "todo" as const, quien: "yo" as const, proyectos: [], tramo: null, responsable: null };
+  const filters = { mostrar: "todo" as const, quien: "yo" as const, proyectos: [], etapa: null, responsable: null };
   const at = (day: number, hour: number, min = 0) => new Date(Date.UTC(2026, 10, day, hour, min, 0));
 
   let ana = "";

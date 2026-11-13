@@ -7,7 +7,7 @@ import { StyleProvider } from "@/components/shell/StyleProvider";
 import type { ListPageProps } from "@/components/patterns/ListPage";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
-import { LISTA_TASKS, LISTA_TRAMOS } from "./fixtures/lista-tasks";
+import { LISTA_TASKS, LISTA_ETAPAS } from "./fixtures/lista-tasks";
 
 const nav = vi.hoisted(() => ({
   search: "estilo=analitico",
@@ -51,10 +51,10 @@ vi.mock("@/lib/auth/auth-service", () => ({
   getCurrentAuthenticatedUser: () => ({ member: { id: "s1" }, email: "ana@cincel.mx", access: "Administrador" }),
 }));
 
-vi.mock("@/lib/actions/tramo-start-actions", () => ({
-  previewStartTramoAction: vi.fn(),
-  startTramoAction: vi.fn(),
-  undoStartTramoAction: vi.fn(),
+vi.mock("@/lib/actions/etapa-start-actions", () => ({
+  previewStartEtapaAction: vi.fn(),
+  startEtapaAction: vi.fn(),
+  undoStartEtapaAction: vi.fn(),
 }));
 const pageData = vi.hoisted(() => ({
   getTareasStartSlotData: vi.fn(),
@@ -67,19 +67,19 @@ const pageData = vi.hoisted(() => ({
 vi.mock("@/lib/actions/page-data/tareas-actions", () => pageData);
 
 // The slot's own behaviour (its query, the deep link, the sheet) is covered by
-// `TareasStartSlot.test.tsx`; here it only shows which tramo it was mounted for.
+// `TareasStartSlot.test.tsx`; here it only shows which etapa it was mounted for.
 vi.mock("@/components/tareas/TareasStartSlot", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./TareasStartSlot")>()),
   TareasStartSlot: ({ workflow }: { workflow: { id: string } }) => (
     <div data-testid="tareas-start-slot" data-workflow={workflow.id} />
   ),
 }));
-vi.mock("@/components/widgets/TramoBadge", () => ({
-  TramoBadge: ({ tramo }: { tramo: { name: string } }) => <span data-testid="tramo-badge">{tramo.name}</span>,
+vi.mock("@/components/widgets/EtapaBadge", () => ({
+  EtapaBadge: ({ etapa }: { etapa: { name: string } }) => <span data-testid="etapa-badge">{etapa.name}</span>,
 }));
-vi.mock("@/components/tareas/StartTramoSheet", () => ({
-  StartTramoSheet: ({ open, projectId, onClose }: { open: boolean; projectId: string | null; onClose(): void }) => (
-    <div data-testid="start-tramo-sheet" data-open={String(open)} data-project={projectId ?? ""}>
+vi.mock("@/components/tareas/StartEtapaSheet", () => ({
+  StartEtapaSheet: ({ open, projectId, onClose }: { open: boolean; projectId: string | null; onClose(): void }) => (
+    <div data-testid="start-etapa-sheet" data-open={String(open)} data-project={projectId ?? ""}>
       <button type="button" onClick={onClose}>
         Cerrar hoja
       </button>
@@ -104,7 +104,7 @@ vi.mock("@/components/patterns/ListPage", () => ({
             {spec.data.rows.map((row) => (
               <tr key={String(row.id)} data-row-id={String(row.id)}>
                 <td>{spec.renderCell?.("tarea", row) ?? String(row.tarea)}</td>
-                <td>{spec.renderCell?.("tramo", row) ?? String(row.tramo ?? "")}</td>
+                <td>{spec.renderCell?.("etapa", row) ?? String(row.etapa ?? "")}</td>
               </tr>
             ))}
           </tbody>
@@ -142,7 +142,7 @@ const LISTA_ROWS = LISTA_TASKS.map(
 /** The cache `/tareas?estilo=analitico` hydrates: the page bundle and the first list page it seeded. */
 function seededClient(query: TareasQuery, nextCursor: string | null = null) {
   const client = createTestQueryClient();
-  const page: TareasPageData = { facets: { total: 5, byTramo: {}, projects: [] }, tramos: LISTA_TRAMOS, staff: [] };
+  const page: TareasPageData = { facets: { total: 5, byEtapa: {}, projects: [] }, etapas: LISTA_ETAPAS, staff: [] };
   // The bundle is keyed by the style; seed it for every one the tests render.
   for (const estilo of ["visual", "esencial", "analitico"] as const) {
     client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(query, estilo)), page);
@@ -155,11 +155,11 @@ function seededClient(query: TareasQuery, nextCursor: string | null = null) {
 }
 
 function renderLista({
-  tramo = null,
+  etapa = null,
   style = "visual",
   nextCursor = null,
-}: { tramo?: string | null; style?: PresentationStyle; nextCursor?: string | null } = {}) {
-  const query: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo };
+}: { etapa?: string | null; style?: PresentationStyle; nextCursor?: string | null } = {}) {
+  const query: TareasQuery = { ...DEFAULT_TAREAS_QUERY, etapa };
   return renderWithQueryClient(
     <StyleProvider style={style} scope="staff">
       <TareasLista query={query} header={{ title: "Tareas" }} />
@@ -203,7 +203,7 @@ describe("TareasLista", () => {
     expect(visual?.columns.slice(0, 7)).toEqual([
       "tarea:text",
       "proyecto:-",
-      "tramo:select",
+      "etapa:select",
       "fase:select",
       "responsable:person",
       "apoyo:people",
@@ -215,13 +215,13 @@ describe("TareasLista", () => {
     renderLista();
     const link = screen.getByRole("link", { name: "Levantamiento" });
     expect(link.getAttribute("href")).toBe("/tareas?estilo=analitico&tarea=t1");
-    expect(screen.getAllByTestId("tramo-badge").map((b) => b.textContent)).toContain("Diseño");
+    expect(screen.getAllByTestId("etapa-badge").map((b) => b.textContent)).toContain("Diseño");
     expect(screen.getByTestId("lista-table").getAttribute("data-columns")).toContain("pctVencidas");
   });
 
   it("shows only the selected etapa's tasks", () => {
     nav.search = "estilo=analitico&etapa=diseno";
-    renderLista({ tramo: "diseno" });
+    renderLista({ etapa: "diseno" });
     const rows = screen.getByTestId("lista-table").querySelectorAll("tr[data-row-id]");
     expect([...rows].map((r) => r.getAttribute("data-row-id"))).toEqual(["t1", "t2"]);
   });
@@ -268,28 +268,28 @@ describe("TareasLista", () => {
 describe("TareasLista start slot", () => {
   it("mounts the start slot for exactly one known etapa", () => {
     nav.search = "estilo=analitico&etapa=diseno";
-    renderLista({ tramo: "diseno" });
+    renderLista({ etapa: "diseno" });
     expect(screen.getByTestId("tareas-start-slot").getAttribute("data-workflow")).toBe("w-diseno");
     expect(screen.getByTestId("lista-table")).toBeTruthy();
   });
 
   it("renders no slot with several etapas selected", () => {
     nav.search = "estilo=analitico&etapa=presale,diseno&project=p9&iniciar=1";
-    renderLista({ tramo: "presale,diseno" });
+    renderLista({ etapa: "presale,diseno" });
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
   });
 
   it("renders no slot for Todas or an unknown etapa", () => {
-    renderLista({ tramo: null });
+    renderLista({ etapa: null });
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
     cleanup();
-    renderLista({ tramo: "otro" });
+    renderLista({ etapa: "otro" });
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
   });
 
   it("never reloads the route", () => {
     nav.search = "estilo=analitico&etapa=diseno";
-    renderLista({ tramo: "diseno" });
+    renderLista({ etapa: "diseno" });
     expect(nav.refresh).not.toHaveBeenCalled();
     expect(nav.replace).not.toHaveBeenCalled();
   });

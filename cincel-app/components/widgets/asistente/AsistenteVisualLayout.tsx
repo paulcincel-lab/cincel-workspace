@@ -48,7 +48,7 @@ import { AssistantLog, type AssistantLogHandle } from "@/components/widgets/asis
 import { AssistantThreadRail } from "@/components/widgets/asistente/AssistantThreadRail";
 import { SuggestionCards, type SuggestionCardItem } from "@/components/widgets/asistente/SuggestionCards";
 import { pickSuggestions, type SuggestionTopic } from "@/lib/assistant/suggestions";
-import { tramoColorClass } from "@/lib/tramos/tramo-color";
+import { etapaColorClass } from "@/lib/etapas/etapa-color";
 import type { AssistantUIMessage, ContextChip } from "@/lib/types/asistente";
 import type { AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
 
@@ -351,11 +351,11 @@ function ConversationBody({
         </div>
         {projectChip ? (
           <span className="hidden max-w-60 shrink-0 items-center gap-1.5 truncate rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground sm:inline-flex">
-            {projectChip.tramo ? (
-              <span aria-hidden className={`size-[7px] shrink-0 rounded-full ${tramoColorClass(projectChip.tramo)}`} />
+            {projectChip.etapa ? (
+              <span aria-hidden className={`size-[7px] shrink-0 rounded-full ${etapaColorClass(projectChip.etapa)}`} />
             ) : null}
             <span className="truncate">
-              {projectChip.tramo ? `${projectChip.label} · ${projectChip.tramo.name}` : projectChip.label}
+              {projectChip.etapa ? `${projectChip.label} · ${projectChip.etapa.name}` : projectChip.label}
             </span>
           </span>
         ) : null}

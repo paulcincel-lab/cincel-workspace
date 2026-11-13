@@ -1,6 +1,6 @@
 /**
  * `DistributionWidget` fixture (redesign FE §4.10.1, §17; frames `Dashboard`,
- * `InicioEsencial`, `InicioAnalitico`): "Tareas por tramo" with open and
+ * `InicioEsencial`, `InicioAnalitico`): "Tareas por etapa" with open and
  * overdue counts. The same numbers are rendered in Visual, Esencial and
  * Analítico. Data shapes come only from `lib/types/widgets.ts`.
  */

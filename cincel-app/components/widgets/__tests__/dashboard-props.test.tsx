@@ -11,13 +11,13 @@ import axe from "axe-core";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
-vi.mock("@/lib/tramos/compat", () => {
+vi.mock("@/lib/etapas/compat", () => {
   const labels: Record<string, string> = { presale: "Presale", diseno: "Diseño", construccion: "Construcción" };
   const slots: Record<string, number> = { presale: 1, diseno: 2, construccion: 3 };
   return {
-    tramoLabel: (key: string) => labels[key] ?? key,
-    tramoColorSlot: (key: string) => slots[key] ?? null,
-    tramoColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
+    etapaLabel: (key: string) => labels[key] ?? key,
+    etapaColorSlot: (key: string) => slots[key] ?? null,
+    etapaColorVar: (key: string) => (slots[key] ? `var(--chart-${slots[key]})` : "var(--muted-foreground)"),
   };
 });
 

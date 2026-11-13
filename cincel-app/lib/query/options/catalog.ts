@@ -41,10 +41,10 @@ export function catalogWorkflowsOptions() {
   });
 }
 
-/** Same rows as `catalogWorkflowsOptions`, under `catalog.tramos`. */
-export function catalogTramosOptions() {
+/** Same rows as `catalogWorkflowsOptions`, under `catalog.etapas`. */
+export function catalogEtapasOptions() {
   return queryOptions<WorkflowRef[]>({
-    queryKey: qk.catalog.tramos(),
+    queryKey: qk.catalog.etapas(),
     queryFn: () => fetchCatalogWorkflows({}),
     staleTime: STALE.catalog,
   });
@@ -95,7 +95,7 @@ export function catalogContactsOptions(type?: ContactType) {
 export const catalogOptions = {
   projectOptions: catalogProjectOptionsOptions,
   workflows: catalogWorkflowsOptions,
-  tramos: catalogTramosOptions,
+  etapas: catalogEtapasOptions,
   taskStatuses: catalogTaskStatusesOptions,
   staff: catalogStaffOptions,
   assignableStaff: catalogAssignableStaffOptions,

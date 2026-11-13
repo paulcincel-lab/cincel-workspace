@@ -5,7 +5,7 @@
  * database. Every row it creates carries a per-run marker and is deleted
  * afterwards.
  *
- * On a seeded project (three tramos with fases, a fase off the catalog,
+ * On a seeded project (three etapas with fases, a fase off the catalog,
  * subtasks, a custom status that closes, admin tasks, overdue and closed
  * tasks), every number the three Resumen layouts show, computed from the
  * SQL aggregates, equals the number the layouts derived before from the
@@ -46,7 +46,7 @@ describe.skipIf(!url)("Proyecto · Resumen task numbers (test DB)", async () => 
   const { listTaskRows } = await import("@/lib/repositories/tasks-repository");
   const old = await import("@/lib/proyectos/project-summary");
   const next = await import("@/lib/proyectos/resumen-summary");
-  const { dominantTramo } = await import("@/lib/people/aggregates");
+  const { dominantEtapa } = await import("@/lib/people/aggregates");
   const { isTaskClosed } = await import("@/lib/tasks/status-options");
   const { resumenSummaryOfRows } = await import("@/tests/unit/fixtures/resumen-summary");
 
@@ -194,8 +194,8 @@ describe.skipIf(!url)("Proyecto · Resumen task numbers (test DB)", async () => 
 
       // Visual.
       const input = data!;
-      expect(next.resumenTramoProgress(summary!, input.tramoCatalog, input.project)).toEqual(
-        old.tramoProgress(rows, input.tramoCatalog, input.project, today),
+      expect(next.resumenEtapaProgress(summary!, input.etapaCatalog, input.project)).toEqual(
+        old.etapaProgress(rows, input.etapaCatalog, input.project, today),
       );
       expect(next.resumenStatusCounts(summary!)).toEqual(old.statusCounts(rows));
       const open = old.nextTasks(rows, today, Number.POSITIVE_INFINITY);
@@ -208,25 +208,25 @@ describe.skipIf(!url)("Proyecto · Resumen task numbers (test DB)", async () => 
       expect(next.resumenTeamLoadCards(input, summary!)).toEqual(old.teamLoadCards(input, rows));
 
       // Esencial.
-      expect(old.esencialTramoLine(input, next.resumenTramoProgress(summary!, input.tramoCatalog, input.project))).toEqual(
-        old.esencialTramoLine(input, old.tramoProgress(rows, input.tramoCatalog, input.project, today)),
+      expect(old.esencialEtapaLine(input, next.resumenEtapaProgress(summary!, input.etapaCatalog, input.project))).toEqual(
+        old.esencialEtapaLine(input, old.etapaProgress(rows, input.etapaCatalog, input.project, today)),
       );
       for (const id of [managerId, otherId, viewerId]) {
-        expect(next.resumenAvatarTramo(summary!, id)).toBe(
-          dominantTramo(rows.filter((t) => t.manager?.id === id).map((t) => t.workflow?.key ?? null)),
+        expect(next.resumenAvatarEtapa(summary!, id)).toBe(
+          dominantEtapa(rows.filter((t) => t.manager?.id === id).map((t) => t.workflow?.key ?? null)),
         );
       }
 
       // Analítico.
       expect(next.resumenKpisOf(input, summary!)).toEqual(old.resumenKpis(input, rows));
-      expect(next.resumenPhaseGroups(summary!, input.tramoCatalog, input.phasesByTramo, input.project, today)).toEqual(
-        old.tramoPhaseGroups(rows, input.tramoCatalog, input.phasesByTramo, input.project, today),
+      expect(next.resumenPhaseGroups(summary!, input.etapaCatalog, input.phasesByEtapa, input.project, today)).toEqual(
+        old.etapaPhaseGroups(rows, input.etapaCatalog, input.phasesByEtapa, input.project, today),
       );
       expect(next.resumenTeamLoadRows(input, summary!)).toEqual(old.teamLoadRows(input, rows));
       for (const hide of [false, true]) {
         const shown = hide ? rows.filter((t) => !isTaskClosed(t)) : rows;
-        const before = old.taskGroupsByTramo(shown, input.tramoCatalog, input.project, today);
-        const after = next.resumenTaskGroups(summary!, input.tramoCatalog, input.project, hide);
+        const before = old.taskGroupsByEtapa(shown, input.etapaCatalog, input.project, today);
+        const after = next.resumenTaskGroups(summary!, input.etapaCatalog, input.project, hide);
         expect(after.groups.map(({ id, label, caption, metrics }) => ({ id, label, caption, metrics }))).toEqual(
           before.groups.map(({ id, label, caption, metrics }) => ({ id, label, caption, metrics })),
         );
@@ -234,7 +234,7 @@ describe.skipIf(!url)("Proyecto · Resumen task numbers (test DB)", async () => 
         expect(after.totals).toEqual(before.totals);
       }
       // The seed exercises what it should: an admin group only for administrators, overdue and blocked tasks.
-      expect(next.resumenTaskGroups(summary!, input.tramoCatalog, input.project, false).groups.some((g) => g.id === "admin")).toBe(includeAdmin);
+      expect(next.resumenTaskGroups(summary!, input.etapaCatalog, input.project, false).groups.some((g) => g.id === "admin")).toBe(includeAdmin);
       expect(next.resumenHeroCounts(summary!).overdue).toBeGreaterThan(2);
     });
   }

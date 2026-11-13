@@ -11,12 +11,12 @@ import {
   peopleWithAvailability,
   personStatus,
   saturationSummary,
-  SIN_TRAMO,
+  SIN_ETAPA,
   suggestAssignee,
   TEAM_ANALITICO_DEFAULT_FILTERS,
   teamFilterCounts,
   teamPillCounts,
-  tramoGroups,
+  etapaGroups,
 } from "./team";
 
 function person(id: string, availability?: PersonDatum["availability"]): PersonDatum {
@@ -55,7 +55,7 @@ describe("saturationSummary", () => {
     initials: id.slice(0, 2).toUpperCase(),
     open: 0,
     overdue: 0,
-    tramo: "diseno",
+    etapa: "diseno",
     occupancyPct: pct,
     ...patch,
   });
@@ -92,7 +92,7 @@ describe("saturationSummary", () => {
       load("diego", 90),
       load("elena", 99),
       load("fer", 40),
-      load("gabi", 10, { tramo: "construccion" }),
+      load("gabi", 10, { etapa: "construccion" }),
     ];
     const summary = saturationSummary(people, TODAY)!;
     expect(summary.nearLimit.map((p) => p.id)).toEqual(["elena", "carla", "diego"]);
@@ -144,27 +144,27 @@ describe("personStatus", () => {
 });
 
 describe("suggestAssignee", () => {
-  const from = teammate("ana", { name: "Ana", tramo: "diseno", occupancyPct: 120 });
+  const from = teammate("ana", { name: "Ana", etapa: "diseno", occupancyPct: 120 });
 
   it("suggestAssignee ignores other etapas, absent people and cargado", () => {
     const people = [
       from,
-      teammate("otro", { name: "Otro", tramo: "construccion", occupancyPct: 10 }),
-      teammate("fuera", { name: "Fuera", tramo: "diseno", occupancyPct: 5, availability: ["vacaciones", "libre", "libre", "libre", "libre"] }),
-      teammate("cargada", { name: "Cargada", tramo: "diseno", occupancyPct: 85 }),
-      teammate("libre", { name: "Libre", tramo: "diseno", occupancyPct: 70 }),
+      teammate("otro", { name: "Otro", etapa: "construccion", occupancyPct: 10 }),
+      teammate("fuera", { name: "Fuera", etapa: "diseno", occupancyPct: 5, availability: ["vacaciones", "libre", "libre", "libre", "libre"] }),
+      teammate("cargada", { name: "Cargada", etapa: "diseno", occupancyPct: 85 }),
+      teammate("libre", { name: "Libre", etapa: "diseno", occupancyPct: 70 }),
     ];
     expect(suggestAssignee(people, from, TODAY)?.id).toBe("libre");
     expect(suggestAssignee(people.slice(0, 4), from, TODAY)).toBeNull();
-    expect(suggestAssignee(people, { ...from, tramo: null }, TODAY)).toBeNull();
+    expect(suggestAssignee(people, { ...from, etapa: null }, TODAY)).toBeNull();
   });
 
   it("suggestAssignee tie → name", () => {
     const people = [
       from,
-      teammate("z", { name: "Zoe", tramo: "diseno", occupancyPct: 30 }),
-      teammate("a", { name: "Álvaro", tramo: "diseno", occupancyPct: 30 }),
-      teammate("m", { name: "Marta", tramo: "diseno", occupancyPct: 40 }),
+      teammate("z", { name: "Zoe", etapa: "diseno", occupancyPct: 30 }),
+      teammate("a", { name: "Álvaro", etapa: "diseno", occupancyPct: 30 }),
+      teammate("m", { name: "Marta", etapa: "diseno", occupancyPct: 40 }),
     ];
     expect(suggestAssignee(people, from, TODAY)?.id).toBe("a");
   });
@@ -186,9 +186,9 @@ describe("teamPillCounts", () => {
 
 describe("filterTeam", () => {
   const people = [
-    teammate("1", { name: "José Núñez", puesto: "Residente de obra", tramo: "construccion", occupancyPct: 10 }),
-    teammate("2", { name: "Ana Ruiz", puesto: "Diseñadora", tramo: "diseno", occupancyPct: 120 }),
-    teammate("3", { name: "Luis Pérez", puesto: null, tramo: null, occupancyPct: 90 }),
+    teammate("1", { name: "José Núñez", puesto: "Residente de obra", etapa: "construccion", occupancyPct: 10 }),
+    teammate("2", { name: "Ana Ruiz", puesto: "Diseñadora", etapa: "diseno", occupancyPct: 120 }),
+    teammate("3", { name: "Luis Pérez", puesto: null, etapa: null, occupancyPct: 90 }),
   ];
 
   it("filterTeam matches accents and puesto", () => {
@@ -209,7 +209,7 @@ describe("filterTeam", () => {
 // ── Personas · Analítico ────────────────────────────────────────────────────
 
 const MONDAYS = ["2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"];
-const TRAMOS = [
+const ETAPAS = [
   { id: "w-pre", key: "presale", name: "Presale", sortOrder: 1 },
   { id: "w-dis", key: "diseno", name: "Diseño", sortOrder: 2 },
   { id: "w-con", key: "construccion", name: "Construcción", sortOrder: 3 },
@@ -223,36 +223,36 @@ function member(id: string, extra: Partial<PersonDatum>): PersonDatum {
   return { id, name: id, initials: id.slice(0, 2).toUpperCase(), open: 0, overdue: 0, occupancyPct: 0, ...extra };
 }
 
-/** Fixture team: 6 people over 3 tramos plus one without tramo. */
+/** Fixture team: 6 people over 3 etapas plus one without etapa. */
 const TEAM: PersonDatum[] = [
-  member("Ana", { tramo: "diseno", occupancyPct: 112, open: 6, overdue: 4, sharesProjectWithViewer: true }),
-  member("Valeria", { tramo: "diseno", occupancyPct: 70, open: 3, sharesProjectWithViewer: false }),
-  member("Luis", { tramo: "presale", occupancyPct: 85, open: 4, overdue: 1, sharesProjectWithViewer: true }),
-  member("Marta", { tramo: "construccion", occupancyPct: 40, open: 2, sharesProjectWithViewer: true }),
-  member("Raúl", { tramo: "construccion", occupancyPct: 20, open: 1, sharesProjectWithViewer: false }),
-  member("Zoe", { tramo: null, occupancyPct: 50, open: 1, sharesProjectWithViewer: false }),
+  member("Ana", { etapa: "diseno", occupancyPct: 112, open: 6, overdue: 4, sharesProjectWithViewer: true }),
+  member("Valeria", { etapa: "diseno", occupancyPct: 70, open: 3, sharesProjectWithViewer: false }),
+  member("Luis", { etapa: "presale", occupancyPct: 85, open: 4, overdue: 1, sharesProjectWithViewer: true }),
+  member("Marta", { etapa: "construccion", occupancyPct: 40, open: 2, sharesProjectWithViewer: true }),
+  member("Raúl", { etapa: "construccion", occupancyPct: 20, open: 1, sharesProjectWithViewer: false }),
+  member("Zoe", { etapa: null, occupancyPct: 50, open: 1, sharesProjectWithViewer: false }),
 ];
 
 describe("Personas Analítico helpers", () => {
   it("teamFilterCounts applies the other groups", () => {
     const all = teamFilterCounts(TEAM, TEAM_ANALITICO_DEFAULT_FILTERS, TODAY);
     expect(all.estado).toEqual({ todas: 6, sobrecargadas: 1, "con-capacidad": 4 });
-    expect(all.tramo).toEqual({ todos: 6, diseno: 2, presale: 1, construccion: 2, [SIN_TRAMO]: 1 });
+    expect(all.etapa).toEqual({ todos: 6, diseno: 2, presale: 1, construccion: 2, [SIN_ETAPA]: 1 });
     expect(all.alcance).toEqual({ todo: 6, "mi-equipo": 3 });
 
-    // Tramo = Diseño: estado and alcance count only Diseño; tramo counts ignore the tramo filter.
-    const diseno = teamFilterCounts(TEAM, { ...TEAM_ANALITICO_DEFAULT_FILTERS, tramo: "diseno" }, TODAY);
+    // Etapa = Diseño: estado and alcance count only Diseño; etapa counts ignore the etapa filter.
+    const diseno = teamFilterCounts(TEAM, { ...TEAM_ANALITICO_DEFAULT_FILTERS, etapa: "diseno" }, TODAY);
     expect(diseno.estado).toEqual({ todas: 2, sobrecargadas: 1, "con-capacidad": 1 });
     expect(diseno.alcance).toEqual({ todo: 2, "mi-equipo": 1 });
-    expect(diseno.tramo.todos).toBe(6);
+    expect(diseno.etapa.todos).toBe(6);
 
-    // Alcance = Solo mi equipo and Estado = Con capacidad: the tramo counts apply both.
+    // Alcance = Solo mi equipo and Estado = Con capacidad: the etapa counts apply both.
     const mine = teamFilterCounts(
       TEAM,
       { ...TEAM_ANALITICO_DEFAULT_FILTERS, alcance: "mi-equipo", estado: "con-capacidad" },
       TODAY,
     );
-    expect(mine.tramo).toEqual({ todos: 1, construccion: 1 });
+    expect(mine.etapa).toEqual({ todos: 1, construccion: 1 });
     expect(mine.estado).toEqual({ todas: 3, sobrecargadas: 1, "con-capacidad": 1 });
     expect(filterTeamAnalitico(TEAM, { ...TEAM_ANALITICO_DEFAULT_FILTERS, alcance: "mi-equipo", estado: "con-capacidad" }, TODAY).map((p) => p.id)).toEqual(["Marta"]);
 
@@ -261,23 +261,23 @@ describe("Personas Analítico helpers", () => {
     expect(searched.estado.todas).toBe(1);
   });
 
-  it("tramoGroups puts people without etapa last", () => {
-    const groups = tramoGroups(TEAM, TRAMOS);
-    expect(groups.map((g) => g.id)).toEqual(["presale", "diseno", "construccion", SIN_TRAMO]);
+  it("etapaGroups puts people without etapa last", () => {
+    const groups = etapaGroups(TEAM, ETAPAS);
+    expect(groups.map((g) => g.id)).toEqual(["presale", "diseno", "construccion", SIN_ETAPA]);
     expect(groups.at(-1)!.label).toBe("Sin etapa");
     const diseno = groups.find((g) => g.id === "diseno")!;
     expect(diseno.rows!.map((r) => r.id)).toEqual(["Ana", "Valeria"]);
     expect(diseno.caption).toBe("2 personas");
     expect(diseno.metrics.find((m) => m.key === "carga")!.value).toBe("91 %");
     expect(diseno.metrics.find((m) => m.key === "vencidas")).toMatchObject({ value: "4", tone: "destructive" });
-    // A tramo with nobody is left out.
-    expect(tramoGroups(TEAM.slice(0, 2), TRAMOS).map((g) => g.id)).toEqual(["diseno"]);
+    // An etapa with nobody is left out.
+    expect(etapaGroups(TEAM.slice(0, 2), ETAPAS).map((g) => g.id)).toEqual(["diseno"]);
   });
 
   it("personasCsv escapes ; and quotes and adds the BOM", () => {
     const rows = [
-      member("a", { name: "Ana; Ruiz", puesto: 'Diseñadora "senior"', tramo: "diseno", open: 6, overdue: 4, occupancyPct: 112, weeks: weeks([112, 104, 86, 60]) }),
-      member("b", { name: "Sofía León", tramo: null, open: 2, occupancyPct: 55, weeks: weeks([55, 0, 60, 40], [2, 0, 3, 2], [0, 5, 0, 0]) }),
+      member("a", { name: "Ana; Ruiz", puesto: 'Diseñadora "senior"', etapa: "diseno", open: 6, overdue: 4, occupancyPct: 112, weeks: weeks([112, 104, 86, 60]) }),
+      member("b", { name: "Sofía León", etapa: null, open: 2, occupancyPct: 55, weeks: weeks([55, 0, 60, 40], [2, 0, 3, 2], [0, 5, 0, 0]) }),
     ];
     const csv = personasCsv(rows, TODAY);
     expect(csv.startsWith("\uFEFF")).toBe(true);

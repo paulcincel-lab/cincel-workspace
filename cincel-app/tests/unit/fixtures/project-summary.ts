@@ -7,15 +7,15 @@ import type { ProjectSummaryInput } from "@/lib/proyectos/project-summary";
 import type { HistoryEvent, ProjectDetail, TaskListRow, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow } from "@/lib/types/redesign";
 
-export const TRAMOS: WorkflowRef[] = [
+export const ETAPAS: WorkflowRef[] = [
   { id: "w-presale", key: "presale", name: "Presale", sortOrder: 1 },
   { id: "w-diseno", key: "diseno", name: "Diseño", sortOrder: 2 },
   { id: "w-construccion", key: "construccion", name: "Construcción", sortOrder: 3 },
   { id: "w-decoracion", key: "decoracion", name: "Decoración", sortOrder: 4 },
 ];
 
-/** Active catalog fases per tramo, in order (the Esencial "fase i de n"). */
-export const PHASES_BY_TRAMO: Record<string, WorkflowPhaseRef[]> = {
+/** Active catalog fases per etapa, in order (the Esencial "fase i de n"). */
+export const PHASES_BY_ETAPA: Record<string, WorkflowPhaseRef[]> = {
   "w-presale": [{ id: "f-levantamiento", name: "Levantamiento", sortOrder: 1 }],
   "w-diseno": [
     { id: "f-anteproyecto", name: "Anteproyecto", sortOrder: 1 },
@@ -52,14 +52,14 @@ export function fixtureProject(overrides: Partial<ProjectDetail> = {}): ProjectD
     createdAt: "2026-04-01T00:00:00.000Z",
     updatedAt: "2026-11-01T00:00:00.000Z",
     client: { id: "c1", name: "Grupo Espinopapa", type: "cliente" },
-    currentWorkflow: TRAMOS[2],
-    tramos: [
-      { ...TRAMOS[0], startedAt: "2026-04-06T00:00:00.000Z", closedAt: "2026-05-29T00:00:00.000Z", current: false },
-      { ...TRAMOS[1], startedAt: "2026-06-01T00:00:00.000Z", closedAt: "2026-06-30T00:00:00.000Z", current: false },
-      { ...TRAMOS[2], startedAt: "2026-07-01T00:00:00.000Z", closedAt: null, current: true },
+    currentWorkflow: ETAPAS[2],
+    etapas: [
+      { ...ETAPAS[0], startedAt: "2026-04-06T00:00:00.000Z", closedAt: "2026-05-29T00:00:00.000Z", current: false },
+      { ...ETAPAS[1], startedAt: "2026-06-01T00:00:00.000Z", closedAt: "2026-06-30T00:00:00.000Z", current: false },
+      { ...ETAPAS[2], startedAt: "2026-07-01T00:00:00.000Z", closedAt: null, current: true },
     ],
-    needsTramo: false,
-    stages: TRAMOS.slice(0, 3),
+    needsEtapa: false,
+    stages: ETAPAS.slice(0, 3),
     manager: { id: "s1", name: "Paul Langarica" },
     coordinator: { id: "s2", name: "Alejandro Riofrio" },
     originStaff: null,
@@ -94,7 +94,7 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
   return {
     project: fixtureProject(),
     portfolio: PORTFOLIO,
-    tramoCatalog: TRAMOS,
+    etapaCatalog: ETAPAS,
     taskStats: { total: 39, done: 32, open: 7, overdue: 4, currentPhase: "Obra negra", currentPhaseId: "f-obra-negra" },
     schedule: {
       tasks: [
@@ -188,7 +188,7 @@ export function fixtureSummaryInput(overrides: Partial<ProjectSummaryInput> = {}
     showBudget: true,
     showClientContacts: true,
     today: "2026-11-06",
-    phasesByTramo: PHASES_BY_TRAMO,
+    phasesByEtapa: PHASES_BY_ETAPA,
     driveFolderUrl: "https://drive.google.com/drive/folders/drive-p1",
     // Open tasks across all projects against capacity (Personas occupancy).
     teamLoad: {
@@ -209,7 +209,7 @@ export function fixtureTaskRow(id: string, overrides: Partial<TaskListRow> = {})
     projectId: "p1",
     kind: "workflow",
     templateId: null,
-    workflowId: TRAMOS[2]!.id,
+    workflowId: ETAPAS[2]!.id,
     phaseId: null,
     spaceId: null,
     closedAt: null,
@@ -228,7 +228,7 @@ export function fixtureTaskRow(id: string, overrides: Partial<TaskListRow> = {})
     updatedAt: "2026-11-01T00:00:00.000Z",
     customStatus: null,
     project: { id: "p1", name: "Local Espinopapa", clientName: null },
-    workflow: TRAMOS[2]!,
+    workflow: ETAPAS[2]!,
     phase: null,
     space: null,
     manager: { id: "s1", name: "Paul Langarica" },
@@ -257,11 +257,11 @@ const ANA = { id: "s3", name: "Ana López" };
  * and two open tasks, Decoración not started with one dated task.
  */
 export const TASK_ROWS: TaskListRow[] = [
-  fixtureTaskRow("t-presale", { workflowId: TRAMOS[0]!.id, workflow: TRAMOS[0]!, status: "completado", title: "Levantamiento topográfico" }),
-  fixtureTaskRow("t-diseno-1", { workflowId: TRAMOS[1]!.id, workflow: TRAMOS[1]!, status: "completado", title: "Planos ejecutivos" }),
+  fixtureTaskRow("t-presale", { workflowId: ETAPAS[0]!.id, workflow: ETAPAS[0]!, status: "completado", title: "Levantamiento topográfico" }),
+  fixtureTaskRow("t-diseno-1", { workflowId: ETAPAS[1]!.id, workflow: ETAPAS[1]!, status: "completado", title: "Planos ejecutivos" }),
   fixtureTaskRow("t-diseno-2", {
-    workflowId: TRAMOS[1]!.id,
-    workflow: TRAMOS[1]!,
+    workflowId: ETAPAS[1]!.id,
+    workflow: ETAPAS[1]!,
     status: "pendiente",
     title: "Detalle de cancelería",
     managerId: ANA.id,
@@ -280,8 +280,8 @@ export const TASK_ROWS: TaskListRow[] = [
   fixtureTaskRow("t-obra-3", { status: "pendiente", title: "Pintura de muros", commitmentDate: "2026-11-12" }),
   fixtureTaskRow("t-obra-4", { status: "completado", title: "Demoliciones" }),
   fixtureTaskRow("t-deco-1", {
-    workflowId: TRAMOS[3]!.id,
-    workflow: TRAMOS[3]!,
+    workflowId: ETAPAS[3]!.id,
+    workflow: ETAPAS[3]!,
     status: "pendiente",
     title: "Selección de mobiliario",
     managerId: ANA.id,
@@ -313,8 +313,8 @@ export const HISTORY_EVENTS: HistoryEvent[] = [
     kind: "cambio",
     actor: { id: "s2", name: "Alejandro Riofrio" },
     field: "currentWorkflowId",
-    beforeValue: TRAMOS[1]!.id,
-    afterValue: TRAMOS[2]!.id,
+    beforeValue: ETAPAS[1]!.id,
+    afterValue: ETAPAS[2]!.id,
     comment: null,
     eventAt: "2026-07-01T15:00:00.000Z",
   },

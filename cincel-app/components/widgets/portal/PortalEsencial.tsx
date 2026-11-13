@@ -7,8 +7,8 @@ import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { initialsOf } from "@/lib/personas/team";
 import { buildPortalStatusSentence, PORTAL_OVERVIEW_COPY, type PortalOverviewData } from "@/lib/portal/overview";
 import { portalDocumentDownloadUrl, portalProjectTabHref } from "@/lib/portal/project-tabs";
-import { tramoColorSlot, type TramoColorSlot } from "@/lib/tramos/tramo-color";
-import type { PortalFileDTO, PortalProjectDTO, PortalTramoDTO } from "@/lib/types/portal";
+import { etapaColorSlot, type EtapaColorSlot } from "@/lib/etapas/etapa-color";
+import type { PortalFileDTO, PortalProjectDTO, PortalEtapaDTO } from "@/lib/types/portal";
 import { cn } from "@/lib/utils";
 
 export const PORTAL_ESENCIAL_COPY = {
@@ -20,15 +20,15 @@ export const PORTAL_ESENCIAL_COPY = {
   porIniciar: "Aún no comenzamos",
 } as const;
 
-/** Literal classes so Tailwind keeps them; neutral when the tramo has no slot. */
-const DOT_CLASS: Record<TramoColorSlot, string> = {
+/** Literal classes so Tailwind keeps them; neutral when the etapa has no slot. */
+const DOT_CLASS: Record<EtapaColorSlot, string> = {
   1: "bg-chart-1",
   2: "bg-chart-2",
   3: "bg-chart-3",
   4: "bg-chart-4",
   5: "bg-chart-5",
 };
-const INK_CLASS: Record<TramoColorSlot, string> = {
+const INK_CLASS: Record<EtapaColorSlot, string> = {
   1: "text-[color:var(--chart-1-ink)]",
   2: "text-[color:var(--chart-2-ink)]",
   3: "text-[color:var(--chart-3-ink)]",
@@ -67,7 +67,7 @@ function Dot({ className }: { className: string }) {
 }
 
 function StatusSentence({ project, data }: { project: PortalProjectDTO; data: PortalOverviewData }) {
-  const s = buildPortalStatusSentence(data.tramos, data.entregas[0] ?? null, project.progressPct);
+  const s = buildPortalStatusSentence(data.etapas, data.entregas[0] ?? null, project.progressPct);
   const next = (date: string | null): ReactNode =>
     date ? (
       <>
@@ -79,7 +79,7 @@ function StatusSentence({ project, data }: { project: PortalProjectDTO; data: Po
   let body: ReactNode;
   if (s.kind === "terminado") body = PORTAL_ESENCIAL_COPY.terminado;
   else if (s.kind === "por_iniciar") body = <>{PORTAL_ESENCIAL_COPY.porIniciar}{next(s.next)}</>;
-  else if (s.kind === "sin_tramos")
+  else if (s.kind === "sin_etapas")
     body = (
       <>
         {"Llevamos "}
@@ -93,7 +93,7 @@ function StatusSentence({ project, data }: { project: PortalProjectDTO; data: Po
       <>
         {"Vamos en "}
         <Dot className={cn("mx-0.5 align-middle", s.slot ? DOT_CLASS[s.slot] : "bg-muted-foreground")} />{" "}
-        <strong className="font-semibold">{s.tramo}</strong>
+        <strong className="font-semibold">{s.etapa}</strong>
         {", "}
         <span className="font-mono tabular-nums">{s.pct} %</span>
         {s.general ? " de avance general" : null}
@@ -104,20 +104,20 @@ function StatusSentence({ project, data }: { project: PortalProjectDTO; data: Po
   return <p className="break-words text-[17px] text-foreground">{body}</p>;
 }
 
-function PhaseDots({ tramos }: { tramos: PortalTramoDTO[] }) {
-  if (tramos.length === 0) return null;
+function PhaseDots({ etapas }: { etapas: PortalEtapaDTO[] }) {
+  if (etapas.length === 0) return null;
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted-foreground">
-      {tramos.map((tramo, i) => {
-        const slot = tramoColorSlot({ key: tramo.key, sortOrder: i + 1 });
-        const color = tramo.state === "por_iniciar" ? NOT_STARTED_DOT : slot ? DOT_CLASS[slot] : "bg-muted-foreground";
+      {etapas.map((etapa, i) => {
+        const slot = etapaColorSlot({ key: etapa.key, sortOrder: i + 1 });
+        const color = etapa.state === "por_iniciar" ? NOT_STARTED_DOT : slot ? DOT_CLASS[slot] : "bg-muted-foreground";
         return (
-          <span key={tramo.key} className="inline-flex items-center gap-2">
+          <span key={etapa.key} className="inline-flex items-center gap-2">
             {i > 0 ? <span aria-hidden>·</span> : null}
             <span className="inline-flex items-center gap-1.5">
               <Dot className={color} />
-              <span className={cn("break-words", tramo.state === "en_curso" && "font-semibold text-foreground")}>
-                {tramo.name}
+              <span className={cn("break-words", etapa.state === "en_curso" && "font-semibold text-foreground")}>
+                {etapa.name}
               </span>
             </span>
           </span>
@@ -168,9 +168,9 @@ export type PortalEsencialProps = {
  * documentos recientes, contacto). Reads only the portal DTOs; the contact is the project manager alone.
  */
 export function PortalEsencial({ project, data }: PortalEsencialProps) {
-  const current = data.tramos.findIndex((t) => t.state === "en_curso");
+  const current = data.etapas.findIndex((t) => t.state === "en_curso");
   const currentSlot =
-    current === -1 ? null : tramoColorSlot({ key: data.tramos[current].key, sortOrder: current + 1 });
+    current === -1 ? null : etapaColorSlot({ key: data.etapas[current].key, sortOrder: current + 1 });
   const dateInk = currentSlot ? INK_CLASS[currentSlot] : "text-muted-foreground";
   const entregas = data.entregas.slice(0, 3);
   const docs = recentDocuments(data);
@@ -180,7 +180,7 @@ export function PortalEsencial({ project, data }: PortalEsencialProps) {
       <div className="flex min-w-0 flex-col gap-[10px] py-2">
         <h1 className="break-words text-[28px] font-semibold tracking-[-0.02em]">{project.name}</h1>
         <StatusSentence project={project} data={data} />
-        <PhaseDots tramos={data.tramos} />
+        <PhaseDots etapas={data.etapas} />
       </div>
 
       <EsencialCard title={PORTAL_OVERVIEW_COPY.entregas} index={0}>

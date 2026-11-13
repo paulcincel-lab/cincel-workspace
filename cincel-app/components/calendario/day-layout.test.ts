@@ -18,7 +18,7 @@ function event(id: string, start: string, end: string, extra: Partial<CalEventIt
     end,
     allDay: false,
     project: null,
-    tramo: null,
+    etapa: null,
     location: null,
     meetUrl: null,
     attendees: [],

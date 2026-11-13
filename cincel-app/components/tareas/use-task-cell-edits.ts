@@ -64,7 +64,7 @@ export const TAREAS_CELL_KEYS: QueryKey[] = [TAREAS_LIST_PREFIX, TAREAS_SUMMARY_
 /** The column keys of the Tareas tables that edit in place, and the field each one saves. */
 export const TASK_CELL_COLUMNS: Readonly<Record<string, TaskCellField>> = {
   tarea: "tarea",
-  tramo: "tramo",
+  etapa: "etapa",
   fase: "fase",
   estatus: "estatus",
   responsable: "responsable",
@@ -76,7 +76,7 @@ export const TASK_CELL_COLUMNS: Readonly<Record<string, TaskCellField>> = {
   horas: "horas",
 };
 
-/** How long after a tramo move the Fase editor opens (the row has moved to its new group by then). */
+/** How long after an etapa move the Fase editor opens (the row has moved to its new group by then). */
 export const FASE_CHAIN_DELAY_MS = 150;
 const FASE_CHAIN_TRIES = 10;
 
@@ -190,8 +190,8 @@ export type PlainColumn<Row> = Omit<RecordColumn<Row>, "edit" | "canEdit">;
 export type UseTaskCellEditsOptions<Row> = {
   /** The task a table row stands for (undefined: the cell stays inert). */
   taskOf(row: Row): TaskCellTask | undefined;
-  /** The page's tramos (every tramo of the catalog). */
-  tramos: WorkflowRef[];
+  /** The page's etapas (every etapa of the catalog). */
+  etapas: WorkflowRef[];
   /** Responsable options. */
   staff: StaffRef[];
   /** Projects whose espacios to load (only with an `espacio` column). */
@@ -210,22 +210,22 @@ export type TaskCellEdits<Row> = {
   support(): { edit: PeopleCellEdit<Row>; canEdit: CanEdit<Row> };
   /**
    * Spread on the element around the table: the first hover or focus loads
-   * the editors' lists (estatus catalog, fases of each tramo, espacios).
+   * the editors' lists (estatus catalog, fases of each etapa, espacios).
    */
   primeProps: { onPointerEnter(): void; onFocusCapture(): void };
 };
 
 /**
  * The editable task cells of a Tareas table (#1025): `CellEdit`s over
- * `task-cell-edits`, locked per `resolveActivitiesCapabilities` (Tramo moves
+ * `task-cell-edits`, locked per `resolveActivitiesCapabilities` (Etapa moves
  * for admins only). A save patches every loaded `tareas.list` row and the task
- * detail right away (a tramo move takes the row, and its subtasks, to their
+ * detail right away (an etapa move takes the row, and its subtasks, to their
  * new group), restores them when the action fails, and refreshes what else
- * the action changes. When a tramo move leaves the task without fase, the
+ * the action changes. When an etapa move leaves the task without fase, the
  * Fase editor opens next.
  */
 export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): TaskCellEdits<Row> {
-  const { taskOf, tramos, staff, projectIds } = options;
+  const { taskOf, etapas, staff, projectIds } = options;
   const qc = useQueryClient();
   const user = useSessionStore(selectAuthenticatedUser);
   const viewer = useMemo<TaskCellViewer>(
@@ -238,7 +238,7 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
   const prime = useCallback(() => setPrimed(true), []);
   const statuses = useQuery({ ...catalogTaskStatusesOptions(), enabled: primed }).data ?? NO_STATUSES;
   const phaseData = useQueries({
-    queries: tramos.map((t) => ({ ...taskPhasesOptions(t.id), enabled: primed })),
+    queries: etapas.map((t) => ({ ...taskPhasesOptions(t.id), enabled: primed })),
     combine: (results) => results.map((r) => r.data),
   });
   const spaceIds = useMemo(() => [...new Set(projectIds ?? [])], [projectIds]);
@@ -246,11 +246,11 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
     queries: spaceIds.map((id) => ({ ...catalogProjectSpacesOptions(id), enabled: primed })),
     combine: (results) => results.map((r) => r.data),
   });
-  const phasesByTramo = useMemo(() => {
+  const phasesByEtapa = useMemo(() => {
     const map = new Map<string, WorkflowPhaseRef[]>();
-    tramos.forEach((t, i) => map.set(t.id, phaseData[i] ?? NO_PHASES));
+    etapas.forEach((t, i) => map.set(t.id, phaseData[i] ?? NO_PHASES));
     return map;
-  }, [tramos, phaseData]);
+  }, [etapas, phaseData]);
   const spacesByProject = useMemo(() => {
     const map = new Map<string, ProjectSpaceRef[]>();
     spaceIds.forEach((id, i) => map.set(id, (spaceData[i] as ProjectSpace[] | null | undefined) ?? NO_SPACES));
@@ -259,13 +259,13 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
 
   const catalogs = useMemo<TaskCellCatalogs>(
     () => ({
-      tramos,
-      phasesOf: (id) => phasesByTramo.get(id) ?? NO_PHASES,
+      etapas,
+      phasesOf: (id) => phasesByEtapa.get(id) ?? NO_PHASES,
       statuses,
       staff,
       spacesOf: (id) => spacesByProject.get(id) ?? NO_SPACES,
     }),
-    [tramos, phasesByTramo, statuses, staff, spacesByProject],
+    [etapas, phasesByEtapa, statuses, staff, spacesByProject],
   );
 
   const taskOfRef = useRef(taskOf);
@@ -279,7 +279,7 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
       if (!task) return { ok: false, error: "NOT_FOUND" };
       const action = taskCellAction(task, field, value);
       if (action.kind === "none") return { ok: true, data: null };
-      const moves = field === "tramo";
+      const moves = field === "etapa";
       const patch = <R extends TaskCellTask>(r: R): R => taskWithChange(r, field, value, catalogs);
       const snapshot = await patchTaskCaches(qc, task.id, patch, moves);
       const restore = () => {
@@ -301,7 +301,7 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
       for (const queryKey of extraInvalidations(task.projectId, action)) void qc.invalidateQueries({ queryKey });
       // A subtask's parent list re-reads it (its order follows the due date).
       for (const [queryKey] of snapshot) if (isChildrenQuery({ queryKey })) void qc.invalidateQueries({ queryKey, exact: true });
-      // The task moved to a tramo its fase isn't in: pick the new fase next.
+      // The task moved to an etapa its fase isn't in: pick the new fase next.
       if (moves && task.phaseId !== null && result.data.phaseId === null) openTaskCell(task.id, "fase");
       return result;
     },
@@ -353,7 +353,7 @@ export function useTaskCellEdits<Row>(options: UseTaskCellEditsOptions<Row>): Ta
         case "espacio":
           edit = { kind: "select", options, clearable: true, value, commit };
           break;
-        case "tramo":
+        case "etapa":
         case "estatus":
         case "prioridad":
           // Prioridad is required in the data model (alta / media / baja): no "Sin prioridad".

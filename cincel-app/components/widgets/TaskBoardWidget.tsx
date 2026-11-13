@@ -30,7 +30,7 @@ import { DistributionWidget } from "@/components/widgets/DistributionWidget";
 import { LIFT_CLASS } from "@/components/widgets/lift";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
-import { TramoBadge } from "@/components/widgets/TramoBadge";
+import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import { areaTintClass } from "@/lib/areas/area-color";
 import { actionErrorText } from "@/lib/errors";
@@ -40,7 +40,7 @@ import { useNewTaskUi } from "@/lib/stores/new-task-store";
 import { useQuickAddRecent } from "@/lib/stores/quick-add-store";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
 import { listItemOfRow } from "@/lib/tareas/page-data";
-import { tramoColorSlot, tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorSlot, etapaColorVar } from "@/lib/etapas/compat";
 import {
   BASE_STATUS_COLOR,
   isTaskClosed,
@@ -119,7 +119,7 @@ export type TaskBoardWidgetProps = {
    * the loaded ones, then pages (`columnPages`). Default: every loaded card.
    */
   visibleCards?: number;
-  /** Visual: Completado cards as one compact line (check, title, "proyecto · tramo · responsable"). */
+  /** Visual: Completado cards as one compact line (check, title, "proyecto · etapa · responsable"). */
   compactCompleted?: boolean;
   /** "Ocultar completadas" (#1039): leaves the Completado column out. */
   hideCompleted?: boolean;
@@ -307,9 +307,9 @@ export function boardDueText(due: string, overdue: boolean, today: string = toda
   return `${text} · ${days} d`;
 }
 
-/** Color of a task's tramo (top strip, subtask fill), neutral without one. */
-function tramoColorOf(task: TaskListItem): string {
-  return task.workflow ? tramoColorVar(task.workflow.key, task.workflow.sortOrder) : "var(--muted-foreground)";
+/** Color of a task's etapa (top strip, subtask fill), neutral without one. */
+function etapaColorOf(task: TaskListItem): string {
+  return task.workflow ? etapaColorVar(task.workflow.key, task.workflow.sortOrder) : "var(--muted-foreground)";
 }
 
 function BoardVisual({
@@ -692,8 +692,8 @@ function BoardCard({
   const overdue = isTaskOverdue(task, today);
   const subtasks = task.subtaskCount;
   const subtasksPct = subtasks > 0 ? Math.round((task.subtaskDoneCount / subtasks) * 100) : 0;
-  const tramoColor = tramoColorOf(task);
-  const tramoSlot = task.workflow ? tramoColorSlot(task.workflow.key) : null;
+  const etapaColor = etapaColorOf(task);
+  const etapaSlot = task.workflow ? etapaColorSlot(task.workflow.key) : null;
   const blocked = task.status === "bloqueado";
   const projectLine =
     blocked && task.waitingOn > 0
@@ -714,11 +714,11 @@ function BoardCard({
         isNew && "row-new",
       )}
     >
-      <span aria-hidden="true" data-slot="board-card-strip" className="h-1 shrink-0" style={{ backgroundColor: tramoColor }} />
+      <span aria-hidden="true" data-slot="board-card-strip" className="h-1 shrink-0" style={{ backgroundColor: etapaColor }} />
 
       <div className="flex flex-col gap-2 px-3.5 pb-3">
         <div className="flex items-center gap-2">
-          {task.workflow ? <TramoBadge tramo={task.workflow} variant="chip" /> : null}
+          {task.workflow ? <EtapaBadge etapa={task.workflow} variant="chip" /> : null}
           {blocked ? (
             <span data-slot="board-card-blocked" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-destructive">
               <Ban aria-hidden="true" className="size-3" />
@@ -753,7 +753,7 @@ function BoardCard({
               </span>
             </div>
             <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="grow-x h-full rounded-full" style={{ width: `${subtasksPct}%`, backgroundColor: tramoColor }} />
+              <div className="grow-x h-full rounded-full" style={{ width: `${subtasksPct}%`, backgroundColor: etapaColor }} />
             </div>
           </div>
         ) : null}
@@ -765,7 +765,7 @@ function BoardCard({
                 aria-hidden="true"
                 className={cn(
                   "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold",
-                  areaTintClass(tramoSlot),
+                  areaTintClass(etapaSlot),
                 )}
               >
                 {getPersonInitials(task.manager.name)}

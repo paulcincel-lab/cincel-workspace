@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { ErrorState } from "@/components/shell/ErrorState";
-import { ProjectNoTramo } from "@/components/proyectos/ProjectNoTramo";
+import { ProjectNoEtapa } from "@/components/proyectos/ProjectNoEtapa";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import {
   RESUMEN_ESENCIAL_FILES,
@@ -20,27 +20,27 @@ import { EsencialItemRow, type EsencialStatus } from "@/components/widgets/Esenc
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
 import {
-  esencialTramoLine,
+  esencialEtapaLine,
   recentFileRows,
   shortDate,
   teamLine,
-  type EsencialTramoStep,
+  type EsencialEtapaStep,
   type NextTask,
   type ProjectSummaryInput,
   type RecentFileRow,
   type TeamAvatar,
 } from "@/lib/proyectos/project-summary";
-import { EMPTY_RESUMEN_SUMMARY, resumenAvatarTramo, resumenTramoProgress, type ResumenTareasSummary } from "@/lib/proyectos/resumen-summary";
+import { EMPTY_RESUMEN_SUMMARY, resumenAvatarEtapa, resumenEtapaProgress, type ResumenTareasSummary } from "@/lib/proyectos/resumen-summary";
 import { proyectoResumenSummaryOptions } from "@/lib/query/options/proyectos";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type { WorkflowRef } from "@/lib/types/core";
 import { cn } from "@/lib/utils";
 
 /**
  * Proyecto · Resumen in the Esencial style (frame `ProyectoResumen-Esencial`):
  * four soft cards, dots and one or two numbers per group, no tables or
- * charts. Tramo line, Próximas tareas (five rows and the quick-add), Equipo
+ * charts. Etapa line, Próximas tareas (five rows and the quick-add), Equipo
  * and the three newest Drive files. Reads `qk.proyectos.resumen(id)` (passed
  * in as `data`) and the task numbers `qk.proyectos.resumenSummary(id)`
  * (server aggregates, prefetched by the page, so the first render makes no
@@ -57,9 +57,9 @@ const CARD = "rounded-lg border border-border bg-card text-card-foreground shado
 const HEADER_LINK =
   "text-[13px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:underline";
 
-// ── Tramo colors (chart tokens through `lib/tramos/compat`) ─────────────────
+// ── Etapa colors (chart tokens through `lib/etapas/compat`) ─────────────────
 
-type TramoTone = { color: string; ink: string; tint: string };
+type EtapaTone = { color: string; ink: string; tint: string };
 
 const TINT_BY_SLOT: Record<string, string> = {
   "1": "bg-tint-primary",
@@ -69,19 +69,19 @@ const TINT_BY_SLOT: Record<string, string> = {
   "5": "bg-tint-success",
 };
 
-function tramoTone(key: string | null, catalog: WorkflowRef[]): TramoTone {
+function etapaTone(key: string | null, catalog: WorkflowRef[]): EtapaTone {
   if (!key) return { color: "var(--muted-foreground)", ink: "var(--foreground)", tint: "bg-muted" };
   const sortOrder = catalog.find((t) => t.key === key)?.sortOrder;
-  const color = tramoColorVar(key, sortOrder);
+  const color = etapaColorVar(key, sortOrder);
   const slot = /--chart-(\d)\)/.exec(color)?.[1] ?? null;
   return slot
     ? { color, ink: `var(--chart-${slot}-ink)`, tint: TINT_BY_SLOT[slot] ?? "bg-muted" }
     : { color, ink: "var(--foreground)", tint: "bg-muted" };
 }
 
-// ── 1. Tramo card ────────────────────────────────────────────────────────────
+// ── 1. Etapa card ────────────────────────────────────────────────────────────
 
-function TramoDot({ step, tone }: { step: EsencialTramoStep; tone: TramoTone }) {
+function EtapaDot({ step, tone }: { step: EsencialEtapaStep; tone: EtapaTone }) {
   if (step.state === "next") {
     return <span aria-hidden="true" data-state="next" className="size-3.5 shrink-0 rounded-full border-2 border-border bg-card" />;
   }
@@ -98,7 +98,7 @@ function TramoDot({ step, tone }: { step: EsencialTramoStep; tone: TramoTone }) 
   return <span aria-hidden="true" data-state="done" className="size-3.5 shrink-0 rounded-full" style={{ background: tone.color }} />;
 }
 
-function connectorStyle(step: EsencialTramoStep, tone: TramoTone): CSSProperties {
+function connectorStyle(step: EsencialEtapaStep, tone: EtapaTone): CSSProperties {
   if (step.state === "done") return { background: tone.color };
   if (step.state === "current") {
     const pct = Math.max(0, Math.min(100, step.pct));
@@ -107,7 +107,7 @@ function connectorStyle(step: EsencialTramoStep, tone: TramoTone): CSSProperties
   return { background: "var(--border)" };
 }
 
-function StepDetail({ step }: { step: EsencialTramoStep }) {
+function StepDetail({ step }: { step: EsencialEtapaStep }) {
   if (!step.detail) return null;
   if (step.state === "done") {
     return (
@@ -127,18 +127,18 @@ function StepDetail({ step }: { step: EsencialTramoStep }) {
   return <span className={cn("block", step.state === "current" && "text-foreground")}>{step.detail}</span>;
 }
 
-function TramoCard({ data, summary }: { data: ProjectSummaryInput; summary: ResumenTareasSummary }) {
+function EtapaCard({ data, summary }: { data: ProjectSummaryInput; summary: ResumenTareasSummary }) {
   const line = useMemo(
-    () => esencialTramoLine(data, resumenTramoProgress(summary, data.tramoCatalog, data.project)),
+    () => esencialEtapaLine(data, resumenEtapaProgress(summary, data.etapaCatalog, data.project)),
     [data, summary],
   );
-  const tones = line.steps.map((step) => tramoTone(step.key, data.tramoCatalog));
-  const noTramo = line.steps.every((step) => step.state === "next");
-  // No started tramo (#1043): the empty state instead of a line of suggested tramos.
+  const tones = line.steps.map((step) => etapaTone(step.key, data.etapaCatalog));
+  const noEtapa = line.steps.every((step) => step.state === "next");
+  // No started etapa (#1043): the empty state instead of a line of suggested etapas.
   if (line.steps.length === 0) {
     return (
       <section aria-label="Etapas" className={cn(CARD, "anim-in")}>
-        <ProjectNoTramo projectId={data.project.id} tramos={data.tramoCatalog} />
+        <ProjectNoEtapa projectId={data.project.id} etapas={data.etapaCatalog} />
       </section>
     );
   }
@@ -153,11 +153,11 @@ function TramoCard({ data, summary }: { data: ProjectSummaryInput; summary: Resu
       <div role="img" aria-label={line.ariaLabel} className="flex items-center gap-2">
         {line.steps.map((step, i) => (
           <Fragment key={step.key}>
-            <TramoDot step={noTramo ? { ...step, state: "next" } : step} tone={tones[i]!} />
+            <EtapaDot step={noEtapa ? { ...step, state: "next" } : step} tone={tones[i]!} />
             {i < line.steps.length - 1 ? (
               <span
                 aria-hidden="true"
-                data-slot="tramo-connector"
+                data-slot="etapa-connector"
                 className="h-[3px] min-w-4 flex-1 rounded-full"
                 style={connectorStyle(step, tones[i]!)}
               />
@@ -165,7 +165,7 @@ function TramoCard({ data, summary }: { data: ProjectSummaryInput; summary: Resu
           </Fragment>
         ))}
         {line.next ? (
-          <span aria-hidden="true" data-slot="tramo-next" className="shrink-0 text-[12.5px] text-muted-foreground">
+          <span aria-hidden="true" data-slot="etapa-next" className="shrink-0 text-[12.5px] text-muted-foreground">
             Siguiente: {line.next.label}
           </span>
         ) : null}
@@ -184,7 +184,7 @@ function TramoCard({ data, summary }: { data: ProjectSummaryInput; summary: Resu
               >
                 {step.label}
               </span>
-              {noTramo ? null : <StepDetail step={step} />}
+              {noEtapa ? null : <StepDetail step={step} />}
             </div>
           ))}
         </div>
@@ -203,7 +203,7 @@ function taskStatus(task: NextTask): EsencialStatus {
 }
 
 /** A task the quick-add just created, shown on top until the next refetch. */
-type CreatedTask = { id: string; title: string; tramoKey: string | null };
+type CreatedTask = { id: string; title: string; etapaKey: string | null };
 
 function NextTasksCard({
   data,
@@ -232,17 +232,17 @@ function NextTasksCard({
 
   async function onCreate(draft: QuickAddDraft) {
     const row = await create(draft);
-    const tramoKey = data.tramoCatalog.find((t) => t.id === draft.tramoId)?.key ?? currentKey;
+    const etapaKey = data.etapaCatalog.find((t) => t.id === draft.etapaId)?.key ?? currentKey;
     setCreated((prev) => ({
       summary,
-      rows: [{ id: row.id, title: row.title, tramoKey }, ...(prev.summary === summary ? prev.rows : [])],
+      rows: [{ id: row.id, title: row.title, etapaKey }, ...(prev.summary === summary ? prev.rows : [])],
     }));
     setCreatedIds((ids) => new Set(ids).add(row.id));
     return row;
   }
 
   const dot = (key: string | null) => (
-    <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: tramoTone(key, data.tramoCatalog).color }} />
+    <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: etapaTone(key, data.etapaCatalog).color }} />
   );
 
   const empty = next.length === 0 && extra.length === 0;
@@ -263,7 +263,7 @@ function NextTasksCard({
               <EsencialItemRow
                 title={task.title}
                 href={taskSheetHref(pathname, searchParams, task.id)}
-                leading={dot(task.tramoKey)}
+                leading={dot(task.etapaKey)}
                 status={null}
                 isNew
               />
@@ -274,7 +274,7 @@ function NextTasksCard({
               <EsencialItemRow
                 title={task.title}
                 href={taskSheetHref(pathname, searchParams, task.id)}
-                leading={dot(task.tramoKey)}
+                leading={dot(task.etapaKey)}
                 meta={task.responsable ? [{ key: "responsable", label: task.responsable.name }] : []}
                 status={taskStatus(task)}
                 isNew={createdIds.has(task.id)}
@@ -290,7 +290,7 @@ function NextTasksCard({
             context={{
               label: data.project.name,
               projectId: data.project.id,
-              tramoId: data.project.currentWorkflowId,
+              etapaId: data.project.currentWorkflowId,
               placeholder: `Agregar una tarea a ${data.project.name}`,
             }}
             onCreate={onCreate}
@@ -307,16 +307,16 @@ function NextTasksCard({
 // ── 2b. Equipo ───────────────────────────────────────────────────────────────
 
 function Avatar({ avatar, catalog }: { avatar: TeamAvatar; catalog: WorkflowRef[] }) {
-  const tone = tramoTone(avatar.tramoKey, catalog);
+  const tone = etapaTone(avatar.etapaKey, catalog);
   return (
     <span
       title={avatar.name}
       className={cn(
         "-ml-2 inline-flex size-9 items-center justify-center rounded-full font-mono text-[12.5px] font-semibold ring-2 ring-card first:ml-0",
         tone.tint,
-        !avatar.tramoKey && "text-muted-foreground",
+        !avatar.etapaKey && "text-muted-foreground",
       )}
-      style={avatar.tramoKey ? { color: tone.ink } : undefined}
+      style={avatar.etapaKey ? { color: tone.ink } : undefined}
     >
       {avatar.initials}
     </span>
@@ -326,7 +326,7 @@ function Avatar({ avatar, catalog }: { avatar: TeamAvatar; catalog: WorkflowRef[
 function TeamCard({ data, summary, fichaHref }: { data: ProjectSummaryInput; summary: ResumenTareasSummary; fichaHref: string }) {
   const team = useMemo(() => {
     const line = teamLine(data.project);
-    const avatars = line.avatars.map((avatar) => ({ ...avatar, tramoKey: resumenAvatarTramo(summary, avatar.id) }));
+    const avatars = line.avatars.map((avatar) => ({ ...avatar, etapaKey: resumenAvatarEtapa(summary, avatar.id) }));
     return { ...line, avatars };
   }, [data.project, summary]);
   const count = team.avatars.length + team.overflow;
@@ -344,7 +344,7 @@ function TeamCard({ data, summary, fichaHref }: { data: ProjectSummaryInput; sum
         <div className="flex flex-col gap-2.5">
           <Link href={fichaHref} aria-label={`Equipo: ${team.text}. Ver en Ficha`} className="flex w-fit items-center rounded-full">
             {team.avatars.map((avatar) => (
-              <Avatar key={avatar.id} avatar={avatar} catalog={data.tramoCatalog} />
+              <Avatar key={avatar.id} avatar={avatar} catalog={data.etapaCatalog} />
             ))}
             {team.overflow > 0 ? (
               <span className="-ml-2 inline-flex size-9 items-center justify-center rounded-full bg-muted font-mono text-[12.5px] font-semibold text-muted-foreground ring-2 ring-card">
@@ -490,7 +490,7 @@ export function ResumenEsencialLayout({ data }: ResumenEsencialLayoutProps): Rea
       {tareas.isError ? (
         <SectionError label="Etapas" onRetry={retry} />
       ) : (
-        <TramoCard data={data} summary={summary} />
+        <EtapaCard data={data} summary={summary} />
       )}
 
       <div className="flex flex-wrap items-start gap-4">

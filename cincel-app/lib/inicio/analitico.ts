@@ -2,7 +2,7 @@
  * Inicio Analítico (#991, frame `Inicio-Analitico`): pure builders over
  * `qk.inicio()` for the KPI strip, the header description and the five
  * sections (Atención, Ritmo semanal, Carga por persona, Tareas abiertas por
- * tramo, Agenda de hoy): grouping, totals, heat levels and "Ir a" counts.
+ * etapa, Agenda de hoy): grouping, totals, heat levels and "Ir a" counts.
  * Client-safe; the page component only maps these to the widget kit.
  */
 import { cachedDateTimeFormat } from "@/lib/dates/zoned-formatters";
@@ -16,14 +16,14 @@ export const ANALITICO_SECTION = {
   atencion: "s-atencion",
   ritmo: "s-ritmo",
   carga: "s-carga",
-  tramos: "s-tramos",
+  etapas: "s-etapas",
   agenda: "s-agenda",
 } as const;
 
 /** Atención reasons shown in Analítico (Decision: vencidas and bloqueadas only). */
 export const ANALITICO_ATTENTION_REASONS: readonly string[] = ["Vencida", "Bloqueada"];
 
-/** Task rows shown per tramo before "Ver más" (Many). */
+/** Task rows shown per etapa before "Ver más" (Many). */
 export const ATTENTION_PAGE_SIZE = 20;
 
 /** Overdue share heat (≥ 45 warn, ≥ 60 crit) on whole percents. */
@@ -149,11 +149,11 @@ export function analiticoKpis(
 // ── Atención ────────────────────────────────────────────────────────────────
 
 export type AttentionTask = AttentionItem;
-export type AttentionTramo = { key: string; label: string; colorVar: string; tasks: AttentionTask[]; overdue: number; daysLate: number };
+export type AttentionEtapa = { key: string; label: string; colorVar: string; tasks: AttentionTask[]; overdue: number; daysLate: number };
 export type AttentionProject = {
   id: string;
   name: string;
-  tramos: AttentionTramo[];
+  etapas: AttentionEtapa[];
   overdue: number;
   daysLate: number;
   /** overdue / open of the project (`ProgressItem`), whole percent; null without open tasks. */
@@ -162,16 +162,16 @@ export type AttentionProject = {
 export type AttentionSummary = { projects: AttentionProject[]; overdue: number; blocked: number; daysLate: number };
 
 /**
- * Vencidas and bloqueadas grouped project → tramo, each level ordered by
- * days late desc (projects by overdue desc first). Tramo label and color
- * come from `tasksByTramo`.
+ * Vencidas and bloqueadas grouped project → etapa, each level ordered by
+ * days late desc (projects by overdue desc first). Etapa label and color
+ * come from `tasksByEtapa`.
  */
 export function attentionSummary(
   items: AttentionItem[],
   progress: Pick<ProgressItem, "id" | "open" | "overdue">[],
-  tramos: Pick<DistributionSegment, "key" | "label" | "colorVar">[],
+  etapas: Pick<DistributionSegment, "key" | "label" | "colorVar">[],
 ): AttentionSummary {
-  const tramoInfo = new Map(tramos.map((t) => [t.key, t]));
+  const etapaInfo = new Map(etapas.map((t) => [t.key, t]));
   const progressById = new Map(progress.map((p) => [p.id, p]));
   const rows = items.filter((item) => ANALITICO_ATTENTION_REASONS.includes(item.reason));
 
@@ -187,14 +187,14 @@ export function attentionSummary(
   const isOverdue = (item: AttentionItem) => item.daysLate !== null;
 
   const projects: AttentionProject[] = [...byProject].map(([id, { name, items: own }]) => {
-    const byTramo = new Map<string, AttentionTask[]>();
+    const byEtapa = new Map<string, AttentionTask[]>();
     for (const item of own) {
-      const key = item.tramo ?? "sin-tramo";
-      byTramo.set(key, [...(byTramo.get(key) ?? []), item]);
+      const key = item.etapa ?? "sin-etapa";
+      byEtapa.set(key, [...(byEtapa.get(key) ?? []), item]);
     }
-    const tramoRows: AttentionTramo[] = [...byTramo]
+    const etapaRows: AttentionEtapa[] = [...byEtapa]
       .map(([key, tasks]) => {
-        const info = tramoInfo.get(key);
+        const info = etapaInfo.get(key);
         const sorted = [...tasks].sort((a, b) => late(b) - late(a) || a.title.localeCompare(b.title, "es"));
         return {
           key,
@@ -207,13 +207,13 @@ export function attentionSummary(
       })
       .sort((a, b) => b.daysLate - a.daysLate || a.label.localeCompare(b.label, "es"));
     const p = progressById.get(id);
-    const overdue = tramoRows.reduce((sum, t) => sum + t.overdue, 0);
+    const overdue = etapaRows.reduce((sum, t) => sum + t.overdue, 0);
     return {
       id,
       name,
-      tramos: tramoRows,
+      etapas: etapaRows,
       overdue,
-      daysLate: tramoRows.reduce((sum, t) => sum + t.daysLate, 0),
+      daysLate: etapaRows.reduce((sum, t) => sum + t.daysLate, 0),
       overduePct: p?.open !== undefined ? pctOf(p.overdue ?? 0, p.open) : null,
     };
   });
@@ -227,7 +227,7 @@ export function attentionSummary(
   };
 }
 
-/** "3 tramos" / "1 tramo". */
+/** "3 etapas" / "1 etapa". */
 export function countLabel(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -282,16 +282,16 @@ export function saturatedCount(people: Pick<PersonDatum, "occupancyPct">[]): num
   return people.filter((p) => (p.occupancyPct ?? 0) >= 100).length;
 }
 
-// ── Tareas abiertas por tramo ───────────────────────────────────────────────
+// ── Tareas abiertas por etapa ───────────────────────────────────────────────
 
-export type TramoTotals = { tramos: number; open: number; overdue: number; overduePct: number | null; avgDays: number | null };
+export type EtapaTotals = { etapas: number; open: number; overdue: number; overduePct: number | null; avgDays: number | null };
 
-export function tramoTotals(segments: DistributionSegment[]): TramoTotals {
+export function etapaTotals(segments: DistributionSegment[]): EtapaTotals {
   const open = segments.reduce((sum, s) => sum + s.value, 0);
   const overdue = segments.reduce((sum, s) => sum + (s.secondary ?? 0), 0);
   const ageSum = segments.reduce((sum, s) => sum + segmentDays(s) * s.value, 0);
   return {
-    tramos: segments.length,
+    etapas: segments.length,
     open,
     overdue,
     overduePct: pctOf(overdue, open),
@@ -299,7 +299,7 @@ export function tramoTotals(segments: DistributionSegment[]): TramoTotals {
   };
 }
 
-/** `extra.diasProm` of a tramo segment (0 when missing). */
+/** `extra.diasProm` of an etapa segment (0 when missing). */
 export function segmentDays(segment: Pick<DistributionSegment, "extra">): number {
   const value = segment.extra?.diasProm;
   return typeof value === "number" ? value : 0;

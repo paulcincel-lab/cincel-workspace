@@ -6,8 +6,8 @@ import { PeopleStack } from "@/components/widgets/PeopleStack";
 import type { TaskDetail } from "@/lib/types/core";
 import type { CalItem, CalTaskItem, DetailAction, MeetingDetail } from "@/lib/types/calendario";
 
-import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction, projectTramoLine, taskNote, taskWhen } from "./event-detail-model";
-import { DetailActionButton, KindChip, TramoBand } from "./EventDetailParts";
+import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction, projectEtapaLine, taskNote, taskWhen } from "./event-detail-model";
+import { DetailActionButton, KindChip, EtapaBand } from "./EventDetailParts";
 import { MeetingDetailDrawer } from "./MeetingParts";
 
 export type EventDetailDrawerProps = {
@@ -69,12 +69,12 @@ function TaskDetailDrawer({ item, task, actions, onClose }: EventDetailDrawerPro
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" data-slot="event-detail-drawer" className="gap-0 overflow-y-auto sm:max-w-[420px] motion-reduce:transition-none">
         <div className="flex flex-col gap-3 p-4 pr-12">
-          <TramoBand tramo={item.tramo} />
+          <EtapaBand etapa={item.etapa} />
           <KindChip item={item} />
           <SheetTitle tabIndex={-1} className="text-lg leading-snug font-semibold outline-none">
             {item.title}
           </SheetTitle>
-          <SheetDescription>{item.kind === "task" ? `${taskWhen(item)} · ${projectTramoLine(item)}` : projectTramoLine(item)}</SheetDescription>
+          <SheetDescription>{item.kind === "task" ? `${taskWhen(item)} · ${projectEtapaLine(item)}` : projectEtapaLine(item)}</SheetDescription>
         </div>
         <div className="flex flex-col gap-4 px-4 pb-4">
           {item.kind === "task" ? (

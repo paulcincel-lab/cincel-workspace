@@ -65,7 +65,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
 
   const ADMIN: ViewerScope = { staffId: "", isAdmin: true };
   const MEMBER: ViewerScope = { staffId: "", isAdmin: false };
-  const NO_FILTERS = { tramo: null, proyecto: null, responsable: null, estado: null, q: null };
+  const NO_FILTERS = { etapa: null, proyecto: null, responsable: null, estado: null, q: null };
 
   const admin = () => ({ id: v().managerId, access: "Administrador" as const });
   const colaborador = () => ({ id: v().helperId, access: "Colaborador" as const });
@@ -73,7 +73,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
   /** Only this run's tasks. */
   const mine = (extra: TaskFilters = {}): TaskFilters => ({ search: v().marker, ...extra });
 
-  /** The paged order, in JS: tramo, fase, manual order, date (nulls last), id. */
+  /** The paged order, in JS: etapa, fase, manual order, date (nulls last), id. */
   function sortKey(r: TaskListRow): [number, number, number, string, string] {
     const MAX = 2147483647;
     return [
@@ -197,40 +197,40 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
 
   describe("taskFacets", () => {
     /** The chip counts and Proyecto options `TareasClient` computed from every task (before 4a). */
-    function clientFacets(tasks: TaskListItem[], tramo: string | null, proyecto: string | null) {
-      const inTramo = (t: TaskListItem) => tramo === null || t.workflow?.key === tramo;
+    function clientFacets(tasks: TaskListItem[], etapa: string | null, proyecto: string | null) {
+      const inEtapa = (t: TaskListItem) => etapa === null || t.workflow?.key === etapa;
       const inProject = (t: TaskListItem) => proyecto === null || t.project.id === proyecto;
       const inScope = tasks.filter(inProject);
-      const byTramo: Record<string, number> = {};
-      for (const t of inScope) if (t.workflow) byTramo[t.workflow.key] = (byTramo[t.workflow.key] ?? 0) + 1;
+      const byEtapa: Record<string, number> = {};
+      for (const t of inScope) if (t.workflow) byEtapa[t.workflow.key] = (byEtapa[t.workflow.key] ?? 0) + 1;
       const projects = new Map<string, string>();
-      for (const t of tasks) if (inTramo(t)) projects.set(t.project.id, t.project.name);
+      for (const t of tasks) if (inEtapa(t)) projects.set(t.project.id, t.project.name);
       if (proyecto && !projects.has(proyecto)) {
         const name = tasks.find((t) => t.project.id === proyecto)?.project.name;
         if (name) projects.set(proyecto, name);
       }
       return {
         total: inScope.length,
-        byTramo,
+        byEtapa,
         projectIds: [...projects.entries()].sort((a, b) => a[1].localeCompare(b[1], "es")).map(([id]) => id),
       };
     }
 
     it.each([
       ["no etapa, no project", null, null],
-      ["a etapa", 0, null],
+      ["an etapa", 0, null],
       ["a project", null, 0],
-      ["a etapa and a project", 1, 3],
-    ] as const)("matches the client counts with %s", async (_label, tramoIndex, projectIndex) => {
-      const tramo = tramoIndex === null ? null : v().workflows[tramoIndex].key;
+      ["an etapa and a project", 1, 3],
+    ] as const)("matches the client counts with %s", async (_label, etapaIndex, projectIndex) => {
+      const etapa = etapaIndex === null ? null : v().workflows[etapaIndex].key;
       const proyecto = projectIndex === null ? null : v().projects[projectIndex].id;
       const base = mine({ status: "pendiente" });
       const tasks = await repo.listTasks(base, MEMBER);
-      const expected = clientFacets(tasks, tramo, proyecto);
+      const expected = clientFacets(tasks, etapa, proyecto);
 
-      const facets = await repo.taskFacets(base, MEMBER, { workflowKey: tramo, projectId: proyecto });
+      const facets = await repo.taskFacets(base, MEMBER, { workflowKey: etapa, projectId: proyecto });
       expect(facets.total).toBe(expected.total);
-      expect(facets.byTramo).toEqual(expected.byTramo);
+      expect(facets.byEtapa).toEqual(expected.byEtapa);
       expect(facets.projects.map((p) => p.id)).toEqual(expected.projectIds);
     });
 
@@ -267,9 +267,9 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
       ["analitico", NO_FILTERS],
       ["visual", { ...NO_FILTERS, responsable: "yo" as const, estado: "pendiente" as const }],
     ] as const)("runs ≤ 6 statements (%s)", async (estilo, filters) => {
-      const tramo = v().workflows[0].key;
+      const etapa = v().workflows[0].key;
       const { count } = await countQueries(() =>
-        asViewer(admin(), () => actions.getTareasPageData({ estilo, ...filters, tramo })),
+        asViewer(admin(), () => actions.getTareasPageData({ estilo, ...filters, etapa })),
       );
       // Analítico reads the summary and up to 3 group pages instead of one list page.
       expect(count).toBeLessThanOrEqual(estilo === "analitico" ? 7 : 6);
@@ -319,11 +319,11 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
 
     it("an unknown etapa loads no rows but keeps the board's columns", async () => {
       const data = await asViewer(admin(), () =>
-        actions.getTareasPageData({ estilo: "visual", ...NO_FILTERS, tramo: `no-${run}` }),
+        actions.getTareasPageData({ estilo: "visual", ...NO_FILTERS, etapa: `no-${run}` }),
       );
       for (const status of BASE_STATUSES) expect(data.board!.columns[status].total).toBe(0);
       const column = await asViewer(admin(), () =>
-        actions.getTareasBoardColumn({ filters: { ...NO_FILTERS, tramo: `no-${run}` }, columnId: "pendiente", cursor: null }),
+        actions.getTareasBoardColumn({ filters: { ...NO_FILTERS, etapa: `no-${run}` }, columnId: "pendiente", cursor: null }),
       );
       expect(column).toEqual({ rows: [], total: 0, nextCursor: null });
     });

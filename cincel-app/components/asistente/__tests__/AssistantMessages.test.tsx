@@ -61,12 +61,12 @@ const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 const tableArgs: RenderTableArgs = {
   title: "Tareas vencidas por etapa",
   columns: [
-    { key: "tramo", label: "Etapa" },
+    { key: "etapa", label: "Etapa" },
     { key: "vencidas", label: "Vencidas", align: "right", format: "count" },
   ],
   rows: [
-    { id: "r1", tramo: "Diseño", vencidas: 3 },
-    { id: "r2", tramo: "Construcción", vencidas: 5 },
+    { id: "r1", etapa: "Diseño", vencidas: 3 },
+    { id: "r2", etapa: "Construcción", vencidas: 5 },
   ],
   totals: "auto",
   heat: [{ key: "vencidas", warnAt: 3, critAt: 5 }],
@@ -116,8 +116,8 @@ describe("AssistantTableMessage (render_table → RecordTable)", () => {
   }
 
   it("passes groupBy through", () => {
-    inStyle("analitico", <AssistantTableMessage {...tableArgs} groupBy="tramo" />);
-    expect((calls.table.at(-1)!.props as RecordTableProps).data.groupBy).toBe("tramo");
+    inStyle("analitico", <AssistantTableMessage {...tableArgs} groupBy="etapa" />);
+    expect((calls.table.at(-1)!.props as RecordTableProps).data.groupBy).toBe("etapa");
   });
 
   it("renders the widget empty state for empty args", () => {

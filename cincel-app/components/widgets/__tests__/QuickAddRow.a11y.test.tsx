@@ -54,7 +54,7 @@ function renderRow(variant: QuickAddRowProps["variant"]) {
   client.setQueryData(qk.catalog.assignableStaff("w-diseno"), STAFF);
   const ui = (
     <QuickAddRow
-      context={{ label: "Diseño", projectId: "p-roble", tramoId: "w-diseno", assigneeId: null }}
+      context={{ label: "Diseño", projectId: "p-roble", etapaId: "w-diseno", assigneeId: null }}
       variant={variant}
       colSpan={3}
       onCreate={vi.fn(async () => ({ id: "t-1", title: "Revisar" }))}

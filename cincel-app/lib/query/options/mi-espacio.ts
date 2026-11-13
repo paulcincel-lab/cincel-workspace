@@ -399,8 +399,8 @@ export function patchMeTasksSummaryStatus(qc: QueryClient, before: TaskListRow, 
   if (wasOpen === isOpen && wasBlocked === isBlocked) return;
   const open = (isOpen ? 1 : 0) - (wasOpen ? 1 : 0);
   const blocked = (isBlocked ? 1 : 0) - (wasBlocked ? 1 : 0);
-  const tramoId = before.workflowId ?? null;
-  const tramoKey = before.workflow?.key ?? null;
+  const etapaId = before.workflowId ?? null;
+  const etapaKey = before.workflow?.key ?? null;
   for (const [key, summary] of qc.getQueriesData<MyTasksSummary>({ queryKey: ME_TASK_SUMMARIES })) {
     if (!summary || !summary.today) continue;
     const input = (key[3] ?? {}) as MyTasksSummaryInput;
@@ -431,7 +431,7 @@ export function patchMeTasksSummaryStatus(qc: QueryClient, before: TaskListRow, 
       dueToday: Math.max(0, summary.all.dueToday + (due === today ? open : 0)),
       buckets: { ...summary.all.buckets, [bucket]: Math.max(0, summary.all.buckets[bucket] + open) },
     };
-    const tramos = summary.tramos.map((t) => (t.id === tramoId ? { ...t, open: Math.max(0, t.open + open) } : t));
+    const etapas = summary.etapas.map((t) => (t.id === etapaId ? { ...t, open: Math.max(0, t.open + open) } : t));
     const esencial = summary.esencial.map((e) =>
       e.project.id === before.projectId
         ? { ...e, open: Math.max(0, e.open + open), overdue: Math.max(0, e.overdue + overdue) }
@@ -439,22 +439,22 @@ export function patchMeTasksSummaryStatus(qc: QueryClient, before: TaskListRow, 
     );
     const matches =
       !input.q &&
-      (input.tramo === null || input.tramo === undefined || input.tramo === tramoKey) &&
+      (input.etapa === null || input.etapa === undefined || input.etapa === etapaKey) &&
       (!input.retraso || (due !== null && due < today));
     const next: MyTasksSummary = matches
       ? {
           ...summary,
           all,
-          tramos,
+          etapas,
           esencial,
           shown: counts(summary.shown),
           projects: summary.projects.map((p) =>
             p.project.id === before.projectId
-              ? { ...counts(p), tramos: p.tramos.map((t) => (t.tramo.id === tramoId ? counts(t) : t)) }
+              ? { ...counts(p), etapas: p.etapas.map((t) => (t.etapa.id === etapaId ? counts(t) : t)) }
               : p,
           ),
         }
-      : { ...summary, all, tramos, esencial };
+      : { ...summary, all, etapas, esencial };
     qc.setQueryData(key, next);
   }
 }
@@ -475,7 +475,7 @@ export function meTaskRowOf(item: TaskListItem): TaskListRow {
 
 /**
  * Adds a task (created or reopened here) to the end of the loaded lists of
- * mine it fits (project, tramo, board column); the refetch puts it in its
+ * mine it fits (project, etapa, board column); the refetch puts it in its
  * server place.
  */
 export function insertMeTaskRow(qc: QueryClient, item: TaskListItem, today: string): void {

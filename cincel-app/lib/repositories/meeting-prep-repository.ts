@@ -66,11 +66,11 @@ export type PrepProject = {
   progress: number;
   startDate: string | null;
   endDate: string | null;
-  tramoName: string | null;
+  etapaName: string | null;
   phaseName: string | null;
 };
 
-/** Progress, plan dates, current tramo and the first open fase of that tramo. */
+/** Progress, plan dates, current etapa and the first open fase of that etapa. */
 export async function getPrepProject(projectId: string, includeAdmin: boolean): Promise<PrepProject | null> {
   const [project] = await db
     .select({
@@ -78,7 +78,7 @@ export async function getPrepProject(projectId: string, includeAdmin: boolean): 
       startDate: projects.startDate,
       endDate: projects.endDate,
       workflowId: projects.currentWorkflowId,
-      tramoName: workflows.name,
+      etapaName: workflows.name,
     })
     .from(projects)
     .leftJoin(workflows, eq(workflows.id, projects.currentWorkflowId))
@@ -108,7 +108,7 @@ export async function getPrepProject(projectId: string, includeAdmin: boolean): 
     progress: project.progress,
     startDate: project.startDate,
     endDate: project.endDate,
-    tramoName: project.workflowId ? (project.tramoName ?? null) : null,
+    etapaName: project.workflowId ? (project.etapaName ?? null) : null,
     phaseName,
   };
 }

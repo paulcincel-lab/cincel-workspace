@@ -27,12 +27,12 @@ export interface ProjectCreateFormProps {
    * after the create through `updateProjectAction`.
    */
   onConfirm: (input: ProjectCreateInput, admin?: ProjectAdminValue) => Promise<void>;
-  /** Presale starts on its own when a project is created (first tramo set to `on_create`). */
+  /** Presale starts on its own when a project is created (first etapa set to `on_create`). */
   presaleAutoStart: boolean;
   /** Admins only: shows the optional client and origin fields under the name. */
   adminOptions?: ProjectCreateAdminOptions | null;
   /**
-   * Staff who can start tramos (#1034): shows "Tramo inicial" under the
+   * Staff who can start etapas (#1034): shows "Etapa inicial" under the
    * name. Without it (or until it loads) the create sends the name only and
    * the server's default applies.
    */
@@ -42,7 +42,7 @@ export interface ProjectCreateFormProps {
 const EMPTY_NAME = "El nombre del proyecto es obligatorio.";
 const NO_PHASES = "Elige al menos una fase.";
 /** Select sentinel for "Ninguno" (Select items can't be empty strings). */
-const NO_TRAMO = "__none__";
+const NO_ETAPA = "__none__";
 const EMPTY_ADMIN: ProjectAdminValue = { clientId: null, origin: null, originStaffId: null };
 
 /** Spanish copy for the codes `createProjectAction` throws. */
@@ -60,7 +60,7 @@ export function projectCreateDescription(presaleAutoStart: boolean): string {
 }
 
 /**
- * The tramo and fases the create starts with. `workflowId` undefined = the
+ * The etapa and fases the create starts with. `workflowId` undefined = the
  * default (`startOptions.defaultWorkflowId`); `uncheckedPhaseIds` empty =
  * every fase checked.
  */
@@ -68,28 +68,28 @@ export type ProjectStartChoice = { workflowId?: string | null; uncheckedPhaseIds
 
 const UNTOUCHED_START: ProjectStartChoice = { uncheckedPhaseIds: new Set() };
 
-/** The tramo the form shows: the picked one, else the default. */
-export function selectedStartTramo(options: ProjectCreateStartOptions, choice: ProjectStartChoice) {
+/** The etapa the form shows: the picked one, else the default. */
+export function selectedStartEtapa(options: ProjectCreateStartOptions, choice: ProjectStartChoice) {
   const id = choice.workflowId === undefined ? options.defaultWorkflowId : choice.workflowId;
-  return id ? (options.tramos.find((t) => t.id === id) ?? null) : null;
+  return id ? (options.etapas.find((t) => t.id === id) ?? null) : null;
 }
 
 /**
  * The start fields of the create input: none while the choice is untouched
  * (the server's default, same as before #1034), `{ startWorkflowId: null }`
- * for "Ninguno", else the tramo and its checked fases. `NO_PHASES` when a
- * tramo with fases has none checked.
+ * for "Ninguno", else the etapa and its checked fases. `NO_PHASES` when a
+ * etapa with fases has none checked.
  */
 export function projectStartInput(
   options: ProjectCreateStartOptions | null | undefined,
   choice: ProjectStartChoice
 ): Pick<ProjectCreateInput, "startWorkflowId" | "phaseIds"> | "NO_PHASES" {
   if (!options || (choice.workflowId === undefined && choice.uncheckedPhaseIds.size === 0)) return {};
-  const tramo = selectedStartTramo(options, choice);
-  if (!tramo) return { startWorkflowId: null };
-  const phaseIds = tramo.phases.filter((p) => !choice.uncheckedPhaseIds.has(p.id)).map((p) => p.id);
-  if (tramo.phases.length > 0 && phaseIds.length === 0) return "NO_PHASES";
-  return { startWorkflowId: tramo.id, phaseIds };
+  const etapa = selectedStartEtapa(options, choice);
+  if (!etapa) return { startWorkflowId: null };
+  const phaseIds = etapa.phases.filter((p) => !choice.uncheckedPhaseIds.has(p.id)).map((p) => p.id);
+  if (etapa.phases.length > 0 && phaseIds.length === 0) return "NO_PHASES";
+  return { startWorkflowId: etapa.id, phaseIds };
 }
 
 /**
@@ -162,8 +162,8 @@ export function useProjectCreateForm({
 export type ProjectCreateForm = ReturnType<typeof useProjectCreateForm>;
 
 /**
- * "Tramo inicial" (#1034): the active tramos plus "Ninguno", and the picked
- * tramo's fases as checkboxes (the Iniciar tramo sheet's `PhaseChecklist`),
+ * "Etapa inicial" (#1034): the active etapas plus "Ninguno", and the picked
+ * etapa's fases as checkboxes (the Iniciar etapa sheet's `PhaseChecklist`),
  * all checked by default. The tasks stay unassigned.
  */
 export function ProjectStartFields({
@@ -175,10 +175,10 @@ export function ProjectStartFields({
   value: ProjectStartChoice;
   onChange: (value: ProjectStartChoice) => void;
 }) {
-  const tramo = selectedStartTramo(options, value);
+  const etapa = selectedStartEtapa(options, value);
   const items: Record<string, string> = {
-    ...Object.fromEntries(options.tramos.map((t) => [t.id, t.name])),
-    [NO_TRAMO]: "Ninguno",
+    ...Object.fromEntries(options.etapas.map((t) => [t.id, t.name])),
+    [NO_ETAPA]: "Ninguno",
   };
 
   function toggle(phaseId: string, checked: boolean) {
@@ -191,43 +191,43 @@ export function ProjectStartFields({
   return (
     <>
       <FormField>
-        <Label htmlFor="project-start-tramo" className="block text-sm font-normal text-muted-foreground">
+        <Label htmlFor="project-start-etapa" className="block text-sm font-normal text-muted-foreground">
           Etapa inicial
         </Label>
         <Select
           items={items}
-          value={tramo?.id ?? NO_TRAMO}
+          value={etapa?.id ?? NO_ETAPA}
           onValueChange={(next) =>
             onChange({
-              workflowId: !next || next === NO_TRAMO ? null : (next as string),
+              workflowId: !next || next === NO_ETAPA ? null : (next as string),
               uncheckedPhaseIds: new Set(),
             })
           }
         >
-          <SelectTrigger id="project-start-tramo" className="mt-1 w-full" aria-describedby="project-start-tramo-hint">
+          <SelectTrigger id="project-start-etapa" className="mt-1 w-full" aria-describedby="project-start-etapa-hint">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {options.tramos.map((t) => (
+            {options.etapas.map((t) => (
               <SelectItem key={t.id} value={t.id}>
                 {t.name}
               </SelectItem>
             ))}
-            <SelectItem value={NO_TRAMO}>Ninguno</SelectItem>
+            <SelectItem value={NO_ETAPA}>Ninguno</SelectItem>
           </SelectContent>
         </Select>
-        <p id="project-start-tramo-hint" className="mt-1 text-xs text-muted-foreground">
-          {tramo ? "Las tareas se crean sin asignar." : "El proyecto queda en Sin etapa; puedes iniciarlo después."}
+        <p id="project-start-etapa-hint" className="mt-1 text-xs text-muted-foreground">
+          {etapa ? "Las tareas se crean sin asignar." : "El proyecto queda en Sin etapa; puedes iniciarlo después."}
         </p>
       </FormField>
-      {tramo && tramo.phases.length > 0 ? (
+      {etapa && etapa.phases.length > 0 ? (
         <fieldset className="space-y-3">
           <legend className="mb-2 text-sm font-medium text-foreground">Fases</legend>
           <PhaseChecklist
             idPrefix="project-start-phase-"
-            checkedIds={new Set(tramo.phases.filter((p) => !value.uncheckedPhaseIds.has(p.id)).map((p) => p.id))}
+            checkedIds={new Set(etapa.phases.filter((p) => !value.uncheckedPhaseIds.has(p.id)).map((p) => p.id))}
             onToggle={toggle}
-            phases={tramo.phases.map((p) => ({ id: p.id, label: `${p.name} · ${p.templateCount} tareas` }))}
+            phases={etapa.phases.map((p) => ({ id: p.id, label: `${p.name} · ${p.templateCount} tareas` }))}
           />
         </fieldset>
       ) : null}
@@ -236,7 +236,7 @@ export function ProjectStartFields({
 }
 
 /**
- * The create form's fields: the name, "Tramo inicial" when `startOptions` is
+ * The create form's fields: the name, "Etapa inicial" when `startOptions` is
  * set, and the admin-only fields when `adminOptions` is set.
  */
 export function ProjectCreateFields({

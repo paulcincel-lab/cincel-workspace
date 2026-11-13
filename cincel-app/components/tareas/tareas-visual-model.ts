@@ -6,7 +6,7 @@
 import type { DonutSegment, KpiSparkTile, WeekStripDay } from "@/components/widgets/TaskSummaryCards";
 import type { TareasBoardData, TareasTrend, TareasTrendKey } from "@/lib/tareas/page-data";
 import { BASE_STATUS_COLOR, BASE_STATUS_LABEL, customStatusBase, parseStatusValue, statusColorVar } from "@/lib/tasks/status-options";
-import { tramoColorVar } from "@/lib/tramos/compat";
+import { etapaColorVar } from "@/lib/etapas/compat";
 import type { TaskStatus } from "@/lib/types/core";
 
 export const TAREAS_VISUAL_DESCRIPTION = "El tablero del equipo. Arrastra para cambiar el estatus.";
@@ -136,7 +136,7 @@ export function weekBarHeight(count: number, max: number): number {
  * The week strip's days: name, number, count, bar, and the per-day label
  * ("Lunes 9, 1 entrega (hoy)", "Martes 10, sin entregas"). Today is
  * flagged; the busiest day (the first with the most tasks due, when any) too.
- * The bar takes the dominant tramo's color, `border` when nothing is due.
+ * The bar takes the dominant etapa's color, `border` when nothing is due.
  */
 export function weekStripDays(week: TareasTrend["week"], today: string): WeekStripDay[] {
   const max = Math.max(0, ...week.days.map((d) => d.due));
@@ -152,7 +152,7 @@ export function weekStripDays(week: TareasTrend["week"], today: string): WeekStr
       count: day.due,
       ariaLabel: `${DAY_LONG[i]} ${dayOfMonth(day.date)}, ${count}${isToday ? " (hoy)" : ""}`,
       barHeight: weekBarHeight(day.due, max),
-      barColor: day.due === 0 ? "var(--border)" : day.tramoKey ? tramoColorVar(day.tramoKey) : "var(--muted-foreground)",
+      barColor: day.due === 0 ? "var(--border)" : day.etapaKey ? etapaColorVar(day.etapaKey) : "var(--muted-foreground)",
       today: isToday,
       busiest: day.date === busiestDate,
     };

@@ -87,7 +87,7 @@ vi.mock("@/components/shell/EstiloSwitch", () => ({
 vi.mock("@/components/mi-espacio/Inbox", () => ({ Inbox: () => <section aria-label="Bandeja completa" /> }));
 vi.mock("@/components/tareas/TaskSheet", () => ({ TASK_SHEET_PARAM: "tarea", TaskSheetRoute: () => null }));
 vi.mock("@/components/tareas/NewTaskDialog", () => ({ newTaskInvalidations: () => [["tareas"]] }));
-/** The quick add (#984): one button that sends a parsed draft with project and tramo tokens. */
+/** The quick add (#984): one button that sends a parsed draft with project and etapa tokens. */
 vi.mock("@/components/widgets/QuickAddRow", () => ({
   QuickAddRow: ({ context, onCreate }: QuickAddRowProps) => (
     <button
@@ -96,7 +96,7 @@ vi.mock("@/components/widgets/QuickAddRow", () => ({
         void onCreate({
           title: "Revisar cortes",
           projectId: "p1",
-          tramoId: "w1",
+          etapaId: "w1",
           assigneeId: null,
           dueDate: null,
           priority: "media",

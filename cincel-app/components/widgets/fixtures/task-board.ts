@@ -165,7 +165,7 @@ export const taskBoardTableFixture: RecordTableData = {
   columns: [
     { key: "tarea", label: "Tarea" },
     { key: "proyecto", label: "Proyecto" },
-    { key: "tramo", label: "Etapa" },
+    { key: "etapa", label: "Etapa" },
     { key: "fase", label: "Fase", hideOn: ["esencial"] },
     { key: "responsable", label: "Responsable" },
     { key: "estatus", label: "Estatus" },
@@ -178,7 +178,7 @@ export const taskBoardTableFixture: RecordTableData = {
     id: t.id,
     tarea: t.title,
     proyecto: t.project.name,
-    tramo: t.workflow?.name ?? "",
+    etapa: t.workflow?.name ?? "",
     fase: t.phase?.name ?? "Sin fase",
     responsable: t.manager?.name ?? "Sin responsable",
     estatus: t.customStatus?.name ?? STATUS_TEXT[t.status],

@@ -105,9 +105,9 @@ describe("InicioAnalitico accessibility", () => {
       expect(controls ? document.getElementById(controls) : null).toBeTruthy();
     }
 
-    fireEvent.click(header(ANALITICO_SECTION.tramos));
-    expect(header(ANALITICO_SECTION.tramos).getAttribute("aria-expanded")).toBe("false");
-    expect(useInicioDashboard.getState().collapsed.tramoDonut).toBe(true);
+    fireEvent.click(header(ANALITICO_SECTION.etapas));
+    expect(header(ANALITICO_SECTION.etapas).getAttribute("aria-expanded")).toBe("false");
+    expect(useInicioDashboard.getState().collapsed.etapaDonut).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Contraer todo" }));
     for (const id of ids) expect(header(id).getAttribute("aria-expanded")).toBe("false");

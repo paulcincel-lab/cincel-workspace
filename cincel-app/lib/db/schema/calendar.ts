@@ -50,7 +50,7 @@ export const calendarEvents = core.table(
     location: text("location"),
     meetUrl: text("meet_url"),
     projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
-    /** Tramo colour of the edge; defaults to the project's current tramo. */
+    /** Etapa colour of the edge; defaults to the project's current etapa. */
     workflowId: uuid("workflow_id").references(() => workflows.id, { onDelete: "set null" }),
     status: calendarEventStatus("status").notNull().default("confirmada"),
     googleCalendarId: text("google_calendar_id"),

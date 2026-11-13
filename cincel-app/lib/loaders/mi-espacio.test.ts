@@ -53,9 +53,9 @@ const PROJECTS = ["p1", "p2"].map((id) => ({
   project: { id, name: id },
   ...EMPTY_MY_TASKS_COUNTS,
   open: 2,
-  tramos: [
-    { tramo: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
-    { tramo: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
+  etapas: [
+    { etapa: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
+    { etapa: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
   ],
 }));
 
@@ -133,7 +133,7 @@ describe("loadMiEspacio", () => {
     expect(h.listTasksPage.mock.calls[0]![2]).toMatchObject({ limit: 30, orderBy: "retraso" });
 
     // The URL's Analítico filters narrow the counts in Analítico only.
-    const narrowed = { tramo: null, q: "planos" };
+    const narrowed = { etapa: null, q: "planos" };
     expect((await loadMiEspacio(user, new Date(), { style: "analitico", analiticoInput: narrowed })).tasks.input).toEqual(narrowed);
     expect((await loadMiEspacio(user, new Date(), { style: "visual", analiticoInput: narrowed })).tasks.input).toEqual(MY_TASKS_ALL);
   });

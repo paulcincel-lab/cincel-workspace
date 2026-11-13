@@ -13,11 +13,11 @@ import { TASK_SORT_COLUMNS } from "./sort";
 /** Most projects the Proyecto multi-select sends (#1045). */
 export const TAREAS_PROYECTOS_MAX = 50;
 
-/** Tramo keys (`workflows.key`), as `parseTareasQuery` keeps them. */
-const TramoKey = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+/** Etapa keys (`workflows.key`), as `parseTareasQuery` keeps them. */
+const EtapaKey = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 const TareasFilterFields = {
-  tramo: TramoKey.nullable(),
+  etapa: EtapaKey.nullable(),
   proyecto: UuidSchema.nullable(),
   responsable: z.union([z.literal("yo"), z.literal("todos"), z.literal("sin"), UuidSchema]).nullable(),
   estado: z.enum(["pendiente", "en_proceso", "completado", "bloqueado"]).nullable(),
@@ -61,7 +61,7 @@ export const TareasListPageInput = z.object({
   filters: TareasListFiltersSchema,
   cursor: Cursor,
   limit: z.number().int().min(10).max(200).optional(),
-  /** "retraso" (Analítico tramo groups): overdue first, then open by due date, then closed; any other column (#1044). */
+  /** "retraso" (Analítico etapa groups): overdue first, then open by due date, then closed; any other column (#1044). */
   ...SortFields,
 });
 

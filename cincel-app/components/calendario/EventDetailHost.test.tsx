@@ -13,7 +13,7 @@ import { EventDetailHost } from "./EventDetailHost";
 
 const item = {
   kind: "task", id: "t:1", taskId: "1", title: "Ingenierías", date: "2026-11-13", dateField: "commitmentDate",
-  project: null, tramo: null, phase: null, status: "pendiente", statusLabel: "Pendiente", priority: "alta", manager: null,
+  project: null, etapa: null, phase: null, status: "pendiente", statusLabel: "Pendiente", priority: "alta", manager: null,
   support: [], overdue: false, completed: false, blocked: false, hours: 1, hoursSource: "default", parentTaskId: null, canEdit: true,
 } as CalTaskItem;
 

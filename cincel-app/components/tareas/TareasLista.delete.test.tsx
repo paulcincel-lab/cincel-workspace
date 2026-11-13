@@ -39,8 +39,8 @@ vi.mock("@/lib/actions/tasks-actions", async (importOriginal) => ({
 }));
 const toasts = vi.hoisted(() => Object.assign(vi.fn(() => "toast-1"), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toasts }));
-vi.mock("@/components/widgets/TramoBadge", () => ({
-  TramoBadge: ({ tramo }: { tramo: { name: string } }) => <span>{tramo.name}</span>,
+vi.mock("@/components/widgets/EtapaBadge", () => ({
+  EtapaBadge: ({ etapa }: { etapa: { name: string } }) => <span>{etapa.name}</span>,
 }));
 // The real RecordTable, without the page shell.
 vi.mock("@/components/patterns/ListPage", async () => {
@@ -66,14 +66,14 @@ import { seedSessionUser } from "@/tests/helpers/session-user";
 
 import { TareasLista } from "./TareasLista";
 import { analiticoTaskRow } from "./fixtures/analitico-summary";
-import { DISENO, LISTA_TRAMOS } from "./fixtures/lista-tasks";
+import { DISENO, LISTA_ETAPAS } from "./fixtures/lista-tasks";
 import { TASK_DELETE_CONFIRM, TASK_DELETED_TOAST, TASK_DELETE_UNDO_MS, TASK_RESTORED_TOAST } from "./task-table-copy";
 
-const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, tramo: "diseno" };
+const QUERY: TareasQuery = { ...DEFAULT_TAREAS_QUERY, etapa: "diseno" };
 
 function renderLista() {
   const client = createTestQueryClient();
-  const page = { facets: { total: 3, byTramo: {}, projects: [] }, tramos: LISTA_TRAMOS, staff: [] };
+  const page = { facets: { total: 3, byEtapa: {}, projects: [] }, etapas: LISTA_ETAPAS, staff: [] };
   client.setQueryData(qk.tareas.page(tareasPageKeyInputOf(QUERY, "analitico")), page);
   client.setQueryData(qk.catalog.taskStatuses(), []);
   const rows = [
