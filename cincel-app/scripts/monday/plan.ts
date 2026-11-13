@@ -13,8 +13,8 @@
  *             paused project, or like another planned one), PROJECT_CODE_TAKEN,
  *             STATUS_UNMAPPED, TEMPLATE_COLLISION, TEMPLATE_INVALID,
  *             PROVIDER_SUBTYPE_MISSING, SCHEDULE_EXISTS, DRIVE_NOT_CONFIGURED
- *             (only with files on), TRAMO_MISSING (groups or items that
- *             resolve no tramo).
+ *             (only with files on), ETAPA_MISSING (groups or items that
+ *             resolve no etapa).
  *   Warnings  PERSON_UNMATCHED, RELATION_MISSING, DATES_MISSING, FILE_MISSING,
  *             STATUS_DEFAULTED (a status label with no saved or default
  *             target), PHASE_UNRESOLVED, CLIENT_MISSING,
@@ -114,7 +114,7 @@ export const BLOCKING_CODES = [
   "PROVIDER_SUBTYPE_MISSING",
   "SCHEDULE_EXISTS",
   "DRIVE_NOT_CONFIGURED",
-  "TRAMO_MISSING",
+  "ETAPA_MISSING",
 ] as const;
 
 export const WARNING_CODES = [
@@ -558,10 +558,10 @@ const PROJECT_STRATEGIES = new Set<BoardMapping["strategy"]>([
   "item_as_project",
 ]);
 
-/** [groupId, workflowId] of the board's groups mapped to a tramo. */
-function tramoTargetIds(bm: BoardMapping): [string, string][] {
+/** [groupId, workflowId] of the board's groups mapped to a etapa. */
+function etapaTargetIds(bm: BoardMapping): [string, string][] {
   return Object.entries(bm.groupTargets).flatMap(([groupId, t]) =>
-    t.kind === "tramo" ? [[groupId, t.workflowId] as [string, string]] : [],
+    t.kind === "etapa" ? [[groupId, t.workflowId] as [string, string]] : [],
   );
 }
 
@@ -691,7 +691,7 @@ export async function buildPlan(
     lookups.workflowIds(
       active.flatMap((b) => [
         ...(b.workflowId ? [b.workflowId] : []),
-        ...tramoTargetIds(b).map(([, id]) => id),
+        ...etapaTargetIds(b).map(([, id]) => id),
       ]),
     ),
   ]);
@@ -754,7 +754,7 @@ export async function buildPlan(
         boardId,
       );
     }
-    for (const [groupId, workflowId] of tramoTargetIds(bm)) {
+    for (const [groupId, workflowId] of etapaTargetIds(bm)) {
       if (!liveWorkflows.has(workflowId)) {
         add(
           "MAPPING_INVALID",
@@ -787,8 +787,8 @@ export async function buildPlan(
       contactBoard.set(p.client.externalId, p.source.boardId);
   }
 
-  // --- TRAMO_MISSING --------------------------------------------------------
-  // New tasks outside the admin group that neither their group nor the board place in a tramo.
+  // --- ETAPA_MISSING --------------------------------------------------------
+  // New tasks outside the admin group that neither their group nor the board place in a etapa.
   const unplaced = newTasks.filter((t) => t.kind !== "admin" && t.workflowId == null);
   for (const group of groupBy(unplaced, (t) =>
     pairKey(t.source.boardId, t.source.groupId ?? ""),
@@ -798,8 +798,8 @@ export async function buildPlan(
       ? `group "${t.source.groupTitle}"`
       : "the board";
     add(
-      "TRAMO_MISSING",
-      `${group.length} task${group.length === 1 ? " " : "s "}of ${where} resolve${group.length === 1 ? "s" : ""} no tramo; choose the board's tramo or a tramo for the group`,
+      "ETAPA_MISSING",
+      `${group.length} task${group.length === 1 ? " " : "s "}of ${where} resolve${group.length === 1 ? "s" : ""} no etapa; choose the board's etapa or a etapa for the group`,
       t.source.boardId,
     );
   }

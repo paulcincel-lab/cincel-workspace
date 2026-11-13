@@ -8,8 +8,8 @@ import {
   type MappingUpgradeLookups,
 } from "@/scripts/monday/mapping.schema";
 
-const TRAMO_DISENO = "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
-const TRAMO_OBRA = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+const ETAPA_DISENO = "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const ETAPA_OBRA = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const FASE_PLANOS = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 const FASE_RENDERS = "3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f";
 const FASE_ACABADOS_DISENO = "4d5e6f7a-8b9c-4d0e-9f2a-3b4c5d6e7f8a";
@@ -21,11 +21,11 @@ const AREA = "8b9c0d1e-2f3a-4b4c-9d6e-7f8a9b0c1d2e";
 function lookups(statusMap: MappingUpgradeLookups["statusMap"] = {}): MappingUpgradeLookups {
   return {
     phases: {
-      [FASE_PLANOS]: { workflowId: TRAMO_DISENO, name: "Planos" },
-      [FASE_RENDERS]: { workflowId: TRAMO_DISENO, name: "Renders" },
-      [FASE_ACABADOS_DISENO]: { workflowId: TRAMO_DISENO, name: "Acabados" },
-      [FASE_ACABADOS_OBRA]: { workflowId: TRAMO_OBRA, name: "Acabados" },
-      [FASE_CIMENTACION]: { workflowId: TRAMO_OBRA, name: "Cimentación" },
+      [FASE_PLANOS]: { workflowId: ETAPA_DISENO, name: "Planos" },
+      [FASE_RENDERS]: { workflowId: ETAPA_DISENO, name: "Renders" },
+      [FASE_ACABADOS_DISENO]: { workflowId: ETAPA_DISENO, name: "Acabados" },
+      [FASE_ACABADOS_OBRA]: { workflowId: ETAPA_OBRA, name: "Acabados" },
+      [FASE_CIMENTACION]: { workflowId: ETAPA_OBRA, name: "Cimentación" },
     },
     statusMap,
   };
@@ -75,7 +75,7 @@ function v1Board(overrides: Record<string, unknown> = {}) {
     name: "Casa Lomas",
     strategy: "board_as_project",
     areaId: AREA,
-    workflowId: TRAMO_DISENO,
+    workflowId: ETAPA_DISENO,
     columns: { name: "title", status: "status" },
     statusMaps: {},
     taskAreaSource: { kind: "group" },
@@ -93,7 +93,7 @@ function v1Mapping(boards: Record<string, unknown>[]) {
   };
 }
 
-function upgradeTargets(groupTargets: Record<string, unknown>, workflowId: string | null = TRAMO_DISENO) {
+function upgradeTargets(groupTargets: Record<string, unknown>, workflowId: string | null = ETAPA_DISENO) {
   const result = upgradeMappingV1(
     v1Mapping([v1Board({ groupTargets, workflowId })]),
     lookups(),
@@ -103,42 +103,42 @@ function upgradeTargets(groupTargets: Record<string, unknown>, workflowId: strin
 }
 
 describe("upgradeMappingV1: group kinds", () => {
-  it("stage → tramo", () => {
-    const { targets, notes } = upgradeTargets({ g: { kind: "stage", workflowId: TRAMO_OBRA } });
-    expect(targets.g).toEqual({ kind: "tramo", workflowId: TRAMO_OBRA });
+  it("stage → etapa", () => {
+    const { targets, notes } = upgradeTargets({ g: { kind: "stage", workflowId: ETAPA_OBRA } });
+    expect(targets.g).toEqual({ kind: "etapa", workflowId: ETAPA_OBRA });
     expect(notes).toEqual([]);
   });
 
-  it("workflow_phase → the fase of that name in the board's tramo", () => {
+  it("workflow_phase → the fase of that name in the board's etapa", () => {
     const { targets } = upgradeTargets({ g: { kind: "workflow_phase", phase: "acabados" } });
-    // "Acabados" exists in both tramos; the board's tramo decides.
+    // "Acabados" exists in both etapas; the board's etapa decides.
     expect(targets.g).toEqual({ kind: "phase", phaseId: FASE_ACABADOS_DISENO });
   });
 
-  it("workflow_phase without a fase of that name → the board's tramo", () => {
+  it("workflow_phase without a fase of that name → the board's etapa", () => {
     const { targets } = upgradeTargets({ g: { kind: "workflow_phase", phase: "Cimentación" } });
-    expect(targets.g).toEqual({ kind: "tramo", workflowId: TRAMO_DISENO });
+    expect(targets.g).toEqual({ kind: "etapa", workflowId: ETAPA_DISENO });
   });
 
-  it("workflow_phase on a board without tramo is dropped and reported", () => {
+  it("workflow_phase on a board without etapa is dropped and reported", () => {
     const { targets, notes } = upgradeTargets({ g: { kind: "workflow_phase", phase: "Planos" } }, null);
     expect(targets.g).toBeUndefined();
     expect(notes).toEqual([{ kind: "group_target_dropped", boardId: "100", groupId: "g", from: "workflow_phase" }]);
   });
 
-  it("phase → the fase named like the group when exactly one tramo has it (accents ignored)", () => {
+  it("phase → the fase named like the group when exactly one etapa has it (accents ignored)", () => {
     const { targets } = upgradeTargets({ g_cim: { kind: "phase" } });
     expect(targets.g_cim).toEqual({ kind: "phase", phaseId: FASE_CIMENTACION });
   });
 
-  it("phase with an ambiguous or unknown name → the board's tramo", () => {
+  it("phase with an ambiguous or unknown name → the board's etapa", () => {
     const { targets } = upgradeTargets({ g_acab: { kind: "phase" }, g_otro: { kind: "phase" }, g_gone: { kind: "phase" } });
-    expect(targets.g_acab).toEqual({ kind: "tramo", workflowId: TRAMO_DISENO });
-    expect(targets.g_otro).toEqual({ kind: "tramo", workflowId: TRAMO_DISENO });
-    expect(targets.g_gone).toEqual({ kind: "tramo", workflowId: TRAMO_DISENO });
+    expect(targets.g_acab).toEqual({ kind: "etapa", workflowId: ETAPA_DISENO });
+    expect(targets.g_otro).toEqual({ kind: "etapa", workflowId: ETAPA_DISENO });
+    expect(targets.g_gone).toEqual({ kind: "etapa", workflowId: ETAPA_DISENO });
   });
 
-  it("phase on a board without tramo and no unique fase is dropped and reported", () => {
+  it("phase on a board without etapa and no unique fase is dropped and reported", () => {
     const { targets, notes } = upgradeTargets({ g_otro: { kind: "phase" } }, null);
     expect(targets.g_otro).toBeUndefined();
     expect(notes).toEqual([{ kind: "group_target_dropped", boardId: "100", groupId: "g_otro", from: "phase" }]);
@@ -163,7 +163,7 @@ describe("upgradeMappingV1: mapping", () => {
     for (const removed of ["areaId", "taskAreaSource", "taskAreas", "statusMaps"]) {
       expect(board).not.toHaveProperty(removed);
     }
-    expect(board.workflowId).toBe(TRAMO_DISENO);
+    expect(board.workflowId).toBe(ETAPA_DISENO);
     expect(board.projectCode).toBe("CL-01");
     expect(mapping.people).toEqual({ "11": { action: "ignore" } });
     expect(mapping.options).toEqual({ includeUpdates: true, includeFiles: false });

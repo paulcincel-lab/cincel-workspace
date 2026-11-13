@@ -1,6 +1,6 @@
 /**
- * The groups table of Equivalencias and of Reacomodar importación: what each monday group becomes (a tramo, a
- * fase of a tramo, an espacio, its own project, tareas de administración or nothing) as select values and
+ * The groups table of Equivalencias and of Reacomodar importación: what each monday group becomes (a etapa, a
+ * fase of a etapa, an espacio, its own project, tareas de administración or nothing) as select values and
  * immutable mapping edits. The default shown is `resolveGroupTarget`, the one translate imports. Pure and
  * client-safe.
  */
@@ -18,18 +18,18 @@ import type { GroupTarget } from "@/scripts/monday/mapping.schema";
 import type { MondayBoardSource, MondayImportChoices } from "@/lib/types/monday-import";
 import type { BoardDraft } from "@/lib/monday-import/wizard-steps";
 
-/** One option of a group's select; `group` is the tramo name the fase options are grouped under. */
+/** One option of a group's select; `group` is the etapa name the fase options are grouped under. */
 export type GroupChoice = { value: string; label: string; group?: string };
 
 export function hasGroupTargets(board: BoardDraft): boolean {
   return GROUP_TARGET_STRATEGIES.has(board.strategy);
 }
 
-/** Select value of a target; the unresolved tramo has none (the select shows its placeholder). */
+/** Select value of a target; the unresolved etapa has none (the select shows its placeholder). */
 export function encodeGroupTarget(target: ResolvedGroupTarget): string {
   switch (target.kind) {
-    case "tramo":
-      return target.workflowId ? `tramo:${target.workflowId}` : "";
+    case "etapa":
+      return target.workflowId ? `etapa:${target.workflowId}` : "";
     case "phase":
       return `phase:${target.phaseId}`;
     default:
@@ -38,9 +38,10 @@ export function encodeGroupTarget(target: ResolvedGroupTarget): string {
 }
 
 export function decodeGroupTarget(value: string): GroupTarget | null {
-  if (value.startsWith("tramo:")) {
-    const workflowId = value.slice("tramo:".length).trim();
-    return workflowId ? { kind: "tramo", workflowId } : null;
+  // Compatibility: `tramo:<id>` is the old spelling of `etapa:<id>`.
+  if (value.startsWith("etapa:") || value.startsWith("tramo:")) {
+    const workflowId = value.slice("etapa:".length).trim();
+    return workflowId ? { kind: "etapa", workflowId } : null;
   }
   if (value.startsWith("phase:")) {
     const phaseId = value.slice("phase:".length).trim();
@@ -60,8 +61,8 @@ export function currentGroupTarget(
 }
 
 /**
- * The options of one group's select (FE §4.6 item 1), in this order: every tramo, every active fase grouped by
- * tramo, an espacio, its own project (board_as_project only), tareas de administración, and ignore.
+ * The options of one group's select (FE §4.6 item 1), in this order: every etapa, every active fase grouped by
+ * etapa, an espacio, its own project (board_as_project only), tareas de administración, and ignore.
  */
 export function groupTargetChoices(
   board: BoardDraft,
@@ -70,9 +71,9 @@ export function groupTargetChoices(
 ): GroupChoice[] {
   const kinds = groupTargetKinds(board.strategy);
   const out: GroupChoice[] = [];
-  if (kinds.includes("tramo")) {
+  if (kinds.includes("etapa")) {
     for (const workflow of choices.workflows) {
-      out.push({ value: `tramo:${workflow.id}`, label: `Etapa «${workflow.name}»` });
+      out.push({ value: `etapa:${workflow.id}`, label: `Etapa «${workflow.name}»` });
     }
   }
   if (kinds.includes("phase")) {
@@ -110,7 +111,7 @@ export function setGroupTarget(board: BoardDraft, groupId: string, target: Group
 
 /**
  * Saved targets that no longer apply go back to the default: `phase` targets whose fase is inactive or gone,
- * `tramo` targets whose tramo is gone, and, when the export is given, targets of groups no longer in it.
+ * `etapa` targets whose etapa is gone, and, when the export is given, targets of groups no longer in it.
  */
 export function pruneGroupTargets(
   board: BoardDraft,

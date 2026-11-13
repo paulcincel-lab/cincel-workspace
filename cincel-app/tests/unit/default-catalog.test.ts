@@ -139,7 +139,7 @@ describe.skipIf(!url)("ensureDefaultCatalog (test DB)", () => {
   /** Empties the catalog tables and creates the default workflows (all rolled back). */
   async function freshInstall(tx: postgres.TransactionSql) {
     await tx`delete from core.tasks where workflow_id is not null`;
-    await tx`delete from core.tramo_start_batches`;
+    await tx`delete from core.etapa_start_batches`;
     await tx`delete from core.workflow_task_templates`;
     await tx`delete from core.position_phases`;
     await tx`delete from core.workflow_phases`;

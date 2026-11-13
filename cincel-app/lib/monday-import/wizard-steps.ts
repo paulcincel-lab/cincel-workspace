@@ -233,19 +233,19 @@ export function setRecordEntry(
 }
 
 /**
- * Sets "Tramo del tablero". Template matches stay when their tramo is still one the board's tasks can land in (the
- * new tramo, or a tramo or fase a group is mapped to); group fases no longer in the catalog go back to the default.
+ * Sets "Etapa del tablero". Template matches stay when their etapa is still one the board's tasks can land in (the
+ * new etapa, or a etapa or fase a group is mapped to); group fases no longer in the catalog go back to the default.
  */
 export function setBoardWorkflow(board: BoardDraft, workflowId: string | null, choices: MondayImportChoices): BoardDraft {
-  const tramos = new Set<string>(workflowId ? [workflowId] : []);
+  const etapas = new Set<string>(workflowId ? [workflowId] : []);
   for (const target of Object.values(board.groupTargets ?? {})) {
-    if (target.kind === "tramo") tramos.add(target.workflowId);
+    if (target.kind === "etapa") etapas.add(target.workflowId);
     if (target.kind === "phase") {
-      const tramo = choices.workflows.find((w) => w.phases.some((p) => p.id === target.phaseId));
-      if (tramo) tramos.add(tramo.id);
+      const etapa = choices.workflows.find((w) => w.phases.some((p) => p.id === target.phaseId));
+      if (etapa) etapas.add(etapa.id);
     }
   }
-  const allowed = new Set(choices.templates.filter((t) => tramos.has(t.workflowId)).map((t) => t.id));
+  const allowed = new Set(choices.templates.filter((t) => etapas.has(t.workflowId)).map((t) => t.id));
   const templateMatches = Object.fromEntries(
     Object.entries(board.templateMatches ?? {}).filter(([, templateId]) => allowed.has(templateId)),
   );

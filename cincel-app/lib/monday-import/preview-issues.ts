@@ -24,7 +24,7 @@ export const ISSUE_FIX_STEP: Record<PlanIssueCode, MondayImportStep> = {
   RELATION_MISSING: "equivalencias",
   DATES_MISSING: "equivalencias",
   FILE_MISSING: "opciones",
-  TRAMO_MISSING: "equivalencias",
+  ETAPA_MISSING: "equivalencias",
   PHASE_UNRESOLVED: "equivalencias",
   CLIENT_MISSING: "equivalencias",
   ADMIN_ASSIGNEE_CLEARED: "equivalencias",
@@ -90,7 +90,7 @@ export function issueText(code: PlanIssueCode, message: string): string {
       return `${named(name, "Un elemento")} no tiene línea de tiempo; no entra al cronograma.`;
     case "FILE_MISSING":
       return `El archivo ${named(name, "de un elemento")} no se descargó; no se importa. Exporta otra vez o apaga los archivos en Opciones.`;
-    case "TRAMO_MISSING":
+    case "ETAPA_MISSING":
       return "Elige una etapa: hay tareas de este tablero sin etapa. Elige la Etapa del tablero o una etapa para su grupo.";
     case "PHASE_UNRESOLVED":
       return `${named(name, "Una tarea")} no coincide con ninguna fase; se importa sin fase para revisarla.`;

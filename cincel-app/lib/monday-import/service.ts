@@ -127,7 +127,7 @@ export interface WizardDeps {
   planLookups?: (db: ImportDb) => PlanLookups;
   /** The saved firm-wide status map; `readSavedStatusMap` (app_settings) by default. */
   savedStatusMap?: (db: ImportDb) => Promise<MondayStatusMap>;
-  /** Puestos with candidate fases and the fase and tramo names, for the puesto suggestion; the DB ones by default. */
+  /** Puestos with candidate fases and the fase and etapa names, for the puesto suggestion; the DB ones by default. */
   positionCatalog?: (db: ImportDb) => Promise<PositionSuggestionCatalog>;
   /** The fases and saved status map a v1 draft is upgraded with; `upgradeDbLookups` by default. */
   upgradeLookups?: (db: ImportDb) => Promise<MappingUpgradeLookups>;
@@ -586,7 +586,7 @@ export async function getExportSource(runId: string, deps: WizardDeps): Promise<
   };
 }
 
-/** The Cincel side of every Equivalencias select (project flow FE §7.8): tramos with fases, puestos, saved status map. */
+/** The Cincel side of every Equivalencias select (project flow FE §7.8): etapas with fases, puestos, saved status map. */
 export async function getImportChoices(db: ImportDb): Promise<MondayImportChoices> {
   const [statusRows, workflowRows, phaseRows, templateRows, positionRows, positionPhaseRows, clientRows, staffRows, statusMap] =
     await Promise.all([
@@ -863,7 +863,7 @@ export async function previewImport(runId: string, importedById: string, deps: W
 // Puesto suggestion for "Crear integrante" (project flow BE §10.8)
 // ---------------------------------------------------------------------------
 
-/** Live, active puestos with their candidate fases, and the fase and tramo names the suggestion shows. */
+/** Live, active puestos with their candidate fases, and the fase and etapa names the suggestion shows. */
 export async function suggestionCatalog(db: ImportDb): Promise<PositionSuggestionCatalog> {
   const [positionRows, candidateRows, phaseRows, workflowRows] = await Promise.all([
     db

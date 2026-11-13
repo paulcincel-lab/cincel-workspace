@@ -97,8 +97,8 @@ const group = (title: string, id = "g") => ({ id, title });
 
 describe("groupTargetKinds", () => {
   it("offers the six kinds on board_as_project and all but project on item_as_project", () => {
-    expect(groupTargetKinds("board_as_project")).toEqual(["tramo", "phase", "space", "project", "admin", "ignore"]);
-    expect(groupTargetKinds("item_as_project")).toEqual(["tramo", "phase", "space", "admin", "ignore"]);
+    expect(groupTargetKinds("board_as_project")).toEqual(["etapa", "phase", "space", "project", "admin", "ignore"]);
+    expect(groupTargetKinds("item_as_project")).toEqual(["etapa", "phase", "space", "admin", "ignore"]);
     expect(groupTargetKinds("group_as_project")).toEqual([]);
     expect(groupTargetKinds("crm_contacts")).toEqual([]);
     expect(groupTargetKinds("skip")).toEqual([]);
@@ -111,8 +111,8 @@ describe("resolveGroupTarget defaults", () => {
       const b = (overrides: Partial<BoardDraft> = {}) => board({ strategy, ...overrides });
 
       it("a title equal to a etapa name (case and accents aside) → that etapa", () => {
-        expect(resolveGroupTarget(b(), group("CONSTRUCCION"), choices)).toEqual({ kind: "tramo", workflowId: OBRA });
-        expect(resolveGroupTarget(b(), group(" diseno "), choices)).toEqual({ kind: "tramo", workflowId: DISENO });
+        expect(resolveGroupTarget(b(), group("CONSTRUCCION"), choices)).toEqual({ kind: "etapa", workflowId: OBRA });
+        expect(resolveGroupTarget(b(), group(" diseno "), choices)).toEqual({ kind: "etapa", workflowId: DISENO });
       });
 
       it("a fase of the board's etapa → that fase, even when other etapas have one of that name", () => {
@@ -126,7 +126,7 @@ describe("resolveGroupTarget defaults", () => {
 
       it("a fase name shared by several other etapas falls back to the board's etapa", () => {
         const onObra = b({ workflowId: OBRA });
-        expect(resolveGroupTarget(onObra, group("Minutas"), choices)).toEqual({ kind: "tramo", workflowId: OBRA });
+        expect(resolveGroupTarget(onObra, group("Minutas"), choices)).toEqual({ kind: "etapa", workflowId: OBRA });
       });
 
       it("“Administrativo” → tareas de administración", () => {
@@ -134,9 +134,9 @@ describe("resolveGroupTarget defaults", () => {
       });
 
       it("anything else → the board's etapa, or the unresolved etapa without one", () => {
-        expect(resolveGroupTarget(b(), group("Extras"), choices)).toEqual({ kind: "tramo", workflowId: DISENO });
+        expect(resolveGroupTarget(b(), group("Extras"), choices)).toEqual({ kind: "etapa", workflowId: DISENO });
         expect(resolveGroupTarget(b({ workflowId: null }), group("Extras"), choices)).toEqual({
-          kind: "tramo",
+          kind: "etapa",
           workflowId: null,
         });
       });
@@ -149,7 +149,7 @@ describe("resolveGroupTarget defaults", () => {
           ),
         } as MondayImportChoices;
         expect(resolveGroupTarget(b(), group("Residencia"), withInactive)).toEqual({
-          kind: "tramo",
+          kind: "etapa",
           workflowId: DISENO,
         });
       });
@@ -159,9 +159,9 @@ describe("resolveGroupTarget defaults", () => {
           kind: "ignore",
         });
         const gone = b({ groupTargets: { g: { kind: "phase", phaseId: "a9000000-0000-4000-8000-000000000009" } } });
-        expect(resolveGroupTarget(gone, group("Extras"), choices)).toEqual({ kind: "tramo", workflowId: DISENO });
+        expect(resolveGroupTarget(gone, group("Extras"), choices)).toEqual({ kind: "etapa", workflowId: DISENO });
         const ownProject = resolveGroupTarget(b({ groupTargets: { g: { kind: "project" } } }), group("Extras"), choices);
-        expect(ownProject).toEqual(strategy === "board_as_project" ? { kind: "project" } : { kind: "tramo", workflowId: DISENO });
+        expect(ownProject).toEqual(strategy === "board_as_project" ? { kind: "project" } : { kind: "etapa", workflowId: DISENO });
       });
     });
   }
@@ -169,8 +169,8 @@ describe("resolveGroupTarget defaults", () => {
 
 describe("groupPlacement", () => {
   it("places a group's tasks per target", () => {
-    expect(groupPlacement({ kind: "tramo", workflowId: OBRA }, group("x"))).toEqual({ workflowId: OBRA });
-    expect(groupPlacement({ kind: "tramo", workflowId: null }, group("x"))).toEqual({});
+    expect(groupPlacement({ kind: "etapa", workflowId: OBRA }, group("x"))).toEqual({ workflowId: OBRA });
+    expect(groupPlacement({ kind: "etapa", workflowId: null }, group("x"))).toEqual({});
     expect(groupPlacement({ kind: "phase", phaseId: RESID }, group("x"), choices)).toEqual({
       workflowId: OBRA,
       phaseId: RESID,
@@ -198,7 +198,7 @@ describe("groupPlacement", () => {
 describe("group target encoding", () => {
   it("round-trips all six kinds", () => {
     const targets: GroupTarget[] = [
-      { kind: "tramo", workflowId: OBRA },
+      { kind: "etapa", workflowId: OBRA },
       { kind: "phase", phaseId: RESID },
       { kind: "space" },
       { kind: "project" },
@@ -206,7 +206,7 @@ describe("group target encoding", () => {
       { kind: "ignore" },
     ];
     expect(targets.map((t) => encodeGroupTarget(t))).toEqual([
-      `tramo:${OBRA}`,
+      `etapa:${OBRA}`,
       `phase:${RESID}`,
       "space",
       "project",
@@ -216,10 +216,15 @@ describe("group target encoding", () => {
     for (const target of targets) expect(decodeGroupTarget(encodeGroupTarget(target))).toEqual(target);
   });
 
-  it("rejects empty ids, removed kinds and unknown values", () => {
-    expect(encodeGroupTarget({ kind: "tramo", workflowId: null })).toBe("");
-    expect(decodeGroupTarget("")).toBeNull();
+  it("reads the old `tramo:<id>` select value as `etapa:<id>`", () => {
+    expect(decodeGroupTarget(`tramo:${OBRA}`)).toEqual({ kind: "etapa", workflowId: OBRA });
     expect(decodeGroupTarget("tramo:")).toBeNull();
+  });
+
+  it("rejects empty ids, removed kinds and unknown values", () => {
+    expect(encodeGroupTarget({ kind: "etapa", workflowId: null })).toBe("");
+    expect(decodeGroupTarget("")).toBeNull();
+    expect(decodeGroupTarget("etapa:")).toBeNull();
     expect(decodeGroupTarget("phase: ")).toBeNull();
     expect(decodeGroupTarget("workflow_phase:Anteproyecto")).toBeNull();
     expect(decodeGroupTarget(`stage:${OBRA}`)).toBeNull();
@@ -230,9 +235,9 @@ describe("group target encoding", () => {
 describe("group target choices", () => {
   it("offers etapas, fases by etapa, espacio, proyecto aparte, administración and ignorar", () => {
     expect(groupTargetChoices(board(), source.groups[1], choices)).toEqual([
-      { value: `tramo:${PRESALE}`, label: "Etapa «Presale»" },
-      { value: `tramo:${DISENO}`, label: "Etapa «Diseño»" },
-      { value: `tramo:${OBRA}`, label: "Etapa «Construcción»" },
+      { value: `etapa:${PRESALE}`, label: "Etapa «Presale»" },
+      { value: `etapa:${DISENO}`, label: "Etapa «Diseño»" },
+      { value: `etapa:${OBRA}`, label: "Etapa «Construcción»" },
       { value: `phase:${MINUTAS_P}`, label: "Fase «Minutas» · Presale", group: "Presale" },
       { value: `phase:${ANTE}`, label: "Fase «Anteproyecto» · Diseño", group: "Diseño" },
       { value: `phase:${EJEC}`, label: "Fase «Ejecutivo» · Diseño", group: "Diseño" },
@@ -260,7 +265,7 @@ describe("group target choices", () => {
 describe("pruneGroupTargets", () => {
   it("keeps a board whose targets all still apply", () => {
     const draft = board({
-      groupTargets: { g_ante: { kind: "phase", phaseId: ANTE }, g_extra: { kind: "tramo", workflowId: OBRA } },
+      groupTargets: { g_ante: { kind: "phase", phaseId: ANTE }, g_extra: { kind: "etapa", workflowId: OBRA } },
     });
     expect(pruneGroupTargets(draft, choices, source)).toBe(draft);
   });
@@ -283,7 +288,7 @@ describe("pruneGroupTargets", () => {
     const draft = board({
       groupTargets: {
         g_ante: { kind: "phase", phaseId: ANTE },
-        g_extra: { kind: "tramo", workflowId: "55555555-5555-4555-8555-555555555555" },
+        g_extra: { kind: "etapa", workflowId: "55555555-5555-4555-8555-555555555555" },
         g_keep: { kind: "phase", phaseId: RESID },
       },
     });

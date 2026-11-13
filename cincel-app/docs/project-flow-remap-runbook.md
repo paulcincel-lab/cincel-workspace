@@ -1,7 +1,7 @@
 # Project flow: one-time remap of the imported projects
 
 One run of this runbook re-sorts the projects imported from monday before the
-project flow (Madrid 22, Guadalajara 83, Local Espiropapa) onto tramos, fases,
+project flow (Madrid 22, Guadalajara 83, Local Espiropapa) onto etapas, fases,
 espacios and administrative tasks. It is the "Ops" step between release A and
 release B of `docs/specs/project-flow/backend.md` §4, with the rules of §11.2,
 and it must be done and recorded before the Phase 5 drops (0025) ship.
@@ -78,7 +78,7 @@ Madrid 22 must show 210. Keep the output: the totals must match after apply.
 ```bash
 npm run monday -- remap \
   --projects "Madrid 22,Guadalajara 83,Local Espiropapa" \
-  --target "Obra=tramo:construccion" \
+  --target "Obra=etapa:construccion" \
   2>&1 | tee remap-preflight.txt
 ```
 
@@ -96,10 +96,10 @@ Check before going on:
   `export_path`, and run the pre-flight again. Do not apply until every board
   has a source.
 - Each preview's total equals the live count of step 2.
-- Madrid 22's preview: Presale and Diseño groups → their tramo, Proyecto
+- Madrid 22's preview: Presale and Diseño groups → their etapa, Proyecto
   Ejecutivo → Diseño · Ejecutivo, Administrativo → Tareas de administración,
-  Obra → tramo Construcción.
-- No blocking issue (`PROJECT_NAME_TAKEN`, `TRAMO_MISSING`). Fix the cause in
+  Obra → etapa Construcción.
+- No blocking issue (`PROJECT_NAME_TAKEN`, `ETAPA_MISSING`). Fix the cause in
   the app and repeat the pre-flight.
 
 Post `remap-preflight.txt` as a comment on the remap issue.
@@ -109,7 +109,7 @@ Post `remap-preflight.txt` as a comment on the remap issue.
 ```bash
 npm run monday -- remap \
   --projects "Madrid 22,Guadalajara 83,Local Espiropapa" \
-  --target "Obra=tramo:construccion" \
+  --target "Obra=etapa:construccion" \
   --apply --by oscar@cincel.mx \
   2>&1 | tee remap-apply.txt
 ```
@@ -120,7 +120,7 @@ Post `remap-apply.txt` as a comment on the remap issue.
 
 Run the counts of step 2 again: the totals are unchanged (Madrid 22: 210).
 
-Tramos of Madrid 22, in order, and the current one:
+Etapas of Madrid 22, in order, and the current one:
 
 ```sql
 select w.name, w.sort_order, ps.started_at, ps.closed_at,
@@ -135,7 +135,7 @@ order by w.sort_order;
 Expected: Presale, Diseño, Construcción, with Construcción current.
 
 In the app (as an admin), open each of the three projects: the tasks sit
-under their tramo and fase, the administrative ones only show for admins,
+under their etapa and fase, the administrative ones only show for admins,
 and the project has the comment "Reacomodar importación: {n} tareas.".
 
 Run the apply of step 4 once more: every project must report 0 changed

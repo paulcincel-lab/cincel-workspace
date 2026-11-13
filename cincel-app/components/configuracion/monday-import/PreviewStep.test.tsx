@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 /**
  * Vista previa problems in Spanish with a "Corregir" link to where each gets fixed (#679); warnings grouped by
- * code with counts and sample details with tramo, fase and espacio (project flow §4.9).
+ * code with counts and sample details with etapa, fase and espacio (project flow §4.9).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -93,7 +93,7 @@ const baseCincel: MondayPreviewSample["cincel"] = {
   customStatus: null,
   priority: null,
   manager: null,
-  tramo: null,
+  etapa: null,
   phase: null,
   phaseReview: false,
   space: null,
@@ -209,7 +209,7 @@ describe("PreviewStep", () => {
           name: "Casa Nido",
           strategy: "board_as_project",
           counts: zero,
-          samples: [taskSample({ title: "Muros", tramo: "Diseño", phase: "Ejecutivo", space: "Depto 201" })],
+          samples: [taskSample({ title: "Muros", etapa: "Diseño", phase: "Ejecutivo", space: "Depto 201" })],
         },
       ],
     };
@@ -221,9 +221,9 @@ describe("PreviewStep", () => {
   });
 
   it("says Administración for admin tasks and flags tasks without fase", () => {
-    expect(sampleDetails(taskSample({ admin: true, tramo: null }))).toContain("Administración");
-    expect(sampleDetails(taskSample({ admin: true, tramo: null }))).not.toContain("Etapa · Fase");
-    expect(sampleDetails(taskSample({ tramo: "Diseño", phase: null, phaseReview: true }))).toContain(
+    expect(sampleDetails(taskSample({ admin: true, etapa: null }))).toContain("Administración");
+    expect(sampleDetails(taskSample({ admin: true, etapa: null }))).not.toContain("Etapa · Fase");
+    expect(sampleDetails(taskSample({ etapa: "Diseño", phase: null, phaseReview: true }))).toContain(
       "Etapa · Fase: Diseño · Sin fase · revisar",
     );
   });

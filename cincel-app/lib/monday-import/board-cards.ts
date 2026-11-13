@@ -59,15 +59,15 @@ export function initials(name: string): string {
   return letters.join("").toUpperCase();
 }
 
-/** Strategies whose items become tasks, which need a tramo. */
+/** Strategies whose items become tasks, which need a etapa. */
 const TASK_STRATEGIES = new Set<BoardStrategy>(["board_as_project", "group_as_project", "item_as_project"]);
 
 /**
- * Whether some of the board's tasks resolve no tramo (TRAMO_MISSING): the board has no "Tramo del tablero" and a
- * group with items (or an item outside any group) isn't placed in a tramo or fase by its target. Without `choices`
+ * Whether some of the board's tasks resolve no etapa (ETAPA_MISSING): the board has no "Etapa del tablero" and a
+ * group with items (or an item outside any group) isn't placed in a etapa or fase by its target. Without `choices`
  * only the groups' own targets count; with them, the defaults by name count too. Admin and ignored groups need none.
  */
-export function needsBoardTramo(
+export function needsBoardEtapa(
   board: BoardDraft,
   source: MondayBoardSource,
   choices: Pick<MondayImportChoices, "workflows"> | null = null,
@@ -81,15 +81,15 @@ export function needsBoardTramo(
     if (!withItems.has(group.id)) return false;
     const target = choices
       ? resolveGroupTarget(board, group, choices)
-      : (board.groupTargets?.[group.id] ?? { kind: "tramo" as const, workflowId: null });
-    if (target.kind === "tramo") return !target.workflowId;
+      : (board.groupTargets?.[group.id] ?? { kind: "etapa" as const, workflowId: null });
+    if (target.kind === "etapa") return !target.workflowId;
     return target.kind === "space" || target.kind === "project";
   });
 }
 
 /**
- * The problems of one board's mapping: schema errors, "Elige un tramo." (blocking) when some of its tasks resolve no
- * tramo, "{n} tareas sin fase." (warning) from the Vista previa, and the preview's other blocking issues of the board.
+ * The problems of one board's mapping: schema errors, "Elige un etapa." (blocking) when some of its tasks resolve no
+ * etapa, "{n} tareas sin fase." (warning) from the Vista previa, and the preview's other blocking issues of the board.
  * A missing client is no longer a problem (the project gets "Asignar cliente y origen").
  */
 export function boardProblems(
@@ -108,15 +108,15 @@ export function boardProblems(
   const problems = validateMapping(mapping)
     .filter((issue) => issue === prefix || issue.startsWith(`${prefix}.`) || issue.startsWith(`${prefix}:`))
     .map((issue) => issue.slice(prefix.length).replace(/^[.:]\s*/, ""));
-  const tramoMissing = needsBoardTramo(board, source, choices);
-  if (tramoMissing) problems.push("Elige una etapa.");
+  const etapaMissing = needsBoardEtapa(board, source, choices);
+  if (etapaMissing) problems.push("Elige una etapa.");
   const withoutPhase = (preview?.issues ?? []).filter(
     (issue) => issue.code === "PHASE_UNRESOLVED" && issue.boardId === boardId,
   ).length;
   if (withoutPhase > 0) problems.push(withoutPhase === 1 ? "1 tarea sin fase." : `${withoutPhase} tareas sin fase.`);
   for (const issue of preview?.issues ?? []) {
     if (!issue.blocking || issue.boardId !== boardId) continue;
-    if (tramoMissing && issue.code === "TRAMO_MISSING") continue;
+    if (etapaMissing && issue.code === "ETAPA_MISSING") continue;
     if (!problems.includes(issue.message)) problems.push(issue.message);
   }
   return problems;
@@ -194,7 +194,7 @@ export function buildBoardCards({
   source: MondayExportSource | null;
   preview: MondayPreview | null;
   reviewed: ReadonlySet<string>;
-  /** The catalog, so a group named like a tramo or fase counts as placed. */
+  /** The catalog, so a group named like a etapa or fase counts as placed. */
   choices?: Pick<MondayImportChoices, "workflows"> | null;
 }): BoardCard[] {
   const base: Pick<BoardCard, "id" | "name" | "workspaceId" | "workspaceName" | "itemCount">[] = [

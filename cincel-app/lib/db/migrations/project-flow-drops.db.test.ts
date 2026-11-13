@@ -3,7 +3,7 @@
  * 0025 (BE §4.3, §16) on two scratch databases:
  *   - a fresh one, every migration in the journal applied in order;
  *   - a dev-like one migrated to 0022, filled with pre-project-flow data (free-text fases,
- *     an área with a member and a tramo, an area group mapping, projects.phases), then 0023 + 0024,
+ *     an área with a member and a etapa, an area group mapping, projects.phases), then 0023 + 0024,
  *     then rows written by release A, then 0025.
  * Runs only when TEST_DATABASE_URL points at a Postgres whose user may create databases.
  */

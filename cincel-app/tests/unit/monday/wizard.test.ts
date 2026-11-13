@@ -343,7 +343,7 @@ describe("monday wizard draft and preview", () => {
     expect(mapping.version).toBe(2);
     const board = mapping.boards.find((b) => b.mondayBoardId === "901")!;
     expect(board.groupTargets).toEqual({
-      g_obra: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
+      g_obra: { kind: "etapa", workflowId: FIXTURE_WORKFLOW },
       g_diseno: { kind: "phase", phaseId: FASE_DISENO },
     });
     expect(board).not.toHaveProperty("areaId");
@@ -411,7 +411,7 @@ describe("monday wizard draft and preview", () => {
     const casaNido = preview.boards[0];
     expect(casaNido.samples.filter((s) => s.entity === "tarea").length).toBeLessThanOrEqual(5);
     expect(casaNido.samples.map((s) => s.mondayName)).toEqual(["Casa Nido", "Muros", "Planos", "Limpieza"]);
-    // A board-as-project shows the project it makes ahead of its tasks (#678); a project has tramos, not fases.
+    // A board-as-project shows the project it makes ahead of its tasks (#678); a project has etapas, not fases.
     expect(casaNido.samples[0]).toMatchObject({ entity: "proyecto", cincel: { title: "Casa Nido", phase: null } });
     expect(casaNido.samples[1]).toMatchObject({ entity: "tarea", cincel: { project: "Casa Nido", admin: false } });
     expect(preview.boards[2].samples[0]).toMatchObject({ entity: "proyecto", mondayName: "Casa Mar" });
@@ -444,17 +444,17 @@ describe("monday wizard draft and preview", () => {
 // ---------------------------------------------------------------------------
 
 describe("monday wizard puesto suggestion", () => {
-  const TRAMO = "66666666-6666-4666-8666-666666666661";
+  const ETAPA = "66666666-6666-4666-8666-666666666661";
   const FASE_OBRA = "66666666-6666-4666-8666-666666666662";
   const FASE_DISENO = "66666666-6666-4666-8666-666666666663";
 
-  /** nestedMapping as a v2 draft: every task board in one tramo, Casa Nido's groups on its two fases. */
+  /** nestedMapping as a v2 draft: every task board in one etapa, Casa Nido's groups on its two fases. */
   function flowMapping(): MappingInput {
     const raw = JSON.parse(JSON.stringify(nestedMapping(ANA, CLIENT))) as MappingInput;
     const boards = raw.boards.map((board) => {
       const out = { ...board } as Record<string, unknown>;
       for (const key of ["statusMaps", "areaId", "taskAreaSource", "taskAreas"]) delete out[key];
-      return (board.strategy === "crm_contacts" ? out : { ...out, workflowId: TRAMO }) as MappingInput["boards"][number];
+      return (board.strategy === "crm_contacts" ? out : { ...out, workflowId: ETAPA }) as MappingInput["boards"][number];
     });
     boards[0] = {
       ...boards[0],
@@ -469,10 +469,10 @@ describe("monday wizard puesto suggestion", () => {
     translateLookups: async () => ({
       ...(await planLookups.translateLookups()),
       phases: {
-        [FASE_DISENO]: { workflowId: TRAMO, name: "Diseño", sortOrder: 1 },
-        [FASE_OBRA]: { workflowId: TRAMO, name: "Obra", sortOrder: 2 },
+        [FASE_DISENO]: { workflowId: ETAPA, name: "Diseño", sortOrder: 1 },
+        [FASE_OBRA]: { workflowId: ETAPA, name: "Obra", sortOrder: 2 },
       },
-      workflows: { [TRAMO]: { name: "Proyecto", sortOrder: 1 } },
+      workflows: { [ETAPA]: { name: "Proyecto", sortOrder: 1 } },
     }),
   };
 
@@ -488,10 +488,10 @@ describe("monday wizard puesto suggestion", () => {
         { id: "p-res", name: "Residente de obra", sortOrder: 2, phaseIds: [FASE_OBRA] },
       ],
       phases: {
-        [FASE_DISENO]: { workflowId: TRAMO, name: "Diseño", sortOrder: 1 },
-        [FASE_OBRA]: { workflowId: TRAMO, name: "Obra", sortOrder: 2 },
+        [FASE_DISENO]: { workflowId: ETAPA, name: "Diseño", sortOrder: 1 },
+        [FASE_OBRA]: { workflowId: ETAPA, name: "Obra", sortOrder: 2 },
       },
-      workflows: { [TRAMO]: { name: "Proyecto", sortOrder: 1 } },
+      workflows: { [ETAPA]: { name: "Proyecto", sortOrder: 1 } },
     }),
   });
 

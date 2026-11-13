@@ -164,8 +164,8 @@ function nestedMapping(): MappingInput {
         client: { kind: "contact", contactId: CLIENT },
         workflowId: FIXTURE_WORKFLOW,
         groupTargets: {
-          g_obra: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
-          g_diseno: { kind: "tramo", workflowId: FIXTURE_WORKFLOW },
+          g_obra: { kind: "etapa", workflowId: FIXTURE_WORKFLOW },
+          g_diseno: { kind: "etapa", workflowId: FIXTURE_WORKFLOW },
         },
         columns: {
           name: "title",

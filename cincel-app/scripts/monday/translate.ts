@@ -12,7 +12,7 @@
  * already exist in Cincel by id; `apply` turns keys into ids as it inserts.
  *
  * Covers contacts, projects, groups, tasks, status, priority, people, dates,
- * notes, dependencies, tramos, fases, espacios, admin tasks and project
+ * notes, dependencies, etapas, fases, espacios, admin tasks and project
  * rollups; subitems (checklist or child tasks), updates → comments, files →
  * planned uploads, `import_refs.data` and cronograma rows (BE §5.2, §6.1).
  */
@@ -86,15 +86,15 @@ export interface CincelLookups {
    * names of `customStatuses` are used.
    */
   statuses?: Record<string, string>;
-  /** core.workflow_phases (live), by id: the fases of each tramo. `active: false` fases are not matched. */
+  /** core.workflow_phases (live), by id: the fases of each etapa. `active: false` fases are not matched. */
   phases: Record<string, { workflowId: string; name: string; key?: string | null; sortOrder: number; active?: boolean }>;
   /** core.workflow_task_templates (active), by id, with the fase each one belongs to. */
   templates: Record<string, { workflowId: string; phaseId?: string | null }>;
   /** core.staff, by id; `admin` marks access role "Administrador" (the only assignees of admin tasks). */
   staff: Record<string, { name: string; admin?: boolean }>;
-  /** core.workflows (tramos, not deleted), by id: names for the Vista previa and `sortOrder` for the current tramo. */
+  /** core.workflows (etapas, not deleted), by id: names for the Vista previa and `sortOrder` for the current etapa. */
   workflows?: Record<string, { name: string; sortOrder?: number }>;
-  /** Titles of the active workflow_task_templates, by id: template matching by title within the task's tramo. */
+  /** Titles of the active workflow_task_templates, by id: template matching by title within the task's etapa. */
   templateTitles?: Record<string, string>;
   /**
    * The saved firm-wide status map (app_settings `monday.status_map`). When absent the mapping's snapshot
@@ -153,7 +153,7 @@ export interface ImportRefData {
   path?: string[];
   /** Projects: the workflow of a `project_stages` row the import wrote (rollback owns that row). */
   stageWorkflowId?: string;
-  /** Projects: the tramos of the `project_stages` rows the import writes, one per tramo with tasks. */
+  /** Projects: the etapas of the `project_stages` rows the import writes, one per etapa with tasks. */
   stageWorkflowIds?: string[];
 }
 
@@ -199,11 +199,11 @@ export interface PlannedProject {
   progress: number;
   startDate: string | null;
   endDate: string | null;
-  /** "Tramo del tablero": the board's tramo; null when none. */
+  /** "Etapa del tablero": the board's etapa; null when none. */
   workflowId: string | null;
-  /** The distinct tramos of the project's tasks, by tramo `sortOrder`: one `project_stages` row each. */
-  tramos: string[];
-  /** `current_workflow_id`: the highest tramo with tasks, else the board's tramo. */
+  /** The distinct etapas of the project's tasks, by etapa `sortOrder`: one `project_stages` row each. */
+  etapas: string[];
+  /** `current_workflow_id`: the highest etapa with tasks, else the board's etapa. */
   currentWorkflowId: string | null;
   source: RowSource;
   data: ImportRefData;
@@ -225,7 +225,7 @@ export interface PlannedTask {
   /** `tasks.system_key`: "assign_client" for the task a project without a client gets; null otherwise. */
   systemKey: string | null;
   templateId: string | null;
-  /** The task's tramo; null for admin tasks and when no tramo resolves. */
+  /** The task's etapa; null for admin tasks and when no etapa resolves. */
   workflowId: string | null;
   /** The task's fase; null when unresolved (`phaseReview`) and for admin tasks. */
   phaseId: string | null;
@@ -560,7 +560,7 @@ function escapeRegExp(text: string): string {
 }
 
 /**
- * The fase of a tramo whose name the task title contains as a whole word, compared by `nameKey` (BE §10.3 rule
+ * The fase of a etapa whose name the task title contains as a whole word, compared by `nameKey` (BE §10.3 rule
  * 3): the longest name wins, ties go to the lower `sortOrder`. Inactive fases don't match. null when none does.
  */
 export function phaseFromTitle(
@@ -634,7 +634,7 @@ interface Ctx {
   schedule: Map<string, ScheduleCandidate>;
   /** project external id → templates its tasks use, so a matched template is used once per project. */
   usedTemplates: Map<string, Set<string>>;
-  /** Tramos and fases for the group targets. */
+  /** Etapas and fases for the group targets. */
   catalog: GroupTargetCatalog;
   /** The firm-wide status map: the saved setting, else the mapping's snapshot. */
   statusMap: MondayStatusMap;
@@ -708,7 +708,7 @@ export function translate(
   translateDependencies(ctx, exported);
   for (const project of out.projects) {
     rollUpProject(project, out.tasks);
-    projectTramos(project, out.tasks, lookups.workflows ?? {});
+    projectEtapas(project, out.tasks, lookups.workflows ?? {});
   }
   translateUpdates(ctx, exported);
   translateFiles(ctx, exported, data.files ?? {});
@@ -973,8 +973,8 @@ function resolveClient(
 // --- projects --------------------------------------------------------------
 
 /**
- * Where a group's tasks go before the per-task rules (BE §10.3): the tramo (the group's, else the board's), the
- * group's fase, its espacio, or tareas de administración (no tramo, fase or espacio).
+ * Where a group's tasks go before the per-task rules (BE §10.3): the etapa (the group's, else the board's), the
+ * group's fase, its espacio, or tareas de administración (no etapa, fase or espacio).
  */
 interface Place {
   admin: boolean;
@@ -984,7 +984,7 @@ interface Place {
   spaceExternalId: string | null;
 }
 
-/** Tasks no group places: the board's tramo, the fase resolved per task. */
+/** Tasks no group places: the board's etapa, the fase resolved per task. */
 function boardPlace(bm: BoardMapping): Place {
   return { admin: false, workflowId: bm.workflowId ?? null, phaseId: null, space: null, spaceExternalId: null };
 }
@@ -1034,7 +1034,7 @@ function newProject(
     startDate: null,
     endDate: null,
     workflowId,
-    tramos: [],
+    etapas: [],
     currentWorkflowId: workflowId,
     source,
     data: { source, columns },
@@ -1508,7 +1508,7 @@ function applyTemplate(ctx: Ctx, project: PlannedProject, templateId: string) {
   used.add(templateId);
 }
 
-/** A task's kind, template, tramo and fase. */
+/** A task's kind, template, etapa and fase. */
 interface TaskFlow {
   kind: TaskKind;
   templateId: string | null;
@@ -1518,10 +1518,10 @@ interface TaskFlow {
 }
 
 /**
- * Kind, tramo and fase of a task (brief §4.3). Admin groups: `admin`, no tramo, fase or template. Otherwise the
- * tramo is the group's (else the board's), and the fase comes from, in order: 1) the item's template of that
- * tramo (`templateMatches`, else the template titled like it), which makes it a workflow task; 2) the group's
- * fase; 3) a fase of the tramo the cleaned title names as a whole word (longest wins); 4) none: `phaseReview`
+ * Kind, etapa and fase of a task (brief §4.3). Admin groups: `admin`, no etapa, fase or template. Otherwise the
+ * etapa is the group's (else the board's), and the fase comes from, in order: 1) the item's template of that
+ * etapa (`templateMatches`, else the template titled like it), which makes it a workflow task; 2) the group's
+ * fase; 3) a fase of the etapa the cleaned title names as a whole word (longest wins); 4) none: `phaseReview`
  * and PHASE_UNRESOLVED.
  */
 function taskFlow(
@@ -1685,7 +1685,7 @@ function addSubitems(
   item: ItemLike,
   parent: PlannedTask,
   project: PlannedProject,
-  /** The parent's group place: child tasks share it (admin, tramo, fase, espacio). */
+  /** The parent's group place: child tasks share it (admin, etapa, fase, espacio). */
   place: Place,
 ) {
   if (bm.subitems === "ignore") return;
@@ -1971,11 +1971,11 @@ function translateDependencies(ctx: Ctx, exported: Map<string, ExportBoard>) {
 // --- project rollups -------------------------------------------------------
 
 /**
- * The project's tramos (BE §10.3): the distinct tramos of its tasks, by tramo `sortOrder` (unknown ones last,
- * first seen first). `currentWorkflowId` is the highest of them, else the board's tramo. Apply writes one
- * `project_stages` row per tramo; `data.stageWorkflowIds` lets rollback own them.
+ * The project's etapas (BE §10.3): the distinct etapas of its tasks, by etapa `sortOrder` (unknown ones last,
+ * first seen first). `currentWorkflowId` is the highest of them, else the board's etapa. Apply writes one
+ * `project_stages` row per etapa; `data.stageWorkflowIds` lets rollback own them.
  */
-export function projectTramos(
+export function projectEtapas(
   project: PlannedProject,
   tasks: readonly PlannedTask[],
   workflows: Readonly<Record<string, { sortOrder?: number }>>,
@@ -1986,13 +1986,13 @@ export function projectTramos(
     if (!seen.includes(t.workflowId)) seen.push(t.workflowId);
   }
   const order = (id: string) => workflows[id]?.sortOrder ?? Number.POSITIVE_INFINITY;
-  const tramos = seen
+  const etapas = seen
     .map((id, i) => ({ id, i }))
     .sort((a, b) => order(a.id) - order(b.id) || a.i - b.i)
     .map((t) => t.id);
-  project.tramos = tramos;
-  project.currentWorkflowId = tramos[tramos.length - 1] ?? project.workflowId;
-  if (tramos.length > 0) project.data.stageWorkflowIds = tramos;
+  project.etapas = etapas;
+  project.currentWorkflowId = etapas[etapas.length - 1] ?? project.workflowId;
+  if (etapas.length > 0) project.data.stageWorkflowIds = etapas;
   else delete project.data.stageWorkflowIds;
 }
 

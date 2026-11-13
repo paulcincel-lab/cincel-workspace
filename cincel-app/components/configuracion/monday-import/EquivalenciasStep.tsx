@@ -126,10 +126,10 @@ const ALL_SECTIONS: readonly BoardSection[] = [
 ];
 
 /**
- * Whether the board needs "Tramo del tablero": only when no group targets a tramo or a fase (FE §4.6 item 2).
- * Boards whose groups aren't mapped one by one always take the board's tramo.
+ * Whether the board needs "Etapa del tablero": only when no group targets a etapa or a fase (FE §4.6 item 2).
+ * Boards whose groups aren't mapped one by one always take the board's etapa.
  */
-export function boardTramoRequired(
+export function boardEtapaRequired(
   board: BoardDraft,
   source: MondayBoardSource,
   choices: MondayImportChoices,
@@ -137,7 +137,7 @@ export function boardTramoRequired(
   if (!hasGroupTargets(board)) return true;
   return !source.groups.some((group) => {
     const target = currentGroupTarget(board, group, choices);
-    return (target.kind === "tramo" && Boolean(target.workflowId)) || target.kind === "phase";
+    return (target.kind === "etapa" && Boolean(target.workflowId)) || target.kind === "phase";
   });
 }
 
@@ -168,11 +168,11 @@ export function BoardEquivalences({
     ...relationColumns.map((column) => ({ value: `relation:${column.id}`, label: `Columna «${column.title}»` })),
     { value: "new", label: "Nuevo contacto" },
   ];
-  const tramoChoices: Choice[] = [
+  const etapaChoices: Choice[] = [
     { value: NONE, label: "Sin etapa" },
     ...choices.workflows.map((workflow) => ({ value: workflow.id, label: workflow.name })),
   ];
-  const tramoMissing = !board.workflowId && boardTramoRequired(board, source, choices);
+  const etapaMissing = !board.workflowId && boardEtapaRequired(board, source, choices);
   const templateChoices = (workflowId: string | null): Choice[] => [
     { value: NONE, label: "Sin plantilla" },
     ...choices.templates
@@ -306,7 +306,7 @@ export function BoardEquivalences({
               <ChoiceSelect
                 label="Etapa del tablero"
                 value={board.workflowId ?? NONE}
-                choices={tramoChoices}
+                choices={etapaChoices}
                 onChange={(value) =>
                   onBoardChange((current) =>
                     pruneGroupTargets({ ...current, workflowId: value === NONE ? null : value }, choices),
@@ -316,7 +316,7 @@ export function BoardEquivalences({
               <p className="text-sm text-muted-foreground">
                 La etapa de los grupos y elementos que no resuelven uno.
               </p>
-              {tramoMissing ? (
+              {etapaMissing ? (
                 <p role="alert" className="text-sm text-destructive">
                   Elige una etapa.
                 </p>
@@ -560,12 +560,12 @@ export function BoardEquivalences({
               <EquivalenceTable monday="Elemento de monday" cincel="Tarea de plantilla · Etapa · Fase">
                 {templateItems.map((item) => {
                   const placement = templateItemPlacement(board, source, item, choices);
-                  const hasTramo = !placement.admin && !placement.ignored && placement.workflowId;
+                  const hasEtapa = !placement.admin && !placement.ignored && placement.workflowId;
                   return (
                     <TableRow key={item.id}>
                       <TableCell className="align-top">{item.name}</TableCell>
                       <TableCell className="space-y-2 whitespace-normal">
-                        {hasTramo ? (
+                        {hasEtapa ? (
                           <ChoiceSelect
                             label={`Plantilla para ${item.name}`}
                             value={board.templateMatches?.[item.id] ?? NONE}
@@ -583,7 +583,7 @@ export function BoardEquivalences({
                           />
                         ) : null}
                         <div className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className={hasTramo ? "text-foreground" : "text-muted-foreground"}>
+                          <span className={hasEtapa ? "text-foreground" : "text-muted-foreground"}>
                             {placementLabel(placement)}
                           </span>
                           {placement.review ? <Badge variant="outline">Sin fase · revisar</Badge> : null}
@@ -602,7 +602,7 @@ export function BoardEquivalences({
   );
 }
 
-/** Paso 3: the board picker and four tabs (Columnas, Estatus, Grupos y tramo, Nombres y códigos de proyecto), prefilled by init and editable. */
+/** Paso 3: the board picker and four tabs (Columnas, Estatus, Grupos y etapa, Nombres y códigos de proyecto), prefilled by init and editable. */
 export function EquivalenciasStep({
   mapping,
   source,

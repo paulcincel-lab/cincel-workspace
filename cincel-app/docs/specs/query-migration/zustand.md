@@ -8,7 +8,7 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 
 ## 0. Key findings (read first)
 
-1. **Dashboards hold no UI state today.** `InicioClient.tsx:43-44` only holds `photo` and `renderedAt`. KpiTiles, TramoDonut, WeeklyPaceChart, WorkloadBars, AttentionList, MyDayAgenda and ProjectProgressList have no `useState`, toggles or selection. Proyectos (`ProjectsPortfolio`) and Personas (`EquipoView`) are the same. The dashboard store is therefore **new behaviour**, not a move of existing state. The product owner approved the interactions (selected KPI, 4/8/12-week range, collapse, chart/table view, series toggles); they are built in Phase 12, separately from the data phases.
+1. **Dashboards hold no UI state today.** `InicioClient.tsx:43-44` only holds `photo` and `renderedAt`. KpiTiles, EtapaDonut, WeeklyPaceChart, WorkloadBars, AttentionList, MyDayAgenda and ProjectProgressList have no `useState`, toggles or selection. Proyectos (`ProjectsPortfolio`) and Personas (`EquipoView`) are the same. The dashboard store is therefore **new behaviour**, not a move of existing state. The product owner approved the interactions (selected KPI, 4/8/12-week range, collapse, chart/table view, series toggles); they are built in Phase 12, separately from the data phases.
 2. **Assistant open is wired twice, and one path is dead.**
    - `AssistantLauncher.tsx` exports `openAssistant()` (const `:29`, function `:31-33`), which fires the window event `cincel:open-assistant`. **That export has no callers**, so both external open paths are dead.
    - `lib/ui/shell-openers.ts:45` exports a second `openAssistant()` through a module registry. Nobody ever calls `registerShellOpener("assistant", …)`; the only registration is `"search"` at `CommandPalette.tsx:147`.
@@ -24,7 +24,7 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 4. **Session user is read as a non-reactive snapshot** with `useState(() => getCurrentAuthenticatedUser())`:
    - `TareasClient.tsx:120`, `TaskSheet.tsx:356`, `TareasStartSlot.tsx:50`, `EquipoView.tsx:42`.
    - `TareasCalendario.tsx:98` adds a window `focus` listener (`:137`) just to refresh it.
-   - Per-render getters with the same problem: `useTaskStatusesEditor.ts:37`, `PuestosClient.tsx:61`, `TramosClient.tsx:126`, `ProjectFichaClient.tsx:120`, `ProjectSectionNav.tsx:74`.
+   - Per-render getters with the same problem: `useTaskStatusesEditor.ts:37`, `PuestosClient.tsx:61`, `EtapasClient.tsx:126`, `ProjectFichaClient.tsx:120`, `ProjectSectionNav.tsx:74`.
    - These should all read `useSessionStore(selector)`.
 5. **Cross-component sync through ad-hoc stores and events. All of it is server state and moves to TQ:**
    - `lib/my-space/bandeja-unread.ts`: module store. `Inbox.tsx:181,266,275` publishes; `bandeja-badge-view.tsx:52` reads.
@@ -96,14 +96,14 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 | renderedAt | `InicioClient.tsx:44` | useState initializer | L | SSR/CSR-stable greeting. |
 | Photo upload pending / error | `ProfilePhotoButton.tsx:49-50` | useState | L → mutation | — |
 | WidgetCard empty detection | `WidgetCard.tsx:57` | useState + MutationObserver | L | DOM-derived. |
-| Selected KPI, range, collapsed widgets, chart/table per widget, series toggles | *(none today)*: KpiTiles, WeeklyPaceChart (fixed 8 weeks, `types/redesign.ts:288-289`), TramoDonut, WorkloadBars | — | **Z `useInicioDashboard`** (new) | Owner's dashboard pattern. Range is a client window over the 8 weeks already loaded unless the loader grows a range input (then it becomes URL + query key). |
+| Selected KPI, range, collapsed widgets, chart/table per widget, series toggles | *(none today)*: KpiTiles, WeeklyPaceChart (fixed 8 weeks, `types/redesign.ts:288-289`), EtapaDonut, WorkloadBars | — | **Z `useInicioDashboard`** (new) | Owner's dashboard pattern. Range is a client window over the 8 weeks already loaded unless the loader grows a range input (then it becomes URL + query key). |
 | Style (Visual/Esencial/Analítico) | `inicio/page.tsx:51`, `EstiloSwitch` `InicioClient.tsx:72` | StyleProvider | `useAppearance` (`useStyle()` selector); the page provider goes (Phase 2) | Not duplicated in the dashboard store. |
 
 ### Tareas: tablero / lista / calendario + TaskSheet
 
 | UI state | file:line | Current | Verdict | Reason |
 |---|---|---|---|---|
-| vista, cal, tramo, responsable, proyecto, estado, q | `lib/tareas/query.ts:11-20`; `TareasClient.tsx:124-131` | URL (`router.replace`) | **URL** (unchanged) | Shareable. Phase 4 swaps the RSC re-render for a query-key change. |
+| vista, cal, etapa, responsable, proyecto, estado, q | `lib/tareas/query.ts:11-20`; `TareasClient.tsx:124-131` | URL (`router.replace`) | **URL** (unchanged) | Shareable. Phase 4 swaps the RSC re-render for a query-key change. |
 | Search draft | `TareasClient.tsx:136-153` | useState + debounce to `q` | L | Input draft. |
 | Facet counts / options | `TareasClient.tsx:156-218` | useMemo over all tasks | TQ `taskFacets` (plan) | Server aggregation. |
 | `?nueva=1` new-task dialog | `use-new-task-param.ts:26-32`; `TareasClient.tsx:119,310` | URL | URL as **entry** → **Z `useNewTaskUi.open()`** | Keep the deep link; one host dialog. |
@@ -130,8 +130,8 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 | NewTaskDialog draft / errors / pending | `NewTaskDialog.tsx:77-79,83-85` | useState | L | Draft. |
 | Start slot board / candidates | `TareasStartSlot.tsx:55-57` | useState | TQ | Server. |
 | Start slot target project | `TareasStartSlot.tsx:58,92-105` (`?project&iniciar`) | useState + URL | URL entry + L | Deep link. |
-| StartTramoSheet preview / load | `StartTramoSheet.tsx:113-116` | useState | TQ | Server. |
-| StartTramoSheet form (phases, mode, managers, autoStart) | `StartTramoSheet.tsx:117-121` | useState | L | Form. |
+| StartEtapaSheet preview / load | `StartEtapaSheet.tsx:113-116` | useState | TQ | Server. |
+| StartEtapaSheet form (phases, mode, managers, autoStart) | `StartEtapaSheet.tsx:117-121` | useState | L | Form. |
 | Google feed dialog status / url | `CalendarFeedDialog.tsx:40-43,142-146` | useState | TQ status; L copied/busy | — |
 | Header/filters/empty drilled to views | `TareasClient.tsx:220-300` → views → `ListPage` | props, 3 levels | keep props | Render slots (ReactNode), not state; acceptable. |
 
@@ -141,14 +141,14 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 |---|---|---|---|---|
 | Portfolio search | `ProjectsPortfolio.tsx:85` | useState (lost on navigation) | **URL `?q=`** (+ local draft debounce like Tareas) | Shareable; consistent with Tareas. |
 | New project dialog | `ProjectsPortfolio.tsx:86,91-123` (`?nuevo=1`) | useState + URL | URL entry + L | One component. |
-| Dashboard widgets (tramo strip, cards/table) | `ProjectsPortfolio.tsx:103-105` | none | **Z `useProyectosDashboard`** (new, optional) | Same pattern as Inicio, if approved. |
+| Dashboard widgets (etapa strip, cards/table) | `ProjectsPortfolio.tsx:103-105` | none | **Z `useProyectosDashboard`** (new, optional) | Same pattern as Inicio, if approved. |
 | Tab nav | `ProjectSectionNav.tsx:92`, `ProjectTabs.tsx:78-104` | route | route | — |
 | Ficha project / tasks / spaces / staff / contacts / workflows / loading / notFound | `ProjectFichaClient.tsx:105-113` | useState + effects | TQ | Server (plan: no client loading flashes). |
 | Ficha isEditing / draft / adminDraft / confirmClientChange / save | `ProjectFichaClient.tsx:114-119` | useState | L | Form. |
 | Ficha remap sheet + notice | `ProjectFichaClient.tsx:134-135` | useState | L | — |
 | Spaces list | `ProjectSpacesCard.tsx:40` | useState copy | TQ (optimistic) | Server. |
 | Spaces add/delete UI | `ProjectSpacesCard.tsx:41-45` | useState | L | — |
-| Tramos card | `ProjectTramosCard.tsx:49-51` | useState | L / mutation | — |
+| Etapas card | `ProjectEtapasCard.tsx:49-51` | useState | L / mutation | — |
 | Project tareas search | `ProjectTasksByFase.tsx:70` | useState (initial `query.q`) | L draft → URL `q` (already parsed) | Keep in step with the URL. |
 | Project tareas filters | `ProjectTasksByFase.tsx:125` | URL push | URL | — |
 | Project new-task dialog | `ProjectTasksByFase.tsx:71,227` | useState + own mount | **Z `useNewTaskUi`** | Single host. |
@@ -246,7 +246,7 @@ Companion to `plan.md` (§4.7), and **authoritative for UI state**. Line numbers
 | General settings legacy key | `lib/settings/general-settings.ts:4,223,242` | localStorage read/remove | leave | Legacy cleanup. |
 | Monday wizard steps | `MondayImportWizard.tsx` (22 useState) | useState | L (run status → TQ poll) | Wizard-local. |
 | Monday reviewed ids | `MondayImportWizard.tsx:78-88` (`reviewedKey(runId)`) | localStorage | L (route through `browser-state-repository`) | Per-run scratch, one reader. |
-| Puestos / Tramos editors | `PuestosClient.tsx` (12), `TramosClient.tsx` (13), `PhaseEditorDrawer`, `PositionEditorDrawer` | useState | TQ lists; L editors | — |
+| Puestos / Etapas editors | `PuestosClient.tsx` (12), `EtapasClient.tsx` (13), `PhaseEditorDrawer`, `PositionEditorDrawer` | useState | TQ lists; L editors | — |
 | Settings nav | `AjustesNavFromPath` | route | route | — |
 
 ### Asistente (`/asistente`)
@@ -406,8 +406,8 @@ export function createDashboardStore<W extends string, K extends string>(
   - Action bundles use `useShallow((s) => [s.toggleCollapsed, s.setWidgetView])`.
   - KpiTiles reads `selectedKpi` only, and widgets that react to it read only that.
 - **Inicio wiring:**
-  - Widget ids: `kpis | tramoDonut | weeklyPace | attention | myDay | projectsProgress | workload`.
-  - `KpiTiles` writes `toggleKpi`. `WidgetCard` gets a collapse toggle (`actions` slot) that writes `toggleCollapsed`. `WeeklyPaceChart` reads `range` (slices `weeklyPace`) and `hiddenSeries.weeklyPace` (created/completed). `TramoDonut` and `WorkloadBars` read `useWidgetView`.
+  - Widget ids: `kpis | etapaDonut | weeklyPace | attention | myDay | projectsProgress | workload`.
+  - `KpiTiles` writes `toggleKpi`. `WidgetCard` gets a collapse toggle (`actions` slot) that writes `toggleCollapsed`. `WeeklyPaceChart` reads `range` (slices `weeklyPace`) and `hiddenSeries.weeklyPace` (created/completed). `EtapaDonut` and `WorkloadBars` read `useWidgetView`.
   - `InicioClient` stays style-agnostic.
 - **Rule:** if a dashboard control ever changes what the **server returns** (for example a range beyond the fixed 12 weeks), it is a **query-key input**. It moves to the **URL** (shareable), not the store.
 
@@ -580,7 +580,7 @@ No new React contexts for app state. UI state goes to Zustand (global, or a page
 
 ### Phase 5: Proyectos (#939: 5a #959, 5b #960, 5c #961, 5d #962)
 - **Stores:** none new. Portfolio search goes to the URL `?q=` (5a). The dashboard is Phase 12 (#969).
-- **Components:** `ProjectsPortfolio.tsx` (`?q=` with a debounced local draft, 5a); `ProjectTasksByFase.tsx` (drop `dialogDefaults` and its dialog mount; `openNewTask({projectId, tramoKey, …})`, 5a); `ProjectFichaClient.tsx:120` and `ProjectSectionNav.tsx:74` read session selectors; Cronograma has no Zustand (`?week` URL, TQ data); `ProjectFiles.tsx` `selectedId` stays local.
+- **Components:** `ProjectsPortfolio.tsx` (`?q=` with a debounced local draft, 5a); `ProjectTasksByFase.tsx` (drop `dialogDefaults` and its dialog mount; `openNewTask({projectId, etapaKey, …})`, 5a); `ProjectFichaClient.tsx:120` and `ProjectSectionNav.tsx:74` read session selectors; Cronograma has no Zustand (`?week` URL, TQ data); `ProjectFiles.tsx` `selectedId` stays local.
 - **Acceptance:** portfolio search survives opening a project and going back; no `NewTaskDialog` mount in `components/proyectos`.
 - **Tests:** `ProjectsPortfolio.test.tsx` (`?q` round trip).
 
@@ -621,7 +621,7 @@ No new React contexts for app state. UI state goes to Zustand (global, or a page
 
 ### Phase 12: Dashboard interactions (#967 factory, #968 Inicio, #969 Proyectos, #970 Personas)
 - **Stores:** the `createDashboardStore` factory and `useWidgetView` (§2.5) in #967; `useInicioDashboard`, `useProyectosDashboard`, `usePersonasDashboard` in their issues. Persisted (`cincel.ui.dashboard.<id>.v1`, `skipHydration`, rehydrated by `<UiStoresHydrator/>`).
-- **Inicio components:** `KpiTiles.tsx` (selectable tiles: `aria-pressed`, `toggleKpi`), `WidgetCard.tsx` (collapse action: `aria-expanded`), `WeeklyPaceChart.tsx` (4/8/12-week segmented control over the fixed 12 weeks; series toggles), `TramoDonut.tsx` and `WorkloadBars.tsx` (`useWidgetView` chart/table). `InicioClient.tsx` stays style-agnostic.
+- **Inicio components:** `KpiTiles.tsx` (selectable tiles: `aria-pressed`, `toggleKpi`), `WidgetCard.tsx` (collapse action: `aria-expanded`), `WeeklyPaceChart.tsx` (4/8/12-week segmented control over the fixed 12 weeks; series toggles), `EtapaDonut.tsx` and `WorkloadBars.tsx` (`useWidgetView` chart/table). `InicioClient.tsx` stays style-agnostic.
 - **Acceptance:** collapse, range, view and series choices survive Inicio → Tareas → Inicio and a reload; `selectedKpi` survives navigation but not a reload; switching Estilo does not carry a per-style view override into the other style; the first render equals the SSR render (defaults) and persisted values apply after mount; zero new server calls caused by store changes.
 - **Tests:** factory unit tests (actions, `partialize`, `migrate`, per-style views); a seeded-store component test per page; an SSR snapshot equality test; a11y tests for the tile toggle and the collapse buttons.
 

@@ -419,7 +419,7 @@ describe.skipIf(!url)(
       });
     });
 
-    it("a board tramo becomes the project's current tramo and stage, origin monday; rollback removes them (#678, project flow BE §10.5)", async () => {
+    it("a board etapa becomes the project's current etapa and stage, origin monday; rollback removes them (#678, project flow BE §10.5)", async () => {
       await inTx(async (tx) => {
         await seed(tx);
         await tx
@@ -477,7 +477,7 @@ describe.skipIf(!url)(
       });
     });
 
-    it("groups mapped to a tramo, their own project or ignored import as planned; rollback removes it all (#687, project flow BE §10.5)", async () => {
+    it("groups mapped to a etapa, their own project or ignored import as planned; rollback removes it all (#687, project flow BE §10.5)", async () => {
       await inTx(async (tx) => {
         await seed(tx);
         const STAGE = "56656656-0000-4000-8000-0000000000f2";
@@ -488,7 +488,7 @@ describe.skipIf(!url)(
         const mapping = nestedMapping(STAFF, CLIENT);
         mapping.boards[0].workflowId = WORKFLOW;
         mapping.boards[0].groupTargets = {
-          g_obra: { kind: "tramo", workflowId: STAGE },
+          g_obra: { kind: "etapa", workflowId: STAGE },
           g_diseno: { kind: "project" },
         };
         mapping.boards[0].projectNames = { g_diseno: "Casa Nido · Diseño" };
@@ -517,7 +517,7 @@ describe.skipIf(!url)(
           .select()
           .from(schema.projectStages)
           .where(eq(schema.projectStages.projectId, boardId));
-        // One stage per tramo with tasks (BE §10.5): every task of board 901 left in it is in group Obra.
+        // One stage per etapa with tasks (BE §10.5): every task of board 901 left in it is in group Obra.
         expect(stages.map((s) => s.workflowId)).toEqual([STAGE]);
 
         expect(await findRollbackBlockers(tx, batch.id)).toEqual([]);

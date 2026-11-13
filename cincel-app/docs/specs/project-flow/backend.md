@@ -1,5 +1,9 @@
 # Spec: Project flow (tramos, fases, puestos) and monday port (Backend)
 
+## Glosario
+
+- **etapa (antes tramo)**: a department stage of a project (Presale, Diseño, Construcción…). This spec was written when it was called *tramo* and keeps that wording below; read every "tramo" as "etapa". Stored values (`tramo_started`, `tramo_start_undone`, `task_tramo_inferred`, `project_without_tramo`) keep the old name; the table is `etapa_start_batches`.
+
 **Status:** Ready for review · **Owner:** Oscar · **Date:** 2026-11-06
 **Source brief:** `docs/specs/source/project-flow-spec.md`. Its "Decisions already made" and "Defaults to confirm" table are final, and this spec builds with them.
 **Decision record:** `docs/adr/0003-project-flow-tramos-fases-puestos.md`.

@@ -4,7 +4,7 @@ const RUN = "12345678-1234-4234-8234-123456789012";
 const PROJECT = "22222222-2222-4222-8222-222222222222";
 const STATUS = "33333333-3333-4333-8333-333333333333";
 const POSITION = "44444444-4444-4444-8444-444444444444";
-const TRAMO = "55555555-5555-4555-8555-555555555555";
+const ETAPA = "55555555-5555-4555-8555-555555555555";
 const TOKEN = "secret-token-xyz";
 
 const session = vi.hoisted(() => ({
@@ -139,7 +139,7 @@ describe("monday import actions", () => {
 });
 
 describe("project flow monday actions", () => {
-  const remapInput = [{ boardId: "101", workflowId: TRAMO, groupTargets: { g1: { kind: "admin" as const } } }];
+  const remapInput = [{ boardId: "101", workflowId: ETAPA, groupTargets: { g1: { kind: "admin" as const } } }];
   const statusMap = { "en curso": { target: { customStatusId: STATUS }, priority: "alta" as const } };
 
   it("rejects non-admins on every new action without touching anything", async () => {

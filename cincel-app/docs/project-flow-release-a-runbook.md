@@ -65,14 +65,14 @@ Every row of the first table must have `ok = t`:
 
 | Check | Expected |
 |---|---|
-| fases (live tramos) | 14 |
-| templates (live tramos) | 51 |
+| fases (live etapas) | 14 |
+| templates (live etapas) | 51 |
 | templates without `phase_id` | 0 |
 | live «Cancelado» / «En espera» | 1 each |
 | `group_mapping_kind` | `role,position` |
 | live active/paused projects sharing `lower(name)` | 0 |
 | `projects_name_lower_uq` exists, `projects_client_name_lower_uq` dropped | 1 / 0 |
-| tasks whose fase belongs to another tramo | 0 |
+| tasks whose fase belongs to another etapa | 0 |
 
 `flow:report` must list the unmatched fases (`task_phase_unmatched`), the old
 `projects.phases` values, the áreas and the removed group mappings.
@@ -111,7 +111,7 @@ ssh <prod-host> "cd <compose-dir> && docker compose -f docker-compose.prod.yml r
 
 Post `flow-report-prod.md` as a comment on #760. If a `status_reused` row has
 `tasksReopened` > 0, tell the team which tasks went back to open. Hand the
-`task_phase_unmatched` rows to the tramo leads and the `project_without_tramo`,
+`task_phase_unmatched` rows to the etapa leads and the `project_without_tramo`,
 `project_renamed_duplicate`, `template_phase_defaulted`, `area*` and
 `group_mapping_area_removed` rows to the administrator (backend spec §4.4).
 
@@ -126,7 +126,7 @@ never writes to Drive or sends mail to real clients:
 
 - [ ] Actividades: lists, filters and task detail open; fases show (or «Sin fase · revisar»).
 - [ ] Proyectos: list and create; a duplicate name shows the name-taken error.
-- [ ] Ficha de proyecto: tramos, tasks and cronograma load.
+- [ ] Ficha de proyecto: etapas, tasks and cronograma load.
 - [ ] Equipo: staff list and staff detail.
 - [ ] Configuración: every tab loads.
 - [ ] Staff Google sign-in: a staff account whose access comes from a Google

@@ -155,10 +155,10 @@ export function remapChangedTasks(preview: MondayRemapPreview): number {
 }
 
 export function remapCountsText(preview: MondayRemapPreview): string {
-  // `changes.tramo` is the remap CLI summary field (scripts/monday/remap.ts, renamed in #1130).
+  // `changes.etapa` is the remap CLI summary field (scripts/monday/remap.ts, renamed in #1130).
   const c = preview.changes;
   return (
-    `${c.tramo} tareas cambian de etapa, ${c.phase} de fase, ${c.space} de espacio, ` +
+    `${c.etapa} tareas cambian de etapa, ${c.phase} de fase, ${c.space} de espacio, ` +
     `${c.admin} pasan a administración, ${c.unchanged} sin cambios, ${c.phaseUnresolved} sin fase · revisar`
   );
 }

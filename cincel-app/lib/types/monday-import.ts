@@ -102,7 +102,7 @@ export interface MondayImportRunState {
 /** The Cincel side of every Equivalencias select (project flow FE §7.8). */
 export interface MondayImportChoices {
   statuses: { id: string; name: string; closes: boolean; countsAsCompleted: boolean }[];
-  /** Active tramos with their active fases, in catalog order. */
+  /** Active etapas with their active fases, in catalog order. */
   workflows: { id: string; name: string; phases: { id: string; name: string; sortOrder: number }[] }[];
   /** Active templates with their fase. */
   templates: { id: string; workflowId: string; phaseId: string; name: string }[];
@@ -195,8 +195,8 @@ export interface MondayPreviewSample {
     customStatus: string | null;
     priority: string | null;
     manager: string | null;
-    /** A task's tramo; a project's tramos, joined. */
-    tramo: string | null;
+    /** A task's etapa; a project's etapas, joined. */
+    etapa: string | null;
     /** A task's fase. */
     phase: string | null;
     /** A task with no template and no fase-name match: "Sin fase · revisar". */
@@ -269,7 +269,7 @@ export interface MondayRemapBoard {
   name: string;
   /** null: board missing from the stored export. */
   source: MondayBoardSource | null;
-  /** "Tramo del tablero". */
+  /** "Etapa del tablero". */
   workflowId: string | null;
   /** Current targets, prefilled from the import refs (groupId → target). */
   groupTargets: Record<string, ProjectFlowGroupTarget>;
@@ -290,7 +290,7 @@ export type MondayRemapInput = Array<{
 export interface MondayRemapPreview {
   tasks: number;
   changes: {
-    tramo: number;
+    etapa: number;
     phase: number;
     space: number;
     admin: number;
@@ -298,7 +298,7 @@ export interface MondayRemapPreview {
     unchanged: number;
     phaseUnresolved: number;
   };
-  /** "Tramo · Fase · Espacio" before/after, up to 10. */
+  /** "Etapa · Fase · Espacio" before/after, up to 10. */
   samples: Array<{ taskId: string; title: string; before: string; after: string }>;
   issues: MondayPreviewIssue[];
 }

@@ -66,13 +66,13 @@ export type BoardStrategy = z.infer<typeof BoardStrategy>;
 
 /**
  * What one monday group becomes on a `board_as_project` or `item_as_project` board (FE §7.8, BE §10.1): one of
- * six targets (Tramo, Fase, Espacio, Proyecto aparte, Tareas de administración, Ignorar). A group never creates
+ * six targets (Etapa, Fase, Espacio, Proyecto aparte, Tareas de administración, Ignorar). A group never creates
  * a fase. Unset groups take the `resolveGroupTarget` default.
  */
-export const GroupTarget = z.discriminatedUnion("kind", [
-  // A tramo (workflow): the project gets a `project_stages` row for it.
-  z.object({ kind: z.literal("tramo"), workflowId: z.uuid() }),
-  // A fase of the catalog; its tramo is the fase's own.
+const GroupTargetShape = z.discriminatedUnion("kind", [
+  // A etapa (workflow): the project gets a `project_stages` row for it.
+  z.object({ kind: z.literal("etapa"), workflowId: z.uuid() }),
+  // A fase of the catalog; its etapa is the fase's own.
   z.object({ kind: z.literal("phase"), phaseId: z.uuid() }),
   // An espacio of the project named after the group.
   z.object({ kind: z.literal("space") }),
@@ -83,7 +83,16 @@ export const GroupTarget = z.discriminatedUnion("kind", [
   // The group's items are not imported.
   z.object({ kind: z.literal("ignore") }),
 ]);
-export type GroupTarget = z.infer<typeof GroupTarget>;
+// Compatibility: mapping files and saved drafts written before the rename carry `kind: "tramo"`; it reads as `etapa`.
+// Typed as the `etapa` shape only: the legacy spelling exists at runtime, not in the types.
+export const GroupTarget = z.preprocess(
+  (value) =>
+    value && typeof value === "object" && (value as { kind?: unknown }).kind === "tramo"
+      ? { ...(value as object), kind: "etapa" }
+      : value,
+  GroupTargetShape,
+) as unknown as typeof GroupTargetShape;
+export type GroupTarget = z.infer<typeof GroupTargetShape>;
 
 /** The project flow name of `GroupTarget`, kept for the wizard payload types. */
 export const ProjectFlowGroupTarget = GroupTarget;
@@ -102,7 +111,7 @@ export const BoardMapping = z.object({
   providerSubtype: z.string().optional(),
   // crm_contacts: monday item id → existing contact
   contactMatches: z.record(z.string(), z.uuid()).default({}),
-  // "Tramo del tablero": the tramo of tasks whose group doesn't place them
+  // "Etapa del tablero": the etapa of tasks whose group doesn't place them
   workflowId: z.uuid().nullable().optional(),
   // optional: a project without a client gets the "Asignar cliente y origen" admin task
   client: ClientRef.nullable().optional(),
@@ -261,7 +270,7 @@ export type MappingUpgradeNote =
       kept: StatusTarget;
       dropped: StatusTarget;
     }
-  // A group whose old target has no v2 equivalent (no fase found and no board tramo): left to the default.
+  // A group whose old target has no v2 equivalent (no fase found and no board etapa): left to the default.
   | { kind: "group_target_dropped"; boardId: string; groupId: string; from: GroupTargetV1["kind"] };
 
 export interface MappingUpgradeResult {
@@ -307,9 +316,9 @@ function sameStatusTarget(a: StatusTarget, b: StatusTarget): boolean {
  * Converts a v1 mapping (stored drafts, uploaded files, `import_batches.mapping` of past batches) to v2
  * (BE §10 intro). A v2 mapping is parsed and returned as it is. Throws the zod error when `raw` is neither.
  *
- * Groups: `stage` → `tramo`; `workflow_phase` → the fase of that name in the board's tramo, else the board's
- * tramo; `phase` (a new project phase) → the fase named like the group in any tramo when exactly one matches,
- * else the board's tramo; `project` and `ignore` stay. `areaId`, `taskAreaSource` and `taskAreas` are dropped.
+ * Groups: `stage` → `etapa`; `workflow_phase` → the fase of that name in the board's etapa, else the board's
+ * etapa; `phase` (a new project phase) → the fase named like the group in any etapa when exactly one matches,
+ * else the board's etapa; `project` and `ignore` stay. `areaId`, `taskAreaSource` and `taskAreas` are dropped.
  *
  * Status: per-board `statusMaps` (column id → label id) are merged into the firm-wide map (keyed by
  * `statusLabelKey(label text)`) only for labels the saved map doesn't have yet; the label text comes from the
@@ -360,24 +369,24 @@ export function upgradeMappingV1(
     void _taskAreas;
     const exported = exportBoards.get(board.mondayBoardId);
     const groupTitles = new Map((exported?.groups ?? []).map((g) => [g.id, g.title]));
-    const boardTramo = board.workflowId ?? null;
+    const boardEtapa = board.workflowId ?? null;
 
     const groupTargets: Record<string, GroupTarget> = {};
     for (const [groupId, target] of Object.entries(oldTargets)) {
       let next: GroupTarget | null = null;
       switch (target.kind) {
         case "stage":
-          next = { kind: "tramo", workflowId: target.workflowId };
+          next = { kind: "etapa", workflowId: target.workflowId };
           break;
         case "workflow_phase": {
-          const phaseId = phaseIn(target.phase, boardTramo);
-          next = phaseId ? { kind: "phase", phaseId } : boardTramo ? { kind: "tramo", workflowId: boardTramo } : null;
+          const phaseId = phaseIn(target.phase, boardEtapa);
+          next = phaseId ? { kind: "phase", phaseId } : boardEtapa ? { kind: "etapa", workflowId: boardEtapa } : null;
           break;
         }
         case "phase": {
           const title = groupTitles.get(groupId);
           const phaseId = title == null ? null : uniquePhase(title);
-          next = phaseId ? { kind: "phase", phaseId } : boardTramo ? { kind: "tramo", workflowId: boardTramo } : null;
+          next = phaseId ? { kind: "phase", phaseId } : boardEtapa ? { kind: "etapa", workflowId: boardEtapa } : null;
           break;
         }
         case "project":

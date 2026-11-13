@@ -1,11 +1,11 @@
 /**
  * "Reacomodar importación" core (project flow BE §11.1): re-sorts an imported
- * project's tasks into tramo / fase / espacio / project / admin with the six
+ * project's tasks into etapa / fase / espacio / project / admin with the six
  * group targets. Takes `db`; no `server-only`, so the CLI
  * (`npm run monday -- remap`) and the wizard-admin actions share it.
  *
  *   npm run monday -- remap --projects "Madrid 22,Guadalajara 83"
- *     [--target "Obra=tramo:construccion"] [--apply --by <admin email>]
+ *     [--target "Obra=etapa:construccion"] [--apply --by <admin email>]
  *
  * Dry-run by default: prints each project's preview. `--apply` writes, and
  * needs `--by`, the email of an active Administrador.
@@ -212,12 +212,12 @@ export function phaseInText(
 // ---------------------------------------------------------------------------
 
 /**
- * The default target of a group (BE §10.2), by `nameKey` of its title: a tramo
- * of that name → `tramo`; a fase of the board's tramo → `phase`; a fase of
- * exactly one other tramo → `phase`; "Administrativo" → `admin`; a fase named
- * inside the title as a whole word (board's tramo first, then exactly one
- * other tramo: "Proyecto Ejecutivo" → Ejecutivo) → `phase`; else the board's
- * tramo; null when the board has none (TRAMO_MISSING).
+ * The default target of a group (BE §10.2), by `nameKey` of its title: a etapa
+ * of that name → `etapa`; a fase of the board's etapa → `phase`; a fase of
+ * exactly one other etapa → `phase`; "Administrativo" → `admin`; a fase named
+ * inside the title as a whole word (board's etapa first, then exactly one
+ * other etapa: "Proyecto Ejecutivo" → Ejecutivo) → `phase`; else the board's
+ * etapa; null when the board has none (ETAPA_MISSING).
  */
 export function defaultGroupTarget(
   title: string,
@@ -226,8 +226,8 @@ export function defaultGroupTarget(
 ): ProjectFlowGroupTarget | null {
   const key = nameKey(title);
   const flows = catalog.workflows.filter((w) => w.active);
-  const tramo = flows.find((w) => nameKey(w.name) === key);
-  if (tramo) return { kind: "tramo", workflowId: tramo.id };
+  const etapa = flows.find((w) => nameKey(w.name) === key);
+  if (etapa) return { kind: "etapa", workflowId: etapa.id };
   const active = catalog.phases.filter((p) => p.active && flows.some((w) => w.id === p.workflowId));
   const own = active.filter((p) => p.workflowId === boardWorkflowId);
   const others = active.filter((p) => p.workflowId !== boardWorkflowId);
@@ -240,15 +240,15 @@ export function defaultGroupTarget(
   if (inOwn) return { kind: "phase", phaseId: inOwn };
   const inOthers = others.filter((p) => containsWord(key, nameKey(p.name)));
   if (inOthers.length === 1) return { kind: "phase", phaseId: inOthers[0].id };
-  if (boardWorkflowId) return { kind: "tramo", workflowId: boardWorkflowId };
+  if (boardWorkflowId) return { kind: "etapa", workflowId: boardWorkflowId };
   return null;
 }
 
 /**
  * A group target stored in a v1 or v2 mapping (or saved by a remap), as a
  * project flow target; null when it doesn't resolve (the default applies).
- * v1 `stage` → `tramo`; v1 `workflow_phase` → the fase by name in the board's
- * tramo (else any tramo when unique, else the board's tramo); v1 `phase` (a
+ * v1 `stage` → `etapa`; v1 `workflow_phase` → the fase by name in the board's
+ * etapa (else any etapa when unique, else the board's etapa); v1 `phase` (a
  * new project phase) → a fase of the group's name when unique, else null.
  */
 export function storedGroupTarget(
@@ -271,10 +271,10 @@ export function storedGroupTarget(
     return any.length === 1 ? any[0].id : null;
   };
   switch (t.kind) {
-    case "tramo":
+    case "etapa":
     case "stage": {
       const id = liveFlow(t.workflowId);
-      return id ? { kind: "tramo", workflowId: id } : null;
+      return id ? { kind: "etapa", workflowId: id } : null;
     }
     case "phase": {
       if (typeof t.phaseId === "string") {
@@ -286,7 +286,7 @@ export function storedGroupTarget(
     case "workflow_phase": {
       const id = typeof t.phase === "string" ? byName(t.phase, boardWorkflowId) : null;
       if (id) return { kind: "phase", phaseId: id };
-      return boardWorkflowId ? { kind: "tramo", workflowId: boardWorkflowId } : null;
+      return boardWorkflowId ? { kind: "etapa", workflowId: boardWorkflowId } : null;
     }
     case "space":
     case "project":
@@ -303,8 +303,8 @@ export function storedGroupTarget(
 // ---------------------------------------------------------------------------
 
 /**
- * Parses a CLI target: `tramo:<id|key|name>`, `phase:<id>`,
- * `phase:<tramo>/<fase>` (key or name), `phase:<fase>` (when unique),
+ * Parses a CLI target: `etapa:<id|key|name>`, `phase:<id>`,
+ * `phase:<etapa>/<fase>` (key or name), `phase:<fase>` (when unique),
  * `space`, `project`, `admin`, `ignore`. Returns an error message otherwise.
  */
 export function parseTargetSpec(spec: string, catalog: RemapCatalog): ProjectFlowGroupTarget | string {
@@ -316,9 +316,10 @@ export function parseTargetSpec(spec: string, catalog: RemapCatalog): ProjectFlo
     const key = nameKey(ref);
     return catalog.workflows.find((w) => w.id === ref || nameKey(w.key) === key || nameKey(w.name) === key);
   };
-  if (kind === "tramo" && arg) {
+  // Compatibility: `tramo:<key>` is the old spelling of `etapa:<key>` and keeps working.
+  if ((kind === "etapa" || kind === "tramo") && arg) {
     const flow = flowOf(arg);
-    return flow ? { kind: "tramo", workflowId: flow.id } : `unknown tramo "${arg}"`;
+    return flow ? { kind: "etapa", workflowId: flow.id } : `unknown etapa "${arg}"`;
   }
   if (kind === "phase" && arg) {
     const byId = catalog.phases.find((p) => p.id === arg);
@@ -326,7 +327,7 @@ export function parseTargetSpec(spec: string, catalog: RemapCatalog): ProjectFlo
     const slash = arg.indexOf("/");
     if (slash > 0) {
       const flow = flowOf(arg.slice(0, slash));
-      if (!flow) return `unknown tramo "${arg.slice(0, slash)}"`;
+      if (!flow) return `unknown etapa "${arg.slice(0, slash)}"`;
       const key = nameKey(arg.slice(slash + 1));
       const phase = catalog.phases.find(
         (p) => p.workflowId === flow.id && (nameKey(p.key ?? "") === key || nameKey(p.name) === key),
@@ -338,9 +339,9 @@ export function parseTargetSpec(spec: string, catalog: RemapCatalog): ProjectFlo
     if (matches.length === 1) return { kind: "phase", phaseId: matches[0].id };
     return matches.length === 0
       ? `unknown fase "${arg}"`
-      : `fase "${arg}" is in more than one tramo; use phase:<tramo>/<fase>`;
+      : `fase "${arg}" is in more than one etapa; use phase:<etapa>/<fase>`;
   }
-  return `unknown target "${spec}" (tramo:<tramo>, phase:<tramo>/<fase>, space, project, admin, ignore)`;
+  return `unknown target "${spec}" (etapa:<etapa>, phase:<etapa>/<fase>, space, project, admin, ignore)`;
 }
 
 // ---------------------------------------------------------------------------
@@ -515,7 +516,7 @@ type SavedTargets = Record<string, { workflowId?: unknown; groupTargets?: Record
 /** Saved by a previous remap on the project ref (`data.groupTargets`): boardId → { workflowId, groupTargets }. */
 const savedTargets = (ref: ImportRef): SavedTargets => asJson(asJson(ref.data).groupTargets) as SavedTargets;
 
-/** Each board's tramo and group targets now: saved by a previous remap, else the batch mapping's, else the defaults. */
+/** Each board's etapa and group targets now: saved by a previous remap, else the batch mapping's, else the defaults. */
 function currentTargets(ctx: RemapContext, catalog: Catalog): MondayRemapInput {
   const saved = savedTargets(ctx.projectRef);
   const live = (id: unknown) => (typeof id === "string" && workflowById(catalog, id) ? id : null);
@@ -731,7 +732,7 @@ async function computePlan(db: Exec, ctx: RemapContext, input: MondayRemapInput,
       issue("MAPPING_INVALID", true, board, "La etapa del tablero ya no existe.");
     for (const [groupId, t] of Object.entries(entry.groupTargets)) {
       const title = board.file!.groups.find((g) => g.id === groupId)?.title ?? groupId;
-      if (t.kind === "tramo" && !workflowById(catalog, t.workflowId))
+      if (t.kind === "etapa" && !workflowById(catalog, t.workflowId))
         issue("MAPPING_INVALID", true, board, `La etapa elegida para el grupo «${title}» ya no existe.`);
       if (t.kind === "phase" && !phaseById(catalog, t.phaseId))
         issue("MAPPING_INVALID", true, board, `La fase elegida para el grupo «${title}» ya no existe.`);
@@ -815,7 +816,7 @@ async function computePlan(db: Exec, ctx: RemapContext, input: MondayRemapInput,
     space: { name: string; boardId: string; groupId: string } | null;
   }
   const drafts: Draft[] = [];
-  const missingTramo = new Map<string, Set<string>>();
+  const missingEtapa = new Map<string, Set<string>>();
   for (const t of ctx.tasks) {
     const s = sourceOf(t);
     if (!s?.boardId) continue;
@@ -824,21 +825,21 @@ async function computePlan(db: Exec, ctx: RemapContext, input: MondayRemapInput,
     const board = boardsById.get(s.boardId)!;
     const boardFlow = entry.workflowId && workflowById(catalog, entry.workflowId) ? entry.workflowId : null;
     let target: ProjectFlowGroupTarget | null = s.groupId ? (entry.groupTargets[s.groupId] ?? null) : null;
-    if (!target && boardFlow) target = { kind: "tramo", workflowId: boardFlow };
+    if (!target && boardFlow) target = { kind: "etapa", workflowId: boardFlow };
     if (!target) {
-      const set = missingTramo.get(board.boardId) ?? new Set<string>();
+      const set = missingEtapa.get(board.boardId) ?? new Set<string>();
       set.add(groupTitle(board, s.groupId, s.groupTitle) || "Sin grupo");
-      missingTramo.set(board.boardId, set);
+      missingEtapa.set(board.boardId, set);
       continue;
     }
     if (target.kind === "ignore") continue;
-    if (target.kind === "tramo" && !workflowById(catalog, target.workflowId)) continue;
+    if (target.kind === "etapa" && !workflowById(catalog, target.workflowId)) continue;
     if (target.kind === "phase" && !phaseById(catalog, target.phaseId)) continue;
     const draft: Draft = { task: t, projectId: t.projectId, admin: false, workflowId: boardFlow, groupPhaseId: null, space: null };
     if (target.kind === "admin") {
       draft.admin = true;
       draft.workflowId = null;
-    } else if (target.kind === "tramo") {
+    } else if (target.kind === "etapa") {
       draft.workflowId = target.workflowId;
     } else if (target.kind === "phase") {
       draft.workflowId = phaseById(catalog, target.phaseId)!.workflowId;
@@ -853,10 +854,10 @@ async function computePlan(db: Exec, ctx: RemapContext, input: MondayRemapInput,
     }
     drafts.push(draft);
   }
-  for (const [boardId, titles] of missingTramo) {
+  for (const [boardId, titles] of missingEtapa) {
     const list = [...titles].map((t) => `«${t}»`).join(", ");
     issue(
-      "TRAMO_MISSING",
+      "ETAPA_MISSING",
       true,
       boardsById.get(boardId)!,
       `Elige una etapa para el tablero o para ${titles.size === 1 ? "el grupo" : "los grupos"} ${list}.`,
@@ -915,10 +916,10 @@ async function computePlan(db: Exec, ctx: RemapContext, input: MondayRemapInput,
   };
   const candidateOf = (d: Draft): { id: string; current: boolean } | null => {
     if (d.admin || !d.workflowId) return null;
-    const inTramo = (id: string | null) => id != null && catalog.templates.get(id)?.workflowId === d.workflowId;
-    if (inTramo(d.task.templateId)) return { id: d.task.templateId!, current: true };
+    const inEtapa = (id: string | null) => id != null && catalog.templates.get(id)?.workflowId === d.workflowId;
+    if (inEtapa(d.task.templateId)) return { id: d.task.templateId!, current: true };
     const matched = templateMatch(d.task);
-    return inTramo(matched) ? { id: matched!, current: false } : null;
+    return inEtapa(matched) ? { id: matched!, current: false } : null;
   };
   // Current links claim first, then the mapping's matches, so a second run gives the same answer.
   const ordered = [...drafts].sort(
@@ -1033,14 +1034,14 @@ function placementLabel(p: TaskPlacement, plan: Plan): string {
   const project =
     p.projectId !== plan.ctx.project.id ? `${plan.projectNames.get(p.projectId) ?? "Otro proyecto"} · ` : "";
   if (p.kind === "admin") return `${project}Tareas de administración`;
-  const tramo = workflowById(plan.catalog, p.workflowId)?.name ?? "Sin etapa";
+  const etapa = workflowById(plan.catalog, p.workflowId)?.name ?? "Sin etapa";
   const phase = phaseById(plan.catalog, p.phaseId)?.name ?? "Sin fase";
   const space = p.spaceId ? ` · ${plan.spaceNames.get(p.spaceId) ?? "Espacio"}` : "";
-  return `${project}${tramo} · ${phase}${space}`;
+  return `${project}${etapa} · ${phase}${space}`;
 }
 
 function previewOf(plan: Plan): MondayRemapPreview {
-  const counts = { tramo: 0, phase: 0, space: 0, admin: 0, otherProject: 0, unchanged: 0, phaseUnresolved: 0 };
+  const counts = { etapa: 0, phase: 0, space: 0, admin: 0, otherProject: 0, unchanged: 0, phaseUnresolved: 0 };
   const changed = new Map(plan.changes.map((c) => [c.taskId, c]));
   for (const t of plan.ctx.tasks) {
     const c = changed.get(t.id);
@@ -1050,7 +1051,7 @@ function previewOf(plan: Plan): MondayRemapPreview {
       counts.unchanged++;
       continue;
     }
-    if (c.before.workflowId !== after.workflowId) counts.tramo++;
+    if (c.before.workflowId !== after.workflowId) counts.etapa++;
     if (c.before.phaseId !== after.phaseId) counts.phase++;
     if (c.before.spaceId !== after.spaceId) counts.space++;
     if (after.kind === "admin" && c.before.kind !== "admin") counts.admin++;
@@ -1113,9 +1114,9 @@ async function writeHistory(tx: FlowTx, batchId: string, rows: (typeof historyEv
 }
 
 /**
- * A project's stages after a remap: add the tramos its tasks now have, delete
+ * A project's stages after a remap: add the etapas its tasks now have, delete
  * stage rows the import created that have no tasks left, recompute
- * `closed_at`, set `current_workflow_id` to the highest tramo with tasks, and
+ * `closed_at`, set `current_workflow_id` to the highest etapa with tasks, and
  * keep the project ref in step (`stageWorkflowIds`, `row_updated_at`).
  */
 async function rebuildStages(tx: FlowTx, projectId: string, catalog: Catalog, actorId: string): Promise<void> {
@@ -1486,7 +1487,7 @@ export function formatRemapPreview(name: string, state: MondayRemapState, previe
   lines.push(
     "",
     `Tasks: ${preview.tasks} before, ${preview.tasks - c.otherProject} after${moved}`,
-    `Changes: tramo ${c.tramo}, fase ${c.phase}, espacio ${c.space}, admin ${c.admin}, other project ${c.otherProject}, unchanged ${c.unchanged}, without fase ${c.phaseUnresolved}`,
+    `Changes: etapa ${c.etapa}, fase ${c.phase}, espacio ${c.space}, admin ${c.admin}, other project ${c.otherProject}, unchanged ${c.unchanged}, without fase ${c.phaseUnresolved}`,
   );
   if (preview.samples.length) {
     lines.push("", "Samples:");

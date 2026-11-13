@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * scripts/monday/apply.ts and scripts/monday/rollback.ts under the project flow
- * (docs/specs/project-flow/backend.md §10.5, §10.9): tramos, fases, espacios,
+ * (docs/specs/project-flow/backend.md §10.5, §10.9): etapas, fases, espacios,
  * kinds, closed_at, the "Asignar cliente y origen" task, the v2 mapping with
  * the status-map snapshot, re-apply, and a rollback that removes it all.
  *
@@ -20,7 +20,7 @@ import type { ImportDb, ImportEntity } from "@/lib/import/refs";
 import { ASSIGN_CLIENT_SYSTEM_KEY, MONDAY_STATUS_MAP_SETTING } from "@/lib/project-flow/catalog";
 import {
   flowTaskColumns,
-  projectTramos,
+  projectEtapas,
   spaceExternalId,
   writePhaseA,
   type BatchInfo,
@@ -132,7 +132,7 @@ describe("apply project flow helpers", () => {
     closedAt: "2026-10-01T05:59:59.000Z",
   };
 
-  it("keeps fase, espacio and closed_at on a closed tramo task", () => {
+  it("keeps fase, espacio and closed_at on a closed etapa task", () => {
     expect(flowTaskColumns(base as never, "s1")).toEqual({
       kind: "usuario",
       templateId: null,
@@ -144,13 +144,13 @@ describe("apply project flow helpers", () => {
     });
   });
 
-  it("drops closed_at on an open task and the fase without a tramo", () => {
+  it("drops closed_at on an open task and the fase without a etapa", () => {
     const cols = flowTaskColumns({ ...base, status: "pendiente", workflowId: null } as never, null);
     expect(cols.closedAt).toBeNull();
     expect(cols.phaseId).toBeNull();
   });
 
-  it("clears tramo, fase, espacio and template on an admin task", () => {
+  it("clears etapa, fase, espacio and template on an admin task", () => {
     const cols = flowTaskColumns({ ...base, kind: "admin", templateId: "t" } as never, "s1");
     expect(cols).toMatchObject({ kind: "admin", templateId: null, workflowId: null, phaseId: null, spaceId: null });
   });
@@ -166,20 +166,20 @@ describe("apply project flow helpers", () => {
     expect(spaceExternalId("item9", { boardId: "b1", groupId: "g1" })).toBe("item9/b1:g1");
   });
 
-  it("gives a stage to every tramo with tasks and makes the highest one current", () => {
+  it("gives a stage to every etapa with tasks and makes the highest one current", () => {
     const order = new Map([
       [W1, 10],
       [W2, 20],
     ]);
-    expect(projectTramos({ workflowId: W1 } as never, [W2, W1, null, W2], order)).toEqual({
-      tramos: [W1, W2],
+    expect(projectEtapas({ workflowId: W1 } as never, [W2, W1, null, W2], order)).toEqual({
+      etapas: [W1, W2],
       currentWorkflowId: W2,
     });
-    // No tasks: the board's tramo, which then has its stage.
-    expect(projectTramos({ workflowId: W1 } as never, [], order)).toEqual({ tramos: [W1], currentWorkflowId: W1 });
-    // translate's current tramo wins.
-    expect(projectTramos({ workflowId: W1, currentWorkflowId: W1 } as never, [W2], order)).toEqual({
-      tramos: [W1, W2],
+    // No tasks: the board's etapa, which then has its stage.
+    expect(projectEtapas({ workflowId: W1 } as never, [], order)).toEqual({ etapas: [W1], currentWorkflowId: W1 });
+    // translate's current etapa wins.
+    expect(projectEtapas({ workflowId: W1, currentWorkflowId: W1 } as never, [W2], order)).toEqual({
+      etapas: [W1, W2],
       currentWorkflowId: W1,
     });
   });
@@ -200,7 +200,7 @@ describe("rollback project flow steps", () => {
   it("lets start batches go with the project and owns the import's espacios", () => {
     const check = (table: string, column: string) =>
       POINTER_CHECKS.find((c) => c.table === table && c.column === column)?.owner;
-    expect(check("tramo_start_batches", "project_id")).toBe("cascade");
+    expect(check("etapa_start_batches", "project_id")).toBe("cascade");
     expect(check("project_spaces", "project_id")).toEqual({ entity: "project_space" });
     expect(check("tasks", "space_id")).toEqual({ entity: "task" });
   });
@@ -387,7 +387,7 @@ describe.skipIf(!url)("apply and rollback, project flow (test DB)", { timeout: 6
     return map;
   }
 
-  it("writes tramos, fases, espacios, kinds, closed_at, the assign_client task and a v2 mapping", async () => {
+  it("writes etapas, fases, espacios, kinds, closed_at, the assign_client task and a v2 mapping", async () => {
     await inTx(async (tx) => {
       const { anaId, betoId } = await seed(tx);
       const { batchId, counts } = await writePhaseA(tx, translation(anaId, betoId), BATCH, anaId);
@@ -464,7 +464,7 @@ describe.skipIf(!url)("apply and rollback, project flow (test DB)", { timeout: 6
       const refs = await refsOf(tx, batchId);
       const projectId = refs.find((r) => r.entity === "project")!.rowId;
 
-      // A later "Iniciar tramo" that created nothing still left its batch row: it goes with the project.
+      // A later "Iniciar etapa" that created nothing still left its batch row: it goes with the project.
       await tx.insert(schema.etapaStartBatches).values({ projectId, workflowId: W2, assignmentMode: "none" });
       expect(await findRollbackBlockers(tx, batchId)).toEqual([]);
 
@@ -511,7 +511,7 @@ describe.skipIf(!url)("apply and rollback, project flow (test DB)", { timeout: 6
       expect(tables).toContain("project_spaces:project_id");
       expect(tables).toContain("tasks:space_id");
       expect(tables).toContain("tasks:project_id");
-      expect(blockers.some((b) => b.table === "tramo_start_batches")).toBe(false);
+      expect(blockers.some((b) => b.table === "etapa_start_batches")).toBe(false);
     });
   });
 });

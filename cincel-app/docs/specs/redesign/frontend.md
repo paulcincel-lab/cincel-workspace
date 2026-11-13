@@ -9,7 +9,7 @@ Conventions (from the repository guidelines and the existing app): Next.js 16 Ap
 
 No Zustand stores and no TanStack Query for this feature. Pages are server components that load initial data; client components keep local state, call server actions and refetch. `@tanstack/react-table` stays (through `DataTable`).
 
-Vocabulary follows Project Flow: **Tramo** (Presale, Diseño, Construcción), **Fase**, **Espacio**, **Puesto**. Where the canvas says "Área" or shows a fourth "Decoración" color, read **Tramo** and the three tramo colors (§14.4).
+Vocabulary follows Project Flow: **Etapa** (Presale, Diseño, Construcción), **Fase**, **Espacio**, **Puesto**. Where the canvas says "Área" or shows a fourth "Decoración" color, read **Etapa** and the three etapa colors (§14.4).
 
 ---
 
@@ -19,7 +19,7 @@ Vocabulary follows Project Flow: **Tramo** (Presale, Diseño, Construcción), **
 
 **Target users**
 - Every staff member: Inicio, Mi espacio, Tareas, Proyectos, Personas, Biblioteca, Asistente, Ajustes › Perfil / Apariencia / Notificaciones / Integraciones.
-- Administrators: Ajustes › Tema y estilo, Control de horario, General, Tramos y fases, Puestos, Estatus, Permisos, monday, Google; team hours report; vacation decisions.
+- Administrators: Ajustes › Tema y estilo, Control de horario, General, Etapas y fases, Puestos, Estatus, Permisos, monday, Google; team hours report; vacation decisions.
 - Clients: the portal (restyled, three styles).
 
 **UX goals**
@@ -46,7 +46,7 @@ Vocabulary follows Project Flow: **Tramo** (Presale, Diseño, Construcción), **
 | `/inicio` | Home: greeting, profile photo, KPIs and widgets in three styles | staff, `dashboard.canViewDashboard` | `Dashboard`, `InicioEsencial`, `InicioAnalitico`, `InicioCalido`, `InicioGrafito`, `InicioOscuro` |
 | `/mi-espacio` | Personal workspace: capture, Bandeja, recordatorios, checklists, notas | staff (owner data only) | `MiEspacio`, `MiEspacioEsencial`, `MiEspacioAnalitico`, `MiEspacioGmail`, `NotaEditor`, `NuevoRecordatorio` |
 | `/mi-espacio?nota=<id>` | Same page with `NoteEditor` open (search param; the page stays mounted) | owner | `NotaEditor` |
-| `/tareas` | Unified tasks: `?vista=tablero\|lista\|calendario&cal=mes\|semana\|dia&tramo=&responsable=yo\|<id>&proyecto=&estado=&q=&tarea=<id>&nueva=1&project=<id>&iniciar=1` | staff, `activities.canViewActivities` | `Tareas`, `TareasLista`, `Calendario`, `CalendarioSemana`, `CalendarioDia` (+ Esencial/Analítico), `EventoDetalle` |
+| `/tareas` | Unified tasks: `?vista=tablero\|lista\|calendario&cal=mes\|semana\|dia&etapa=&responsable=yo\|<id>&proyecto=&estado=&q=&tarea=<id>&nueva=1&project=<id>&iniciar=1` | staff, `activities.canViewActivities` | `Tareas`, `TareasLista`, `Calendario`, `CalendarioSemana`, `CalendarioDia` (+ Esencial/Analítico), `EventoDetalle` |
 | `/tareas?tarea=<id>` | Same page with `TaskSheet` open over the current view (search param, so the board stays mounted; closing removes the param with `router.replace`) | staff | `TareaDetalle` |
 | `/proyectos` | Project list in three styles; "Nuevo proyecto" dialog | `projects.canViewProjects` | `Proyectos`, `ProyectosEsencial`, `ProyectosAnalitico`, `NuevoProyecto` |
 | `/proyectos/[id]` | Project Resumen tab | `canViewProjects` | `Proyecto`, `ProyectoEsencial`, `ProyectoAnalitico` |
@@ -74,8 +74,8 @@ Vocabulary follows Project Flow: **Tramo** (Presale, Diseño, Construcción), **
 | `/ajustes/general` | Organization data (existing `GeneralSettingsWorkspace`, restyled) + header links | admin | `AjustesGeneral` |
 | `/ajustes/tema` | Organization theme and style editor | `canManageAppearance` (server guard, §8) | `AjustesAdmin` |
 | `/ajustes/horario` | Control de horario settings (`canManageTimeTracking`) + team report (`canViewTeamHours`, three styles) | server guard: either capability (§8) | `AjustesHorario` (+ variants) |
-| `/ajustes/tramos` | Project Flow "Tramos y fases" page, rendered here when Project Flow's page exists; otherwise the route 404s and `AjustesNav` hides the item (§21.2) | admin | `AjustesAreas` (layout reference only) |
-| `/ajustes/puestos` | Project Flow "Puestos" page, same rule as Tramos | admin | — |
+| `/ajustes/tramos` | Project Flow "Etapas y fases" page, rendered here when Project Flow's page exists; otherwise the route 404s and `AjustesNav` hides the item (§21.2) | admin | `AjustesAreas` (layout reference only) |
+| `/ajustes/puestos` | Project Flow "Puestos" page, same rule as Etapas | admin | — |
 | `/ajustes/estatus` | Existing `EstatusClient`, restyled | admin | `AjustesEstatus` |
 | `/ajustes/permisos` | Existing `PermissionsWorkspace`, restyled (storage unchanged) | admin | `AjustesPermisos` |
 | `/ajustes/monday` | Existing monday wizard + import history | admin (bootstrap rule unchanged) | `AjustesMonday`, `BienvenidaMonday` |
@@ -96,7 +96,7 @@ Old `page.tsx` files become server `redirect()` stubs (bookmarks keep working). 
 | `/mis-tareas` | `/tareas?vista=lista&responsable=yo` |
 | `/calendario` | `/tareas?vista=calendario` |
 | `/actividades/general` | `/tareas?vista=lista` |
-| `/actividades/[tramo]` | `/tareas?vista=lista&tramo=[tramo]`; with `?project=X` (Project Flow's start deep link) → `/tareas?vista=lista&tramo=[tramo]&project=X&iniciar=1` |
+| `/actividades/[etapa]` | `/tareas?vista=lista&etapa=[etapa]`; with `?project=X` (Project Flow's start deep link) → `/tareas?vista=lista&etapa=[etapa]&project=X&iniciar=1` |
 | `/equipo` | `/personas` |
 | `/directorio` | `/personas/clientes` |
 | `/clientes`, `/contratistas`, `/proveedores/*` | `/personas/clientes`, `/personas/contratistas`, `/personas/proveedores` |
@@ -104,7 +104,7 @@ Old `page.tsx` files become server `redirect()` stubs (bookmarks keep working). 
 | `/recursos/[seccion]` | `/biblioteca/[seccion]`; `mis-vacaciones` → `/biblioteca/vacaciones` |
 | `/recursos/empresa`, `/recursos/empresa/[doc]` | `/biblioteca`, `/biblioteca/empresa/[doc]` |
 | `/profile` | `/ajustes/perfil` |
-| `/configuracion`, `/configuracion/[x]` | `/ajustes/apariencia`, `/ajustes/[x]` (`workflows` → `tramos`, `areas` → `puestos`, `importar-monday` → `monday`, `google/primeros-pasos` → `/ajustes/google/primeros-pasos`) |
+| `/configuracion`, `/configuracion/[x]` | `/ajustes/apariencia`, `/ajustes/[x]` (`workflows` → `etapas`, `areas` → `puestos`, `importar-monday` → `monday`, `google/primeros-pasos` → `/ajustes/google/primeros-pasos`) |
 | `/tareas/[id]`, `/mi-espacio/notas/[id]` (canonical link forms returned by search and notifications, BE §7.3) | `/tareas?tarea=[id]`, `/mi-espacio?nota=[id]` (server `redirect()`, so the sheet opens over the mounted view) |
 
 ### 2.3 Feature flag and route group
@@ -135,7 +135,7 @@ Every page lists its states. Standard states (§4.2):
 ### 3.1 Shell (every staff page)
 
 Frames: `Sidebar`, every screen frame, `Movil*`.
-- **Sidebar** (248 px, `sidebar` token background, right border `sidebar-border`): logo block (30 px square mark + "CINCEL" letter-spaced 0.14em + system name), search button ("Buscar" + `⌘K`) opening `CommandPalette`, `TimeClock` card (only when time tracking is enabled for the viewer, §3.13), nav items (36 px, radius 10, icon 17 px stroke 1.8): Inicio, Mi espacio (badge = `unreadCount` + my open reminders still due today), Tareas (badge = my open tasks), Proyectos, Personas, Biblioteca, Asistente — count badges are the Badge `count` variant (mono 11 px, primary tint) and hide at 0; section "Áreas" with the tramos (9 px color square in the tramo's chart color + name) linking `/tareas?tramo=key`; spacer; footer: Ajustes item, user block (avatar 30 px + name + access role; the name links `/ajustes/perfil`; avatar opens a menu: Perfil, Apariencia, Instagram / Sitio web / Correo links from General settings, "Cerrar sesión").
+- **Sidebar** (248 px, `sidebar` token background, right border `sidebar-border`): logo block (30 px square mark + "CINCEL" letter-spaced 0.14em + system name), search button ("Buscar" + `⌘K`) opening `CommandPalette`, `TimeClock` card (only when time tracking is enabled for the viewer, §3.13), nav items (36 px, radius 10, icon 17 px stroke 1.8): Inicio, Mi espacio (badge = `unreadCount` + my open reminders still due today), Tareas (badge = my open tasks), Proyectos, Personas, Biblioteca, Asistente — count badges are the Badge `count` variant (mono 11 px, primary tint) and hide at 0; section "Áreas" with the etapas (9 px color square in the etapa's chart color + name) linking `/tareas?tramo=key`; spacer; footer: Ajustes item, user block (avatar 30 px + name + access role; the name links `/ajustes/perfil`; avatar opens a menu: Perfil, Apariencia, Instagram / Sitio web / Correo links from General settings, "Cerrar sesión").
 - Active item: `sidebar-primary` background, `sidebar-primary-foreground` text, weight 500.
 - **Assistant button**: fixed bottom-right, 48 px pill "Pregúntale a Cincel" + `⌘J` hint, opens `AssistantSheet` (§3.12). Hidden on `/asistente`.
 - **Toaster**: exactly one shadcn `sonner` `<Toaster position="bottom-right" offset={72} />`, mounted in the root `app/layout.tsx` by Phase 1 (so it serves both shells). Project Flow Phase 2 must not add a second one (§21.2).
@@ -148,9 +148,9 @@ Frames: `Dashboard` (Visual), `InicioEsencial`, `InicioAnalitico`; theme referen
 - **Widgets:** `KpiWidget`, `DistributionWidget`, `WidgetCard` + chart line, `AttentionListWidget`, `AgendaWidget`, `ProgressListWidget`, `PeopleWidget` (§4.10).
 - **RSC** loads `fetchInicioAction()`, `fetchMyPreferencesAction()`, photo URL. **CC** `InicioClient`.
 - **Header block** (replaces `PageHeader` on this page only): avatar 72 px (photo or initials on `secondary`), camera button 28 px (`primary`) opening a file picker (`accept="image/jpeg,image/png,image/webp"`); the client re-encodes the image through `<canvas>` to JPEG ≤ 1024 px (this drops EXIF, including GPS) and uploads it to `POST /api/staff/me/photo` (route handler, 2 MB limit, EXIF/XMP metadata also stripped server-side; `TOO_LARGE`, `INVALID_TYPE`, `RATE_LIMITED`); "Buenos días, {firstName}" (22/600; "Buenas tardes" after 12:00, "Buenas noches" after 19:00), role line, date line "viernes, 6 de noviembre · {n} eventos hoy · {m} tareas vencidas" (`Intl.DateTimeFormat("es-MX")`, lowercase). Right: "Nueva tarea" (primary) → `/tareas?nueva=1`, and `EstiloSwitch`.
-- **Visual**: KPI row (4 tiles: Proyectos activos, Vencidas, Bloqueadas, Revisiones · 7 días; number 30/500, 7-point sparkline, delta pill, tramo split bar, caption); "Tareas abiertas por tramo" donut (ring 5.5/42, center total, legend with count and %); "Ritmo semanal" line chart (8 weeks, Completadas solid `chart-1` with area, Creadas dashed `chart-4`, horizontal grid only); "Requiere atención" list (left 4 px tramo bar, title links `/tareas?tarea=<id>`, project · tramo, reason pill, avatar, due date mono `destructive`); "Mi día" agenda (time mono + tinted event block) with "Sin revisiones en los próximos 7 días" dashed empty line; "Avance de proyectos activos" bars; "Carga por persona" stacked bars (En proceso / Pendiente / Vencida) with legend.
-- **Esencial**: max-width 980; one card of four big numbers + labels; two-column "Requiere atención" (title, "proyecto · persona · motivo fecha") and "Mi día" (time + title + project); three lists: tareas abiertas por tramo, avance de proyectos (name … %), carga por persona (name … n tareas). No charts, no tints, no avatars.
-- **Analítico**: KPI table (Indicador, Hoy, Δ 7 días, Prom. 30 días, Mín – máx 30 d, Tendencia 7 d sparkline 72×18) incl. "Completadas · semana"; "Tareas por tramo" table (Abiertas, Vencidas, % venc. heat cell, Días prom., Total row); "Ritmo semanal" table (Semana, Creadas, Completadas, Neto colored text); "Requiere atención" table (Tarea, Proyecto, Tramo dot, Resp. initials, Motivo, Vence, Retraso); "Proyectos activos" table (Real, Plan, Desv., Presup.); "Carga por persona" table (En proceso, Pendiente, Vencidas, Total).
+- **Visual**: KPI row (4 tiles: Proyectos activos, Vencidas, Bloqueadas, Revisiones · 7 días; number 30/500, 7-point sparkline, delta pill, etapa split bar, caption); "Tareas abiertas por etapa" donut (ring 5.5/42, center total, legend with count and %); "Ritmo semanal" line chart (8 weeks, Completadas solid `chart-1` with area, Creadas dashed `chart-4`, horizontal grid only); "Requiere atención" list (left 4 px etapa bar, title links `/tareas?tarea=<id>`, project · etapa, reason pill, avatar, due date mono `destructive`); "Mi día" agenda (time mono + tinted event block) with "Sin revisiones en los próximos 7 días" dashed empty line; "Avance de proyectos activos" bars; "Carga por persona" stacked bars (En proceso / Pendiente / Vencida) with legend.
+- **Esencial**: max-width 980; one card of four big numbers + labels; two-column "Requiere atención" (title, "proyecto · persona · motivo fecha") and "Mi día" (time + title + project); three lists: tareas abiertas por etapa, avance de proyectos (name … %), carga por persona (name … n tareas). No charts, no tints, no avatars.
+- **Analítico**: KPI table (Indicador, Hoy, Δ 7 días, Prom. 30 días, Mín – máx 30 d, Tendencia 7 d sparkline 72×18) incl. "Completadas · semana"; "Tareas por etapa" table (Abiertas, Vencidas, % venc. heat cell, Días prom., Total row); "Ritmo semanal" table (Semana, Creadas, Completadas, Neto colored text); "Requiere atención" table (Tarea, Proyecto, Etapa dot, Resp. initials, Motivo, Vence, Retraso); "Proyectos activos" table (Real, Plan, Desv., Presup.); "Carga por persona" table (En proceso, Pendiente, Vencidas, Total).
 - **Empty:** no projects → `EmptyState` "Aún no hay proyectos activos" + "Nuevo proyecto". No tasks needing attention → line "Nada requiere atención hoy".
 - **Visibility (B8):** project/task scoping by `scopeDashboardProjects/Tasks` (existing). For viewers without `canSeeAdminData` (§21.2 compat), `attention`, `myDay`, `projectsProgress[].next` and KPI counts exclude admin tasks (Project Flow `kind = "admin"`) and never include client/origin fields; the server applies this, the page renders what it gets.
 - **Per-style KPIs:** "Completadas · semana" has `visibleIn: ["analitico"]`; `KpiWidget` filters by `visibleIn` internally (the page never checks the style).
@@ -175,25 +175,25 @@ Frames: `MiEspacio` (+ `MiEspacioEsencial`, `MiEspacioAnalitico`), `MiEspacioGma
 ### 3.4 `/tareas`
 
 Frames: `Tareas` (+ `TareasEsencial`, `TareasAnalitico`), `TareasLista` (+ variants), `Calendario`, `CalendarioSemana` (+ variants), `CalendarioDia`, `TareaDetalle`, `NuevaTarea`, `EventoDetalle`.
-- **Widgets / patterns:** `ListPage` + `FiltersBar`, `RecordTable`, `DistributionWidget`, `AgendaWidget`, `StatusChip`, `TramoBadge`; `TaskSheet` = `FormSheet`, `NewTaskDialog` = `FormDialog` (§4.10, §4.11). The Visual board columns are the only non-widget surface (existing `TableroClient` drag-and-drop).
-- **RSC** reads search params (`TareasQuery`, §4.6), loads `fetchBoardAction` / `fetchTasksAction` / `fetchCalendarAction` (existing) for the selected view and filters, `fetchAssignableStaffAction`, workflows (tramos). **CC** `TareasClient`.
-- **Header:** "Tareas" + description "Todas los tramos en un solo lugar. Arrastra una tarjeta para cambiar su estatus." (tablero) / "Fechas de entrega y agenda del equipo. Las horas con ≈ son estimadas." (calendario); view switch (segmented links Tablero / Lista / Calendario, 30 px items on `muted`); `EstiloSwitch`; "Nueva tarea" (primary) → `NewTaskDialog`.
-- **Filters bar:** tramo chips (Todas + tramo color square + count; `aria-pressed`), "Responsable: Yo ▾" (combobox: Yo, Todos, people), "Proyecto ▾" (combobox), search. Filters write the URL (`router.replace`, no scroll). "Mis tareas" is "Responsable: Yo".
-- **Tablero / Visual:** columns 290 px on `muted` background (radius 14, padding 10): status ring + name + count; cards (white, radius 12): tramo chip (tint + ink + dot), priority text, title (link `/tareas?tarea=<id>`), project, subtask progress bar + n/m, avatar + name, due date mono (`destructive` when overdue); "+ Agregar" quick-add at the end of each open column (`TaskBoardWidget` `onQuickAdd(columnKey)`, wired by `TareasTablero`): opens `NewTaskDialog` with `defaults.status` = that column; after `createUserTaskAction` the dialog sets the status (`setTaskStatusAction` / `setTaskCustomStatusAction`) and refreshes, so the card lands in the column. Empty status columns collapse to 52 px vertical strips (ring, "0", vertical label). Drag-and-drop between columns calls `setTaskStatusAction` (existing) with optimistic move and rollback on error.
+- **Widgets / patterns:** `ListPage` + `FiltersBar`, `RecordTable`, `DistributionWidget`, `AgendaWidget`, `StatusChip`, `EtapaBadge`; `TaskSheet` = `FormSheet`, `NewTaskDialog` = `FormDialog` (§4.10, §4.11). The Visual board columns are the only non-widget surface (existing `TableroClient` drag-and-drop).
+- **RSC** reads search params (`TareasQuery`, §4.6), loads `fetchBoardAction` / `fetchTasksAction` / `fetchCalendarAction` (existing) for the selected view and filters, `fetchAssignableStaffAction`, workflows (etapas). **CC** `TareasClient`.
+- **Header:** "Tareas" + description "Todas los etapas en un solo lugar. Arrastra una tarjeta para cambiar su estatus." (tablero) / "Fechas de entrega y agenda del equipo. Las horas con ≈ son estimadas." (calendario); view switch (segmented links Tablero / Lista / Calendario, 30 px items on `muted`); `EstiloSwitch`; "Nueva tarea" (primary) → `NewTaskDialog`.
+- **Filters bar:** etapa chips (Todas + etapa color square + count; `aria-pressed`), "Responsable: Yo ▾" (combobox: Yo, Todos, people), "Proyecto ▾" (combobox), search. Filters write the URL (`router.replace`, no scroll). "Mis tareas" is "Responsable: Yo".
+- **Tablero / Visual:** columns 290 px on `muted` background (radius 14, padding 10): status ring + name + count; cards (white, radius 12): etapa chip (tint + ink + dot), priority text, title (link `/tareas?tarea=<id>`), project, subtask progress bar + n/m, avatar + name, due date mono (`destructive` when overdue); "+ Agregar" quick-add at the end of each open column (`TaskBoardWidget` `onQuickAdd(columnKey)`, wired by `TareasTablero`): opens `NewTaskDialog` with `defaults.status` = that column; after `createUserTaskAction` the dialog sets the status (`setTaskStatusAction` / `setTaskCustomStatusAction`) and refreshes, so the card lands in the column. Empty status columns collapse to 52 px vertical strips (ring, "0", vertical label). Drag-and-drop between columns calls `setTaskStatusAction` (existing) with optimistic move and rollback on error.
 - **Tablero / Esencial:** list grouped by estatus with counts ("Pendiente · 4"), rows title / project / responsable / due as text; Completado collapsed with a link to the list view.
-- **Tablero / Analítico:** estatus summary strip (count and % per estatus, "vencidas / abiertas" cell) + 10-column table (Tarea, Proyecto, Tramo, Fase, Responsable, Estatus, Prioridad, Vence, Días de retraso, Subtareas) with a totals row.
-- **Lista / Visual:** grouped table (Pendiente, En proceso, Completado collapsed with count): checkbox, tarea (link), proyecto, tramo chip, responsable avatar+name, vence, prioridad, subtareas progress.
+- **Tablero / Analítico:** estatus summary strip (count and % per estatus, "vencidas / abiertas" cell) + 10-column table (Tarea, Proyecto, Etapa, Fase, Responsable, Estatus, Prioridad, Vence, Días de retraso, Subtareas) with a totals row.
+- **Lista / Visual:** grouped table (Pendiente, En proceso, Completado collapsed with count): checkbox, tarea (link), proyecto, etapa chip, responsable avatar+name, vence, prioridad, subtareas progress.
 - **Lista / Esencial:** groups Vencidas / Esta semana / Más adelante, text rows.
 - **Lista / Analítico:** by-project table (Abiertas, Vencidas, % vencidas heat, retraso promedio) above the detailed table sorted by delay.
-- **Calendario** (`cal=mes|semana|dia`; existing `UnifiedCalendar` logic, new presentation): toolbar "Hoy", prev/next (`aria-label` "Mes anterior"/"Mes siguiente"), title "noviembre de 2026", tramo legend, Mes/Semana/Día segmented links; right aside: selected day agenda ("viernes 6", "4 eventos"), "Entregas por semana" stacked bars, "Sincronizar con Google Calendar" (existing `CalendarFeedDialog`).
-  - Mes / Visual: 7-column grid, 112 px cells, events as tinted blocks with 3 px tramo left border (`Calendario`), "+n más", today = `primary` circle.
-  - Mes / Esencial: agenda list grouped by day. Mes / Analítico: calendar shaded by daily load (counts) + tramo summary + table of the month's deliveries.
-  - Semana / Visual: time grid 8:00–19:00 + all-day row for due dates (`CalendarioSemana`). Esencial: day-by-day list. Analítico: daily summary (shaded, Δ vs last week) + events table (Día, Hora, Duración, Proyecto, Tramo, Asistentes) with daily subtotals.
+- **Calendario** (`cal=mes|semana|dia`; existing `UnifiedCalendar` logic, new presentation): toolbar "Hoy", prev/next (`aria-label` "Mes anterior"/"Mes siguiente"), title "noviembre de 2026", etapa legend, Mes/Semana/Día segmented links; right aside: selected day agenda ("viernes 6", "4 eventos"), "Entregas por semana" stacked bars, "Sincronizar con Google Calendar" (existing `CalendarFeedDialog`).
+  - Mes / Visual: 7-column grid, 112 px cells, events as tinted blocks with 3 px etapa left border (`Calendario`), "+n más", today = `primary` circle.
+  - Mes / Esencial: agenda list grouped by day. Mes / Analítico: calendar shaded by daily load (counts) + etapa summary + table of the month's deliveries.
+  - Semana / Visual: time grid 8:00–19:00 + all-day row for due dates (`CalendarioSemana`). Esencial: day-by-day list. Analítico: daily summary (shaded, Δ vs last week) + events table (Día, Hora, Duración, Proyecto, Etapa, Asistentes) with daily subtotals.
   - Día: single-day timeline with a "now" line + "Vence hoy" panel (`CalendarioDia`; one style only, the agenda is already a list).
   - Event click → `EventDetailPopover` (`EventoDetalle`): title, time, project chip, attendees, location, linked tasks, "Abrir en Cutto" only when the event carries a stored Cutto URL (`AgendaItem.meetingUrl` non-null; until Cutto's API exists, only URLs pasted into the event), "Editar" / "Eliminar".
-- **TaskSheet** (`/tareas?tarea=<id>`, Sheet 520 px, frame `TareaDetalle`): header status select + close (back), title (inline edit), properties grid (Estatus, Responsable, Proyecto, Tramo, Fase, Espacio, Fecha compromiso, Revisión, Prioridad), descripción, subtareas checklist with progress, adjuntos thumbnails, actividad/comentarios timeline (existing history), comment composer with "@" mentions. Uses existing task actions. Close removes `tarea` from the URL (`router.replace`), so the view underneath never unmounts. Fase and Espacio fields render only when that data exists (§21.2 compat).
-- **NewTaskDialog** (frame `NuevaTarea`): Título, Proyecto, Tramo, Fase (Project Flow catalog; hidden when the tramo has none), Responsable, Fecha de entrega, Prioridad (segmented), Descripción, Subtareas, link "Usar plantilla del tramo"; "Cancelar" / "Crear tarea" (existing `createUserTaskAction`).
-- When `tramo` is a single tramo and Project Flow's contracts exist (Q2), the Lista view shows Project Flow's "Listos para iniciar" / "Próximos" cards above the table and its `StartTramoSheet`; `project=X&iniciar=1` (from the `/actividades/[tramo]?project=X` redirect) opens that sheet for project X, preserving Project Flow's deep link. Without Project Flow, nothing renders there and `iniciar` is ignored.
+- **TaskSheet** (`/tareas?tarea=<id>`, Sheet 520 px, frame `TareaDetalle`): header status select + close (back), title (inline edit), properties grid (Estatus, Responsable, Proyecto, Etapa, Fase, Espacio, Fecha compromiso, Revisión, Prioridad), descripción, subtareas checklist with progress, adjuntos thumbnails, actividad/comentarios timeline (existing history), comment composer with "@" mentions. Uses existing task actions. Close removes `tarea` from the URL (`router.replace`), so the view underneath never unmounts. Fase and Espacio fields render only when that data exists (§21.2 compat).
+- **NewTaskDialog** (frame `NuevaTarea`): Título, Proyecto, Etapa, Fase (Project Flow catalog; hidden when the etapa has none), Responsable, Fecha de entrega, Prioridad (segmented), Descripción, Subtareas, link "Usar plantilla del etapa"; "Cancelar" / "Crear tarea" (existing `createUserTaskAction`).
+- When `etapa` is a single etapa and Project Flow's contracts exist (Q2), the Lista view shows Project Flow's "Listos para iniciar" / "Próximos" cards above the table and its `StartEtapaSheet`; `project=X&iniciar=1` (from the `/actividades/[etapa]?project=X` redirect) opens that sheet for project X, preserving Project Flow's deep link. Without Project Flow, nothing renders there and `iniciar` is ignored.
 - **Empty:** no tasks for filters → "No hay tareas con estos filtros" + "Quitar filtros". **Permissions:** existing activities capabilities.
 
 ### 3.5 `/proyectos` and `/proyectos/[id]/*`
@@ -201,11 +201,11 @@ Frames: `Tareas` (+ `TareasEsencial`, `TareasAnalitico`), `TareasLista` (+ varia
 Frames: `Proyectos` (+ variants), `NuevoProyecto`, `Proyecto` (+ variants), `ProyectoTareas`, `ProyectoCronograma`, `ProyectoArchivos` (+ variants), `ProyectoClientes`, `ProyectoFicha`, `ProyectoReporte`.
 - **Widgets / patterns:** `ListPage`, `EntityCardGrid`, `RecordTable`, `DistributionWidget`, `ProgressListWidget`, `KpiWidget`, `PhaseStepper`, `WidgetCard`; `NewProjectDialog` = `FormDialog` (§4.10, §4.11).
 - **List RSC:** `fetchProjectsAction` + `fetchProjectsPortfolioAction` (Annex C). Header "Proyectos" + "{n} activos · avance, fase y entregas de cada obra."; search; `EstiloSwitch`; "Nuevo proyecto" → `NewProjectDialog` (frame `NuevoProyecto`; fields per Project Flow: name only for non-admins, client/origin for admins).
-  - Visual: "Proyectos por tramo" strip (one flexible segment per tramo, flex = count, tint background, 3 px bottom border, count + name); cards grid `minmax(300px,1fr)`: tinted 84 px head with tramo chip and progress ring 52 px, name, place, tramo step bar, "n abiertas · m vencidas", team avatars, next delivery row.
-  - Esencial: phase summary line + plain list (nombre, lugar, tramo, % as text, próxima entrega).
+  - Visual: "Proyectos por etapa" strip (one flexible segment per etapa, flex = count, tint background, 3 px bottom border, count + name); cards grid `minmax(300px,1fr)`: tinted 84 px head with etapa chip and progress ring 52 px, name, place, etapa step bar, "n abiertas · m vencidas", team avatars, next delivery row.
+  - Esencial: phase summary line + plain list (nombre, lugar, etapa, % as text, próxima entrega).
   - Analítico: phase summary table with totals + portfolio table (Real, Plan, Desv., Presup. ejercido (admins only; the column is absent for others), Abiertas, Vencidas, Días a entrega, Próxima entrega, sparkline, totals row). "Próxima entrega" never names an admin task (server rule, B8).
-- **Project shell** (`ProjectTabs` + header, all tabs): breadcrumb "Proyectos / {name}", 48 px icon tile, name 22/600, tramo chip, meta line "{tipo} · {ciudad} · Responsable: {name}", actions "Reporte" (outline → `/cronograma/reporte`) and "Nueva tarea", tabs: Resumen, Tareas (count), Cronograma, Archivos (count), Clientes (count; shown with `portal.manageAccess`), Ficha. `EstiloSwitch` right-aligned under the tabs on data tabs.
-- **Resumen** Visual: tramo stepper (done ✓ / current / next, date ranges), progress ring 64 px "Avance · 32 de 39 tareas", budget bar "Presupuesto · ejercido [MONTO] de [MONTO]" (admins only), mini Gantt "Cronograma de obra" (partidas, month grid, today line), "Archivos recientes" grid, "Ficha" key/value list, "Cliente y contactos" (with a Cutto chat link per staff contact). **Visibility (B8):** the card renders when `canSeeAdminData(user)` or when the viewer is a member of the project (responsable, coordinador or miembro) **and** has `clients.canViewClients`; otherwise it is absent from the DOM. The staff-contacts part (team) is always visible. Esencial: summary, tramos, partidas, files, ficha, contacts as text lists. Analítico: indicators table, partidas table, budget by item table ([MONTO]), tramos table, folders table, contacts table.
+- **Project shell** (`ProjectTabs` + header, all tabs): breadcrumb "Proyectos / {name}", 48 px icon tile, name 22/600, etapa chip, meta line "{tipo} · {ciudad} · Responsable: {name}", actions "Reporte" (outline → `/cronograma/reporte`) and "Nueva tarea", tabs: Resumen, Tareas (count), Cronograma, Archivos (count), Clientes (count; shown with `portal.manageAccess`), Ficha. `EstiloSwitch` right-aligned under the tabs on data tabs.
+- **Resumen** Visual: etapa stepper (done ✓ / current / next, date ranges), progress ring 64 px "Avance · 32 de 39 tareas", budget bar "Presupuesto · ejercido [MONTO] de [MONTO]" (admins only), mini Gantt "Cronograma de obra" (partidas, month grid, today line), "Archivos recientes" grid, "Ficha" key/value list, "Cliente y contactos" (with a Cutto chat link per staff contact). **Visibility (B8):** the card renders when `canSeeAdminData(user)` or when the viewer is a member of the project (responsable, coordinador or miembro) **and** has `clients.canViewClients`; otherwise it is absent from the DOM. The staff-contacts part (team) is always visible. Esencial: summary, etapas, partidas, files, ficha, contacts as text lists. Analítico: indicators table, partidas table, budget by item table ([MONTO]), etapas table, folders table, contacts table.
 - **Tareas tab:** tasks grouped by fase/partida with progress per group, rows (estatus, tarea → `/tareas?tarea=<id>`, responsable, vence, subtareas), filters, "+ Agregar tarea" per group. Esencial: one card per group with text rows. Analítico: per-group summary + dense table.
 - **Cronograma tab:** existing `cronograma-view` content; Visual = existing panels in the new card style; Esencial = partidas with dates and % as text + milestones; Analítico = `RecordTable` directly (Partida, Responsable, Inicio, Fin, Duración, % real, % plan, Desviación, Holgura, monthly text timeline), via the `ListPage` widget spec (§4.11).
 - **Archivos tab:** existing `ProjectFilesBrowser` behavior; Visual = folders + cards + detail panel (frame `ProyectoArchivos`); Esencial = plain list; Analítico = `RecordTable` directly: storage by folder and type + file table (Nombre, Carpeta, Tipo, Tamaño, Versión, Autor, Modificado).
@@ -217,9 +217,9 @@ Frames: `Proyectos` (+ variants), `NuevoProyecto`, `Proyecto` (+ variants), `Pro
 Frames: `Personas`, `PersonasClientes`, `PersonasContratistas`, `PersonasProveedores`, `PersonaDetalle` (+ variants).
 - **Widgets / patterns:** `ListPage`, `PeopleWidget`, `RecordTable`, `EntityCardGrid`, `KpiWidget`, `ProgressListWidget`, `AttentionListWidget` (§4.10, §4.11).
 - **Header:** "Personas" + "Equipo interno y directorio externo en un solo lugar."; tabs (links, with counts): Equipo, Clientes, Contratistas, Proveedores; `EstiloSwitch` (tab links keep the style); "Agregar persona" (opens the existing member/contact editors per tab).
-- **Equipo** (RSC: `fetchStaffAction`, `fetchPeopleOverviewAction` Annex C): Visual = "Disponibilidad esta semana" grid (5 days, libre/ocupado/saturado/vacaciones legend) + person cards (avatar 44, name → `/personas/equipo/[id]`, puesto (Project Flow; access role is not shown as puesto), tramo chip, "n proyectos", load bar colored by %, actions "Ver tareas", correo, "Abrir chat en Cutto" link). Esencial = directory list with availability as a sentence ("Libre jue y vie"). Analítico = table (Abiertas, Vencidas, Horas semana*, % ocupación heat, Proyectos activos, Último contacto) with averages row. *Horas only when the server returns them (`canViewTeamHours` or self, B4); otherwise the column is absent.
+- **Equipo** (RSC: `fetchStaffAction`, `fetchPeopleOverviewAction` Annex C): Visual = "Disponibilidad esta semana" grid (5 days, libre/ocupado/saturado/vacaciones legend) + person cards (avatar 44, name → `/personas/equipo/[id]`, puesto (Project Flow; access role is not shown as puesto), etapa chip, "n proyectos", load bar colored by %, actions "Ver tareas", correo, "Abrir chat en Cutto" link). Esencial = directory list with availability as a sentence ("Libre jue y vie"). Analítico = table (Abiertas, Vencidas, Horas semana*, % ocupación heat, Proyectos activos, Último contacto) with averages row. *Horas only when the server returns them (`canViewTeamHours` or self, B4); otherwise the column is absent.
 - **Clientes / Contratistas / Proveedores**: existing Directorio data (`fetchContactsAction`), rendered per frame; `?contacto=<contactId>` (from search results) opens the existing `ClientDetailSheet` for that contact; Proveedores has sub-filter chips Colaboradores / Contratistas / Tiendas. Existing `ClientDetailSheet` / `ContactEditorSheet` stay. Esencial/Analítico per frames (Analítico adds cotizaciones 90 d and tiempo de entrega only when the data exists; otherwise the column is omitted).
-- **Detalle** (`fetchPersonaDetailAction`): header (avatar, puesto, tramo, contact buttons incl. "Abrir chat en Cutto"), stats (abiertas, vencidas, horas esta semana*), proyectos, tareas asignadas, disponibilidad strip, actividad reciente (`recentActivity`: Visual dot + sentence + mono time, Esencial sentence over time, absent in Analítico; empty "Sin actividad reciente"). Esencial/Analítico per frames.
+- **Detalle** (`fetchPersonaDetailAction`): header (avatar, puesto, etapa, contact buttons incl. "Abrir chat en Cutto"), stats (abiertas, vencidas, horas esta semana*), proyectos, tareas asignadas, disponibilidad strip, actividad reciente (`recentActivity`: Visual dot + sentence + mono time, Esencial sentence over time, absent in Analítico; empty "Sin actividad reciente"). Esencial/Analítico per frames.
 - **Empty:** "Aún no hay {clientes/contratistas/proveedores}" + "Agregar".
 
 ### 3.7 `/biblioteca`, `/biblioteca/[seccion]`, `/biblioteca/empresa/[doc]`, `/biblioteca/vacaciones`
@@ -228,7 +228,7 @@ Frames: `Biblioteca`, `BibliotecaSeccion`, `BibliotecaDocumento`, `MisVacaciones
 - **Widgets / patterns:** `EntityCardGrid`, `ListPage` + `RecordTable`, `KpiWidget` (saldo), `AgendaWidget` (ausencias), `FormSheet` (`VacationForm`) (§4.10, §4.11).
 - Uses existing `ResourcesWorkspaceServer` data and resource actions. Header "Biblioteca" + search + `EstiloSwitch`.
 - Index Visual: section "Empresa" (cards: Book, Manual de la empresa, Imagen de la empresa, RFC, Políticas de la empresa) and "Recursos" (Formación, Formatos de obra, Plantillas de diseño, Mis documentos, Mis favoritos, Mis vacaciones), each card icon chip + count + updated; "Abiertos recientemente" row (from `cincel.resources.recent-docs.v1`, unchanged). Esencial: plain lists. Analítico: catalog table (Sección, Documentos, Actualizado). Views/downloads columns shown in the frames are deferred (no tracking exists).
-- Sección: breadcrumb, filters (tipo, tramo), table/grid with open/download and favorite toggle (existing behavior).
+- Sección: breadcrumb, filters (tipo, etapa), table/grid with open/download and favorite toggle (existing behavior).
 - Documento: left TOC, reading column, right panel (versión, actualizado por, "Descargar PDF", "Preguntar al asistente sobre este documento" → opens `AssistantSheet` with the document in context).
 - Vacaciones: balance (Disponibles / Tomados / Pendientes ring + bars), `VacationForm` (Desde, Hasta, Tipo, Comentario, "Enviar solicitud" → `requestVacationAction`), history table with status chips (cancel pending → `cancelVacationRequestAction`), team strip for the month (`fetchTeamAbsencesAction`; absences show the kind only when the server returns it, otherwise "Ausencia" — the kind is returned only to the owner and to `canDecideVacations`, B12), and a "Documentos" section listing the existing `resource_links` rows of section `mis-vacaciones` (existing resource actions), so nothing is lost behind the redirect.
 - **Solicitudes del equipo** (only for `canDecideVacations` = Administrador, Dirección): `RecordTable` of pending requests (Persona, Desde, Hasta, Días, Tipo, Comentario, Solicitada) with row actions "Aprobar" / "Rechazar" (`FormDialog` with optional note → `decideVacationAction`); a requester never sees their own row there. Below it, for the same viewers, a `SettingsSection` "Días de vacaciones": "Días por año" (org default) and a per-person override table (Persona, Días; empty = default) → `fetchVacationSettingsAction` / `saveVacationSettingsAction` (placed here, not in Ajustes › General, because Dirección decides vacations but can't open General).
@@ -238,15 +238,15 @@ Frames: `Biblioteca`, `BibliotecaSeccion`, `BibliotecaDocumento`, `MisVacaciones
 
 Frames: `Ajustes`, `AjustesAdmin`, `AjustesHorario` (+ variants), `Perfil`, `AjustesNotificaciones`, `AjustesIntegraciones`, `AjustesGeneral`, `AjustesAreas`, `AjustesEstatus`, `AjustesPermisos`, `AjustesMonday`, component `AjustesNav`.
 - **Patterns:** every Ajustes page is `SettingsSection` / `SettingsRow` (§4.11); the team hours report is a `RecordTable`; confirmations are `FormDialog`.
-- Layout: `PageHeader` "Ajustes" + "Tus preferencias y, si eres administrador, las de la organización."; left `AjustesNav` (240 px; group "Personal": Perfil, Apariencia, Notificaciones, "Gmail, calendario y Cutto"; group "Organización", each item with an "Admin" badge and rendered only when the viewer has the **same capability that guards its segment** (table in §8), absent from the DOM otherwise; Tramos y fases and Puestos also only when Project Flow's pages exist); right content as `SettingsSection`s.
+- Layout: `PageHeader` "Ajustes" + "Tus preferencias y, si eres administrador, las de la organización."; left `AjustesNav` (240 px; group "Personal": Perfil, Apariencia, Notificaciones, "Gmail, calendario y Cutto"; group "Organización", each item with an "Admin" badge and rendered only when the viewer has the **same capability that guards its segment** (table in §8), absent from the DOM otherwise; Etapas y fases and Puestos also only when Project Flow's pages exist); right content as `SettingsSection`s.
 - **Server guards (B4, R2):** personal pages live in `app/(staff)/ajustes/(personal)/`. Each organization segment has **its own** `app/(staff)/ajustes/(admin)/<segment>/layout.tsx` that calls `requirePageCapability(cap)` with that segment's capability (§8) and calls `notFound()` on failure — everywhere, including direct URL access. There is no shared admin layout and the client `AppRouteGuard` prefix check is not relied on for `/ajustes`. On `/ajustes/horario`, the settings sections need `canManageTimeTracking` and the report section `canViewTeamHours`; the segment layout admits either and each section checks its own capability.
 - **Apariencia** (`/ajustes/apariencia`): "Tema" radio cards (Azul Cincel "Organización" badge, Cálido, Grafito) with mini previews; note "El tema de la organización es {name}. Puedes usar otro solo para ti." + "Editar tema de la organización" (admins); "Estilo de presentación" radio cards (Visual / Esencial / Analítico with icon and one-line description); "Modo" (Claro / Oscuro / Sistema), "Densidad" (Cómoda / Compacta), "Tamaño de texto" slider 13–16 step 0.5; live "Vista previa"; "Nuevo diseño" switch ("Probar el nuevo diseño") bound to `redesignEnabled`. Every change calls `updateMyPreferencesAction` immediately (optimistic) and re-applies the appearance without reload. When the org disallows overrides, Tema and Estilo cards are disabled with "La organización fijó el tema y el estilo." (`OVERRIDE_DISABLED`).
-- **Tema y estilo** (`/ajustes/tema`, `ThemeEditor`): breadcrumb; actions "Restablecer" (`resetOrgAppearanceAction(base)` after confirm), "Exportar CSS" (downloads the resolved `:root` + `.dark` blocks), "Publicar para todos" (`saveOrgAppearanceAction`). "Partir de:" chips (Azul Cincel, Cálido, Grafito). Sections: "Estilo de la organización" (three cards + checkbox "Permitir que cada persona elija su estilo y tema" → `allowUserOverride`; checkbox "Nuevo diseño para todos" → `redesignDefault`), "Interfaz" / "Navegación" / "Tramos y estatus" token rows (`TokenRow`: color input + label + `--name` + hex chip; a Claro/Oscuro switch above the rows selects which mode is edited), "Tipografía" (font family select; `TypeScaleRow` per role: size slider, value, weight select), "Forma y espacio" (radius 0–24, card padding 8–28, gap 6–28, sombra Ninguna/Suave/Marcada). Right: sticky live preview of a mini app using the draft values + `ContrastBadge` ("Contraste texto / fondo: {r}:1 · cumple 4.5:1" or the failing copy). "Publicar para todos" is disabled while any pair of the shared list fails (`lib/ui/contrast.ts`, §14.6). After publishing, other users see the change **on their next page load** (the action revalidates the root layout and bumps the cookie version `v`).
+- **Tema y estilo** (`/ajustes/tema`, `ThemeEditor`): breadcrumb; actions "Restablecer" (`resetOrgAppearanceAction(base)` after confirm), "Exportar CSS" (downloads the resolved `:root` + `.dark` blocks), "Publicar para todos" (`saveOrgAppearanceAction`). "Partir de:" chips (Azul Cincel, Cálido, Grafito). Sections: "Estilo de la organización" (three cards + checkbox "Permitir que cada persona elija su estilo y tema" → `allowUserOverride`; checkbox "Nuevo diseño para todos" → `redesignDefault`), "Interfaz" / "Navegación" / "Etapas y estatus" token rows (`TokenRow`: color input + label + `--name` + hex chip; a Claro/Oscuro switch above the rows selects which mode is edited), "Tipografía" (font family select; `TypeScaleRow` per role: size slider, value, weight select), "Forma y espacio" (radius 0–24, card padding 8–28, gap 6–28, sombra Ninguna/Suave/Marcada). Right: sticky live preview of a mini app using the draft values + `ContrastBadge` ("Contraste texto / fondo: {r}:1 · cumple 4.5:1" or the failing copy). "Publicar para todos" is disabled while any pair of the shared list fails (`lib/ui/contrast.ts`, §14.6). After publishing, other users see the change **on their next page load** (the action revalidates the root layout and bumps the cookie version `v`).
 - **Control de horario** (`/ajustes/horario`): switch "Control de horario activado/desactivado" with state copy; "Obligatorio a partir de" date input (min tomorrow); timeline strip (Hoy · Prueba · Obligatorio desde {fecha}); "Reglas de la jornada" (Entrada, Salida, Horas esperadas por día, Tolerancia de retardo, Días laborales toggles, checkboxes: pedir registro al iniciar sesión, cierre automático a las {hh:mm}, descontar {n} min de comida, excluir roles); "Lo que ve el equipo al iniciar sesión" preview of `ClockInPrompt`; "Horas del equipo · semana del {fecha}" `TeamHoursTable` with "Exportar CSV" (`/api/horario/export?week=`) — the only part that changes with style (Esencial: list per person; Analítico: per-day columns, total, meta, diferencia, retardos, % cumplimiento heat, averages row). "Guardar cambios" → `saveTimeTrackingSettingsAction`. The location option of the frame is not built (brief default). Viewers with only `canViewTeamHours` (Dirección) see the report and a read-only summary of the rules (no switch, no save).
 - **Perfil:** photo (upload through `POST /api/staff/me/photo` after client re-encode, §3.2; remove with `removeMyPhotoAction`), "Mis horas esta semana" line (`fetchMyWeekHoursAction`, only when time tracking is enabled), nombre, puesto (read-only, from Equipo), correo (read-only, from Google), teléfono, firma de correo, idioma y zona horaria (read-only es-MX / America/Mexico_City), "Cambiar contraseña" (existing form), "Guardar" (existing staff update action for own editable fields).
 - **Notificaciones:** matrix (rows: Asignación, Mención, Vencimiento, Comentario, Aprobación del cliente, Recordatorio, Sistema; columns: En la app, Correo, Resumen diario) checkboxes; quiet hours (from/to); the daily digest is sent at 07:30 (fixed, shown as "Resumen diario a las 07:30"); "Guardar" → `updateNotificationPreferencesAction`. The frame's "Cutto" column is not built.
 - **Integraciones:** cards Gmail (status, account, "Conectar" → `/api/auth/google/start?grant=gmail`, "Sincronizar ahora" → `syncGmailAction`, "Desconectar" → `FormDialog` "¿Desconectar Gmail de Cincel?" with copy "Cincel dejará de leer tu correo y borrará la copia de tus conversaciones guardada aquí. Tu cuenta de Google sigue conectada para Drive y Calendar; para quitar el permiso de correo por completo, entra a los permisos de tu cuenta de Google." + link "Abrir permisos de Google" (`https://myaccount.google.com/permissions`, new tab) → `disconnectGmailAction()`), Google Calendar (existing sync controls), Google Drive (existing status), Cutto (link-only card "Abrir Cutto" + copy "Cutto es una aplicación aparte. Cincel enlaza a los canales de cada proyecto."), monday (link `/ajustes/monday`).
-- **General / Estatus / Permisos / Tramos / Puestos / monday / Google:** existing components moved under `/ajustes` and restyled with tokens; no behavior change (Tramos and Puestos are Project Flow pages). General gains the three header link fields (Instagram, Sitio web, Correo) previously in localStorage (storage per BE).
+- **General / Estatus / Permisos / Etapas / Puestos / monday / Google:** existing components moved under `/ajustes` and restyled with tokens; no behavior change (Etapas and Puestos are Project Flow pages). General gains the three header link fields (Instagram, Sitio web, Correo) previously in localStorage (storage per BE).
 
 ### 3.9 `/asistente` and the assistant sheet
 
@@ -278,7 +278,7 @@ Frames: `PortalLogin`, `PortalProyecto` (+ `PortalProyectoEsencial`, `PortalProy
 ### 3.12 States, 404, search
 
 Frames: `EstadosSistema`, `Error404`, `BuscarCmdK`.
-- `app/not-found.tsx` (staff): illustration from CSS shapes, "No encontramos esta página", "Volver a Inicio", "Buscar" (opens `CommandPalette`).
+- `app/not-found.tsx` (staff): illustration from CSS shapes, "No enconetapas esta página", "Volver a Inicio", "Buscar" (opens `CommandPalette`).
 - `CommandPalette` (`⌘K`, shadcn `Command` in a `Dialog`): input "Buscar tareas, proyectos, personas, archivos…", results grouped by type from `searchWorkspaceAction` (types `proyecto`, `tarea`, `persona`, `archivo`, `nota`; debounce 200 ms, min 2 chars; with fewer than 2 characters no call is made and the palette shows "Escribe al menos 2 letras." plus the actions group); a static, client-side "Acciones" group of commands (Crear tarea → `/tareas?nueva=1`, Nuevo proyecto → `/proyectos?nuevo=1`, Nueva nota → `/mi-espacio?nota=nueva`, Preguntar al asistente → opens `AssistantSheet`, Registrar entrada → `clockInAction`, shown only when `fetchMyTodayAction().enabled` is true — false until Phase 6), filtered by the query; result urls are used as returned (`/tareas/<id>`, `/mi-espacio/notas/<id>`, `/personas/clientes?contacto=<id>`, `/personas/equipo/<id>`, `/proyectos/<id>`, Drive link for files), footer hints "↑↓ navegar · ↵ abrir · esc cerrar".
 - Offline banner: `navigator.onLine === false` → top `Alert` "Sin conexión. Los cambios se guardarán cuando vuelvas a estar en línea." (informational; no offline queue).
 
@@ -310,7 +310,7 @@ export type AppShellProps = {
 // lib/ui/nav.ts
 export type NavItemKey = "inicio" | "mi-espacio" | "tareas" | "proyectos" | "personas" | "biblioteca" | "asistente" | "ajustes";
 export type NavItem = { key: NavItemKey; label: string; href: string; icon: LucideIcon; badge?: number };
-export type NavModel = { items: NavItem[]; tramos: { key: string; name: string; colorVar: string; href: string }[]; footer: NavItem[] };
+export type NavModel = { items: NavItem[]; etapas: { key: string; name: string; colorVar: string; href: string }[]; footer: NavItem[] };
 
 // components/shell/Sidebar.tsx (client)
 export type SidebarProps = { nav: NavModel; activeKey: NavItemKey | null; session: AppShellProps["session"]; today: TodayStatus | null; onOpenSearch(): void };
@@ -385,7 +385,7 @@ export type CommandPaletteProps = { open: boolean; onOpenChange(open: boolean): 
 
 ### 4.3 Inicio
 
-`InicioClient` ({ data: InicioData; photoUrl: string | null; me: { firstName: string; role: string } }), `ProfilePhotoButton` ({ photoUrl; initials; onChange(url) }), `KpiTiles` (visual), `KpiTable` (analítico), `TramoDonut`, `WeeklyPaceChart` (shadcn `ChartContainer`), `AttentionList` ({ items; variant: "visual" | "esencial" | "analitico" }), `MyDayAgenda`, `ProjectProgressList`, `WorkloadBars`. Every widget takes data already shaped by `fetchInicioAction`; style picks the component (§15).
+`InicioClient` ({ data: InicioData; photoUrl: string | null; me: { firstName: string; role: string } }), `ProfilePhotoButton` ({ photoUrl; initials; onChange(url) }), `KpiTiles` (visual), `KpiTable` (analítico), `EtapaDonut`, `WeeklyPaceChart` (shadcn `ChartContainer`), `AttentionList` ({ items; variant: "visual" | "esencial" | "analitico" }), `MyDayAgenda`, `ProjectProgressList`, `WorkloadBars`. Every widget takes data already shaped by `fetchInicioAction`; style picks the component (§15).
 
 ### 4.4 Mi espacio
 
@@ -410,14 +410,14 @@ export type NotesGridProps = { notes: Note[]; onOpen(note: Note): void };
 ```ts
 // lib/tareas/query.ts
 export type TareasVista = "tablero" | "lista" | "calendario";
-export type TareasQuery = { vista: TareasVista; cal: "mes" | "semana" | "dia"; tramo: string | null; responsable: "yo" | string | null; proyecto: string | null; estado: string | null; q: string | null; nueva?: boolean };
+export type TareasQuery = { vista: TareasVista; cal: "mes" | "semana" | "dia"; etapa: string | null; responsable: "yo" | string | null; proyecto: string | null; estado: string | null; q: string | null; nueva?: boolean };
 export function parseTareasQuery(sp: URLSearchParams): TareasQuery;
 export function toTareasSearch(q: Partial<TareasQuery>): string;
 
 // components/tareas/*
-export type TareasClientProps = { query: TareasQuery; initial: { tasks?: TaskListItem[]; board?: TaskBoard; calendar?: CalendarData }; staff: StaffOption[]; tramos: WorkflowRef[] };
+export type TareasClientProps = { query: TareasQuery; initial: { tasks?: TaskListItem[]; board?: TaskBoard; calendar?: CalendarData }; staff: StaffOption[]; etapas: WorkflowRef[] };
 export type TaskSheetProps = { taskId: string; onClose(): void };
-export type NewTaskDialogProps = { open: boolean; onOpenChange(open: boolean): void; defaults?: { projectId?: string; tramoKey?: string; title?: string; description?: string } };
+export type NewTaskDialogProps = { open: boolean; onOpenChange(open: boolean): void; defaults?: { projectId?: string; etapaKey?: string; title?: string; description?: string } };
 export type EventDetailPopoverProps = { event: CalendarItem; anchor: HTMLElement; onClose(): void };
 ```
 
@@ -425,7 +425,7 @@ export type EventDetailPopoverProps = { event: CalendarItem; anchor: HTMLElement
 
 ### 4.6 Proyectos
 
-`ProjectTabs` ({ project: ProjectRef & { tramo: WorkflowRef | null }; active: "resumen" | "tareas" | "cronograma" | "archivos" | "clientes" | "ficha"; counts: { tareas: number; archivos: number; clientes: number }; canManagePortal: boolean }), `ProjectsPortfolio` ({ projects; portfolio: PortfolioRow[] }), `ProjectSummary` (style variants), `ProjectTasksByFase`, `NewProjectDialog` (Project Flow fields).
+`ProjectTabs` ({ project: ProjectRef & { etapa: WorkflowRef | null }; active: "resumen" | "tareas" | "cronograma" | "archivos" | "clientes" | "ficha"; counts: { tareas: number; archivos: number; clientes: number }; canManagePortal: boolean }), `ProjectsPortfolio` ({ projects; portfolio: PortfolioRow[] }), `ProjectSummary` (style variants), `ProjectTasksByFase`, `NewProjectDialog` (Project Flow fields).
 
 ### 4.7 Personas and Biblioteca
 
@@ -434,7 +434,7 @@ export type EventDetailPopoverProps = { event: CalendarItem; anchor: HTMLElement
 ### 4.8 Ajustes
 
 ```ts
-export type AjustesNavProps = { active: "perfil" | "apariencia" | "notificaciones" | "integraciones" | "general" | "tema" | "horario" | "tramos" | "puestos" | "estatus" | "permisos" | "monday" | "google"; isAdmin: boolean };
+export type AjustesNavProps = { active: "perfil" | "apariencia" | "notificaciones" | "integraciones" | "general" | "tema" | "horario" | "etapas" | "puestos" | "estatus" | "permisos" | "monday" | "google"; isAdmin: boolean };
 export type ThemeEditorProps = { initial: OrgAppearance; presets: Record<ThemeId, OrgAppearance> };
 export type TokenRowProps = { name: TokenName; label: string; value: string; onChange(hex: string): void };
 export type TypeScaleRowProps = { role: TypeRole; label: string; value: { size: number; weight: 400 | 500 | 600 }; min: number; max: number; onChange(v: { size: number; weight: 400 | 500 | 600 }): void };
@@ -461,7 +461,7 @@ export type RenderTableArgs = RecordTableData & { title?: string };             
 
 ### 4.10 Reusable widget library (top priority: reuse)
 
-**Rule:** pages never write per-style markup. A page composes a few **style-aware widgets**; each widget takes **one typed data shape** and renders the three styles internally through `StyleView`. All style differences (§15) live inside `components/widgets/*`. The per-feature components of §4.3–§4.8 are thin compositions of these widgets plus the shared patterns of §4.11; where §4.3–§4.8 name a component (e.g. `KpiTiles`, `TramoDonut`, `TeamGrid`), it is an instance of the widget below, not a separate implementation.
+**Rule:** pages never write per-style markup. A page composes a few **style-aware widgets**; each widget takes **one typed data shape** and renders the three styles internally through `StyleView`. All style differences (§15) live inside `components/widgets/*`. The per-feature components of §4.3–§4.8 are thin compositions of these widgets plus the shared patterns of §4.11; where §4.3–§4.8 name a component (e.g. `KpiTiles`, `EtapaDonut`, `TeamGrid`), it is an instance of the widget below, not a separate implementation.
 
 #### 4.10.1 Widgets
 
@@ -471,20 +471,20 @@ Data shapes are imported from **`lib/types/widgets.ts`** (single source, owned b
 // lib/types/widgets.ts (BE-owned; FE imports)
 export type Series7 = number[];                                    // 7 points, oldest → newest
 export type Tone = "default" | "ok" | "warn" | "critical";
-export type TramoKey = string;                                     // workflows.key
+export type EtapaKey = string;                                     // workflows.key
 export type Availability = "libre" | "ocupado" | "saturado" | "vacaciones";
 
 export type KpiDatum = { key: string; label: string; value: number; display?: string;
   delta?: { value: number; good: boolean; caption: string }; series7?: Series7;
-  avg30?: number; min30?: number; max30?: number; split?: { tramo: TramoKey; share: number }[];
+  avg30?: number; min30?: number; max30?: number; split?: { etapa: EtapaKey; share: number }[];
   caption?: string; href?: string;
   visibleIn?: PresentationStyle[] };                               // omitted = all styles (B13)
 export type DistributionSegment = { key: string; label: string; value: number; colorVar: string; secondary?: number; extra?: Record<string, number | string> };
 export type ProgressItem = { id: string; label: string; sublabel?: string; real: number; plan?: number | null; budgetPct?: number | null; colorVar?: string; href?: string; next?: { title: string; date: string } | null };
-export type AttentionItem = { id: string; title: string; href: string; project: string; tramo: TramoKey | null; reason: string; tone: Tone; assignee: { id: string; name: string; initials: string } | null; due: string | null; daysLate: number | null };
-export type AgendaItem = { id: string; title: string; start: string; end?: string; allDay?: boolean; estimated?: boolean; project?: string; tramo?: TramoKey | null; attendees?: string[]; href?: string; meetingUrl?: string /* only when a Cutto URL is stored on the event */ };
-export type PersonDatum = { id: string; name: string; initials: string; photoUrl?: string | null; puesto?: string | null; tramo?: TramoKey | null; open: number; overdue: number; activeProjects?: number; occupancyPct?: number; weekHours?: number | null; availability?: Availability[]; href?: string };
-export type EntityCard = { id: string; title: string; subtitle?: string; href?: string; iconName?: string /* lucide icon name */; tramo?: TramoKey | null; progress?: number; badges?: { label: string; tone: Tone }[]; meta?: { label: string; value: string }[] };
+export type AttentionItem = { id: string; title: string; href: string; project: string; etapa: EtapaKey | null; reason: string; tone: Tone; assignee: { id: string; name: string; initials: string } | null; due: string | null; daysLate: number | null };
+export type AgendaItem = { id: string; title: string; start: string; end?: string; allDay?: boolean; estimated?: boolean; project?: string; etapa?: EtapaKey | null; attendees?: string[]; href?: string; meetingUrl?: string /* only when a Cutto URL is stored on the event */ };
+export type PersonDatum = { id: string; name: string; initials: string; photoUrl?: string | null; puesto?: string | null; etapa?: EtapaKey | null; open: number; overdue: number; activeProjects?: number; occupancyPct?: number; weekHours?: number | null; availability?: Availability[]; href?: string };
+export type EntityCard = { id: string; title: string; subtitle?: string; href?: string; iconName?: string /* lucide icon name */; etapa?: EtapaKey | null; progress?: number; badges?: { label: string; tone: Tone }[]; meta?: { label: string; value: string }[] };
 export type RecordColumn = { key: string; label: string; align?: "left" | "right"; mono?: boolean; width?: number; format?: "text" | "count" | "percent" | "hours" | "days" | "date" | "delta" | "mxn"; hideOn?: PresentationStyle[] };
 export type RecordTableData = { columns: RecordColumn[]; rows: Record<string, unknown>[]; groupBy?: string; totals?: Record<string, string | number> | "auto"; heat?: { key: string; warnAt: number; critAt: number }[] };
 ```
@@ -495,14 +495,14 @@ export type RecordTableData = { columns: RecordColumn[]; rows: Record<string, un
 | `KpiWidget` | `{ items: KpiDatum[] }` (filters `visibleIn` by the current style internally) | tiles: value, sparkline, delta pill, split bar | number + label grid | `RecordTable` rows: hoy, Δ 7 d, prom. 30 d, mín–máx, tendencia | **extends** `components/v2/layout/KpiRow` + `KpiTile` (adds `series7`, `delta`, styles) |
 | `DistributionWidget` | `{ title: string; segments: DistributionSegment[]; totalLabel?: string; secondaryLabel?: string; extraColumns?: { key: string; label: string }[] }` | donut + legend (`chart.tsx`) | text list "label … value" | `RecordTable` with %, heat on `secondary/value`, extra columns, total row | **reuses** `chart.tsx` (replaces `app/dashboard/DonutCard.tsx`) |
 | `ProgressListWidget` | `{ title: string; items: ProgressItem[]; variant?: "bars" \| "rings" }` | bars or rings 52–64 px | "label … n%" list | `RecordTable`: real, plan, desviación (signed, colored text), presupuesto, próxima entrega | **reuses** `components/v2/status/CapacityRing`, `LoadBar` |
-| `AttentionListWidget` | `{ title: string; items: AttentionItem[]; totalCount?: number; moreHref?: string }` | rows with tramo bar, reason pill, avatar, due date | title + "proyecto · persona · motivo fecha" | `RecordTable`: tarea, proyecto, tramo dot, resp., motivo, vence, retraso | **reuses** `StatusChip`, `TramoBadge`, `PersonAvatar` |
+| `AttentionListWidget` | `{ title: string; items: AttentionItem[]; totalCount?: number; moreHref?: string }` | rows with etapa bar, reason pill, avatar, due date | title + "proyecto · persona · motivo fecha" | `RecordTable`: tarea, proyecto, etapa dot, resp., motivo, vence, retraso | **reuses** `StatusChip`, `EtapaBadge`, `PersonAvatar` |
 | `AgendaWidget` | `{ title: string; items: AgendaItem[]; mode: "day" \| "week" \| "month"; groupBy?: "day" \| "none"; emptyText?: string }` | tinted time blocks (day) / time grid (week) / month grid | list grouped by day | `RecordTable` with daily subtotals; month = load heat table | **wraps** existing `components/calendario/UnifiedCalendar` for week/month grids (presentation only) |
 | `PeopleWidget` | `{ people: PersonDatum[]; show: ("load" \| "hours" \| "availability" \| "projects")[]; layout?: "cards" \| "rows"; actions?: (p: PersonDatum) => ReactNode }` | avatar cards (load bar, chips) or availability grid | directory list; availability as a sentence | `RecordTable`: abiertas, vencidas, horas, % ocupación heat, proyectos, averages row | **reuses** `PersonAvatar`, `LoadBar`, `AppAvatar` |
 | `RecordTable` | `{ data: RecordTableData; renderCell?: (columnKey: string, row: Record<string, unknown>) => ReactNode \| undefined; density?: "comoda" \| "compacta"; selectable?: boolean; rowActions?: RowAction[]; emptyState?: EmptyStateProps }` (cells format by `column.format` unless `renderCell` returns a node) | lists inside Visual pages | plain lists (no heat, no totals) | dense: 12.5 px, mono numbers, header `muted`, totals row, heat cells; columns with `hideOn` are dropped per style | **extends** `components/ui/DataTable` (TanStack) + `components/v2/table/RowActionsMenu`, `bulk-select`, `BulkActionBar`, `components/ui/ExportMenu` |
 | `EntityCardGrid` | `{ items: EntityCard[]; table?: RecordTableData; footer?: (item: EntityCard) => ReactNode; minWidth?: number; emptyState?: EmptyStateProps }` (badges and icon come from the data) | card grid with tinted head / icon chip / badges | white bordered cards, title + text meta | `table` (or one built from `title`, `subtitle`, `meta`) | **new** (no existing equivalent; built on shadcn `Card`) |
 | `TaskBoardWidget` | `{ board: TaskBoard; table: RecordTableData; onMove(taskId: string, statusId: string): Promise<void> }` | kanban columns with drag-and-drop, collapsed empty columns | `RecordTable` grouped by estatus | estatus summary (`DistributionWidget`) + dense `RecordTable` | **evolves** `components/tablero/TableroClient` (drag-and-drop logic kept) |
 | `StatusChip` | `{ status: TaskStatusRef; size?: "sm" \| "md" }` | tinted chip | text | text | thin **adapter** over `components/v2/status/StatusBadge` (which takes `{ label, token }`): maps the status (and custom status base) to `{ label, token }` |
-| `TramoBadge` | `{ tramo: WorkflowRef; variant?: "chip" \| "dot" \| "text" }` | chip (tint + ink) | text | dot + text | until Project Flow renames it, **is** `components/v2/status/AreaBadge` wrapped by `lib/tramos/compat.ts` (`tramoColorSlot`, `tramoLabel`), §21.2 |
+| `EtapaBadge` | `{ etapa: WorkflowRef; variant?: "chip" \| "dot" \| "text" }` | chip (tint + ink) | text | dot + text | until Project Flow renames it, **is** `components/v2/status/AreaBadge` wrapped by `lib/etapas/compat.ts` (`etapaColorSlot`, `etapaLabel`), §21.2 |
 
 Each widget renders its own `EmptyState` (via an `emptyText`/`emptyState` prop) and `LoadingSkeleton` variant, so pages don't handle widget-level states.
 
@@ -510,13 +510,13 @@ Each widget renders its own `EmptyState` (via an `emptyText`/`emptyState` prop) 
 
 | Page (§3) | Widgets used |
 |---|---|
-| Inicio | `KpiWidget`, `DistributionWidget` (tareas por tramo), `WidgetCard` + `chart.tsx` line (ritmo semanal; Analítico via `RecordTable`), `AttentionListWidget`, `AgendaWidget` (Mi día), `ProgressListWidget` (avance), `PeopleWidget` (carga) |
+| Inicio | `KpiWidget`, `DistributionWidget` (tareas por etapa), `WidgetCard` + `chart.tsx` line (ritmo semanal; Analítico via `RecordTable`), `AttentionListWidget`, `AgendaWidget` (Mi día), `ProgressListWidget` (avance), `PeopleWidget` (carga) |
 | Mi espacio | `RecordTable` (Bandeja rows, reminders, checklists index), `EntityCardGrid` (notes), `AgendaWidget` (recordatorios hoy/mañana), `WidgetCard` |
 | Tareas · Tablero | `ListPage` with `spec.kind = "board"` → `TaskBoardWidget` (all three styles inside the widget) |
 | Tareas · Lista | `ListPage` with `spec.kind = "table"` → `RecordTable` grouped (`groupBy`); by-project summary rows are `RecordTableData` columns hidden in Visual/Esencial (`hideOn`) |
 | Tareas · Calendario | `AgendaWidget` (`mode` = mes/semana/día), `DistributionWidget` (entregas por semana) |
-| Proyectos | `ListPage` with `spec.kind = "cards"` → `EntityCardGrid` (renders its `table` in Esencial/Analítico) + `DistributionWidget` (por tramo) |
-| Proyecto · Resumen | `PhaseStepper` (tramos), `ProgressListWidget` (partidas, presupuesto), `KpiWidget` (avance), `EntityCardGrid` (archivos recientes), `RecordTable` (ficha, contactos) |
+| Proyectos | `ListPage` with `spec.kind = "cards"` → `EntityCardGrid` (renders its `table` in Esencial/Analítico) + `DistributionWidget` (por etapa) |
+| Proyecto · Resumen | `PhaseStepper` (etapas), `ProgressListWidget` (partidas, presupuesto), `KpiWidget` (avance), `EntityCardGrid` (archivos recientes), `RecordTable` (ficha, contactos) |
 | Proyecto · Tareas / Cronograma / Archivos | `RecordTable` grouped (tareas); Cronograma: existing panels inside `WidgetCard` for Visual and a `CronogramaWidget` (library, wraps the existing panels + a `RecordTable` for Esencial/Analítico: holgura, duración); Archivos: `ListPage` `spec.kind = "cards"` (storage by type is `RecordTableData`) |
 | Personas (all tabs) | `ListPage` with `spec.kind = "people"` (equipo) or `"cards"`/`"table"` (clientes, contratistas, proveedores) |
 | Persona detalle | `KpiWidget`, `ProgressListWidget` (proyectos), `AttentionListWidget` (tareas), `PeopleWidget` single-row availability, `ActivityFeedWidget` (actividad reciente) |
@@ -587,7 +587,7 @@ Each widget renders its own `EmptyState` (via an `emptyText`/`emptyState` prop) 
 | Shell | `app/(staff)/layout.tsx` (new route group): session, `resolveAppearance`, nav model, `fetchMyTodayAction` | `Sidebar` (search open), `TimeClock` (status, ticking seconds, pending), `AssistantSheet` (open, thread, messages), `CommandPalette` (query, results) |
 | Inicio | `fetchInicioAction`, photo URL | `InicioClient`: photo, style |
 | Mi espacio | notifications, Gmail status/threads, reminders, checklists, notes | `MiEspacioClient`: tab, selected thread, editors open, optimistic lists |
-| Tareas | tasks/board/calendar for `TareasQuery`, staff, tramos | `TareasClient`: query (URL-synced), drag state, sheet/dialog open |
+| Tareas | tasks/board/calendar for `TareasQuery`, staff, etapas | `TareasClient`: query (URL-synced), drag state, sheet/dialog open |
 | Proyectos | projects, portfolio; per project: project, counts, tab data | `ProyectosClient`, tab clients |
 | Personas | staff + overview / contacts / detail | tab clients |
 | Biblioteca | resource data, vacations | section clients, `VacationForm` |
@@ -700,7 +700,7 @@ export type SearchResult = { type: "proyecto" | "tarea" | "persona" | "archivo" 
 export type AssistantContext = { route: string; projectId?: string; taskId?: string; personId?: string };
 export type AssistantActionRecord = { id: string; threadId: string; toolCallId: string; tool: string; summary: string; input: unknown; status: "proposed" | "confirmed" | "cancelled" | "done" | "failed"; result: unknown | null; error: string | null; createdAt: string; decidedAt: string | null };
 
-export type InicioData = { kpis: KpiDatum[]; tasksByTramo: DistributionSegment[]; weeklyPace: { weekStart: string; created: number; completed: number }[]; attention: AttentionItem[]; myDay: AgendaItem[]; projectsProgress: ProgressItem[]; workload: PersonDatum[] };
+export type InicioData = { kpis: KpiDatum[]; tasksByEtapa: DistributionSegment[]; weeklyPace: { weekStart: string; created: number; completed: number }[]; attention: AttentionItem[]; myDay: AgendaItem[]; projectsProgress: ProgressItem[]; workload: PersonDatum[] };
 export type PersonaDetail = { staff: Staff; person: PersonDatum; stats: KpiDatum[]; projects: ProgressItem[]; tasks: AttentionItem[]; weekHours: { date: string; hours: number }[] | null; availability: Availability[]; recentActivity: PersonaActivityItem[] };
 export type PersonaActivityItem = { id: string; text: string; at: string; when: string; href: string }; // last 10, admin items only with canSeeAdminData (BE §7.11)
 export type PortfolioRow = { projectId: string; real: number; plan: number | null; deviation: number | null; budgetSpentPct: number | null; open: number; overdue: number; daysToDelivery: number | null; nextDelivery: { title: string; date: string } | null; series7: number[] };
@@ -841,7 +841,7 @@ Owner-only (`FORBIDDEN` for someone else's row, `NOT_FOUND` for a missing one). 
 
 - Every staff route requires a session (existing `getSession`). The `(staff)` layout redirects to `/login` without one.
 - **Server guards, not the client prefix check (B4, R2):** one `layout.tsx` per admin segment folder (`app/(staff)/ajustes/(admin)/<segment>/layout.tsx`) calls `requirePageCapability(cap)`; failure = `notFound()` everywhere. `AppRouteGuard`'s `CONFIG_ROUTE_PREFIX` is kept only for the legacy `/configuracion` paths (which redirect anyway); `/ajustes/(personal)/*` needs only a session.
-- **Capabilities** (added to `lib/auth/permissions.ts` in Phase 1; names as in BE §12): `canManageAppearance` (Administrador), `canManageGeneralSettings` (alias of today's General settings rule, keeping Dirección if today's rule allows it; `saveGeneralSettingsAction`/`restoreGeneralSettingsAction` switch to it in Phase 6), `canManageTimeTracking` (Administrador), `canViewTeamHours` (Administrador, Dirección — checked as `user.access === "Dirección"` like `canViewSensitiveStaffData`), `canDecideVacations` (Administrador, Dirección), `canSeeAdminData` (re-export via `lib/tramos/compat.ts`, §21.2). Existing capability objects keep their real names (`team.canViewTeam`, `portal.manageAccess`, `clients.canViewClients`, `activities.canViewActivities`, `projects.canViewProjects`, `dashboard.canViewDashboard`).
+- **Capabilities** (added to `lib/auth/permissions.ts` in Phase 1; names as in BE §12): `canManageAppearance` (Administrador), `canManageGeneralSettings` (alias of today's General settings rule, keeping Dirección if today's rule allows it; `saveGeneralSettingsAction`/`restoreGeneralSettingsAction` switch to it in Phase 6), `canManageTimeTracking` (Administrador), `canViewTeamHours` (Administrador, Dirección — checked as `user.access === "Dirección"` like `canViewSensitiveStaffData`), `canDecideVacations` (Administrador, Dirección), `canSeeAdminData` (re-export via `lib/etapas/compat.ts`, §21.2). Existing capability objects keep their real names (`team.canViewTeam`, `portal.manageAccess`, `clients.canViewClients`, `activities.canViewActivities`, `projects.canViewProjects`, `dashboard.canViewDashboard`).
 
 | Surface | Rule |
 |---|---|
@@ -850,7 +850,7 @@ Owner-only (`FORBIDDEN` for someone else's row, `NOT_FOUND` for a missing one). 
 | `/ajustes/tema` (segment guard and nav item), `saveOrgAppearanceAction`, `resetOrgAppearanceAction` | `canManageAppearance` (Administrador) |
 | `/ajustes/horario` settings sections | `canManageTimeTracking` (Administrador) |
 | `/ajustes/horario` report section (segment guard and nav item admit either capability) | `canViewTeamHours` (Administrador, Dirección) |
-| `/ajustes/estatus`, `permisos`, `monday`, `google`, `tramos`, `puestos` (segment guards and nav items) | Administrador (today's rule) |
+| `/ajustes/estatus`, `permisos`, `monday`, `google`, `etapas`, `puestos` (segment guards and nav items) | Administrador (today's rule) |
 | `fetchTeamHoursAction`, CSV export | `canViewTeamHours` |
 | Hours in Personas / Persona detalle / Perfil | server returns `weekHours` only for `canViewTeamHours` or self |
 | `decideVacationAction`, `fetchPendingVacationRequestsAction`, "Solicitudes del equipo" | `canDecideVacations` (never on one's own request) |
@@ -947,17 +947,17 @@ app/
   (staff)/ajustes/page.tsx
   (staff)/ajustes/(personal)/{perfil,apariencia,notificaciones,integraciones}
   (staff)/ajustes/(admin)/<segment>/layout.tsx   # one per segment: requirePageCapability(cap) → notFound()
-  (staff)/ajustes/(admin)/{general,tema,horario,tramos,puestos,estatus,permisos,monday,google}
+  (staff)/ajustes/(admin)/{general,tema,horario,etapas,puestos,estatus,permisos,monday,google}
   api/staff/me/photo/route.ts        # POST upload (2 MB; metadata stripped server-side)
   api/staff/[id]/photo/route.ts
   api/gmail/attachments/[messageId]/[attachmentId]/route.ts
   api/horario/export/route.ts
   not-found.tsx
   (old routes keep page.tsx as redirect stubs)
-components/widgets/     StyleView, WidgetCard, KpiWidget, DistributionWidget, ProgressListWidget, AttentionListWidget, AgendaWidget, PeopleWidget, RecordTable, EntityCardGrid, TaskBoardWidget, CronogramaWidget, fixtures/ (one fixture per widget and style) (StatusChip, TramoBadge re-exported)
+components/widgets/     StyleView, WidgetCard, KpiWidget, DistributionWidget, ProgressListWidget, AttentionListWidget, AgendaWidget, PeopleWidget, RecordTable, EntityCardGrid, TaskBoardWidget, CronogramaWidget, fixtures/ (one fixture per widget and style) (StatusChip, EtapaBadge re-exported)
 components/patterns/    FormSheet, FormDialog, SettingsSection, SettingsRow, ListPage, FiltersBar
 components/shell/       AppShell, LegacyFrame, Sidebar, TimeClock, BottomTabs, PageHeader (re-export of v2), EstiloSwitch, StyleProvider, EmptyState, ErrorState, LoadingSkeleton, CommandPalette, AppearanceProvider, ClockInPrompt
-components/inicio/      InicioClient, ProfilePhotoButton, KpiTiles, KpiTable, TramoDonut, WeeklyPaceChart, AttentionList, MyDayAgenda, ProjectProgressList, WorkloadBars
+components/inicio/      InicioClient, ProfilePhotoButton, KpiTiles, KpiTable, EtapaDonut, WeeklyPaceChart, AttentionList, MyDayAgenda, ProjectProgressList, WorkloadBars
 components/mi-espacio/  MiEspacioClient, QuickCapture, Inbox, GmailReader, GmailDraftSheet, NoteEditor, NotesGrid, ReminderDialog, ChecklistCard
 components/tareas/      TareasClient, TaskSheet, NewTaskDialog, EventDetailPopover (existing files kept until cleanup)
 components/proyectos/   ProjectTabs, ProjectsPortfolio, ProjectSummary, ProjectTasksByFase, NewProjectDialog
@@ -969,7 +969,7 @@ lib/ui/                 preferences.ts (resolveAppearance), nav.ts, themes.ts (p
 lib/tareas/query.ts
 lib/integrations/cutto-links.ts      # client-safe
 lib/integrations/cutto-api.server.ts # server-only (BE)
-lib/tramos/compat.ts                 # Project Flow compatibility (§21.2)
+lib/etapas/compat.ts                 # Project Flow compatibility (§21.2)
 lib/shell/nav-items/<domain>.ts      # nav extension points (§21.1)
 lib/types/redesign.ts
 lib/types/widgets.ts                 # BE-owned widget shapes
@@ -984,14 +984,14 @@ lib/types/widgets.ts                 # BE-owned widget shapes
 | "Dashboard", "Dashboard ejecutivo" | "Inicio" |
 | "Bienvenido, {name}" (every page) | "Buenos días, {name}" on Inicio only |
 | "Actividades", "Tablero", "Mis tareas", "Calendario" (menu) | "Tareas" (views Tablero / Lista / Calendario; "Responsable: Yo") |
-| "Área", "Departamento", "Etapa", "Workflow" (tramo concept) | "Tramo" (Project Flow §13) |
+| "Área", "Departamento", "Etapa", "Workflow" (etapa concept) | "Etapa" (Project Flow §13) |
 | "Taller de diseño" | "Diseño" |
 | "Equipo", "Directorio", "Clientes", "Proveedores" (menu) | "Personas" (tabs Equipo, Clientes, Contratistas, Proveedores) |
 | "Recursos", "Empresa" (menu) | "Biblioteca" |
 | "Mis vacaciones" (resource section) | "Mis vacaciones" under Biblioteca |
 | "Configuración" | "Ajustes" |
 | "Seguridad y datos de acceso" (/profile) | "Perfil" |
-| "Workflows" (config) | "Tramos y fases" |
+| "Workflows" (config) | "Etapas y fases" |
 | "Áreas" (config) | "Puestos" |
 | "Viernes, 6 De Noviembre" | "viernes, 6 de noviembre" (`Intl.DateTimeFormat("es-MX")`, no title case) |
 | "Noviembre De 2026" | "noviembre de 2026" |
@@ -1018,7 +1018,7 @@ lib/types/widgets.ts                 # BE-owned widget shapes
 | Text | `foreground`, `card-foreground`, `muted-foreground`, `secondary-foreground`, `accent-foreground` |
 | Actions | `primary` / `primary-foreground`, `secondary` / `secondary-foreground`, `ring` |
 | Semantic | `destructive` (vencido, bloqueado, error), `warning` (fill) with `warning-ink` (text), `success` |
-| Data series | `chart-1` Presale, `chart-2` Diseño, `chart-3` Construcción (via `tramoColorSlot`, §21.2); `chart-4`, `chart-5` generic series (e.g. "Creadas", En proceso) |
+| Data series | `chart-1` Presale, `chart-2` Diseño, `chart-3` Construcción (via `etapaColorSlot`, §21.2); `chart-4`, `chart-5` generic series (e.g. "Creadas", En proceso) |
 | Text on data colors | **always** `chart-N-ink` (never `chart-N` as text color) |
 | Navigation | `sidebar`, `sidebar-foreground`, `sidebar-primary`, `sidebar-primary-foreground`, `sidebar-accent`, `sidebar-accent-foreground`, `sidebar-border`, `sidebar-ring` |
 
@@ -1062,7 +1062,7 @@ The editor disables "Publicar para todos" and marks the failing rows when `check
 | Aspect | Visual | Esencial | Analítico |
 |---|---|---|---|
 | Charts, rings, sparklines, progress bars | yes | no | sparklines only (56–72 × 16–18, `foreground` stroke) |
-| Tinted chips / colored fills | yes (tints §14.5) | no (plain text; optional 6 px `muted-foreground` dot) | tramo shown as 8 px color dot only |
+| Tinted chips / colored fills | yes (tints §14.5) | no (plain text; optional 6 px `muted-foreground` dot) | etapa shown as 8 px color dot only |
 | Avatars | yes | no (names as text) | initials text only |
 | Containers | cards with shadow per theme | white cards, 1 px border, no shadow | tables (radius 10, header row `muted`), no shadow |
 | Body text | 14 px | 15 px; meta 13 px | 12.5 px; headers 11.5 px |
@@ -1076,12 +1076,12 @@ The editor disables "Publicar para todos" and marks the failing rows when `check
 | Widget | Visual | Esencial | Analítico |
 |---|---|---|---|
 | Indicadores | tile: number, sparkline, delta pill | number + label | table: hoy, Δ 7 días, prom. 30 días, mín–máx, tendencia |
-| Tareas por tramo | donut + legend | list with counts | table: abiertas, vencidas, % heat, días prom., total |
+| Tareas por etapa | donut + legend | list with counts | table: abiertas, vencidas, % heat, días prom., total |
 | Avance de proyectos | rings / bars | list with % | real vs plan, desviación, presupuesto |
 | Requiere atención | tinted rows with avatar | title + date | compact table with days late |
 | Tablero de tareas | columns with color cards | list grouped by estatus | dense table + estatus summary |
-| Calendario | events with tramo color | agenda per day | load heat map + deliveries table |
-| Proyectos / cronograma | cards with ring, Gantt | list with tramo and % | portfolio: real vs plan, deviation, budget |
+| Calendario | events with etapa color | agenda per day | load heat map + deliveries table |
+| Proyectos / cronograma | cards with ring, Gantt | list with etapa and % | portfolio: real vs plan, deviation, budget |
 | Personas | cards with avatar and availability | directory list | occupancy, hours (if allowed), overdue table |
 | Density / text | comfortable, 14 px | roomy, 15 px | compact, 12–13 px, mono numbers |
 
@@ -1098,7 +1098,7 @@ Pages listed in brief decision 3 implement all three; every other page (forms, d
 - Sheets/dialogs trap focus, close with Escape (except a required `ClockInPrompt`), and return focus. The required prompt has a visible explanation.
 - Drag-and-drop on the board has a keyboard alternative: the card's status select (existing) and "Mover a…" menu.
 - Charts have `role="img"` + `aria-label` with the key numbers, and the Analítico table is the accessible equivalent.
-- Icon-only buttons have `aria-label`. No color-only meaning: tramo dots always have a text label nearby; status uses text.
+- Icon-only buttons have `aria-label`. No color-only meaning: etapa dots always have a text label nearby; status uses text.
 - `prefers-reduced-motion`: no sheet/dialog animation, no ticking animation (time still updates).
 - `<html lang="es">`.
 
@@ -1120,12 +1120,12 @@ Vitest + Testing Library colocated (existing pattern); Playwright e2e in `tests/
 - `ThemeEditor`: editing a token updates the preview; failing contrast disables publish and marks rows; "Partir de" loads a preset; reset confirms.
 - `InicioClient`: three styles render the same numbers (snapshot of the KPI values per style); photo upload errors (`TOO_LARGE`, `INVALID_TYPE`).
 - `Inbox`, `GmailReader`, `GmailDraftSheet` (send requires confirmation dialog), `NoteEditor`, `ReminderDialog` (`PAST_TIME`), `ChecklistCard`, `QuickCapture` routing (note / checklist / reminder).
-- `TareasClient`: URL-synced filters, "Responsable: Yo", view switch, collapsed empty columns, drag rollback; `TaskSheet` deep link and back; `NewTaskDialog` fase list per tramo.
+- `TareasClient`: URL-synced filters, "Responsable: Yo", view switch, collapsed empty columns, drag rollback; `TaskSheet` deep link and back; `NewTaskDialog` fase list per etapa.
 - `ProjectTabs` (Clientes only with permission), `ProjectsPortfolio` styles.
 - `PersonasTabs` keep style across tabs; hours column hidden for non-allowed viewers.
 - `VacationForm` (`OVERLAP`), `TeamHoursTable` styles, `CommandPalette` grouping and min length.
 - `AssistantSheet`: context chip only for server-confirmed context; a tool part in `approval-requested` renders `ConfirmationCard` with the tool summary, and Confirmar/Cancelar call `addToolApprovalResponse`; output-available / output-denied / output-error states render; the client sends a generated thread id and only the new message; legacy localStorage thread calls `importLegacyAssistantThreadAction` once and deletes the key; `render_table`/`render_timeline` render through `RecordTable`/`AgendaWidget`.
-- Redirect stubs: each old route redirects to its §2.2 target when the flag is on and renders as today when off; new-only routes redirect to legacy when off; `/actividades/[tramo]?project=X` keeps `project` and adds `iniciar=1`.
+- Redirect stubs: each old route redirects to its §2.2 target when the flag is on and renders as today when off; new-only routes redirect to legacy when off; `/actividades/[etapa]?project=X` keeps `project` and adds `iniciar=1`.
 - `(staff)` layout: flag on mounts `AppShell` once; flag off renders children bare (legacy pages show their own sidebar; restyled pages show `LegacyFrame`); never two sidebars.
 - Admin guards: each `/ajustes/(admin)/<segment>/layout.tsx` returns 404 for a viewer without the segment capability of §8 (server test per segment), and `AjustesNav` omits exactly those items; Dirección reaches `/ajustes/horario` (report only) and `/ajustes/general` when `canManageGeneralSettings` allows it.
 - Stub phase: with Phase 1 stubs (`IMPLEMENTED` flags false in `lib/actions/<domain>-actions.flags.ts`, read actions disabled/empty), no nav item, palette command, sidebar slot or button that would call a write stub is rendered (one test per domain); "Registrar entrada" is absent from the palette while `fetchMyTodayAction().enabled` is false.
@@ -1205,12 +1205,12 @@ Rule 3. Assistant tools register an `available(ctx)` check that imports the flag
 
 | Phase | Name | Owns (implements) |
 |---|---|---|
-| 1 | Contracts and foundation | ONE migration PR with all new tables (incl. `cron_leases`) (BE §4); `lib/types/redesign.ts`, `lib/types/widgets.ts` (§4.10.1, §7.1); all 62 §7 action signatures + zod schemas as stubs (Rule 1), each actions file with its sibling flags module `lib/actions/<domain>-actions.flags.ts` (`IMPLEMENTED`, §9); user-preference actions `fetchMyPreferencesAction` / `updateMyPreferencesAction` fully implemented; `fetchOrgAppearanceAction` implemented as a reader in `org-appearance-actions.ts`; `general_settings.company` schema fields `instagramUrl`, `contactEmail` + defaults in `lib/settings/general-settings-schema.ts`; photo routes `POST /api/staff/me/photo`, `GET /api/staff/[id]/photo` + `removeMyPhotoAction` fully implemented (§7.3); `lib/errors.ts` (`actionErrorText` + new codes incl. `NOT_IMPLEMENTED`, §9); capabilities in `lib/auth/permissions.ts` (`canManageAppearance`, `canManageGeneralSettings`, `canManageTimeTracking`, `canViewTeamHours`, `canDecideVacations`, `canSeeAdminData` re-export) and per-segment guards (§8); `lib/tramos/compat.ts`; `lib/ui/contrast.ts`, `lib/ui/themes.ts`, appearance resolver + cookie + SSR style block (flag-gated, B17/B18, §4.1, §14); `app/(staff)/layout.tsx`, AppShell, Sidebar (TimeClock slot hidden while `IMPLEMENTED.clockInAction` in `time-tracking-actions.flags.ts` is false / the `fetchMyTodayAction` stub reports `enabled: false`), PageHeader, EstiloSwitch, StyleProvider/StyleView, Toaster, EmptyState/ErrorState/LoadingSkeleton; the whole widget library + ListPage/FiltersBar/FormSheet/FormDialog/SettingsSection; nav config with extension points; `lib/notifications/notify.ts` (full: row insert, preferences, quiet hours, email pending, BE §8.3) + cron jobs `notifications-deliver` and `daily-digest`; the daily-producers registry `lib/cron/daily-producers/index.ts` with a stub `vencimiento.ts` (BE §13); ALL new email templates (recordatorio, resumen-diario, vacaciones-decision, vacaciones-solicitud, BE §11.3); read helpers fully implemented: `lib/time-tracking/week-hours.ts`, `lib/vacations/approved-absences.ts`, `lib/my-space/reminders-for-day.ts` (BE §8.12); cron registry + lease + `/api/cron/tick` (BE §8.0.4, BE §13); assistant `defineTool` + registry + `summarize(input)` + client-safe `lib/assistant/tool-summaries.ts` + ConfirmationCard + render_table/render_timeline/render_confirmation (UI only; chat route untouched) (§3.9, §4.9) |
+| 1 | Contracts and foundation | ONE migration PR with all new tables (incl. `cron_leases`) (BE §4); `lib/types/redesign.ts`, `lib/types/widgets.ts` (§4.10.1, §7.1); all 62 §7 action signatures + zod schemas as stubs (Rule 1), each actions file with its sibling flags module `lib/actions/<domain>-actions.flags.ts` (`IMPLEMENTED`, §9); user-preference actions `fetchMyPreferencesAction` / `updateMyPreferencesAction` fully implemented; `fetchOrgAppearanceAction` implemented as a reader in `org-appearance-actions.ts`; `general_settings.company` schema fields `instagramUrl`, `contactEmail` + defaults in `lib/settings/general-settings-schema.ts`; photo routes `POST /api/staff/me/photo`, `GET /api/staff/[id]/photo` + `removeMyPhotoAction` fully implemented (§7.3); `lib/errors.ts` (`actionErrorText` + new codes incl. `NOT_IMPLEMENTED`, §9); capabilities in `lib/auth/permissions.ts` (`canManageAppearance`, `canManageGeneralSettings`, `canManageTimeTracking`, `canViewTeamHours`, `canDecideVacations`, `canSeeAdminData` re-export) and per-segment guards (§8); `lib/etapas/compat.ts`; `lib/ui/contrast.ts`, `lib/ui/themes.ts`, appearance resolver + cookie + SSR style block (flag-gated, B17/B18, §4.1, §14); `app/(staff)/layout.tsx`, AppShell, Sidebar (TimeClock slot hidden while `IMPLEMENTED.clockInAction` in `time-tracking-actions.flags.ts` is false / the `fetchMyTodayAction` stub reports `enabled: false`), PageHeader, EstiloSwitch, StyleProvider/StyleView, Toaster, EmptyState/ErrorState/LoadingSkeleton; the whole widget library + ListPage/FiltersBar/FormSheet/FormDialog/SettingsSection; nav config with extension points; `lib/notifications/notify.ts` (full: row insert, preferences, quiet hours, email pending, BE §8.3) + cron jobs `notifications-deliver` and `daily-digest`; the daily-producers registry `lib/cron/daily-producers/index.ts` with a stub `vencimiento.ts` (BE §13); ALL new email templates (recordatorio, resumen-diario, vacaciones-decision, vacaciones-solicitud, BE §11.3); read helpers fully implemented: `lib/time-tracking/week-hours.ts`, `lib/vacations/approved-absences.ts`, `lib/my-space/reminders-for-day.ts` (BE §8.12); cron registry + lease + `/api/cron/tick` (BE §8.0.4, BE §13); assistant `defineTool` + registry + `summarize(input)` + client-safe `lib/assistant/tool-summaries.ts` + ConfirmationCard + render_table/render_timeline/render_confirmation (UI only; chat route untouched) (§3.9, §4.9) |
 | 2 | Shell, navigation and states | redirects (both directions, flag-aware), CommandPalette (⌘K) + `search-actions.ts`, avatar menu UI, opt-in banner + avatar-menu opt-in UI, BottomTabs (mobile), Error404/error.tsx/loading.tsx per route group |
 | 3 | Inicio, Tareas y Calendario | `fetchInicioAction`, `/inicio`, `/tareas` (tablero, lista, calendario views), TaskSheet, NewTaskDialog, calendar style variants, notify hooks inside `tasks-actions.ts` (asignación, mención, comentario), daily producer `lib/cron/daily-producers/vencimiento.ts` (vencimiento) |
 | 4 | Proyectos, Personas, Biblioteca y Vacaciones | `fetchProjectsPortfolioAction`, `fetchPeopleOverviewAction`, `fetchPersonaDetailAction`, `/proyectos` + project tabs, `/personas/*`, `/biblioteca/*`, `vacations-actions.ts` (all), Mis vacaciones incl. "Días de vacaciones" settings section and "Solicitudes del equipo" |
 | 5 | Mi espacio, Bandeja y Gmail | `my-space-actions.ts`, `notifications-actions.ts`, `gmail-actions.ts`, Gmail consent grant + attachment route, cron jobs `reminders-fire`, `gmail-sync`, `/mi-espacio/*`, Ajustes › Notificaciones and Ajustes › Integraciones pages |
-| 6 | Ajustes, tema y Control de horario | `org-appearance-actions.ts` save/reset + Tema y estilo editor, Apariencia page, `time-tracking-actions.ts`, TimeClock behavior, login clock-in prompt, team hours report + `/api/horario/export`, cron job `auto-close-jornadas`, Perfil page, Ajustes › General UI (company links fields already in the schema from Phase 1) and the save/restore switch to `canManageGeneralSettings`, per-segment admin pages restyle (estatus, permisos, monday, google; tramos/puestos link to Project Flow pages when present) |
+| 6 | Ajustes, tema y Control de horario | `org-appearance-actions.ts` save/reset + Tema y estilo editor, Apariencia page, `time-tracking-actions.ts`, TimeClock behavior, login clock-in prompt, team hours report + `/api/horario/export`, cron job `auto-close-jornadas`, Perfil page, Ajustes › General UI (company links fields already in the schema from Phase 1) and the save/restore switch to `canManageGeneralSettings`, per-segment admin pages restyle (estatus, permisos, monday, google; etapas/puestos link to Project Flow pages when present) |
 | 7 | Asistente en todas partes | `app/api/asistente/chat/route.ts`, `assistant-actions.ts`, AssistantButton/AssistantSheet, `/asistente` page, tool domain files `lib/assistant/tools/<domain>.ts` for all 65 new tools (each guarded by Rule 3), legacy thread import |
 | 8 | Acceso y portal | login, denegado, cambio de contraseña, first-login wizards restyle, portal pages restyle + styles |
 | 9 | Cleanup | remove flag and legacy shell/routes/pages, ThemeToggle data-theme legacy, switch `globals.css` fallback from Grafito to Azul, delete localStorage readers |
@@ -1241,12 +1241,12 @@ Migrations: all redesign tables ship in **one** migration generated with drizzle
 
 ### 21.2 Project Flow coordination
 
-- `lib/tramos/compat.ts` (Phase 1): `listTramos` (from `workflows`, keys `presale`/`diseno`/`construccion`), `tramoLabel`, `tramoColorSlot`, `tramoColorVar`, `phaseLabel` (null without a fase catalog), `canSeeAdminData` (re-export from Project Flow when present, else `isAdministratorRole`). Redesign code imports only from here.
-- `TramoBadge` is `components/v2/status/AreaBadge` wrapped by compat until Project Flow renames it.
+- `lib/etapas/compat.ts` (Phase 1): `listEtapas` (from `workflows`, keys `presale`/`diseno`/`construccion`), `etapaLabel`, `etapaColorSlot`, `etapaColorVar`, `phaseLabel` (null without a fase catalog), `canSeeAdminData` (re-export from Project Flow when present, else `isAdministratorRole`). Redesign code imports only from here.
+- `EtapaBadge` is `components/v2/status/AreaBadge` wrapped by compat until Project Flow renames it.
 - Fase, Espacio and Puesto UI renders only when that data exists.
 - **One `Toaster`**, in the root layout (Phase 1). Project Flow Phase 2 must not add a second one.
-- The legacy `components/layout/Sidebar.tsx` may still be edited by Project Flow; the new `Sidebar` reads tramos from `listTramos`, so neither blocks the other.
-- `/actividades/[tramo]?project=X` → `/tareas?tramo=…&project=X&iniciar=1` keeps Project Flow's start deep link.
+- The legacy `components/layout/Sidebar.tsx` may still be edited by Project Flow; the new `Sidebar` reads etapas from `listEtapas`, so neither blocks the other.
+- `/actividades/[etapa]?project=X` → `/tareas?tramo=…&project=X&iniciar=1` keeps Project Flow's start deep link.
 - `/ajustes/tramos` and `/ajustes/puestos` render Project Flow's pages when present; otherwise they are hidden from `AjustesNav` and 404.
 - A short addendum recording this coordination is added to the Project Flow specs separately.
 
@@ -1274,7 +1274,7 @@ Migrations: all redesign tables ship in **one** migration generated with drizzle
 
 ## Annex B: Contract names introduced here
 
-Types: `NavItemKey`, `NavItem`, `NavModel`, `TareasVista`, `TareasQuery`, `RenderTableArgs`, `RenderTimelineArgs`, `ListSpec`, `ConfirmationCardProps`, `AppearanceCookie`. Modules: `lib/ui/preferences.ts`, `lib/ui/nav.ts` (`buildNavModel`), `lib/ui/themes.ts`, `lib/ui/tints.ts`, `lib/ui/contrast.ts`, `lib/tareas/query.ts` (`parseTareasQuery`, `toTareasSearch`). Cookies: `cincel-appearance`, `cincel-portal-style`. Route groups: `app/(staff)`, `app/(staff)/ajustes/(personal)`, `app/(staff)/ajustes/(admin)`. Modules: `lib/tramos/compat.ts`, `lib/integrations/cutto-links.ts`, registries of §21.1. Every server action name is in §7 and matches the canonical contract list.
+Types: `NavItemKey`, `NavItem`, `NavModel`, `TareasVista`, `TareasQuery`, `RenderTableArgs`, `RenderTimelineArgs`, `ListSpec`, `ConfirmationCardProps`, `AppearanceCookie`. Modules: `lib/ui/preferences.ts`, `lib/ui/nav.ts` (`buildNavModel`), `lib/ui/themes.ts`, `lib/ui/tints.ts`, `lib/ui/contrast.ts`, `lib/tareas/query.ts` (`parseTareasQuery`, `toTareasSearch`). Cookies: `cincel-appearance`, `cincel-portal-style`. Route groups: `app/(staff)`, `app/(staff)/ajustes/(personal)`, `app/(staff)/ajustes/(admin)`. Modules: `lib/etapas/compat.ts`, `lib/integrations/cutto-links.ts`, registries of §21.1. Every server action name is in §7 and matches the canonical contract list.
 
 ## Annex C: Contract additions requested (accepted by the backend in round 1; now part of §7)
 
@@ -1300,7 +1300,7 @@ Source: `docs/review/redesign-review.md` (round 1).
 | B4 Authorization | `/ajustes/(admin)` server guard per segment; four capabilities named; `AjustesNav` per capability; Dirección reaches the hours report (§3.8, §8) |
 | B5 Ownership | §20 (canonical phase plan) and §21.1 (extension points); widget library and patterns in Phase 1; widget shapes only in `lib/types/widgets.ts` |
 | B6 Migrations | One generated migration, regenerated on top of whichever lands first; no hand renumbering (§21.1, BE §4) |
-| B7 Project Flow | `lib/tramos/compat.ts`; AreaBadge as TramoBadge; conditional Fase/Espacio/Puesto UI; one Toaster; `?project` deep link kept (`project` + `iniciar`); tramos/puestos pages only when present (§21.2) |
+| B7 Project Flow | `lib/etapas/compat.ts`; AreaBadge as EtapaBadge; conditional Fase/Espacio/Puesto UI; one Toaster; `?project` deep link kept (`project` + `iniciar`); etapas/puestos pages only when present (§21.2) |
 | B8 Admin-only data | Visibility rules per page (Inicio, Proyecto Resumen, Proyectos, Personas) and on §7.1 outputs |
 | B9 Assistant approvals | Native `needsApproval` + `addToolApprovalResponse`; `ConfirmationCard` from the tool part with `summarize(input)`; client-generated thread id in the body; only the new message is sent; `importLegacyAssistantThreadAction`; `fetchAssistantActionsAction` replaces confirm/cancel actions (§3.9, §4.9, §7.11) |
 | B10 Notifications | FE unchanged: Bandeja lists in-app rows; delivery and digest are server jobs |

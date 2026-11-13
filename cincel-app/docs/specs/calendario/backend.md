@@ -54,7 +54,7 @@ lib/types/calendario.ts                 types of §6 (client-safe)
 lib/validation/calendario.ts            zod schemas of §6 and §11 (client-safe)
 lib/calendario/
   range.ts                              pure: view → {from,to}, week starts Monday, org time zone
-  items.ts                              pure: row → CalItem, due date rule, overdue, tramo colour slot
+  items.ts                              pure: row → CalItem, due date rule, overdue, etapa colour slot
   load.ts                               pure: effectiveHours, workdayHours, loadLabel, overlaps (§9)
   risk.ts                               pure: riskItems, blockingItems (§10.1)
   redistribute.ts                       pure: proposeRedistribution (§10.3)
@@ -121,7 +121,7 @@ notificationKind += "reunion"
 | location | text null | "Oficina Cincel · Sala 2", an address, or "En sitio" |
 | meet_url | text null | from Google `conferenceData` or pasted |
 | project_id | uuid → projects, null, on delete set null | |
-| workflow_id | uuid → workflows, null | tramo colour of the edge; defaults to the project's current tramo |
+| workflow_id | uuid → workflows, null | etapa colour of the edge; defaults to the project's current etapa |
 | status | `calendar_event_status` default `confirmada` | cancel = status, never delete (history rule) |
 | google_calendar_id, google_event_id, google_etag, google_html_link | text null | |
 | google_sync_error | text null | last write-through error code |
@@ -145,7 +145,7 @@ A Google event whose id equals a Cincel meeting's `google_event_id` is not cache
 
 ### 3.5 Hours (changed)
 - `tasks.estimated_hours numeric(5,2) null`, check `0 < x <= 80`.
-- `workflow_task_templates.default_estimated_hours numeric(5,2) null`, same check. Tramo start copies it onto the task (`lib/project-flow/start-tramo.ts`), so later template edits don't change existing tasks.
+- `workflow_task_templates.default_estimated_hours numeric(5,2) null`, same check. Etapa start copies it onto the task (`lib/project-flow/start-etapa.ts`), so later template edits don't change existing tasks.
 
 ### 3.6 `assistant_proposals` (new, `lib/db/schema/assistant.ts`)
 | Column | Type | Notes |
@@ -200,7 +200,7 @@ export type CalendarioFilters = {
   mostrar: CalMostrar;               // default "todo"
   quien: "yo" | "todos";             // default "yo"; "todos" needs canViewTeamCalendar, else forced to "yo"
   proyectos: string[];               // project ids, [] = all
-  tramo: string | null;              // workflow id, "none" = sin tramo
+  etapa: string | null;              // workflow id, "none" = sin etapa
   responsable: string | null;        // staff id, only with quien = "todos"
   apoyo: boolean;                    // include tasks where the person is support (task_support), default true
   ocultarCompletadas: boolean;       // default from useHideCompletedPreference
@@ -211,13 +211,13 @@ Zod in `lib/validation/calendario.ts`: dates `z.iso.date()`, `to >= from`, span 
 
 ### 5.2 Output
 ```ts
-export type CalTramoRef = { id: string; key: string | null; name: string; colorSlot: 1 | 2 | 3 | 4 | 5 | null };
+export type CalEtapaRef = { id: string; key: string | null; name: string; colorSlot: 1 | 2 | 3 | 4 | 5 | null };
 export type CalPersonRef = { id: string; name: string };
 export type CalTaskItem = {
   kind: "task"; id: string /* "t:"+taskId */; taskId: string; title: string;
   date: string;                       // due date shown: commitment_date ?? delivery_date
   dateField: "commitmentDate" | "deliveryDate";
-  project: { id: string; name: string } | null; tramo: CalTramoRef | null; phase: { id: string; name: string } | null;
+  project: { id: string; name: string } | null; etapa: CalEtapaRef | null; phase: { id: string; name: string } | null;
   status: TaskStatus; statusLabel: string; priority: TaskPriority;
   manager: CalPersonRef | null; support: CalPersonRef[];
   overdue: boolean; completed: boolean; blocked: boolean;
@@ -227,7 +227,7 @@ export type CalTaskItem = {
 export type CalEventItem = {
   kind: "event"; id: string /* "e:"+eventId */; eventId: string; source: "cincel" | "google";
   title: string; date: string; start: string; end: string; allDay: boolean;  // ISO with offset
-  project: { id: string; name: string } | null; tramo: CalTramoRef | null;
+  project: { id: string; name: string } | null; etapa: CalEtapaRef | null;
   location: string | null; meetUrl: string | null;
   attendees: { name: string; staffId: string | null; response: AttendeeResponse }[];
   attendeeCount: number; organizer: CalPersonRef | null;
@@ -313,7 +313,7 @@ export type ProposalChange =
   | { changeId: string; type: "event_create"; draft: MeetingDraft }
   | { changeId: string; type: "event_update"; eventId: string; before: MeetingPatch; after: MeetingPatch; notify: boolean }
   | { changeId: string; type: "event_cancel"; eventId: string; notify: boolean }
-  | { changeId: string; type: "task_create"; draft: { title: string; projectId: string; managerId: string | null; commitmentDate: string | null; tramoId: string | null; sourceText: string } }
+  | { changeId: string; type: "task_create"; draft: { title: string; projectId: string; managerId: string | null; commitmentDate: string | null; etapaId: string | null; sourceText: string } }
   | { changeId: string; type: "decision"; minutesId: string; text: string };
 export type MeetingDraft = { title: string; start: string; end: string; projectId: string | null; location: string | null;
   meet: boolean; attendees: { staffId?: string; contactId?: string; email: string; name: string }[]; description?: string };
@@ -463,7 +463,7 @@ export type SummaryAction =
 
 ### 10.2 Meeting prep
 `loadMeetingPrep(user, eventId)`:
-- KPIs: project progress vs plan (`projects.progress` vs linear plan between `start_date` and `end_date`; "−8 vs plan"), current tramo and fase, overdue count "de 15 abiertas", last meeting of the project with minutes ("28 oct · 3 acuerdos, 1 abierto").
+- KPIs: project progress vs plan (`projects.progress` vs linear plan between `start_date` and `end_date`; "−8 vs plan"), current etapa and fase, overdue count "de 15 abiertas", last meeting of the project with minutes ("28 oct · 3 acuerdos, 1 abierto").
 - `overdue`: open tasks of the project due before the meeting start, max 10, by days late.
 - `agenda`: one item per overdue task ("Avance y nueva fecha de Ingenierías"), one per open point of the last minutes ("Decisión de acabado de cocina (pendiente del 28 oct)"), one per delivery due in the next 14 days ("Fechas de entrega de proyecto ejecutivo"); max 8, deduplicated.
 - `summary`: one paragraph. Default from a template; the ✦ button asks the model for a rephrased version through the `meeting_prep` tool with `{ phrasing: true }` (Decision D6).

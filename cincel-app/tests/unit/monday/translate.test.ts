@@ -429,7 +429,7 @@ describe("translate: board_as_project", () => {
     );
   });
 
-  it("kind: workflow for template matches of the tramo, usuario with the board tramo otherwise", () => {
+  it("kind: workflow for template matches of the etapa, usuario with the board etapa otherwise", () => {
     const r = run();
     expect(task(r, "1003")).toMatchObject({
       kind: "workflow",
@@ -453,11 +453,11 @@ describe("translate: board_as_project", () => {
     );
   });
 
-  it("board tramo → the tasks' tramo, the project's one tramo and its current tramo", () => {
+  it("board etapa → the tasks' etapa, the project's one etapa and its current etapa", () => {
     const p = project(run(), "301");
     expect(p).toMatchObject({
       workflowId: BOARD_WORKFLOW,
-      tramos: [BOARD_WORKFLOW],
+      etapas: [BOARD_WORKFLOW],
       currentWorkflowId: BOARD_WORKFLOW,
     });
     expect(p.data.stageWorkflowIds).toEqual([BOARD_WORKFLOW]);
@@ -466,7 +466,7 @@ describe("translate: board_as_project", () => {
     input.boards[0].workflowId = null;
     input.boards[0].templateMatches = {};
     const none = project(run(exportData(), input), "301");
-    expect(none).toMatchObject({ workflowId: null, tramos: [], currentWorkflowId: null });
+    expect(none).toMatchObject({ workflowId: null, etapas: [], currentWorkflowId: null });
     expect(none.data).not.toHaveProperty("stageWorkflowIds");
   });
 
@@ -527,8 +527,8 @@ describe("translate: contacts and other strategies", () => {
       phaseId: null,
     });
     expect(project(r, "6003").client).toBeNull();
-    // The board has no tramo.
-    expect(project(r, "6001")).toMatchObject({ workflowId: null, tramos: [] });
+    // The board has no etapa.
+    expect(project(r, "6001")).toMatchObject({ workflowId: null, etapas: [] });
     expect(r.issues).toContainEqual(
       expect.objectContaining({
         code: "CLIENT_UNRESOLVED",
@@ -564,7 +564,7 @@ describe("translate: contacts and other strategies", () => {
       status: "activo",
       progress: 0,
       workflowId: null,
-      tramos: [],
+      etapas: [],
     });
   });
 
@@ -578,7 +578,7 @@ describe("translate: contacts and other strategies", () => {
     expect(r.projects.some((p) => p.source.boardId === "701")).toBe(false);
   });
 
-  it("item_as_project and group_as_project take the board tramo", () => {
+  it("item_as_project and group_as_project take the board etapa", () => {
     const input = mappingInput();
     input.boards[2].workflowId = WORKFLOW;
     input.boards[4].workflowId = WORKFLOW;
@@ -586,7 +586,7 @@ describe("translate: contacts and other strategies", () => {
     for (const id of ["6001", "701:ga"]) {
       expect(project(r, id)).toMatchObject({
         workflowId: WORKFLOW,
-        tramos: [WORKFLOW],
+        etapas: [WORKFLOW],
         currentWorkflowId: WORKFLOW,
       });
       expect(project(r, id).data.stageWorkflowIds).toEqual([WORKFLOW]);

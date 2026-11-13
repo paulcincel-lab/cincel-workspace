@@ -3,8 +3,8 @@
  * dry run (scripts/monday/plan.ts `buildPlan`): counts per Cincel entity per
  * board, the plan's issues and up to 5 items per board shown as the Cincel
  * row apply creates for them. Boards whose items become tasks also get up to 5
- * rows for the projects the board makes, with their tramos (#678). Task rows show
- * "Tramo · Fase", espacio and admin tasks (project flow FE §7.8). Issues are in
+ * rows for the projects the board makes, with their etapas (#678). Task rows show
+ * "Etapa · Fase", espacio and admin tasks (project flow FE §7.8). Issues are in
  * Spanish with the step that fixes them (#679). Pure: no DB, no files.
  */
 import { ISSUE_FIX_STEP, issuePersonId, issuePersonName, issueText } from "@/lib/monday-import/preview-issues";
@@ -32,7 +32,7 @@ const PRIORITY_LABELS: Record<string, string> = { alta: "Alta", media: "Media", 
 export interface PreviewNames {
   customStatuses: Record<string, { name: string }>;
   staff: Record<string, { name: string }>;
-  /** Tramo names; a missing name shows as no tramo. */
+  /** Etapa names; a missing name shows as no etapa. */
   workflows?: Record<string, { name: string }>;
   /** Fase names of the task rows. */
   phases?: Record<string, { name: string }>;
@@ -109,7 +109,7 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     customStatus: null,
     priority: null,
     manager: null,
-    tramo: null,
+    etapa: null,
     phase: null,
     phaseReview: false,
     space: null,
@@ -126,7 +126,7 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
     contactType: null,
   } satisfies Omit<MondayPreviewSample["cincel"], "title">;
 
-  const tramoName = (id: string | null | undefined): string | null =>
+  const etapaName = (id: string | null | undefined): string | null =>
     id ? (names.workflows?.[id]?.name ?? null) : null;
 
   const taskSample = (t: PlannedTask): MondayPreviewSample => ({
@@ -142,8 +142,8 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       customStatus: t.customStatusId ? (names.customStatuses[t.customStatusId]?.name ?? null) : null,
       priority: PRIORITY_LABELS[t.priority] ?? t.priority,
       manager: t.managerId ? (names.staff[t.managerId]?.name ?? null) : null,
-      // "Tramo · Fase" as apply writes them; a task without a fase shows "Sin fase · revisar".
-      tramo: tramoName(t.workflowId),
+      // "Etapa · Fase" as apply writes them; a task without a fase shows "Sin fase · revisar".
+      etapa: etapaName(t.workflowId),
       phase: t.phaseId ? (names.phases?.[t.phaseId]?.name ?? null) : null,
       phaseReview: t.kind !== "admin" && (t.phaseReview || !t.phaseId),
       space: t.space,
@@ -168,10 +168,10 @@ export function buildPreview(plan: Plan, data: ExportData, names: PreviewNames):
       ...empty,
       title: p.name,
       status: p.status === "completado" ? "Completado" : "Activo",
-      // The project's tramos (one stage each), as apply writes them.
-      tramo:
-        (p.tramos.length > 0 ? p.tramos : p.currentWorkflowId ? [p.currentWorkflowId] : [])
-          .map((id) => tramoName(id))
+      // The project's etapas (one stage each), as apply writes them.
+      etapa:
+        (p.etapas.length > 0 ? p.etapas : p.currentWorkflowId ? [p.currentWorkflowId] : [])
+          .map((id) => etapaName(id))
           .filter((name): name is string => Boolean(name))
           .join(", ") || null,
       tasks: projectTasks.get(p.externalId) ?? 0,

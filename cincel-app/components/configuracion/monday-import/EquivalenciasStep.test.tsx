@@ -70,8 +70,8 @@ describe("EquivalenciasStep · Grupos y etapa", () => {
   it("has one Etapa del tablero select and no department, workflow or task área controls", () => {
     renderWithQueryClient(<Harness initial={draft()} source={boardSource([{ id: "g1", title: "Extras" }])} />);
     expect(screen.getByRole("heading", { name: "Grupos y etapa" })).toBeTruthy();
-    const tramo = screen.getByRole("combobox", { name: "Etapa del tablero" }) as HTMLSelectElement;
-    expect(within(tramo).getAllByRole("option").map((option) => option.textContent)).toEqual([
+    const etapa = screen.getByRole("combobox", { name: "Etapa del tablero" }) as HTMLSelectElement;
+    expect(within(etapa).getAllByRole("option").map((option) => option.textContent)).toEqual([
       "Elige una opción",
       "Sin etapa",
       "Presale",

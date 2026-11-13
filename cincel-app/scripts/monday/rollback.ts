@@ -130,8 +130,8 @@ type Owner =
   | "project_stage"
   /**
    * It goes with the batch row it points at (an `on delete cascade` child
-   * that is no history of its own), so it never blocks. `tramo_start_batches`
-   * of a later "Iniciar tramo" on an imported project: the tasks such a start
+   * that is no history of its own), so it never blocks. `etapa_start_batches`
+   * of a later "Iniciar etapa" on an imported project: the tasks such a start
    * created block through their own checks (project flow BE §10.9).
    */
   | "cascade"
@@ -282,7 +282,7 @@ export const POINTER_CHECKS: readonly PointerCheck[] = [
     owner: own("project_space"),
   },
   {
-    table: "tramo_start_batches",
+    table: "etapa_start_batches",
     column: "project_id",
     target: "project",
     idSql: "c.id",

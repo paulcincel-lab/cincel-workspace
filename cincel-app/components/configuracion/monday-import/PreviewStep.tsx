@@ -38,9 +38,9 @@ function Counts({ counts }: { counts: MondayPreviewCounts }) {
   );
 }
 
-/** "Tramo · Fase: Diseño · Ejecutivo", or just the tramo or fase it has. */
-function tramoPhase(tramo: string | null | undefined, phase: string | null): string | null {
-  const parts = [tramo, phase].filter(Boolean);
+/** "Etapa · Fase: Diseño · Ejecutivo", or just the etapa or fase it has. */
+function etapaPhase(etapa: string | null | undefined, phase: string | null): string | null {
+  const parts = [etapa, phase].filter(Boolean);
   return parts.length > 0 ? `Etapa · Fase: ${parts.join(" · ")}` : null;
 }
 
@@ -50,10 +50,10 @@ export function sampleDetails(sample: MondayPreviewSample): string {
   const isAdmin = isTask && (c.admin === true || c.kind === "admin");
   const parts = [
     c.project ? `Proyecto: ${c.project}` : null,
-    sample.entity === "proyecto" ? (c.tramo ? `Etapas: ${c.tramo}` : null) : null,
-    // A task's tramo, fase and espacio (project flow §4.9), or "Administración" for an admin task.
+    sample.entity === "proyecto" ? (c.etapa ? `Etapas: ${c.etapa}` : null) : null,
+    // A task's etapa, fase and espacio (project flow §4.9), or "Administración" for an admin task.
     isAdmin ? "Administración" : null,
-    isTask && !isAdmin ? tramoPhase(c.tramo, c.phase) : null,
+    isTask && !isAdmin ? etapaPhase(c.etapa, c.phase) : null,
     isTask && !isAdmin && c.phaseReview ? "Sin fase · revisar" : null,
     isTask && !isAdmin && c.space ? `Espacio: ${c.space}` : null,
     c.customStatus ?? c.status ? `Estatus: ${c.customStatus ?? c.status}` : null,

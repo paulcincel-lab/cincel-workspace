@@ -12,12 +12,12 @@
 
 select check_name, expected, actual, (expected = actual) as ok
 from (
-  select 2 as n, 'fases (live tramos)' as check_name, '14' as expected,
+  select 2 as n, 'fases (live etapas)' as check_name, '14' as expected,
     (select count(*)::text
        from core.workflow_phases p
        join core.workflows w on w.id = p.workflow_id and w.deleted_at is null) as actual
   union all
-  select 3, 'templates (live tramos)', '51',
+  select 3, 'templates (live etapas)', '51',
     (select count(*)::text
        from core.workflow_task_templates t
        join core.workflows w on w.id = t.workflow_id and w.deleted_at is null)
@@ -56,7 +56,7 @@ from (
     (select count(*)::text from pg_indexes
       where schemaname = 'core' and indexname = 'projects_client_name_lower_uq')
   union all
-  select 11, 'tasks whose fase belongs to another tramo', '0',
+  select 11, 'tasks whose fase belongs to another etapa', '0',
     (select count(*)::text
        from core.tasks k
        join core.workflow_phases p on p.id = k.phase_id
@@ -64,8 +64,8 @@ from (
 ) c
 order by n;
 
--- Context for the issue comment: fases and templates per tramo, report kinds.
-select w.key as tramo,
+-- Context for the issue comment: fases and templates per etapa, report kinds.
+select w.key as etapa,
        (select count(*) from core.workflow_phases p where p.workflow_id = w.id) as fases,
        (select count(*) from core.workflow_task_templates t where t.workflow_id = w.id) as templates
   from core.workflows w

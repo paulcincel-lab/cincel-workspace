@@ -1,4 +1,4 @@
-/** Shared fixtures for the Equivalencias component tests: a three-tramo catalog and a native select stand-in. */
+/** Shared fixtures for the Equivalencias component tests: a three-etapa catalog and a native select stand-in. */
 import type { MondayImportChoices } from "@/lib/types/monday-import";
 
 export const PRESALE = "11111111-1111-4111-8111-111111111111";
