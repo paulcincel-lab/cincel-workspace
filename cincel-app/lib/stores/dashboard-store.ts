@@ -7,6 +7,7 @@ import { useStyle } from "@/components/shell/StyleProvider";
 import { registerPersistedStore } from "@/components/shell/UiStoresHydrator";
 import { registerUiStoreReset } from "@/lib/query/reset-client-state";
 import type { PresentationStyle } from "@/lib/types/redesign";
+import { normalizeEtapaValue } from "@/lib/ui/etapa-param";
 import { PRESENTATION_STYLES } from "@/lib/ui/style-override";
 
 /**
@@ -325,7 +326,7 @@ export function createDashboardStore<W extends string, K extends string, F exten
       const filters = emptyFilters();
       if (isRecord(value.filters)) {
         for (const [key, picked] of renamed(value.filters)) {
-          if (isFilterKey(key) && typeof picked === "string" && picked !== "") filters[key] = picked;
+          if (isFilterKey(key) && typeof picked === "string" && picked !== "") filters[key] = normalizeEtapaValue(picked); // old saved `sin-tramo` reads as `sin-etapa`
         }
       }
       sanitized.filters = filters;

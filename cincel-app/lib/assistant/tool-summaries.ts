@@ -147,7 +147,8 @@ export function summarizeCreateTasksFromNotes(input: unknown): string {
 }
 
 export function summarizeRebalanceWorkload(input: unknown): string {
-  const etapa = text(input, "etapa");
+  // `tramo`: a call stored before the rename.
+  const etapa = text(input, "etapa") || text(input, "tramo");
   const max = field(input, "maxPerPerson");
   const scope = etapa ? ` de ${quoted(etapa)}` : "";
   const limit = typeof max === "number" && Number.isFinite(max) ? ` (máximo ${max} por persona)` : " según la capacidad de cada persona";

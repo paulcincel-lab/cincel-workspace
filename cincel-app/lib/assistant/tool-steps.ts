@@ -189,6 +189,7 @@ const PARAM_KEYS: Record<string, string> = {
   client: "cliente",
   workflow: "etapa",
   etapa: "etapa",
+  tramo: "etapa", // calls and results stored before the rename
   stage: "etapa",
   priority: "prioridad",
   range: "periodo",
@@ -230,7 +231,7 @@ function paramValue(key: string, value: unknown): string | null {
   if (typeof value === "string") {
     const clean = value.replace(/\s+/g, " ").trim();
     if (!clean) return null;
-    if (key === "workflow" || key === "etapa") return WORKFLOW_NAMES[clean] ?? clean;
+    if (key === "workflow" || key === "etapa" || key === "tramo") return WORKFLOW_NAMES[clean] ?? clean;
     if (key === "status") return taskStatusLabel(clean).toLowerCase();
     if (key === "due") return DUE_WORDS[clean] ?? clean;
     if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return formatDueDate(clean);
@@ -382,7 +383,7 @@ export function taskCardsOf(output: unknown, today: string = todayIso()): ToolTa
     if (!("commitmentDate" in item)) return null;
     const title = str(item, "title") || str(item, "description");
     if (!title) return null;
-    const etapaName = str(item, "etapa") || str(item, "workflow");
+    const etapaName = str(item, "etapa") || str(item, "tramo") || str(item, "workflow");
     const key = fold(etapaName);
     const dueDate = str(item, "commitmentDate") || null;
     const late = dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? daysBetween(dueDate, today) : null;

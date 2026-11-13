@@ -5,8 +5,8 @@
  * (`confirm: true` → AI SDK `needsApproval`; writes also ask after untrusted
  * content in the turn), `summarize(input)` for `ConfirmationCard` and `run`.
  */
-import { tool, type FlexibleSchema, type ModelMessage, type Tool, type ToolSet } from "ai";
-import type { z } from "zod";
+import { jsonSchema, tool, type FlexibleSchema, type ModelMessage, type Tool, type ToolSet } from "ai";
+import { z } from "zod";
 
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { actionErrorCode, actionErrorText } from "@/lib/errors";
@@ -31,6 +31,11 @@ export type ToolDefinition<S extends z.ZodType = z.ZodType> = {
   confirm: boolean;
   /** Write tool: asks for approval after an untrusted result in the same turn (review N4). */
   write: boolean;
+  /**
+   * Compatibility: input fields renamed since tool calls were stored (`{ tramo: "etapa" }`). A pending
+   * approval or replayed call carrying the old name still validates and runs under the new one.
+   */
+  legacyInputNames?: Readonly<Record<string, string>>;
   summarize(input: z.output<S>): string;
   run(ctx: ToolRunContext, input: z.output<S>): Promise<unknown>;
 };
@@ -110,12 +115,35 @@ export function approvalRule(definition: Pick<ToolDefinition, "confirm" | "write
   return false;
 }
 
+/** The input with each old field name moved to its new name (when the new one is absent). */
+export function renameLegacyInput(input: unknown, names: Readonly<Record<string, string>>): unknown {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return input;
+  const out: Record<string, unknown> = { ...(input as Record<string, unknown>) };
+  for (const [old, current] of Object.entries(names)) {
+    if (old in out) {
+      if (!(current in out)) out[current] = out[old];
+      delete out[old];
+    }
+  }
+  return out;
+}
+
 export function defineTool<S extends z.ZodType>(definition: ToolDefinition<S>): DefinedTool<S> {
   if (!TOOL_NAME.test(definition.name)) {
     throw new Error(`INVALID: tool name "${definition.name}" must be snake_case`);
   }
   const needsApproval = approvalRule(definition);
-  const inputSchema = definition.schema as unknown as FlexibleSchema<z.output<S>>;
+  const names = definition.legacyInputNames;
+  const inputSchema = (
+    names
+      ? jsonSchema<z.output<S>>(z.toJSONSchema(definition.schema, { io: "input" }) as never, {
+          validate: (value) => {
+            const parsed = definition.schema.safeParse(renameLegacyInput(value, names));
+            return parsed.success ? { success: true, value: parsed.data } : { success: false, error: parsed.error };
+          },
+        })
+      : definition.schema
+  ) as unknown as FlexibleSchema<z.output<S>>;
 
   return {
     name: definition.name,

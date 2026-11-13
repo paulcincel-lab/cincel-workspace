@@ -133,6 +133,18 @@ describe("useInicioDashboard instance", () => {
     expect(s.filters).toEqual({ responsable: "s-3", etapa: "diseno" });
   });
 
+  it("reads a saved sin-tramo filter value as sin-etapa", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        state: { range: "8w", collapsed: {}, views: {}, hiddenSeries: {}, filters: { responsable: null, tramo: "sin-tramo" } },
+        version: 1,
+      }),
+    );
+    await useInicioDashboard.persist.rehydrate();
+    expect(useInicioDashboard.getState().filters).toEqual({ responsable: null, etapa: "sin-etapa" });
+  });
+
   it("unknown keys dropped", async () => {
     localStorage.setItem(
       KEY,

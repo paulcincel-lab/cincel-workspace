@@ -527,6 +527,7 @@ export const rebalance_workload = defineTool({
   description:
     "Reparte las tareas abiertas entre el equipo cuando alguien rebasa su capacidad (o el máximo indicado): mueve tareas pendientes de menor prioridad a quien tiene espacio, dentro de una etapa o en todos. Pide confirmación al usuario antes de reasignar.",
   schema: rebalanceSchema,
+  legacyInputNames: { tramo: "etapa" },
   capability: isLead,
   available: always,
   confirm: true,
