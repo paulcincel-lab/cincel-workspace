@@ -740,7 +740,7 @@ export function activityItems(events: HistoryEvent[], catalog: WorkflowRef[], no
       return {
         ...base,
         verb: "movió el proyecto a",
-        object: tramo?.name ?? "otro tramo",
+        object: tramo?.name ?? "otra etapa",
         objectTone: "tramo",
         tramoLabel: null,
         tramoKey: tramo?.key ?? null,
@@ -752,7 +752,7 @@ export function activityItems(events: HistoryEvent[], catalog: WorkflowRef[], no
       return {
         ...base,
         verb: startedNow ? "inició" : "deshizo el inicio de",
-        object: tramo?.name ?? "un tramo",
+        object: tramo?.name ?? "una etapa",
         objectTone: "tramo",
         tramoLabel: tramo?.name ?? null,
         tramoKey: tramo?.key ?? null,
@@ -874,7 +874,7 @@ export type EsencialTramoLine = {
 };
 
 /** The Resumen's empty state when the project has started no tramo (#1043). */
-export const RESUMEN_NO_TRAMO = "Este proyecto aún no tiene tramo.";
+export const RESUMEN_NO_TRAMO = "Este proyecto aún no tiene etapa.";
 
 const LONG_MONTH = new Intl.DateTimeFormat("es-MX", { month: "long", timeZone: "UTC" });
 
@@ -940,11 +940,11 @@ export function esencialTramoLine(input: ProjectSummaryInput, progress: TramoPro
     return {
       steps,
       next,
-      title: steps.length > 0 ? "Sin tramo asignado" : RESUMEN_NO_TRAMO,
+      title: steps.length > 0 ? "Sin etapa asignada" : RESUMEN_NO_TRAMO,
       real,
       ariaLabel:
         steps.length > 0
-          ? `Tramos: sin tramo asignado (${steps.map((s) => s.label).join(", ")})${next ? `, siguiente ${next.label}` : ""}`
+          ? `Etapas: sin etapa asignada (${steps.map((s) => s.label).join(", ")})${next ? `, siguiente ${next.label}` : ""}`
           : RESUMEN_NO_TRAMO,
     };
   }
@@ -988,7 +988,7 @@ export function esencialTramoLine(input: ProjectSummaryInput, progress: TramoPro
     next,
     title: taskStats.currentPhase ? `En ${current.label} · ${taskStats.currentPhase}` : `En ${current.label}`,
     real,
-    ariaLabel: `Tramos: ${spoken.join(", ")}`,
+    ariaLabel: `Etapas: ${spoken.join(", ")}`,
   };
 }
 
@@ -1592,7 +1592,7 @@ export function tareasCsvFilename(projectName: string, today: string): string {
 /** The "Tareas por tramo" export: header + one row per task, in table order. */
 export function tareasCsvRows(groups: Group<TaskRow>[]): { header: string[]; rows: (string | number | null)[][] } {
   return {
-    header: ["Tramo", "Tarea", "Fase", "Responsable", "Estatus", "Vence", "Días de retraso"],
+    header: ["Etapa", "Tarea", "Fase", "Responsable", "Estatus", "Vence", "Días de retraso"],
     rows: groups.flatMap((group) =>
       (group.rows ?? []).map((row) => [
         group.label,

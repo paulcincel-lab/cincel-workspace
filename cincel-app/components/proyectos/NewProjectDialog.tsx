@@ -17,7 +17,7 @@ export type NewProjectDialogProps = ProjectCreateFormProps & {
 
 /** Error copy of the create: the §9 codes, with the project wording for `NAME_TAKEN` and the starting tramo's fases. */
 export function newProjectErrorText(err: unknown): string {
-  if (actionErrorCode(err) === "PHASE_MISMATCH") return "Una de las fases ya no pertenece al tramo elegido. Vuelve a elegirlas.";
+  if (actionErrorCode(err) === "PHASE_MISMATCH") return "Una de las fases ya no pertenece a la etapa elegida. Vuelve a elegirlas.";
   return actionErrorText(err, { entity: "project" });
 }
 

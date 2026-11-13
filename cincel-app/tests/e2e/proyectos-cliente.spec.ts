@@ -47,7 +47,7 @@ async function seedProjectWithClient(name: string, clientId: string, adminTaskTi
       select id from core.workflows where key = 'presale' and deleted_at is null limit 1`;
     const [admin] = await sql<{ id: string }[]>`
       select id from core.staff where lower(email) = lower(${ADMIN_EMAIL}) and deleted_at is null limit 1`;
-    if (!presale || !admin) throw new Error("seeded Presale tramo or admin not found");
+    if (!presale || !admin) throw new Error("seeded Presale etapa or admin not found");
     const [project] = await sql<{ id: string }[]>`
       insert into core.projects (name, client_id, origin, current_workflow_id, status, address_city)
       values (${name}, ${clientId}, ${`Origen E2E ${RUN_ID}`}, ${presale.id}, 'activo', 'CDMX')

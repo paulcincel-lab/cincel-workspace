@@ -522,7 +522,7 @@ function TasksBoard({
 
   async function onCreate(bucket: MyTaskBucket, draft: QuickAddDraft) {
     if (!draft.projectId || !draft.tramoId) {
-      onAnnounce("Indica el proyecto y el tramo de la tarea.");
+      onAnnounce("Indica el proyecto y la etapa de la tarea.");
       throw new Error("INVALID: proyecto");
     }
     const task = await create.mutateAsync({
@@ -700,7 +700,7 @@ function TaskCard({ task, today, fresh, style }: { task: TaskListItem; today: st
             {tramo.label}
           </span>
         ) : (
-          <span className="text-[11.5px] text-muted-foreground">Sin tramo</span>
+          <span className="text-[11.5px] text-muted-foreground">Sin etapa</span>
         )}
         <DuePill tone={due.tone} label={due.label} />
       </div>

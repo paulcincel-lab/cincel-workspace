@@ -60,7 +60,7 @@ describe("toPortalTramosDTO", () => {
     { id: "w4", key: "decoracion", name: "Decoración", active: false, sortOrder: 4, startedAt: null, closedAt: null },
   ];
 
-  it("orders the catalog and maps the project's state, dropping inactive tramos never started", () => {
+  it("orders the catalog and maps the project's state, dropping inactive etapas never started", () => {
     expect(toPortalTramosDTO(rows, "w2").map(({ key, name, state }) => ({ key, name, state }))).toEqual([
       { key: "presale", name: "Presale", state: "completado" },
       { key: "diseno", name: "Diseño", state: "en_curso" },
@@ -74,7 +74,7 @@ describe("toPortalTramosDTO", () => {
     }
   });
 
-  it("progress: 100 when completado, 0 por iniciar, closed over live tasks en curso; month the tramo started", () => {
+  it("progress: 100 when completado, 0 por iniciar, closed over live tasks en curso; month the etapa started", () => {
     const started = [
       { id: "w1", key: "presale", name: "Presale", active: true, sortOrder: 1, startedAt: "2026-01-12T10:00:00Z", closedAt: "2026-03-01T00:00:00Z" },
       { id: "w2", key: "diseno", name: "Diseño", active: true, sortOrder: 2, startedAt: new Date("2026-06-03T12:00:00Z"), closedAt: null },
@@ -96,7 +96,7 @@ describe("toPortalTramosDTO", () => {
 });
 
 describe("buildPortalStepper", () => {
-  it("points at the tramo in progress", () => {
+  it("points at the etapa in progress", () => {
     expect(
       buildPortalStepper([
         { key: "a", name: "Presale", state: "completado", progressPct: 0, startMonth: null },
@@ -106,7 +106,7 @@ describe("buildPortalStepper", () => {
     ).toEqual({ steps: 3, current: 2, label: "Fase actual: Diseño · 2 de 3" });
   });
 
-  it("handles none started, all done and no tramos", () => {
+  it("handles none started, all done and no etapas", () => {
     expect(buildPortalStepper([{ key: "a", name: "Presale", state: "por_iniciar", progressPct: 0, startMonth: null }])?.label).toBe("Por iniciar");
     expect(buildPortalStepper([{ key: "a", name: "Presale", state: "completado", progressPct: 0, startMonth: null }])?.label).toBe("Todas las fases completadas");
     expect(buildPortalStepper([])).toBeNull();
@@ -177,7 +177,7 @@ describe("buildPortalOverview", () => {
   });
   const visualTramos = [t("presale", "Presale", "completado"), t("diseno", "Diseño", "en_curso"), t("construccion", "Construcción", "por_iniciar")];
 
-  it("heroTramo is the en_curso tramo", () => {
+  it("heroTramo is the en_curso etapa", () => {
     const data = buildPortalOverview({ project, schedule, tramos: visualTramos, files: null, today: "2026-11-07" });
     expect(data.heroTramo?.key).toBe("diseno");
     expect(buildPortalOverview({ project, schedule, tramos: [t("a", "A", "completado")], files: null, today: "2026-11-07" }).heroTramo).toBeNull();
@@ -269,7 +269,7 @@ describe("buildPortalStatusSentence", () => {
     expect(buildPortalStatusSentence(tramos, null)).toEqual({ kind: "por_iniciar", next: null });
   });
 
-  it("status sentence falls back to project progress when tramo pct missing", () => {
+  it("status sentence falls back to project progress when etapa pct missing", () => {
     const legacy = { key: "diseno", name: "Diseño", state: "en_curso" } as unknown as PortalTramoDTO;
     expect(buildPortalStatusSentence([legacy], next, 41.6)).toEqual({
       kind: "en_curso",
@@ -281,11 +281,11 @@ describe("buildPortalStatusSentence", () => {
     });
   });
 
-  it("status sentence without tramos uses the project progress", () => {
+  it("status sentence without etapas uses the project progress", () => {
     expect(buildPortalStatusSentence([], null, 41.6)).toEqual({ kind: "sin_tramos", pct: 42, next: null });
   });
 
-  it("status sentence between tramos stands on the last one finished", () => {
+  it("status sentence between etapas stands on the last one finished", () => {
     const tramos = [tramo("presale", "Presale", "completado", 100), tramo("diseno", "Diseño", "por_iniciar", 0)];
     expect(buildPortalStatusSentence(tramos, null, 30)).toMatchObject({ kind: "en_curso", tramo: "Presale", pct: 100 });
   });

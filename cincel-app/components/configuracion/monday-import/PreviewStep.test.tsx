@@ -200,7 +200,7 @@ describe("PreviewStep", () => {
     expect(onFix).toHaveBeenCalledWith("equivalencias", "b1");
   });
 
-  it("shows a task sample's tramo, fase and espacio", () => {
+  it("shows a task sample's etapa, fase and espacio", () => {
     const withSamples: MondayPreview = {
       ...preview,
       boards: [
@@ -214,7 +214,7 @@ describe("PreviewStep", () => {
       ],
     };
     renderWithQueryClient(<PreviewStep preview={withSamples} error="" isPending={false} onRefresh={() => {}} onFix={() => {}} />);
-    expect(screen.getByText(/Tramo · Fase: Diseño · Ejecutivo · Espacio: Depto 201/)).toBeTruthy();
+    expect(screen.getByText(/Etapa · Fase: Diseño · Ejecutivo · Espacio: Depto 201/)).toBeTruthy();
     expect(screen.getByText("1. Muros")).toBeTruthy();
     expect(screen.getByText("Tarea: Muros")).toBeTruthy();
     expect(screen.queryByText(/Workflow:|Área:|Sin workflow/)).toBeNull();
@@ -222,9 +222,9 @@ describe("PreviewStep", () => {
 
   it("says Administración for admin tasks and flags tasks without fase", () => {
     expect(sampleDetails(taskSample({ admin: true, tramo: null }))).toContain("Administración");
-    expect(sampleDetails(taskSample({ admin: true, tramo: null }))).not.toContain("Tramo · Fase");
+    expect(sampleDetails(taskSample({ admin: true, tramo: null }))).not.toContain("Etapa · Fase");
     expect(sampleDetails(taskSample({ tramo: "Diseño", phase: null, phaseReview: true }))).toContain(
-      "Tramo · Fase: Diseño · Sin fase · revisar",
+      "Etapa · Fase: Diseño · Sin fase · revisar",
     );
   });
 

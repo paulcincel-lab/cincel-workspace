@@ -85,9 +85,9 @@ describe("GroupTargetsTable", () => {
   it("offers exactly the six targets, in order, on a board_as_project board", () => {
     render(<Harness groups={[{ id: "g1", title: "Extras" }]} />);
     expect(optionLabels(selectFor("Extras"))).toEqual([
-      "Tramo «Presale»",
-      "Tramo «Diseño»",
-      "Tramo «Construcción»",
+      "Etapa «Presale»",
+      "Etapa «Diseño»",
+      "Etapa «Construcción»",
       "Fase «Anteproyecto» · Diseño",
       "Fase «Ejecutivo» · Diseño",
       "Fase «Obra negra» · Construcción",
@@ -111,7 +111,6 @@ describe("GroupTargetsTable", () => {
     render(<Harness groups={[{ id: "g1", title: "Extras" }]} />);
     const labels = optionLabels(selectFor("Extras")).join("\n");
     expect(labels).not.toMatch(/Fase nueva/);
-    expect(labels).not.toMatch(/Etapa «/);
     expect(labels).not.toMatch(/de workflow/);
   });
 
@@ -127,11 +126,11 @@ describe("GroupTargetsTable", () => {
         ]}
       />,
     );
-    expect(selectedLabel(selectFor("construccion"))).toBe("Tramo «Construcción»");
+    expect(selectedLabel(selectFor("construccion"))).toBe("Etapa «Construcción»");
     expect(selectedLabel(selectFor("ANTEPROYECTO"))).toBe("Fase «Anteproyecto» · Diseño");
     expect(selectedLabel(selectFor("Obra Negra"))).toBe("Fase «Obra negra» · Construcción");
     expect(selectedLabel(selectFor("Administrativo"))).toBe("Tareas de administración");
-    expect(selectedLabel(selectFor("Extras"))).toBe("Tramo «Diseño»");
+    expect(selectedLabel(selectFor("Extras"))).toBe("Etapa «Diseño»");
   });
 
   it("saves the chosen target and explains Ignorar", () => {

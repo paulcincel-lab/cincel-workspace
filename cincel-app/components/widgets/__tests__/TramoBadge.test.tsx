@@ -78,7 +78,7 @@ describe("TramoBadge per style and variant", () => {
     expect(dot.container.textContent).toBe("Decoración");
   });
 
-  it("Visual renders a neutral chip for an unknown tramo", () => {
+  it("Visual renders a neutral chip for an unknown etapa", () => {
     const { container } = renderIn("visual", <TramoBadge tramo={TRAMO_FIXTURE.otro} />);
     expect(container.querySelector('[data-slot="badge"]')!.className).toContain("bg-muted");
     expect(container.querySelector(".bg-muted-foreground")).not.toBeNull();
@@ -102,7 +102,7 @@ describe("TramoBadge per style and variant", () => {
     expect(container.querySelector('[class*="bg-"]')).toBeNull();
   });
 
-  it("Esencial dot is the 6 px muted dot, never the tramo color", () => {
+  it("Esencial dot is the 6 px muted dot, never the etapa color", () => {
     const { container } = renderIn("esencial", <TramoBadge tramo={TRAMO_FIXTURE.construccion} variant="dot" />);
     expect(mark(container).getAttribute("data-variant")).toBe("dot");
     expect(container.querySelector(".bg-muted-foreground")).not.toBeNull();
@@ -139,8 +139,8 @@ describe("TramoBadge states", () => {
   });
 
   it("renders a custom empty text", () => {
-    const { container } = renderIn("analitico", <TramoBadge tramo={null} emptyText="Asignar tramo" />);
-    expect(container.textContent).toBe("Asignar tramo");
+    const { container } = renderIn("analitico", <TramoBadge tramo={null} emptyText="Asignar etapa" />);
+    expect(container.textContent).toBe("Asignar etapa");
   });
 
   it.each(STYLES)("renders the list LoadingSkeleton while loading in %s", (style) => {

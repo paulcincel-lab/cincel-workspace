@@ -76,7 +76,7 @@ import AjustesPage from "../page";
 import AjustesGeneralLayout from "../(admin)/general/layout";
 import AjustesTemaLayout from "../(admin)/tema/layout";
 import AjustesHorarioLayout from "../(admin)/horario/layout";
-import AjustesTramosLayout from "../(admin)/tramos/layout";
+import AjustesTramosLayout from "../(admin)/etapas/layout";
 import AjustesPuestosLayout from "../(admin)/puestos/layout";
 import AjustesEstatusLayout from "../(admin)/estatus/layout";
 import AjustesPermisosLayout from "../(admin)/permisos/layout";

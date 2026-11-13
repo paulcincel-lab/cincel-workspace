@@ -172,16 +172,16 @@ describe("inMemoryCounter", () => {
   });
 });
 
-describe("tramo grouping", () => {
-  it("keys by workflow, then admin and sin tramo", () => {
+describe("etapa grouping", () => {
+  it("keys by workflow, then admin and sin etapa", () => {
     expect(taskTramoKey(task({ id: "a", workflow: presale }))).toBe("presale");
     expect(taskTramoKey(task({ id: "b", kind: "admin" }))).toBe("admin");
     expect(taskTramoKey(task({ id: "c" }))).toBe("sin-tramo");
     expect(taskTramoLabel(task({ id: "b", kind: "admin" }))).toBe("Administración");
-    expect(taskTramoLabel(task({ id: "c" }))).toBe("Sin tramo");
+    expect(taskTramoLabel(task({ id: "c" }))).toBe("Sin etapa");
   });
 
-  it("orders by tramo sortOrder with no tramo and admin last", () => {
+  it("orders by etapa sortOrder with no etapa and admin last", () => {
     const sorted = [
       task({ id: "admin", kind: "admin" }),
       task({ id: "none" }),
@@ -191,7 +191,7 @@ describe("tramo grouping", () => {
     expect(sorted.map((t) => t.id)).toEqual(["p", "d", "none", "admin"]);
   });
 
-  it("splits shares by tramo over every item", () => {
+  it("splits shares by etapa over every item", () => {
     const items = [task({ id: "1", workflow: presale }), task({ id: "2", workflow: presale }), task({ id: "3", workflow: diseno }), task({ id: "4" })];
     expect(tramoSplit(items, (t) => t.workflow?.key ?? null)).toEqual([
       { tramo: "presale", share: 0.5 },

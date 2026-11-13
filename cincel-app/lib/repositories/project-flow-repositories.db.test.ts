@@ -70,8 +70,8 @@ describe.skipIf(!url)("project flow repositories (test DB)", async () => {
     const created = await db
       .insert(schema.workflows)
       .values([
-        { key: `a_${run}`, name: `Tramo A ${run}`, sortOrder: 900 },
-        { key: `b_${run}`, name: `Tramo B ${run}`, sortOrder: 901 },
+        { key: `a_${run}`, name: `Etapa A ${run}`, sortOrder: 900 },
+        { key: `b_${run}`, name: `Etapa B ${run}`, sortOrder: 901 },
       ])
       .returning({ id: schema.workflows.id });
     workflowA = created[0].id;
@@ -102,16 +102,16 @@ describe.skipIf(!url)("project flow repositories (test DB)", async () => {
   });
 
   describe("fases", () => {
-    it("rejects a task whose fase belongs to another tramo", async () => {
+    it("rejects a task whose fase belongs to another etapa", async () => {
       await expect(newTask({ workflowId: workflowA, phaseId: phaseB })).rejects.toThrow();
       await expect(newTask({ workflowId: workflowA, phaseId: phaseA })).resolves.toBeTruthy();
     });
 
-    it("rejects a fase without a tramo", async () => {
+    it("rejects a fase without a etapa", async () => {
       await expect(newTask({ workflowId: null, phaseId: phaseA })).rejects.toThrow();
     });
 
-    it("assertPhaseInWorkflow throws PHASE_MISMATCH for another tramo's fase", async () => {
+    it("assertPhaseInWorkflow throws PHASE_MISMATCH for another etapa's fase", async () => {
       await expect(phasesRepo.assertPhaseInWorkflow(db, phaseA, workflowA)).resolves.toBeUndefined();
       await expect(phasesRepo.assertPhaseInWorkflow(db, phaseB, workflowA)).rejects.toThrow("PHASE_MISMATCH");
     });
@@ -148,7 +148,7 @@ describe.skipIf(!url)("project flow repositories (test DB)", async () => {
       expect(history.map((h) => h.field)).toContain("phase:Ejecutivo");
     });
 
-    it("resolves a gate fase by tramo key and fase key", async () => {
+    it("resolves a gate fase by etapa key and fase key", async () => {
       await db.update(schema.workflowPhases).set({ key: "gate" }).where(eq(schema.workflowPhases.id, phaseA));
       expect(await phasesRepo.resolveGatePhase(db, `a_${run}`, "gate")).toMatchObject({ id: phaseA });
       expect(await phasesRepo.resolveGatePhase(db, `b_${run}`, "gate")).toBeNull();

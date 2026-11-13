@@ -271,7 +271,7 @@ const TABLE_COLUMNS: RecordColumn[] = [
   { key: "duracion", label: "Duración", align: "right", mono: true, format: "text" },
   { key: "evento", label: "Evento", format: "text" },
   { key: "proyecto", label: "Proyecto", format: "text" },
-  { key: "tramo", label: "Tramo", format: "text" },
+  { key: "tramo", label: "Etapa", format: "text" },
   { key: "asistentes", label: "Asistentes", align: "right", mono: true, format: "text" },
 ];
 

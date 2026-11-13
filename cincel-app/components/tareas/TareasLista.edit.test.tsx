@@ -151,13 +151,13 @@ describe("TareasLista editable cells", () => {
     expect(within(title).getByRole("link", { name: OPEN_TASK_LABEL }).getAttribute("href")).toBe("/tareas?vista=lista&tarea=t1");
   });
 
-  it("moving a task out of the filtered tramo takes it out of the list", async () => {
+  it("moving a task out of the filtered etapa takes it out of the list", async () => {
     seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Administrador" });
     actions.updateTaskAction.mockResolvedValue({ ok: true, data: { id: "t1", workflowId: PRESALE.id, phaseId: null } });
     renderLista();
     fireEvent.click(cell("t1", "tramo"));
     await act(async () => {
-      fireEvent.click(within(screen.getByRole("dialog", { name: "Editor Tramo" })).getByRole("button", { name: "Presale" }));
+      fireEvent.click(within(screen.getByRole("dialog", { name: "Editor Etapa" })).getByRole("button", { name: "Presale" }));
     });
     expect(actions.updateTaskAction).toHaveBeenCalledWith("t1", { workflowId: PRESALE.id });
     // The subtask moves with it.
@@ -165,10 +165,10 @@ describe("TareasLista editable cells", () => {
     expect(document.querySelector('[data-cell-row="t2"]')).toBeNull();
   });
 
-  it("colaborador can't move a task with a tramo", () => {
+  it("colaborador can't move a task with a etapa", () => {
     seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
     renderLista();
     fireEvent.click(cell("t1", "tramo"));
-    expect(screen.getByRole("dialog", { name: "Editor Tramo" }).textContent).toBe(LOCK_REASON.tramo);
+    expect(screen.getByRole("dialog", { name: "Editor Etapa" }).textContent).toBe(LOCK_REASON.tramo);
   });
 });

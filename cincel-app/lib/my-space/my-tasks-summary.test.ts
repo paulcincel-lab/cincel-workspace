@@ -45,7 +45,7 @@ describe("Mi espacio task filters (#1051)", () => {
     expect(meTasksFirstPageSize(meTasksGroupFilters({ tramo: null, q: null }, "p1", "diseno", false))).toBe(ME_TASKS_PAGE_SIZE);
   });
 
-  it("group filters: project, tramo (Sin tramo key), search, closed only outside En retraso", () => {
+  it("group filters: project, etapa (Sin etapa key), search, closed only outside En retraso", () => {
     expect(meTasksGroupFilters({ tramo: null, q: "x" }, "p1", null, true)).toEqual({
       proyecto: "p1",
       tramo: SIN_TRAMO_KEY,
@@ -61,7 +61,7 @@ describe("Mi espacio task filters (#1051)", () => {
     });
   });
 
-  it("rowFitsMeList: project, tramo and column; search and En retraso wait for the refetch", () => {
+  it("rowFitsMeList: project, etapa and column; search and En retraso wait for the refetch", () => {
     const row = { projectId: "p1", workflow: { key: "diseno" }, commitmentDate: "2026-11-12" };
     expect(rowFitsMeList(meTasksBucketFilters("semana"), row, MONDAY)).toBe(true);
     expect(rowFitsMeList(meTasksBucketFilters("hoy"), row, MONDAY)).toBe(false);
@@ -93,7 +93,7 @@ describe("Analítico groups from the summary", () => {
       {
         project: { id: "p2", name: "Torre Sur" },
         ...counts({ closed: 1 }),
-        tramos: [{ tramo: { id: null, key: null, name: "Sin tramo", sortOrder: 2147483647 }, ...counts({ closed: 1 }) }],
+        tramos: [{ tramo: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...counts({ closed: 1 }) }],
       },
     ],
   };
@@ -116,7 +116,7 @@ describe("Analítico groups from the summary", () => {
     expect(groups.map((g) => g.label)).toEqual(["Casa Lomas", "Torre Sur"]);
     expect(groups[0]!.caption).toBe("5 tareas");
     expect(groups[0]!.children![1]).toMatchObject({ caption: "4 · 1 vencida · bloqueada", loading: false, remaining: 2 });
-    expect(groups[1]!.children![0]!.label).toBe("Sin tramo");
+    expect(groups[1]!.children![0]!.label).toBe("Sin etapa");
     expect(groups[1]!.metrics[0]!.value).toBe("0 vencidas");
   });
 

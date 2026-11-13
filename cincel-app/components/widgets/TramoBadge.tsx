@@ -27,7 +27,7 @@ export type TramoBadgeProps = {
   loading?: boolean;
 };
 
-export const TRAMO_BADGE_EMPTY_TEXT = "Sin tramo";
+export const TRAMO_BADGE_EMPTY_TEXT = "Sin etapa";
 
 /** Label and color slot of a tramo: compat label for the known tramos, the row's own name otherwise. */
 export function tramoBadgeModel(tramo: WorkflowRef): { label: string; slot: TramoColorSlot | null } {

@@ -225,7 +225,7 @@ describe("Resumen Visual accessibility (#995)", () => {
 
   it("each chart has role img, label and a hidden data table", () => {
     render(<VisualPage restricted={false} />);
-    for (const name of ["Tareas por estatus", "Avance por tramo", "Avance contra plan"]) {
+    for (const name of ["Tareas por estatus", "Avance por etapa", "Avance contra plan"]) {
       const region = screen.getByRole("region", { name });
       const chart = region.querySelector('[role="img"]');
       expect(chart?.getAttribute("aria-label")?.length ?? 0).toBeGreaterThan(0);

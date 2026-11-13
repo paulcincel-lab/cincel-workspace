@@ -29,10 +29,10 @@ export type ReportRow = {
 export const REPORT_KIND_INFO: Record<(typeof PROJECT_FLOW_REPORT_KINDS)[number], { title: string; action: string }> = {
   task_phase_unmatched: {
     title: "Tareas sin fase («Sin fase · revisar»)",
-    action: "Líderes del tramo, o el remapeo",
+    action: "Líderes de la etapa, o el remapeo",
   },
   task_tramo_inferred: {
-    title: "Tareas sin tramo a las que se asignó el único tramo con esa fase",
+    title: "Tareas sin etapa a las que se asignó la única etapa con esa fase",
     action: "Solo revisar",
   },
   task_linked_to_template: {
@@ -48,15 +48,15 @@ export const REPORT_KIND_INFO: Record<(typeof PROJECT_FLOW_REPORT_KINDS)[number]
     action: "Solo revisar",
   },
   template_phase_defaulted: {
-    title: "Plantillas colocadas en la primera fase del tramo",
-    action: "Administrador, en Tramos y fases",
+    title: "Plantillas colocadas en la primera fase de la etapa",
+    action: "Administrador, en Etapas y fases",
   },
   project_phases: {
     title: "Valores anteriores de las fases del proyecto",
     action: "Solo revisar (se eliminan en la versión B)",
   },
   project_without_tramo: {
-    title: "Proyectos sin tramo actual («Asignar tramo»)",
+    title: "Proyectos sin etapa actual («Asignar etapa»)",
     action: "Administrador",
   },
   project_renamed_duplicate: {
@@ -72,7 +72,7 @@ export const REPORT_KIND_INFO: Record<(typeof PROJECT_FLOW_REPORT_KINDS)[number]
     action: "Administrador: recrearlos como puestos si se necesitan",
   },
   area_workflow: {
-    title: "Tramos de áreas (se eliminan en la versión B)",
+    title: "Etapas de áreas (se eliminan en la versión B)",
     action: "Administrador: recrearlos como puestos si se necesitan",
   },
   group_mapping_area_removed: {

@@ -79,12 +79,12 @@ describe("NewTaskDialogHost", () => {
   });
 
   it("?nueva=1 opens it with the URL defaults and strips the param through history.replaceState", () => {
-    nav.search = "estilo=analitico&proyecto=p-roble&tramo=diseno&nueva=1";
+    nav.search = "estilo=analitico&proyecto=p-roble&etapa=diseno&nueva=1";
     render(<NewTaskDialogHost />);
 
     expect(dialogDefaults()).toEqual({ projectId: "p-roble", tramoKey: "diseno" });
     expect(useNewTaskUi.getState().source).toBe("url");
-    expect(replaceState).toHaveBeenCalledWith(null, "", "/tareas?estilo=analitico&proyecto=p-roble&tramo=diseno");
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/tareas?estilo=analitico&proyecto=p-roble&etapa=diseno");
     expect(nav.router.replace).not.toHaveBeenCalled();
     expect(nav.router.push).not.toHaveBeenCalled();
     expect(nav.router.refresh).not.toHaveBeenCalled();

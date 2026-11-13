@@ -141,14 +141,14 @@ describe.skipIf(!url)("Mi espacio tasks (test DB)", async () => {
     expect(summary.shown).toMatchObject({ open: 7, overdue: 2, blocked: 1, daysLateSum: 12, maxDaysLate: 9, closed: 2, projects: 2 });
   });
 
-  it("is one SQL statement (plus the tramo lookup when a tramo is chosen)", async () => {
+  it("is one SQL statement (plus the etapa lookup when a etapa is chosen)", async () => {
     const plain = await countQueries(() => summaryOf({ tramo: null, q: null }));
     expect(plain.count).toBe(1);
     const tramo = await countQueries(() => summaryOf({ tramo: diseno.key, q: null }));
     expect(tramo.count).toBe(2);
   });
 
-  it("Analítico groups: overdue projects first, tramos by order with Sin tramo last, closed counted apart", async () => {
+  it("Analítico groups: overdue projects first, etapas by order with Sin etapa last, closed counted apart", async () => {
     const summary = await summaryOf({ tramo: null, q: null });
     expect(summary.projects.map((p) => p.project.id)).toEqual([lomas, bodega, torre]);
     const [casa, bod, tor] = summary.projects;
@@ -198,7 +198,7 @@ describe.skipIf(!url)("Mi espacio tasks (test DB)", async () => {
     expect((await pageOf({ q: "%", orderBy: "retraso" })).total).toBe(0);
   });
 
-  it("lists: a tramo group in the retraso order, closed ones last with cerradas", async () => {
+  it("lists: a etapa group in the retraso order, closed ones last with cerradas", async () => {
     const open = await pageOf(s.meTasksGroupFilters({ tramo: null, q: null }, lomas, diseno.key, false));
     expect(titles(open.rows)).toEqual(["Render", "Planos", "Cotizar"]);
     expect(open.total).toBe(3);

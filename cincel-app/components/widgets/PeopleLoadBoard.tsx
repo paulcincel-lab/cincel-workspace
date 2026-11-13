@@ -166,7 +166,7 @@ export function tramoRows(
   }));
   const keys = new Set(known.map((t) => t.key));
   const none = people.filter((p) => !p.tramo || !keys.has(p.tramo)).length;
-  if (none > 0) rows.push({ key: null, label: "Sin tramo", count: none, color: "var(--muted-foreground)" });
+  if (none > 0) rows.push({ key: null, label: "Sin etapa", count: none, color: "var(--muted-foreground)" });
   return rows;
 }
 
@@ -440,7 +440,7 @@ function TramoCard({ people, tramos }: { people: PersonDatum[]; tramos?: Workflo
   const rows = tramoRows(people, tramos);
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
-    <SummaryCard title="Personas por tramo" index={1}>
+    <SummaryCard title="Personas por etapa" index={1}>
       <ul className="flex flex-col gap-2 text-[12.5px]">
         {rows.map((row, i) => (
           <li key={row.key ?? "sin-tramo"} className="flex items-center gap-2.5">

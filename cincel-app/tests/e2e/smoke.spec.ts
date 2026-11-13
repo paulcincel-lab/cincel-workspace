@@ -25,7 +25,7 @@ test.describe("Acceso — login e Inicio", () => {
     const cases: [string, string][] = [
       ["/dashboard", "/inicio"],
       ["/tablero?proyecto=p1", "/tareas?estilo=visual&proyecto=p1"],
-      ["/tareas?vista=lista&tramo=diseno", "/tareas?estilo=analitico&tramo=diseno"],
+      ["/tareas?vista=lista&etapa=diseno", "/tareas?estilo=analitico&etapa=diseno"],
       ["/equipo", "/personas"],
       ["/configuracion/general", "/ajustes/general"],
     ];

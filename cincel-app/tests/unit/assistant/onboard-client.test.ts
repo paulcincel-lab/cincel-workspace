@@ -72,7 +72,7 @@ beforeEach(() => {
 });
 
 describe("onboard_client", () => {
-  it("an administrator: new client, project without a tramo, client set on the project, tramo started", async () => {
+  it("an administrator: new client, project without a etapa, client set on the project, etapa started", async () => {
     h.requireCapabilityUser.mockResolvedValue(userWith("Administrador"));
     const out = await run({ name: "Acme", projectName: "Casa Acme" });
 

@@ -165,7 +165,7 @@ afterEach(() => {
 
 describe("task sheet search params", () => {
   it("sets and removes tarea keeping the other params", () => {
-    expect(taskSheetSearch("estilo=visual&tramo=diseno", "t-9")).toBe("?estilo=visual&tramo=diseno&tarea=t-9");
+    expect(taskSheetSearch("estilo=visual&etapa=diseno", "t-9")).toBe("?estilo=visual&etapa=diseno&tarea=t-9");
     expect(taskSheetSearch("estilo=visual&tarea=t-9", null)).toBe("?estilo=visual");
     expect(taskSheetSearch("tarea=t-9", null)).toBe("");
     expect(taskSheetHref("/tareas", new URLSearchParams("estilo=analitico"), "t-2")).toBe("/tareas?estilo=analitico&tarea=t-2");
@@ -324,7 +324,7 @@ describe("TaskSheet properties", () => {
   it("shows the properties grid, adjuntos and actividad", async () => {
     render(<TaskSheet taskId="t-1" onClose={vi.fn()} />);
     await screen.findByDisplayValue("Planos de conjunto");
-    for (const term of ["Estatus", "Responsable", "Proyecto", "Tramo", "Prioridad"]) {
+    for (const term of ["Estatus", "Responsable", "Proyecto", "Etapa", "Prioridad"]) {
       expect(screen.getAllByText(term).length).toBeGreaterThan(0);
     }
     expect(screen.getByLabelText("Fecha compromiso")).toBeTruthy();
@@ -352,7 +352,7 @@ describe("TaskSheet properties", () => {
     expect(screen.queryByText("Espacio")).toBeNull();
   });
 
-  it("an admin task shows no tramo, fase or espacio and reads no espacios", async () => {
+  it("an admin task shows no etapa, fase or espacio and reads no espacios", async () => {
     const task = makeTask({ kind: "admin", workflowId: null, workflow: null, phaseId: null, phase: null });
     render(<TaskSheet taskId="t-1" onClose={vi.fn()} />, seededClient(makeSheetData(task)));
     await screen.findByDisplayValue("Planos de conjunto");

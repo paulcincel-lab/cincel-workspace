@@ -161,7 +161,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     expect(adminRows[0].commitmentDate).toBe(adminTasks.todayInAppTimeZone());
   });
 
-  it("does not start the first tramo when its auto-start is off", async () => {
+  it("does not start the first etapa when its auto-start is off", async () => {
     await setFirstAutoStart("manual");
     const project = await create(`Casa Manual ${run}`);
     expect(project.tramos).toEqual([]);
@@ -252,7 +252,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
       .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.kind, "workflow")));
   }
 
-  it("starts the chosen tramo with only the checked fases (#1034)", async () => {
+  it("starts the chosen etapa with only the checked fases (#1034)", async () => {
     await setFirstAutoStart("on_create");
     const diseno = await workflowByKey("diseno");
     expect(diseno.phaseIds.length).toBeGreaterThan(1);
@@ -286,7 +286,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     expect(await assignClientTasks(project.id)).toHaveLength(1);
   });
 
-  it("starts every active fase of the chosen tramo when phaseIds is missing", async () => {
+  it("starts every active fase of the chosen etapa when phaseIds is missing", async () => {
     await setFirstAutoStart("manual");
     const diseno = await workflowByKey("diseno");
     const project = await repo.createProject({ name: `Casa Diseño Todo ${run}`, startWorkflowId: diseno.id }, actorId);
@@ -309,7 +309,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     );
   });
 
-  it("starts no tramo with startWorkflowId null, even when the first tramo auto-starts", async () => {
+  it("starts no etapa with startWorkflowId null, even when the first etapa auto-starts", async () => {
     await setFirstAutoStart("on_create");
     const project = await repo.createProject({ name: `Casa Ninguno ${run}`, startWorkflowId: null }, actorId);
     projectIds.push(project.id);
@@ -320,7 +320,7 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
     expect(await assignClientTasks(project.id)).toHaveLength(1);
   });
 
-  it("rejects an unknown or inactive tramo with INVALID and a foreign fase with PHASE_MISMATCH", async () => {
+  it("rejects an unknown or inactive etapa with INVALID and a foreign fase with PHASE_MISMATCH", async () => {
     await setFirstAutoStart("manual");
     await expect(
       repo.createProject({ name: `Casa Rara ${run}`, startWorkflowId: randomUUID() }, actorId)
@@ -347,11 +347,11 @@ describe.skipIf(!url)("createProject / updateProject (test DB)", async () => {
       repo.createProject({ name: `Casa Vacía ${run}`, startWorkflowId: diseno.id, phaseIds: [] }, actorId)
     ).rejects.toThrow("NO_PHASES");
     await expect(
-      repo.createProject({ name: `Casa Sin Tramo ${run}`, startWorkflowId: null, phaseIds: diseno.phaseIds }, actorId)
+      repo.createProject({ name: `Casa Sin Etapa ${run}`, startWorkflowId: null, phaseIds: diseno.phaseIds }, actorId)
     ).rejects.toThrow(/^INVALID/);
 
     // Every rejection rolled back: none of those projects exists.
-    const names = [`Casa Rara ${run}`, `Casa Inactiva ${run}`, `Casa Mezcla ${run}`, `Casa Vacía ${run}`, `Casa Sin Tramo ${run}`];
+    const names = [`Casa Rara ${run}`, `Casa Inactiva ${run}`, `Casa Mezcla ${run}`, `Casa Vacía ${run}`, `Casa Sin Etapa ${run}`];
     const rows = await db
       .select({ id: schema.projects.id })
       .from(schema.projects)

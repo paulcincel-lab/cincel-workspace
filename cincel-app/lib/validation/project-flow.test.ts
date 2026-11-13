@@ -27,7 +27,7 @@ describe("parseInput", () => {
     expect(() => parseInput(OrderedIdsSchema, ["not-a-uuid"])).toThrow("INVALID: 0");
   });
 
-  it("checks the tramo start payload", () => {
+  it("checks the etapa start payload", () => {
     const base = { projectId: id, workflowId: other, phaseIds: [id], assignment: { mode: "self" } };
     expect(parseInput(StartTramoInputSchema, base)).toEqual(base);
     expect(

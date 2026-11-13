@@ -14,7 +14,7 @@ const PROPS: EntityCardFooterProps = {
     { key: "diseno", label: "Diseño", state: "current", colorVar: "var(--chart-2)" },
     { key: "construccion", label: "Construcción", state: "next", colorVar: "var(--chart-3)" },
   ],
-  stepsLabel: "Tramos",
+  stepsLabel: "Etapas",
   people: [
     { id: "s1", name: "Ana López", initials: "AL" },
     { id: "s2", name: "Luis Paz", initials: "LP" },
@@ -35,7 +35,7 @@ afterEach(() => cleanup());
 describe("EntityCardFooter", () => {
   it("Visual: step bar with each state and the team avatars", () => {
     const { container } = renderIn("visual");
-    expect(screen.getByRole("img", { name: "Tramos: Presale terminado, Diseño actual, Construcción pendiente" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Etapas: Presale terminado, Diseño actual, Construcción pendiente" })).toBeTruthy();
     expect([...container.querySelectorAll("[data-step]")].map((s) => s.getAttribute("data-state"))).toEqual([
       "done",
       "current",

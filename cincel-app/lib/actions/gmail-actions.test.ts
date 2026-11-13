@@ -200,7 +200,7 @@ describe.skipIf(!url)("gmail actions (test DB)", async () => {
     if (!workflow) {
       [workflow] = await db
         .insert(schema.workflows)
-        .values({ key: `gmail-${run}`, name: `Tramo ${run}`, sortOrder: 990 })
+        .values({ key: `gmail-${run}`, name: `Etapa ${run}`, sortOrder: 990 })
         .returning({ id: schema.workflows.id });
       createdWorkflowId = workflow!.id;
     }

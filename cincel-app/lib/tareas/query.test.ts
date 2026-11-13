@@ -135,14 +135,14 @@ describe("parseTareasQuery / toTareasSearch", () => {
   });
 
   it("writes params in a fixed order with a leading ?", () => {
-    expect(toTareasSearch({ q: "a b", tramo: "presale", responsable: "yo" })).toBe("?tramo=presale&responsable=yo&q=a+b");
+    expect(toTareasSearch({ q: "a b", tramo: "presale", responsable: "yo" })).toBe("?etapa=presale&responsable=yo&q=a+b");
   });
 
   it("ignores the params of the removed view switch and Calendario view", () => {
     const sp = new URLSearchParams({ vista: "calendario", cal: "semana", fecha: "2026-11-06", tramo: "presale" });
     const query = parseTareasQuery(sp);
     expect(query).toEqual({ ...DEFAULT_TAREAS_QUERY, tramo: "presale" });
-    expect(toTareasSearch(query)).toBe("?tramo=presale");
+    expect(toTareasSearch(query)).toBe("?etapa=presale");
   });
 });
 

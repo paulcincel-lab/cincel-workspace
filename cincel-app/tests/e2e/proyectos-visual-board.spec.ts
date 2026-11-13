@@ -58,12 +58,12 @@ test.describe("Proyectos · Visual · Todos los proyectos", () => {
     await loginAsAdmin(page, BASE_URL);
   });
 
-  test("the project is a card in the grid with its tramo chip; a click opens it", async ({ page }) => {
+  test("the project is a card in the grid with its etapa chip; a click opens it", async ({ page }) => {
     await page.goto(`${BASE_URL}/proyectos?estilo=visual`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "Todos los proyectos" })).toBeVisible({ timeout: 30_000 });
     // No tramo board.
     await expect(page.getByRole("heading", { name: "Tablero del portafolio" })).toHaveCount(0);
-    await expect(page.getByText("Arrastra un proyecto para moverlo de tramo")).toHaveCount(0);
+    await expect(page.getByText("Arrastra un proyecto para moverlo de etapa")).toHaveCount(0);
     await expect(page.locator('[data-slot="board-column"]')).toHaveCount(0);
     // The summary is about the portfolio, not the tramos.
     const summary = page.getByRole("region", { name: "Resumen del portafolio" });

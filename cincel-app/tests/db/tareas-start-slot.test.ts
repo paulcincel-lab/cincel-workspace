@@ -179,7 +179,7 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
     expect(candidates.slice(firstUnsuggested).every((c) => !c.suggested)).toBe(true);
   });
 
-  it("is null for an unknown tramo", async () => {
+  it("is null for an unknown etapa", async () => {
     expect(await asViewer(admin(), () => getTareasStartSlotData({ tramoId: randomUUID() }))).toBeNull();
   });
 
@@ -194,7 +194,7 @@ describe.skipIf(!url)("tareas start slot (test DB)", async () => {
     await expect(asViewer(null, () => getTareasStartSlotData({ tramoId: workflowId }))).rejects.toThrow("FORBIDDEN");
   });
 
-  it("rejects a malformed tramo id", async () => {
+  it("rejects a malformed etapa id", async () => {
     await expect(asViewer(admin(), () => getTareasStartSlotData({ tramoId: "nope" }))).rejects.toThrow("INVALID");
   });
 

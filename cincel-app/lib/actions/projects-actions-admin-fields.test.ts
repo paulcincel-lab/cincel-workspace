@@ -71,7 +71,7 @@ describe("createProjectAction (name only)", () => {
     expect(paths).not.toContain(`/proyectos/${PROJECT}/ficha`);
   });
 
-  it("passes the starting tramo and fases through (#1034)", async () => {
+  it("passes the starting etapa and fases through (#1034)", async () => {
     const WF = "77777777-7777-4777-8777-777777777777";
     await createProjectAction({ name: "Casa Valle", startWorkflowId: WF, phaseIds: [PROJECT] });
     expect(repo.createProject).toHaveBeenCalledWith(
@@ -85,7 +85,7 @@ describe("createProjectAction (name only)", () => {
     );
   });
 
-  it("refuses a starting tramo without the start-tramo capability", async () => {
+  it("refuses a starting etapa without the start-tramo capability", async () => {
     activities.canCreateActivity = false;
     await expect(createProjectAction({ name: "Casa Valle", startWorkflowId: null })).rejects.toThrow("FORBIDDEN");
     expect(repo.createProject).not.toHaveBeenCalled();

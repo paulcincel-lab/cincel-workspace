@@ -45,7 +45,7 @@ describe("summary helpers", () => {
     expect(hiddenSummaryProjects(summary).map((p) => p.name)).toEqual(["Bosque", "Casa Valle de Bravo"]);
   });
 
-  it("tareasGroupFilters narrows to the project and tramo in retraso order", () => {
+  it("tareasGroupFilters narrows to the project and etapa in retraso order", () => {
     const f = { tramo: null, proyecto: null, responsable: "yo", estado: null, q: "plano", mostrar: "en_retraso" as const };
     expect(tareasGroupFilters(f, "p1", "diseno")).toEqual({ ...f, proyecto: "p1", tramo: "diseno", orderBy: "retraso" });
     expect(tareasGroupFilters(f, "p1", null).tramo).toBe(SIN_TRAMO_KEY);

@@ -67,7 +67,7 @@ export function nextSort(current: TaskSort | null, column: TaskSortColumn): Task
 /** What each column's two directions read as in the subtitle. */
 const SORT_PHRASE: Record<TaskSortColumn, { label: string; asc: string; desc: string }> = {
   titulo: { label: "tarea", asc: "A a Z", desc: "Z a A" },
-  tramo: { label: "tramo", asc: "primero a último", desc: "último a primero" },
+  tramo: { label: "etapa", asc: "primera a última", desc: "última a primera" },
   fase: { label: "fase", asc: "primera a última", desc: "última a primera" },
   responsable: { label: "responsable", asc: "A a Z", desc: "Z a A" },
   estatus: { label: "estatus", asc: "pendientes primero", desc: "completadas primero" },

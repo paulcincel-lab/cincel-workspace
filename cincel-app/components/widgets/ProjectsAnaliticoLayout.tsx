@@ -102,7 +102,7 @@ export const ANALITICO_COLLAPSE_ALL = "Contraer todo";
 /** The table's accessible name (the tramo card above is "Proyectos por tramo"). */
 export const PORTFOLIO_TABLE_LABEL = "Portafolio de proyectos";
 /** The tramo bar's legend: each segment filters by its tramo. */
-export const TRAMO_SEGMENTS_LABEL = "Filtrar por tramo";
+export const TRAMO_SEGMENTS_LABEL = "Filtrar por etapa";
 
 const NEW_PROJECT_PARAM = "nuevo";
 const SEARCH_DEBOUNCE_MS = 300;

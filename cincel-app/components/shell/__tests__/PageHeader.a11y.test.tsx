@@ -52,7 +52,7 @@ describe("PageHeader accessibility", () => {
             <StyleProvider style={style} scope="staff">
               <PageHeader
                 title="Tareas"
-                description="Todas las tareas de tus proyectos, por tramo."
+                description="Todas las tareas de tus proyectos, por etapa."
                 breadcrumb={[{ label: "Inicio", href: "/inicio" }, { label: "Tareas" }]}
                 badge={<Badge variant="secondary">Admin</Badge>}
                 actions={

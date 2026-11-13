@@ -132,7 +132,7 @@ afterEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders the logo, the seven items in order, the Áreas list, Ajustes and the user block", () => {
+  it("renders the logo, the seven items in order, the Etapas list, Ajustes and the user block", () => {
     renderSidebar();
 
     expect(screen.getByText("CINCEL")).toBeTruthy();
@@ -146,8 +146,8 @@ describe("Sidebar", () => {
       "/biblioteca",
       "/asistente",
     ]);
-    expect(screen.getByText("Áreas")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Diseño" }).getAttribute("href")).toBe("/tareas?tramo=diseno");
+    expect(screen.getByText("Etapas")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Diseño" }).getAttribute("href")).toBe("/tareas?etapa=diseno");
     expect(within(screen.getByRole("navigation", { name: "Ajustes" })).getByRole("link", { name: "Ajustes" })).toBeTruthy();
     expect(screen.getByText("Alejandro Riofrio")).toBeTruthy();
     expect(screen.getByText("Administrador")).toBeTruthy();
@@ -193,13 +193,13 @@ describe("Sidebar", () => {
     expect(proyectos.querySelector("[data-slot=badge]")).toBeNull();
   });
 
-  it("colors each tramo dot with its own color", () => {
+  it("colors each etapa dot with its own color", () => {
     renderSidebar({
       nav: {
         ...FULL_NAV,
         tramos: [
           ...FULL_NAV.tramos,
-          { key: "decoracion", name: "Decoración", colorVar: "var(--chart-4)", href: "/tareas?tramo=decoracion" },
+          { key: "decoracion", name: "Decoración", colorVar: "var(--chart-4)", href: "/tareas?etapa=decoracion" },
         ],
       },
     });
@@ -221,7 +221,7 @@ describe("Sidebar", () => {
     renderSidebar({ nav: { items: [navItem("proyectos")], tramos: [], footer: [] } });
 
     expect(within(mainNav()).getAllByRole("link")).toHaveLength(1);
-    expect(screen.queryByText("Áreas")).toBeNull();
+    expect(screen.queryByText("Etapas")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Ajustes" })).toBeNull();
   });
 

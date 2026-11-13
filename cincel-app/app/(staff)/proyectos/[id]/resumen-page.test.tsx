@@ -184,7 +184,7 @@ describe("/proyectos/[id]", () => {
     expect(actions.getProyectoShell).not.toHaveBeenCalled();
   });
 
-  it("Analítico: the first page of every «Tareas por tramo» group in one call (#1051)", async () => {
+  it("Analítico: the first page of every «Tareas por etapa» group in one call (#1051)", async () => {
     state.style = "analitico";
     await renderPage();
     expect(loaders.loadTareasListFirstPages).toHaveBeenCalledTimes(1);

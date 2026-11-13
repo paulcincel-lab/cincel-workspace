@@ -79,8 +79,8 @@ export async function seedTasksVolume(db: Db, run: string, count = VOLUME_TASKS)
   const workflows = await db
     .insert(schema.workflows)
     .values([
-      { key: `vol-a-${run}`, name: `Tramo A ${run}`, sortOrder: 901 },
-      { key: `vol-b-${run}`, name: `Tramo B ${run}`, sortOrder: 902 },
+      { key: `vol-a-${run}`, name: `Etapa A ${run}`, sortOrder: 901 },
+      { key: `vol-b-${run}`, name: `Etapa B ${run}`, sortOrder: 902 },
     ])
     .returning({ id: schema.workflows.id, key: schema.workflows.key });
   ids.workflows.push(...workflows.map((w) => w.id));

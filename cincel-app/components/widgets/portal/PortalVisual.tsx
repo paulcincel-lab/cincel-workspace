@@ -30,7 +30,7 @@ export const PORTAL_VISUAL_COPY = {
   avanceGeneral: "AVANCE GENERAL",
   proximaEntrega: "Próxima entrega",
   enTramo: (name: string) => `En ${name}`,
-  tramosEnMarcha: (n: number, total: number) => `${n} de ${total} tramos en marcha`,
+  tramosEnMarcha: (n: number, total: number) => `${n} de ${total} etapas en marcha`,
   entregaFinal: "entrega final estimada",
   entregaFinalSola: "Entrega final estimada",
   verTodos: "Ver todos →",

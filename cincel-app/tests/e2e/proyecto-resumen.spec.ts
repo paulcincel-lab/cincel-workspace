@@ -233,7 +233,7 @@ test.describe("Proyecto · Resumen Visual (#995)", () => {
     const hero = page.getByRole("region", { name: "Avance del proyecto" });
     await expect(hero).toBeVisible({ timeout: 30_000 });
     await expect(hero.getByRole("img", { name: /^Avance \d+ %/ })).toBeVisible();
-    for (const name of ["Tareas por estatus", "Avance por tramo", "Equipo y carga", "Lo que sigue", "Actividad reciente", "Archivos"]) {
+    for (const name of ["Tareas por estatus", "Avance por etapa", "Equipo y carga", "Lo que sigue", "Actividad reciente", "Archivos"]) {
       await expect(page.getByRole("region", { name })).toBeVisible();
     }
     // Four reads prefetched and hydrated: the first render needs no action call.

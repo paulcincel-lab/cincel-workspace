@@ -117,7 +117,7 @@ function codeText(code: string, context: ActionErrorContext): string {
     case "NAME_TAKEN":
       return NAME_TAKEN_COPY[context.entity ?? "project"](context);
     case "PHASE_MISMATCH":
-      return "Esa fase no pertenece al tramo de la tarea.";
+      return "Esa fase no pertenece a la etapa de la tarea.";
     case "SPACE_MISMATCH":
       return "Ese espacio es de otro proyecto.";
     case "ADMIN_TASK":
@@ -125,9 +125,9 @@ function codeText(code: string, context: ActionErrorContext): string {
     case "NO_PHASES":
       return "Elige al menos una fase.";
     case "NOT_STARTED":
-      return "Ese tramo aún no se inicia en el proyecto.";
+      return "Esa etapa aún no se inicia en el proyecto.";
     case "TOUCHED":
-      return `No se puede deshacer: ya se editó una de las tareas creadas o ${context.tramoName ?? "el tramo"} se inició de nuevo después.`;
+      return `No se puede deshacer: ya se editó una de las tareas creadas o ${context.tramoName ?? "la etapa"} se inició de nuevo después.`;
     case "IN_USE":
       return "Este puesto se asigna desde un grupo de Google. Quita el grupo en Configuración → Google primero.";
     case "INVALID":

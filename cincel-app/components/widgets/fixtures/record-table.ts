@@ -9,7 +9,7 @@ import type { RecordTableData } from "@/lib/types/widgets";
 /** "Tareas por tramo": counts, % vencidas with heat (> 45 warn, > 60 crit), budget only in Analítico. */
 export const recordTableFixture: RecordTableData = {
   columns: [
-    { key: "tramo", label: "Tramo" },
+    { key: "tramo", label: "Etapa" },
     { key: "abiertas", label: "Abiertas", format: "count" },
     { key: "vencidas", label: "Vencidas", format: "count" },
     { key: "pctVencidas", label: "% venc.", format: "percent" },

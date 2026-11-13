@@ -66,14 +66,14 @@ afterEach(() => {
   cleanup();
 });
 
-describe("EquivalenciasStep · Grupos y tramo", () => {
-  it("has one Tramo del tablero select and no department, workflow or task área controls", () => {
+describe("EquivalenciasStep · Grupos y etapa", () => {
+  it("has one Etapa del tablero select and no department, workflow or task área controls", () => {
     renderWithQueryClient(<Harness initial={draft()} source={boardSource([{ id: "g1", title: "Extras" }])} />);
-    expect(screen.getByRole("heading", { name: "Grupos y tramo" })).toBeTruthy();
-    const tramo = screen.getByRole("combobox", { name: "Tramo del tablero" }) as HTMLSelectElement;
+    expect(screen.getByRole("heading", { name: "Grupos y etapa" })).toBeTruthy();
+    const tramo = screen.getByRole("combobox", { name: "Etapa del tablero" }) as HTMLSelectElement;
     expect(within(tramo).getAllByRole("option").map((option) => option.textContent)).toEqual([
       "Elige una opción",
-      "Sin tramo",
+      "Sin etapa",
       "Presale",
       "Diseño",
       "Construcción",
@@ -85,19 +85,19 @@ describe("EquivalenciasStep · Grupos y tramo", () => {
     expect(screen.queryByText("Área sin equivalente")).toBeNull();
   });
 
-  it("requires the tramo when no group targets a tramo or fase", () => {
+  it("requires the etapa when no group targets a etapa or fase", () => {
     renderWithQueryClient(
       <Harness
         initial={draft({ strategy: "group_as_project", workflowId: null })}
         source={boardSource([{ id: "g1", title: "Familia Pérez" }])}
       />,
     );
-    expect(screen.getByText("Elige un tramo.")).toBeTruthy();
-    fireEvent.change(screen.getByRole("combobox", { name: "Tramo del tablero" }), { target: { value: DISENO } });
-    expect(screen.queryByText("Elige un tramo.")).toBeNull();
+    expect(screen.getByText("Elige una etapa.")).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Etapa del tablero" }), { target: { value: DISENO } });
+    expect(screen.queryByText("Elige una etapa.")).toBeNull();
   });
 
-  it("doesn't require it when a group already targets a tramo", () => {
+  it("doesn't require it when a group already targets a etapa", () => {
     renderWithQueryClient(
       <Harness
         initial={draft({ workflowId: null })}
@@ -107,7 +107,7 @@ describe("EquivalenciasStep · Grupos y tramo", () => {
         ])}
       />,
     );
-    expect(screen.queryByText("Elige un tramo.")).toBeNull();
+    expect(screen.queryByText("Elige una etapa.")).toBeNull();
   });
 });
 
@@ -123,7 +123,7 @@ describe("EquivalenciasStep · Tareas de plantilla", () => {
     { id: "i4", name: "Pago de anticipo", groupId: "g2" },
   ];
 
-  it("shows each item's Tramo · Fase and flags the ones without a fase", () => {
+  it("shows each item's Etapa · Fase and flags the ones without a fase", () => {
     renderWithQueryClient(
       <Harness
         initial={draft({ templateMatches: { i1: PLANOS_TEMPLATE } })}
@@ -184,7 +184,7 @@ describe("EquivalenciasStep · Cliente (opcional)", () => {
         onStatusCreated={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("tab", { name: /Grupos y tramo/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Grupos y etapa/ }));
     expect(screen.getByRole("heading", { name: "Cliente (opcional)" })).toBeTruthy();
     expect(
       screen.getByText("Sin cliente, cada proyecto se crea con la tarea de administración «Asignar cliente y origen»."),

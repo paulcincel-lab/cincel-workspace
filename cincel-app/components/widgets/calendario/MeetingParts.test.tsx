@@ -45,7 +45,7 @@ describe("CalendarItemChip meetings", () => {
     render(<CalendarItemChip item={meeting} density="block" />);
     expect(screen.getByText("10:00 – 11:00")).toBeTruthy();
   });
-  it("uses the tramo token for the edge", () => {
+  it("uses the etapa token for the edge", () => {
     const { container } = render(<CalendarItemChip item={meeting} density="chip" />);
     expect((container.firstChild as HTMLElement).style.borderLeftColor).toBe("var(--chart-2)");
   });

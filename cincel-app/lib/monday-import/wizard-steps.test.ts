@@ -268,7 +268,7 @@ describe("draft edits over the fixture", () => {
     expect(isDefaultedStatus(undefined)).toBe(false);
   });
 
-  it("keeps template matches of the tramos the board's tasks land in when the tramo changes", () => {
+  it("keeps template matches of the etapas the board's tasks land in when the etapa changes", () => {
     const board = { ...findBoard(mapping, "101")!, workflowId: ID.wfOther, templateMatches: { x: ID.tplOther } };
     expect(setBoardWorkflow(board, ID.wfObra, choices).templateMatches).toEqual({});
     expect(setBoardWorkflow(board, ID.wfOther, choices).templateMatches).toEqual({ x: ID.tplOther });

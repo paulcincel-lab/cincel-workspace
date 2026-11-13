@@ -239,7 +239,7 @@ describe.skipIf(!url)("Proyecto · Resumen task numbers (test DB)", async () => 
     });
   }
 
-  it("each «Tareas por tramo» group's rows page through `qk.tareas.list` and add up to the summary", async () => {
+  it("each «Tareas por etapa» group's rows page through `qk.tareas.list` and add up to the summary", async () => {
     const { loadTareasListPage } = await import("@/lib/loaders/tareas");
     const user = await asViewer({ id: viewerId, access: "Administrador" }, () => requireCapabilityUser());
     const data = (await loadProjectResumen(projectId, user))!;

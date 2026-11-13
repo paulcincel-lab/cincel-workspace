@@ -260,7 +260,7 @@ export function activitiesDueTable(output: unknown, today: string = localToday()
   const tramos = new Map<string, Tramo>();
   for (const row of rows) {
     const key = str(row.workflowKey);
-    const label = str(row.workflow) ?? "Sin tramo";
+    const label = str(row.workflow) ?? "Sin etapa";
     const id = key ?? (str(row.workflow) ? `tramo-${label}` : NO_TRAMO_ID);
     const tramo = tramos.get(id) ?? { id, label, key, sortOrder: num(row.workflowSortOrder), rows: [] };
     const vence = str(row.commitmentDate);
@@ -298,7 +298,7 @@ export function activitiesDueTable(output: unknown, today: string = localToday()
   return {
     title: "tareas vencidas",
     columns: [
-      { key: "tarea", label: "Tramo → tarea" },
+      { key: "tarea", label: "Etapa → tarea" },
       { key: "responsable", label: "Responsable" },
       { key: "vence", label: "Vence", format: "date", mono: true },
       { key: "dias", label: "Días", format: "count", align: "right", mono: true },
@@ -317,7 +317,7 @@ export function workloadTable(output: unknown): StepTable | null {
     title: "carga por persona",
     columns: [
       { key: "persona", label: "Persona" },
-      { key: "tramo", label: "Tramo" },
+      { key: "tramo", label: "Etapa" },
       { key: "abiertas", label: "Abiertas", format: "count", align: "right", mono: true },
       { key: "carga", label: "Carga", format: "percent", align: "right", mono: true },
     ],

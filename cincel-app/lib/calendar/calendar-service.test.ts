@@ -77,19 +77,19 @@ describe("buildCalendarEvents — default event time", () => {
   });
 });
 
-describe("buildCalendarEvents — tramo and fase", () => {
+describe("buildCalendarEvents — etapa and fase", () => {
   const diseno = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
   const ejecutivo = { id: "f1", name: "Ejecutivo", sortOrder: 1 };
 
-  it("carries the task's tramo and fase", () => {
+  it("carries the task's etapa and fase", () => {
     const [event] = buildCalendarEvents([makeTask({ kind: "workflow", workflow: diseno, phase: ejecutivo })]);
     expect(event).toMatchObject({ tramo: "diseno", tramoLabel: "Diseño", phaseId: "f1", phaseLabel: "Ejecutivo" });
     expect(event.href).toBe("/actividades/diseno?project=Proyecto");
   });
 
-  it("uses Sin tramo for tasks without one and Administración for admin tasks", () => {
+  it("uses Sin etapa for tasks without one and Administración for admin tasks", () => {
     const [none] = buildCalendarEvents([makeTask()]);
-    expect(none).toMatchObject({ tramo: "sin-tramo", tramoLabel: "Sin tramo", phaseId: null, phaseLabel: "" });
+    expect(none).toMatchObject({ tramo: "sin-tramo", tramoLabel: "Sin etapa", phaseId: null, phaseLabel: "" });
     const [admin] = buildCalendarEvents([makeTask({ kind: "admin" })]);
     expect(admin).toMatchObject({ tramo: "admin", tramoLabel: "Administración" });
   });

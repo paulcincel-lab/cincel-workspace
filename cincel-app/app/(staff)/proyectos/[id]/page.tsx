@@ -144,6 +144,6 @@ async function prefetchAnaliticoGroups(
     });
   } catch (error) {
     // The groups load on the client instead.
-    console.error("[proyecto-resumen] tareas por tramo", error);
+    console.error("[proyecto-resumen] tareas por etapa", error);
   }
 }

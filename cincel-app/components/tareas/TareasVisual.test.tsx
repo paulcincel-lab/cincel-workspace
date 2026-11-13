@@ -349,7 +349,7 @@ describe("TareasVisual · summary", () => {
 });
 
 describe("TareasVisual · filters", () => {
-  it("Mostrar, tramo and Solo mías are pressed buttons with the facet counts", () => {
+  it("Mostrar, etapa and Solo mías are pressed buttons with the facet counts", () => {
     renderVisual();
     const group = screen.getByRole("group", { name: "Filtros" });
     const todas = within(group).getByRole("button", { name: /^Todas/ });

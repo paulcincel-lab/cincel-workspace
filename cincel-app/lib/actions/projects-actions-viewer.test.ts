@@ -72,7 +72,7 @@ describe("project reads", () => {
   });
 });
 
-describe("current tramo changes", () => {
+describe("current etapa changes", () => {
   it("return no client or origin to a non-admin", async () => {
     expect(await setProjectCurrentTramoAction(PROJECT, WORKFLOW)).toMatchObject({
       clientId: null,

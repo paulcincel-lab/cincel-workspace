@@ -111,7 +111,7 @@ describe("AsistenteEsencialLayout", () => {
     expect(within(log).queryByText(/Usó \d+ herramienta/)).toBeNull();
   });
 
-  it("task lists show tramo dot, title link and colored lateness", () => {
+  it("task lists show etapa dot, title link and colored lateness", () => {
     chat.current = conversation([assistant("m1", [toolDone("c1"), { type: "text", text: "Estas son." }])]);
     renderLayout(chat.current.messages);
     const list = screen.getByRole("list", { name: "Tareas" });

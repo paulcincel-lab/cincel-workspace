@@ -182,10 +182,10 @@ describe("NewProjectDialog", () => {
   });
 });
 
-describe("NewProjectDialog · Tramo inicial (#1034)", () => {
-  it("shows the default tramo with every fase checked; untouched it sends the name only", async () => {
+describe("NewProjectDialog · Etapa inicial (#1034)", () => {
+  it("shows the default etapa with every fase checked; untouched it sends the name only", async () => {
     const { onConfirm } = renderDialog({ startOptions: START_OPTIONS });
-    expect(screen.getByRole("combobox", { name: "Tramo inicial" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Etapa inicial" })).toBeTruthy();
     const levantamiento = screen.getByRole("checkbox", { name: "Levantamiento · 3 tareas" });
     expect(levantamiento.getAttribute("aria-checked")).toBe("true");
     expect(screen.getByRole("checkbox", { name: "Propuesta · 2 tareas" }).getAttribute("aria-checked")).toBe("true");
@@ -194,7 +194,7 @@ describe("NewProjectDialog · Tramo inicial (#1034)", () => {
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ name: "Casa Lomas" }));
   });
 
-  it("sends the tramo and the checked fases once a fase is unchecked", async () => {
+  it("sends the etapa and the checked fases once a fase is unchecked", async () => {
     const { onConfirm } = renderDialog({ startOptions: START_OPTIONS });
     fireEvent.click(screen.getByRole("checkbox", { name: "Propuesta · 2 tareas" }));
     fireEvent.change(screen.getByLabelText("Nombre del proyecto"), { target: { value: "Casa Lomas" } });
@@ -216,7 +216,7 @@ describe("NewProjectDialog · Tramo inicial (#1034)", () => {
 
   it("hides the select without start options", () => {
     renderDialog();
-    expect(screen.queryByRole("combobox", { name: "Tramo inicial" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Etapa inicial" })).toBeNull();
   });
 
   it("maps the choice to the create input", () => {
@@ -251,10 +251,10 @@ describe("/proyectos?nuevo=1", () => {
     expect(screen.getByRole("combobox", { name: "Cliente" })).toBeTruthy();
   });
 
-  it("shows Tramo inicial to staff who can start tramos", async () => {
+  it("shows Etapa inicial to staff who can start etapas", async () => {
     nav.params = new URLSearchParams("nuevo=1");
     renderPortfolio({ canPickStartTramo: true });
-    expect(await screen.findByRole("combobox", { name: "Tramo inicial" })).toBeTruthy();
+    expect(await screen.findByRole("combobox", { name: "Etapa inicial" })).toBeTruthy();
   });
 
   it("stays closed without ?nuevo=1", () => {

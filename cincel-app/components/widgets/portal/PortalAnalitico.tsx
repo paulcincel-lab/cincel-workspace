@@ -48,7 +48,7 @@ const SECTION_LABEL: Record<PortalSectionKey, string> = {
   archivos: "Archivos",
 };
 const SECTION_TITLE: Record<PortalSectionKey, string> = {
-  fases: "Fases por tramo",
+  fases: "Fases por etapa",
   entregables: "Entregables",
   archivos: "Archivos por carpeta",
 };
@@ -247,7 +247,7 @@ export function PortalAnalitico({ project, data: overview }: PortalAnaliticoProp
   ];
   const entregableColumns: RecordColumn[] = [
     { key: "entregable", label: "Entregable" },
-    { key: "tramo", label: "Tramo" },
+    { key: "tramo", label: "Etapa" },
     { key: "fechaPlan", label: "Fecha plan", mono: true },
     ...(hasReal ? [{ key: "fechaReal", label: "Fecha real", mono: true }] : []),
     { key: "estado", label: "Estado" },
@@ -266,7 +266,7 @@ export function PortalAnalitico({ project, data: overview }: PortalAnaliticoProp
   const phaseTable: Group<PortalPhaseRow> = {
     id: SECTION_GROUP_ID.fases,
     label: SECTION_TITLE.fases,
-    caption: `${phaseGroups.length} ${phaseGroups.length === 1 ? "tramo" : "tramos"} · ${phaseTotals.fases} ${phaseTotals.fases === 1 ? "fase" : "fases"}`,
+    caption: `${phaseGroups.length} ${phaseGroups.length === 1 ? "etapa" : "etapas"} · ${phaseTotals.fases} ${phaseTotals.fases === 1 ? "fase" : "fases"}`,
     metrics: [
       { key: "avance", label: "Avance", value: `${phaseTotals.avance} %` },
       ...(phaseTotals.desvio !== null

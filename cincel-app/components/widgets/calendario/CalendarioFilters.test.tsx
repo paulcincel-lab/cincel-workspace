@@ -110,10 +110,10 @@ describe("Analítico filters", () => {
     expect(onChange).toHaveBeenCalledWith({ mostrar: "tareas" });
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Responsable" })).getByRole("radio", { name: "Todos" }));
     expect(onChange).toHaveBeenCalledWith({ quien: "todos" });
-    const tramo = screen.getByRole("radiogroup", { name: "Tramo" });
+    const tramo = screen.getByRole("radiogroup", { name: "Etapa" });
     fireEvent.click(within(tramo).getByRole("radio", { name: "Diseño" }));
     expect(onChange).toHaveBeenCalledWith({ tramo: "w2" });
-    fireEvent.click(within(tramo).getByRole("radio", { name: "Sin tramo" }));
+    fireEvent.click(within(tramo).getByRole("radio", { name: "Sin etapa" }));
     expect(onChange).toHaveBeenCalledWith({ tramo: "none" });
     expect(screen.getByRole("button", { name: "Proyecto: Todos" })).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Incluir apoyo" }));

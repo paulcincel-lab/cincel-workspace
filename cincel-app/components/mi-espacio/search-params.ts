@@ -5,6 +5,8 @@
  * page stays mounted: the client swaps the params with
  * `history.replaceState`, which the App Router mirrors into `useSearchParams`.
  */
+import { readEtapaParam } from "@/lib/ui/etapa-param";
+
 export const NOTE_PARAM = "nota";
 export const NEW_NOTE = "nueva";
 export const THREAD_PARAM = "correo";
@@ -30,8 +32,8 @@ export function replaceMiEspacioParam(key: string, value: string | null): void {
 /** `?estado=retraso` shows only overdue tasks; absent = every open task ("Abiertas"). */
 export const ESTADO_PARAM = "estado";
 export const ESTADO_RETRASO = "retraso";
-/** `?tramo=<key>`: tasks of one tramo; absent = every tramo. */
-export const TRAMO_PARAM = "tramo";
+/** `?etapa=<key>` (old links: `?tramo=`): tasks of one etapa; absent = every etapa. */
+export const TRAMO_PARAM = "etapa";
 /** `?q=`: searches task, checklist and notification titles. */
 export const SEARCH_PARAM = "q";
 /** `?abiertos=<projectId>,<projectId>`: the expanded project groups; absent = all, empty = none. */
@@ -52,7 +54,7 @@ export function parseMiEspacioFilters(params: URLSearchParams | null): MiEspacio
   const abiertos = params?.get(ABIERTOS_PARAM) ?? null;
   return {
     estado: params?.get(ESTADO_PARAM) === ESTADO_RETRASO ? "retraso" : "abiertas",
-    tramo: params?.get(TRAMO_PARAM) || null,
+    tramo: readEtapaParam(params) || null,
     q: params?.get(SEARCH_PARAM) ?? "",
     abiertos: abiertos === null ? null : abiertos.split(",").filter(Boolean),
   };

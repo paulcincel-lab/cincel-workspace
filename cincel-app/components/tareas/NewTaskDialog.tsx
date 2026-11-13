@@ -176,7 +176,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
   return (
     <FormDialog
       title="Nueva tarea"
-      description="Se creará como tarea activa en el proyecto y el tramo que elijas."
+      description="Se creará como tarea activa en el proyecto y la etapa que elijas."
       open={open}
       onOpenChange={(next) => {
         if (!pending) onOpenChange(next);
@@ -239,7 +239,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
           </FormField>
 
           <FormField className="flex flex-col gap-2">
-            <Label>Tramo</Label>
+            <Label>Etapa</Label>
             <Select
               items={Object.fromEntries(workflows.map((w) => [w.id, w.name]))}
               value={workflowId ?? ""}
@@ -249,8 +249,8 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
               }}
               disabled={!catalogReady}
             >
-              <SelectTrigger aria-label="Tramo" className="w-full">
-                <SelectValue placeholder="Elige un tramo" />
+              <SelectTrigger aria-label="Etapa" className="w-full">
+                <SelectValue placeholder="Elige una etapa" />
               </SelectTrigger>
               <SelectContent>
                 {workflows.map((w) => (
@@ -356,7 +356,7 @@ export function NewTaskDialog({ open, onOpenChange, defaults }: NewTaskDialogPro
                 size="sm"
                 onClick={() => update({ subtasks: applyTemplate(subtasks, templateTitles) })}
               >
-                Usar plantilla del tramo
+                Usar plantilla de la etapa
               </Button>
             ) : null}
           </div>

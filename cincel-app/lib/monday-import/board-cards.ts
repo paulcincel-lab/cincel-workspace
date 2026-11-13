@@ -109,7 +109,7 @@ export function boardProblems(
     .filter((issue) => issue === prefix || issue.startsWith(`${prefix}.`) || issue.startsWith(`${prefix}:`))
     .map((issue) => issue.slice(prefix.length).replace(/^[.:]\s*/, ""));
   const tramoMissing = needsBoardTramo(board, source, choices);
-  if (tramoMissing) problems.push("Elige un tramo.");
+  if (tramoMissing) problems.push("Elige una etapa.");
   const withoutPhase = (preview?.issues ?? []).filter(
     (issue) => issue.code === "PHASE_UNRESOLVED" && issue.boardId === boardId,
   ).length;

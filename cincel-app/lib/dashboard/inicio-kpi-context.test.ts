@@ -22,7 +22,7 @@ const task = (workflow: TaskLike["workflow"], kind: TaskLike["kind"] = "workflow
 const project = (currentWorkflow: Parameters<typeof projectTramoGroup>[0]["currentWorkflow"]) => ({ currentWorkflow });
 
 describe("tramoCountsLine (Proyectos activos)", () => {
-  it("lists the count per área in tramo order, as in the canvas", () => {
+  it("lists the count per área in etapa order, as in the canvas", () => {
     const projects = [
       project(CONSTRUCCION),
       project(PRESALE),
@@ -36,9 +36,9 @@ describe("tramoCountsLine (Proyectos activos)", () => {
     );
   });
 
-  it("puts projects without a tramo last", () => {
+  it("puts projects without a etapa last", () => {
     expect(tramoCountsLine([project(null), project(DISENO)], projectTramoGroup, KPI_CONTEXT.noActiveProjects)).toBe(
-      "Por área: Diseño 1 · Sin tramo 1",
+      "Por área: Diseño 1 · Sin etapa 1",
     );
   });
 
@@ -60,7 +60,7 @@ describe("tramoConcentrationLine (Vencidas, Bloqueadas)", () => {
     );
   });
 
-  it("breaks ties by tramo order and counts tasks without tramo in the total", () => {
+  it("breaks ties by etapa order and counts tasks without etapa in the total", () => {
     const tasks = [task(DISENO), task(PRESALE), task(null), task(null, "admin")];
     expect(tramoConcentrationLine(tasks, taskTramoGroup, KPI_CONTEXT.noBlocked)).toBe("Presale concentra 1 de 4");
   });

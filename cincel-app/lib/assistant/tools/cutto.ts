@@ -105,7 +105,7 @@ const CUTTO_COPY: Record<string, string> = {
   NOT_FOUND: "No se encontró en Cutto.",
   NO_EMAIL: "Esa persona no tiene correo registrado en Cincel.",
   NO_PROJECT: "Indica el proyecto.",
-  NO_TRAMO: "El proyecto no tiene un tramo actual; asígnalo antes de crear tareas.",
+  NO_TRAMO: "El proyecto no tiene una etapa actual; asígnalo antes de crear tareas.",
   NO_ACTION_ITEMS: "La reunión no tiene acuerdos para convertir en tareas.",
 };
 
@@ -384,7 +384,7 @@ const get_meeting_notes = defineTool({
 const meeting_to_tasks = defineTool({
   name: "meeting_to_tasks",
   description:
-    "Convierte los acuerdos de una reunión de Cutto en tareas del proyecto (en su tramo actual), asignadas a quien Cutto indique cuando es del equipo.",
+    "Convierte los acuerdos de una reunión de Cutto en tareas del proyecto (en su etapa actual), asignadas a quien Cutto indique cuando es del equipo.",
   schema: z.object({ meetingId: ID, project: PROJECT.optional().describe("Por omisión, el proyecto de la página") }),
   capability: (user) => canCreateTasks(user),
   available,

@@ -705,7 +705,7 @@ export const SECTION_TABLE_COLUMNS: RecordTableData["columns"] = [
   { key: "favorito", label: "Favorito", width: 72 },
   { key: "nombre", label: "Nombre" },
   { key: "tipo", label: "Tipo" },
-  { key: "tramo", label: "Tramo" },
+  { key: "tramo", label: "Etapa" },
   { key: "actualizado", label: "Actualizado", format: "date" },
   { key: "acciones", label: "Acciones", align: "right" },
 ];
@@ -1155,7 +1155,7 @@ export function buildBibliotecaTable(
   const columns: RecordColumn[] = [
     { key: "nombre", label: "Nombre", width: 300 },
     { key: "tipo", label: "Tipo", width: 100 },
-    { key: "tramo", label: "Tramo", width: 170 },
+    { key: "tramo", label: "Etapa", width: 170 },
     { key: "responsable", label: "Responsable", width: 150 },
     { key: "actualizado", label: "Actualizado", format: "date", width: 110 },
     ...(hasSize ? [{ key: "sizeBytes", label: "Tamaño", align: "right" as const, mono: true, width: 90 }] : []),

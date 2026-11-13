@@ -78,7 +78,7 @@ export function ProjectTramosCard({
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>Tramos</h2>
+          <h2>Etapas</h2>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -89,14 +89,14 @@ export function ProjectTramosCard({
         ) : null}
 
         {started.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Ningún tramo iniciado todavía.</p>
+          <p className="text-sm text-muted-foreground">Ninguna etapa iniciada todavía.</p>
         ) : (
-          <ul className="space-y-2 text-sm" aria-label="Tramos iniciados">
+          <ul className="space-y-2 text-sm" aria-label="Etapas iniciadas">
             {started.map((tramo) => (
               <li key={tramo.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center gap-2 font-medium text-foreground">
                   <span>{tramo.name}</span>
-                  {tramo.id === currentId ? <Badge variant="outline">Tramo actual</Badge> : null}
+                  {tramo.id === currentId ? <Badge variant="outline">Etapa actual</Badge> : null}
                 </span>
                 <span className="text-muted-foreground">
                   {tramo.closedAt
@@ -111,7 +111,7 @@ export function ProjectTramosCard({
         {canChangeTramo && started.length > 0 ? (
           <div className="space-y-1">
             <Label htmlFor="ficha-tramo-actual" className="text-sm font-normal text-muted-foreground">
-              Tramo actual
+              Etapa actual
             </Label>
             <Select
               items={Object.fromEntries(started.map((t) => [t.id, t.name]))}
@@ -121,8 +121,8 @@ export function ProjectTramosCard({
                 if (typeof v === "string") setCurrent(v);
               }}
             >
-              <SelectTrigger id="ficha-tramo-actual" aria-label="Tramo actual" className="w-full sm:w-64">
-                <SelectValue placeholder="Elige un tramo" />
+              <SelectTrigger id="ficha-tramo-actual" aria-label="Etapa actual" className="w-full sm:w-64">
+                <SelectValue placeholder="Elige una etapa" />
               </SelectTrigger>
               <SelectContent>
                 {started.map((t) => (
@@ -147,11 +147,11 @@ export function ProjectTramosCard({
 
         {showAssign ? (
           <div className="space-y-2 border-t border-border pt-4">
-            <p className="text-sm font-medium text-foreground">Asignar tramo</p>
+            <p className="text-sm font-medium text-foreground">Asignar etapa</p>
             <p className="text-sm text-muted-foreground">
               {project.needsTramo
-                ? "Este proyecto no tiene tramo actual."
-                : "Hay tareas sin tramo; corrígelas desde el detalle de cada tarea en «Sin tramo»."}
+                ? "Este proyecto no tiene etapa actual."
+                : "Hay tareas sin etapa; corrígelas desde el detalle de cada tarea en «Sin etapa»."}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Select
@@ -160,8 +160,8 @@ export function ProjectTramosCard({
                 disabled={pending}
                 onValueChange={(v) => setAssignId(typeof v === "string" ? v : null)}
               >
-                <SelectTrigger aria-label="Asignar tramo" className="w-full sm:w-56">
-                  <SelectValue placeholder="Elige un tramo" />
+                <SelectTrigger aria-label="Asignar etapa" className="w-full sm:w-56">
+                  <SelectValue placeholder="Elige una etapa" />
                 </SelectTrigger>
                 <SelectContent>
                   {workflows.map((w) => (

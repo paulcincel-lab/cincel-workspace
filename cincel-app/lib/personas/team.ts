@@ -499,7 +499,7 @@ export function tramoGroups(people: PersonDatum[], tramos: WorkflowRef[]): Group
   const entries: Array<{ id: string; label: string; color?: string }> = [
     ...ordered.map((t) => ({ id: t.key, label: t.name, color: tramoColorVar(t.key, t.sortOrder) })),
     ...unknown.map((key) => ({ id: key, label: tramoLabel(key), color: tramoColorVar(key) })),
-    { id: SIN_TRAMO, label: "Sin tramo" },
+    { id: SIN_TRAMO, label: "Sin etapa" },
   ];
   const groups: Group<PersonRow>[] = [];
   for (const entry of entries) {
@@ -641,7 +641,7 @@ function csvField(value: string | number): string {
  */
 export function personasCsv(rows: PersonDatum[], today: string = localToday()): string {
   const weekStarts = teamWeekStarts(rows, today);
-  const header = ["Persona", "Puesto", "Tramo", "Abiertas", "Vencidas", "Carga %", ...weekStarts.map(weekLabel), "Disponibilidad"];
+  const header = ["Persona", "Puesto", "Etapa", "Abiertas", "Vencidas", "Carga %", ...weekStarts.map(weekLabel), "Disponibilidad"];
   const lines = [header.map(csvField).join(";")];
   for (const p of rows) {
     const weeks = weekStarts.map((_, i) => {

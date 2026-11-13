@@ -59,9 +59,9 @@ import { StyleProvider } from "@/components/shell/StyleProvider";
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 
 const tableArgs: RenderTableArgs = {
-  title: "Tareas vencidas por tramo",
+  title: "Tareas vencidas por etapa",
   columns: [
-    { key: "tramo", label: "Tramo" },
+    { key: "tramo", label: "Etapa" },
     { key: "vencidas", label: "Vencidas", align: "right", format: "count" },
   ],
   rows: [

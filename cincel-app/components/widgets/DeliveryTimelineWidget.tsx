@@ -135,7 +135,7 @@ export function DeliveryTimelineWidget({ title, days, items, rangeLabel, toneOf,
         </div>
       </div>
       {legend.length > 0 ? (
-        <ul aria-label="Tramos" className="flex flex-wrap gap-3.5 text-xs text-muted-foreground">
+        <ul aria-label="Etapas" className="flex flex-wrap gap-3.5 text-xs text-muted-foreground">
           {legend.map((entry) => (
             <li key={entry.key} className="flex items-center gap-1.5">
               <span aria-hidden="true" className="size-2 rounded-full" style={{ background: toneOf(entry.key).color }} />

@@ -97,7 +97,7 @@ describe("taskRowToItem", () => {
     expect(taskRowToItem(row({ status: "completado", waiting: true }), ctx).blocked).toBe(false);
   });
 
-  it("gives the tramo its colour slot", () => {
+  it("gives the etapa its colour slot", () => {
     const item = taskRowToItem(row({ workflowId: "w1", workflowKey: "diseno", workflowName: "Diseño", workflowSortOrder: 2 }), {
       today: "2026-11-11",
       canEdit: true,

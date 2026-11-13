@@ -85,7 +85,7 @@ async function loadTramos(): Promise<NavModel["tramos"]> {
         key: row.key,
         name: row.name,
         colorVar: colorVarOf(row.key, row.sortOrder, row.colorSlot),
-        href: `/tareas?tramo=${encodeURIComponent(row.key)}`,
+        href: `/tareas?etapa=${encodeURIComponent(row.key)}`,
       }));
   } catch {
     return [];

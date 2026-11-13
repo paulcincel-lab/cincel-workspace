@@ -58,11 +58,11 @@ export type ProjectsEsencialLayoutProps = {
 };
 
 export const ESENCIAL_SEARCH_LABEL = "Buscar proyectos";
-export const ESENCIAL_PILLS_LABEL = "Filtrar por tramo";
+export const ESENCIAL_PILLS_LABEL = "Filtrar por etapa";
 export const ESENCIAL_ERROR_TITLE = "No se pudieron cargar los proyectos";
 export const ESENCIAL_EMPTY_TITLE = "Aún no hay proyectos";
 export const ESENCIAL_NEW_PROJECT_LABEL = "Nuevo proyecto";
-export const ESENCIAL_CLEAR_TRAMO_LABEL = "Ver todos los tramos";
+export const ESENCIAL_CLEAR_TRAMO_LABEL = "Ver todas las etapas";
 /** Same param and debounce as the other styles (`ProjectsPortfolio`). */
 const SEARCH_PARAM = "q";
 const NEW_PROJECT_PARAM = "nuevo";
@@ -196,7 +196,7 @@ function TramoLine({ row, tramoName }: { row: EsencialProjectRow; tramoName: str
   return (
     <div
       className="flex flex-col gap-1.5"
-      aria-label={`Tramo actual: ${tramoName ?? NO_TRAMO_LABEL}`}
+      aria-label={`Etapa actual: ${tramoName ?? NO_TRAMO_LABEL}`}
       role="group"
       data-slot="tramo-line"
     >

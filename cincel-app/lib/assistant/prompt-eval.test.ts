@@ -35,7 +35,7 @@ function answering(text: string) {
 
 const TOOLS: AssistantToolInfo[] = [
   { name: "search_workspace", description: "Busca en Cincel proyectos, tareas, personas, archivos y tus notas.", write: false },
-  { name: "get_project", description: "Consulta un proyecto: estatus, avance y tramo actual.", write: false },
+  { name: "get_project", description: "Consulta un proyecto: estatus, avance y etapa actual.", write: false },
 ];
 
 function systemOf(model: MockLanguageModelV4): string {

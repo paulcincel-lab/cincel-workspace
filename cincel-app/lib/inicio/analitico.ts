@@ -198,7 +198,7 @@ export function attentionSummary(
         const sorted = [...tasks].sort((a, b) => late(b) - late(a) || a.title.localeCompare(b.title, "es"));
         return {
           key,
-          label: info?.label ?? "Sin tramo",
+          label: info?.label ?? "Sin etapa",
           colorVar: info?.colorVar ?? "var(--muted-foreground)",
           tasks: sorted,
           overdue: tasks.filter(isOverdue).length,

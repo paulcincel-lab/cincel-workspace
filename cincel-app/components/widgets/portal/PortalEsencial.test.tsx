@@ -117,7 +117,7 @@ describe("PortalEsencial", () => {
     expect(screen.getByText("Aún no hay documentos compartidos.")).toBeTruthy();
   });
 
-  it("sentence variants: terminado, por iniciar, no tramos", () => {
+  it("sentence variants: terminado, por iniciar, no etapas", () => {
     const done = tramos.map((t) => ({ ...t, state: "completado" as const, progressPct: 100 }));
     const { unmount } = render(<PortalEsencial project={project} data={overview({ tramos: done })} />);
     expect(screen.getByText("Proyecto terminado")).toBeTruthy();

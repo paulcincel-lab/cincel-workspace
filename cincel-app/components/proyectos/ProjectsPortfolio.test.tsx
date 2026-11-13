@@ -271,7 +271,7 @@ describe("ProjectsPortfolio", () => {
 });
 
 describe("projects portfolio data", () => {
-  it("filters by the current tramo, Sin tramo included; null keeps every project", () => {
+  it("filters by the current etapa, Sin etapa included; null keeps every project", () => {
     const listed = PROJECTS.filter((p) => p.status !== "completado");
     expect(filterByTramo(listed, "diseno").map((p) => p.id)).toEqual(["p-lomas"]);
     expect(filterByTramo(listed, "presale").map((p) => p.id)).toEqual(["p-andares"]);
@@ -290,19 +290,19 @@ describe("projects portfolio data", () => {
     expect(sparklineText([])).toBeNull();
   });
 
-  it("counts projects per tramo in tramo order, plus Sin tramo", () => {
+  it("counts projects per etapa in etapa order, plus Sin etapa", () => {
     const listed = PROJECTS.filter((p) => p.status !== "completado");
     const segments = buildTramoSegments(listed, portfolioById(PORTFOLIO), TRAMOS);
     expect(segments.map((s) => [s.label, s.value])).toEqual([
       ["Presale", 1],
       ["Diseño", 1],
       ["Construcción", 0],
-      ["Sin tramo", 1],
+      ["Sin etapa", 1],
     ]);
     expect(segments[1]).toMatchObject({ colorVar: "var(--chart-2)", extra: { abiertas: 4, vencidas: 2, avance: "62%" } });
   });
 
-  it("marks each tramo done, current or next", () => {
+  it("marks each etapa done, current or next", () => {
     expect(tramoSteps(PROJECTS[0], TRAMOS).map((s) => s.state)).toEqual(["done", "current", "next"]);
     expect(tramoSteps(PROJECTS[2], TRAMOS).map((s) => s.state)).toEqual(["next", "next", "next"]);
   });

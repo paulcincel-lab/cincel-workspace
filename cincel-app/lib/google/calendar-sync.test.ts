@@ -34,12 +34,11 @@ describe("toGoogleEvent", () => {
     expect(body.transparency).toBe("transparent");
   });
 
-  it("names the tramo, and the fase when there is one", () => {
-    expect(toGoogleEvent(event(), "https://x").description).toContain("Tramo: Diseño\nResponsable: Ana");
+  it("names the etapa, and the fase when there is one", () => {
+    expect(toGoogleEvent(event(), "https://x").description).toContain("Etapa: Diseño\nResponsable: Ana");
     expect(
       toGoogleEvent(event({ phaseId: "f1", phaseLabel: "Ejecutivo" }), "https://x").description
-    ).toContain("Tramo: Diseño · Fase: Ejecutivo");
-    expect(toGoogleEvent(event(), "https://x").description).not.toContain("Etapa:");
+    ).toContain("Etapa: Diseño · Fase: Ejecutivo");
   });
 });
 

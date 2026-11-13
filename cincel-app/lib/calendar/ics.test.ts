@@ -75,12 +75,11 @@ describe("buildIcs", () => {
     expect(ics).toContain("DTSTAMP:20260923T120000Z");
   });
 
-  it("describes the tramo and fase of the task", () => {
+  it("describes the etapa and fase of the task", () => {
     const unfold = (ics: string) => ics.replace(/\r\n /g, "");
-    expect(unfold(build([event]))).toContain("Tramo: Diseño · Fase: Anteproyecto");
-    expect(unfold(build([event]))).not.toContain("Etapa:");
+    expect(unfold(build([event]))).toContain("Etapa: Diseño · Fase: Anteproyecto");
     const noPhase = unfold(build([{ ...event, phaseId: null, phaseLabel: "" }]));
-    expect(noPhase).toContain("Tramo: Diseño\\nResponsable: Ana");
+    expect(noPhase).toContain("Etapa: Diseño\\nResponsable: Ana");
     expect(noPhase).not.toContain("Fase:");
   });
 

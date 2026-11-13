@@ -63,7 +63,7 @@ const ROWS: Row[] = [
   { input: "Revisar @ana @jorge", title: "Revisar", assigneeId: "p-jorge" },
   { input: "viernes y lunes revisar", title: "y lunes revisar", dueDate: "2026-11-13" },
   { input: "Diseño de cocina", title: "Diseño de cocina" },
-  { input: "/ cerrar el tramo de Diseño", title: "", slash: "cerrar el tramo de Diseño" },
+  { input: "/ cerrar la etapa de Diseño", title: "", slash: "cerrar la etapa de Diseño" },
   { input: "   ", title: "" },
   {
     input: "mañana",

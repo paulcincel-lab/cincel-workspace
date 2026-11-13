@@ -233,7 +233,7 @@ const sitePhotoLogSchema = z.object({
 
 const scheduleFromTemplateSchema = z.object({
   project: projectInput,
-  template: z.string().trim().min(1).max(80).describe("Tramo cuya plantilla se programa (clave o nombre, p. ej. Diseño)"),
+  template: z.string().trim().min(1).max(80).describe("Etapa cuya plantilla se programa (clave o nombre, p. ej. Diseño)"),
   startDate: ISO_DATE.describe("Fecha de inicio YYYY-MM-DD"),
 });
 
@@ -536,7 +536,7 @@ function pickWorkflow(rows: WorkflowDetail[], query: string): { ok: true; value:
   const q = normalized(query);
   const byKey = rows.find((w) => normalized(w.key) === q);
   if (byKey) return { ok: true, value: byKey };
-  return pickByName(rows, query, "la plantilla de tramo");
+  return pickByName(rows, query, "la plantilla de etapa");
 }
 
 function shift(date: string | null, days: number): string | null {
@@ -773,7 +773,7 @@ export const tools: DefinedTool[] = [
   defineTool({
     name: "schedule_from_template",
     description:
-      "Programa en un proyecto las tareas de la plantilla de un tramo (Project Flow) a partir de una fecha de inicio. Crea varias tareas de una vez: confirma el proyecto, el tramo y la fecha.",
+      "Programa en un proyecto las tareas de la plantilla de una etapa (Project Flow) a partir de una fecha de inicio. Crea varias tareas de una vez: confirma el proyecto, la etapa y la fecha.",
     schema: scheduleFromTemplateSchema,
     capability: isLead,
     available: always,

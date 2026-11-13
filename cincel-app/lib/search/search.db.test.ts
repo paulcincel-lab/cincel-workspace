@@ -181,7 +181,7 @@ describe.skipIf(!url)("searchWorkspace (test DB)", async () => {
     expect(byId.get(projectIds[`Casa ${m}`]!)).toMatchObject({
       type: "proyecto",
       url: `/proyectos/${projectIds[`Casa ${m}`]}`,
-      subtitle: "Sin tramo · Activo",
+      subtitle: "Sin etapa · Activo",
     });
     expect(byId.get(userTaskNewId)).toMatchObject({
       type: "tarea",

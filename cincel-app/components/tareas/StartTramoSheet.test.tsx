@@ -299,7 +299,7 @@ describe("StartTramoSheet", () => {
     expect(onStarted).not.toHaveBeenCalled();
   });
 
-  it("shows the nothing-to-create state when the tramo is started and every fase has its tasks", async () => {
+  it("shows the nothing-to-create state when the etapa is started and every fase has its tasks", async () => {
     actions.previewStartTramoAction.mockResolvedValue(
       preview({
         alreadyStarted: true,

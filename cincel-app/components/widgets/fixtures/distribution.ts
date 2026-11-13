@@ -15,7 +15,7 @@ export type DistributionFixture = {
 };
 
 export const distributionFixture: DistributionFixture = {
-  title: "Tareas por tramo",
+  title: "Tareas por etapa",
   totalLabel: "Abiertas",
   secondaryLabel: "Vencidas",
   extraColumns: [{ key: "diasProm", label: "Días prom." }],
@@ -40,7 +40,7 @@ export const distributionFixtureExpected = {
 
 /** A distribution without the secondary measure (Analítico shows the share %). */
 export const distributionShareFixture: DistributionFixture = {
-  title: "Proyectos por tramo",
+  title: "Proyectos por etapa",
   segments: [
     { key: "presale", label: "Presale", value: 3, colorVar: "var(--chart-1)" },
     { key: "diseno", label: "Diseño", value: 1, colorVar: "var(--chart-2)" },

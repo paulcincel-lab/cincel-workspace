@@ -349,7 +349,7 @@ function metaLabels(items: EntityCard[]): string[] {
 export function entityTableData(items: EntityCard[]): RecordTableData {
   const columns: RecordColumn[] = [{ key: "title", label: "Nombre" }];
   if (items.some((i) => i.subtitle)) columns.push({ key: "subtitle", label: "Detalle" });
-  if (items.some((i) => i.tramo)) columns.push({ key: "tramo", label: "Tramo" });
+  if (items.some((i) => i.tramo)) columns.push({ key: "tramo", label: "Etapa" });
   if (items.some((i) => i.progress !== undefined)) {
     columns.push({ key: "progress", label: ENTITY_PROGRESS_LABEL, align: "right", mono: true, format: "percent" });
   }

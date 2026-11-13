@@ -167,7 +167,7 @@ export function buildPeopleTable(people: PersonDatum[], show: PeopleShow[]): Rec
   const columns: RecordTableData["columns"] = [
     { key: "name", label: "Persona" },
     { key: "puesto", label: "Puesto" },
-    { key: "tramo", label: "Tramo" },
+    { key: "tramo", label: "Etapa" },
     { key: "open", label: "Abiertas", align: "right", mono: true, format: "count" },
     { key: "overdue", label: "Vencidas", align: "right", mono: true, format: "count" },
   ];

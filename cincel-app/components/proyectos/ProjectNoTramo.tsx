@@ -51,7 +51,7 @@ export function ProjectNoTramo({ projectId, tramos }: ProjectNoTramoProps) {
     <div data-testid="resumen-no-tramo">
       <EmptyState
         title={RESUMEN_NO_TRAMO}
-        action={canStart && tramos.length > 0 ? { label: "Iniciar un tramo", onClick: openSheet } : undefined}
+        action={canStart && tramos.length > 0 ? { label: "Iniciar una etapa", onClick: openSheet } : undefined}
       />
       {canStart ? (
         <StartTramoSheet

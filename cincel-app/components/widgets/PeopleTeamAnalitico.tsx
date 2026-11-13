@@ -63,7 +63,7 @@ export type PeopleTeamAnaliticoProps = {
   loading?: boolean;
 };
 
-export const TEAM_TABLE_LABEL = "Personas por tramo";
+export const TEAM_TABLE_LABEL = "Personas por etapa";
 export const NO_MATCH_TEXT = "Nadie coincide con estos filtros.";
 const COLUMN_COUNT = 10;
 
@@ -379,7 +379,7 @@ function ProjectTableRow({ id, project, newCount }: { id: string; project: Perso
           ) : null}
         </span>
       </td>
-      <td className={cn(TD, "text-muted-foreground")}>{project.tramo ? tramoLabel(project.tramo) : "Sin tramo"}</td>
+      <td className={cn(TD, "text-muted-foreground")}>{project.tramo ? tramoLabel(project.tramo) : "Sin etapa"}</td>
       <td className={cn(TD, NUM)}>{project.open}</td>
       <td className={cn(TD, NUM, project.overdue > 0 && "text-destructive")}>{project.overdue}</td>
       <td className={cn(TD, NUM)}>{plural(project.open, "tarea", "tareas")}</td>
@@ -443,7 +443,7 @@ export function PeopleTeamAnalitico({
     },
     {
       id: "tramo",
-      label: "Tramo",
+      label: "Etapa",
       value: state.tramo ?? "todos",
       options: [
         { value: "todos", label: "Todos", count: counts.tramo.todos ?? 0 },
@@ -454,7 +454,7 @@ export function PeopleTeamAnalitico({
           color: tramoColorVar(t.key, t.sortOrder),
         })),
         ...((counts.tramo[SIN_TRAMO] ?? 0) > 0 || state.tramo === SIN_TRAMO
-          ? [{ value: SIN_TRAMO, label: "Sin tramo", count: counts.tramo[SIN_TRAMO] ?? 0 }]
+          ? [{ value: SIN_TRAMO, label: "Sin etapa", count: counts.tramo[SIN_TRAMO] ?? 0 }]
           : []),
       ],
     },

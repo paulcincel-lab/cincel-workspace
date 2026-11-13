@@ -125,8 +125,8 @@ export function TaskTramoSelect({
         if (v) onChange(v as string);
       }}
     >
-      <SelectTrigger aria-label="Tramo" className={triggerClassName}>
-        <SelectValue placeholder="Sin tramo" />
+      <SelectTrigger aria-label="Etapa" className={triggerClassName}>
+        <SelectValue placeholder="Sin etapa" />
       </SelectTrigger>
       <SelectContent>
         {tramos.map((t) => (

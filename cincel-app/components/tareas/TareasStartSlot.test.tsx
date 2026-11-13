@@ -8,7 +8,7 @@ import type { StartTramoResult, TramoBoard } from "@/lib/types/core";
 import type { StartSlotCandidate, TareasStartSlotData } from "@/lib/types/tareas-start-slot";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
-const nav = vi.hoisted(() => ({ search: "estilo=analitico&tramo=diseno", replace: vi.fn(), refresh: vi.fn() }));
+const nav = vi.hoisted(() => ({ search: "estilo=analitico&etapa=diseno", replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: nav.refresh, replace: nav.replace, push: vi.fn() }),
   usePathname: () => "/tareas",
@@ -114,7 +114,7 @@ function sheet() {
 let replaceState: MockInstance<History["replaceState"]>;
 
 beforeEach(() => {
-  nav.search = "estilo=analitico&tramo=diseno";
+  nav.search = "estilo=analitico&etapa=diseno";
   pageData.getTareasStartSlotData.mockReset().mockResolvedValue(slotData());
   sonner.toast.mockReset();
   sheetProps.staff = [];
@@ -166,14 +166,14 @@ describe("TareasStartSlot", () => {
   });
 
   it("opens the sheet once from ?project=X&iniciar=1 and strips both params with history.replaceState on close", async () => {
-    nav.search = "estilo=analitico&tramo=diseno&project=p9&iniciar=1";
+    nav.search = "estilo=analitico&etapa=diseno&project=p9&iniciar=1";
     renderSlot();
     await waitFor(() => expect(sheet().getAttribute("data-open")).toBe("true"));
     expect(sheet().getAttribute("data-project")).toBe("p9");
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar hoja" }));
     expect(sheet().getAttribute("data-open")).toBe("false");
-    expect(replaceState).toHaveBeenCalledWith(null, "", "/tareas?estilo=analitico&tramo=diseno");
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/tareas?estilo=analitico&etapa=diseno");
     expect(nav.replace).not.toHaveBeenCalled();
     expect(nav.refresh).not.toHaveBeenCalled();
 
@@ -183,7 +183,7 @@ describe("TareasStartSlot", () => {
   });
 
   it("does not open the sheet for ?project=X without iniciar=1", async () => {
-    nav.search = "estilo=analitico&tramo=diseno&project=p9";
+    nav.search = "estilo=analitico&etapa=diseno&project=p9";
     renderSlot();
     await screen.findByText("Listos para iniciar (1)");
     expect(sheet().getAttribute("data-open")).toBe("false");
@@ -191,13 +191,13 @@ describe("TareasStartSlot", () => {
 
   it("without canStart shows a read-only count and ignores iniciar", async () => {
     pageData.getTareasStartSlotData.mockResolvedValue(slotData({ canStart: false }));
-    nav.search = "estilo=analitico&tramo=diseno&project=p9&iniciar=1";
+    nav.search = "estilo=analitico&etapa=diseno&project=p9&iniciar=1";
     renderSlot();
     expect(await screen.findByTestId("ready-to-start-count")).toBeTruthy();
     expect(sheet().getAttribute("data-open")).toBe("false");
   });
 
-  it("renders no board when the tramo is gone (null)", async () => {
+  it("renders no board when the etapa is gone (null)", async () => {
     pageData.getTareasStartSlotData.mockResolvedValue(null);
     renderSlot();
     await waitFor(() => expect(pageData.getTareasStartSlotData).toHaveBeenCalled());

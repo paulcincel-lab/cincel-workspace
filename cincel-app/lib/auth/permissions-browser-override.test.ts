@@ -79,7 +79,7 @@ describe("client capability resolvers ignore the browser-only matrix", () => {
     expect(withStored).toEqual(clean);
   });
 
-  it("a Colaborador still cannot manage task statuses, puestos or tramos with the matrix stored", () => {
+  it("a Colaborador still cannot manage task statuses, puestos or etapas with the matrix stored", () => {
     window.localStorage.setItem(LEGACY_MATRIX_KEY, everythingOn());
     const viewer = user("Colaborador");
     expect(permissions.resolveTaskStatusesCapabilities(viewer).canManageTaskStatuses).toBe(false);

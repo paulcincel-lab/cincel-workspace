@@ -84,7 +84,7 @@ describe("saturationSummary", () => {
     expect(saturationSummary([people[0]!], TODAY)).toBeNull();
   });
 
-  it("lists up to 3 people in cargado, most loaded first, and suggests a candidate in the same tramo", () => {
+  it("lists up to 3 people in cargado, most loaded first, and suggests a candidate in the same etapa", () => {
     const people = [
       load("ana", 130),
       load("bruno", 80),
@@ -146,7 +146,7 @@ describe("personStatus", () => {
 describe("suggestAssignee", () => {
   const from = teammate("ana", { name: "Ana", tramo: "diseno", occupancyPct: 120 });
 
-  it("suggestAssignee ignores other tramos, absent people and cargado", () => {
+  it("suggestAssignee ignores other etapas, absent people and cargado", () => {
     const people = [
       from,
       teammate("otro", { name: "Otro", tramo: "construccion", occupancyPct: 10 }),
@@ -261,10 +261,10 @@ describe("Personas Analítico helpers", () => {
     expect(searched.estado.todas).toBe(1);
   });
 
-  it("tramoGroups puts people without tramo last", () => {
+  it("tramoGroups puts people without etapa last", () => {
     const groups = tramoGroups(TEAM, TRAMOS);
     expect(groups.map((g) => g.id)).toEqual(["presale", "diseno", "construccion", SIN_TRAMO]);
-    expect(groups.at(-1)!.label).toBe("Sin tramo");
+    expect(groups.at(-1)!.label).toBe("Sin etapa");
     const diseno = groups.find((g) => g.id === "diseno")!;
     expect(diseno.rows!.map((r) => r.id)).toEqual(["Ana", "Valeria"]);
     expect(diseno.caption).toBe("2 personas");
@@ -283,7 +283,7 @@ describe("Personas Analítico helpers", () => {
     expect(csv.startsWith("\uFEFF")).toBe(true);
     const lines = csv.slice(1).trimEnd().split("\r\n");
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toBe("Persona;Puesto;Tramo;Abiertas;Vencidas;Carga %;9–15 nov;16–22 nov;23–29 nov;30 nov–6 dic;Disponibilidad");
+    expect(lines[0]).toBe("Persona;Puesto;Etapa;Abiertas;Vencidas;Carga %;9–15 nov;16–22 nov;23–29 nov;30 nov–6 dic;Disponibilidad");
     expect(lines[1]).toBe('"Ana; Ruiz";"Diseñadora ""senior""";Diseño;6;4;112;112;104;86;60;Saturado');
     expect(lines[2]).toBe("Sofía León;;;2;0;55;55;Vac.;60;40;Libre");
   });

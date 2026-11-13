@@ -28,7 +28,7 @@ const STATE_LABEL: Record<TramoStep["state"], string> = {
 export function tramoStepsTable(steps: TramoStep[]): RecordTableData {
   return {
     columns: [
-      { key: "tramo", label: "Tramo" },
+      { key: "tramo", label: "Etapa" },
       { key: "inicio", label: "Inicio", format: "date" },
       { key: "fin", label: "Fin", format: "date" },
       { key: "duracion", label: "Duración", align: "right", mono: true, format: "days" },

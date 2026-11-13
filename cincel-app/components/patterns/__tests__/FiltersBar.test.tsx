@@ -41,8 +41,8 @@ vi.mock("next/link", async () => {
 
 const CHIPS: FiltersBarChip[] = [
   { key: "todas", label: "Todas", count: 24, pressed: false, href: "/tareas" },
-  { key: "diseno", label: "Diseño", count: 9, colorVar: "--chart-2", pressed: true, href: "/tareas?tramo=diseno" },
-  { key: "construccion", label: "Construcción", colorVar: "var(--chart-3)", pressed: false, href: "/tareas?tramo=construccion" },
+  { key: "diseno", label: "Diseño", count: 9, colorVar: "--chart-2", pressed: true, href: "/tareas?etapa=diseno" },
+  { key: "construccion", label: "Construcción", colorVar: "var(--chart-3)", pressed: false, href: "/tareas?etapa=construccion" },
 ];
 
 afterEach(() => {
@@ -70,7 +70,7 @@ describe("FiltersBar", () => {
     expect(todas.getAttribute("aria-pressed")).toBe("false");
 
     const diseno = screen.getByRole("button", { name: /Diseño/ });
-    expect(diseno.getAttribute("href")).toBe("/tareas?tramo=diseno");
+    expect(diseno.getAttribute("href")).toBe("/tareas?etapa=diseno");
     expect(diseno.getAttribute("aria-pressed")).toBe("true");
     // Filters replace the URL without scrolling.
     expect(diseno.getAttribute("data-replace")).toBe("true");
@@ -119,7 +119,7 @@ describe("FiltersBar", () => {
 
     fireEvent.keyDown(chip, { key: " " });
     fireEvent.keyUp(chip, { key: " " });
-    expect(clicked).toContain("/tareas?tramo=construccion");
+    expect(clicked).toContain("/tareas?etapa=construccion");
 
     clicked.length = 0;
     fireEvent.click(screen.getByRole("button", { name: /Todas/ }));

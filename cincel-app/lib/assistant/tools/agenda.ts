@@ -809,7 +809,7 @@ export const schedule_site_visit = defineTool({
 
       const workflowId = await siteVisitWorkflowId(project);
       if (!workflowId) {
-        return { ok: false as const, error: `El proyecto «${project.name}» no tiene un tramo para la tarea de la visita.` };
+        return { ok: false as const, error: `El proyecto «${project.name}» no tiene una etapa para la tarea de la visita.` };
       }
       const checklist = await siteVisitChecklist(project.id, input.checklistTemplate);
       if (!checklist.ok) return checklist;

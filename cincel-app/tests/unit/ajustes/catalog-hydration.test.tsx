@@ -54,7 +54,7 @@ vi.mock("@/components/patterns/FormDialog", () => import("@/tests/unit/fixtures/
 import { EstatusSettings } from "@/components/ajustes/EstatusSettings";
 import { PermisosSettings } from "@/components/ajustes/PermisosSettings";
 import { PuestosClient } from "@/app/(staff)/ajustes/(admin)/puestos/PuestosClient";
-import { TramosClient } from "@/app/(staff)/ajustes/(admin)/tramos/TramosClient";
+import { TramosClient } from "@/app/(staff)/ajustes/(admin)/etapas/TramosClient";
 import { buildDefaultPermissionsState } from "@/lib/auth/permissionsState";
 import {
   ajustesEstatusOptions,
@@ -135,7 +135,7 @@ describe("Ajustes catalog hydration", () => {
     noPageDataCalls();
   });
 
-  it("tramos: renders the prefetched tramos; the catalog seed keeps only active ones", async () => {
+  it("etapas: renders the prefetched etapas; the catalog seed keeps only active ones", async () => {
     const data = { workflows: [INACTIVE_TRAMO, TRAMO], activeProjects: {}, phaseTaskCounts: {} };
     const { client, state } = await hydrationRoundtrip(async (qc) => {
       await prefetch(qc, ajustesTramosOptions(), async () => data);

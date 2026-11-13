@@ -60,7 +60,7 @@ describe("step tables", () => {
     { id: "t4", projectId: "p1", description: "Levantamiento", workflow: "Presale", workflowKey: "presale", workflowSortOrder: 1, blocked: false, commitmentDate: "2026-11-20", manager: null },
   ];
 
-  it("list_activities_due groups by tramo with day totals", () => {
+  it("list_activities_due groups by etapa with day totals", () => {
     const table = activitiesDueTable(due, TODAY)!;
     expect(table.title).toBe("tareas vencidas");
     expect(table.groups.map((g) => g.label)).toEqual(["Presale", "Diseño", "Construcción"]);

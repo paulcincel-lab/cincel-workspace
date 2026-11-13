@@ -64,7 +64,7 @@ const COLUMNS: RecordColumn<AnaliticoRow>[] = [
   { key: "tipo", label: "TIPO", width: 90 },
   { key: "titulo", label: "TÍTULO", width: 280 },
   { key: "proyecto", label: "PROYECTO", width: 170 },
-  { key: "tramo", label: "TRAMO", width: 130 },
+  { key: "tramo", label: "ETAPA", width: 130 },
   { key: "responsable", label: "RESPONSABLE / ASISTENTES", width: 200 },
 ];
 

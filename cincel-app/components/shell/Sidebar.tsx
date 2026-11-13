@@ -34,7 +34,7 @@ import { AvatarMenu } from "./AvatarMenu";
 /**
  * Sidebar of the new shell (redesign FE §3.1, §4.1; frame `Sidebar`): logo,
  * search button, time clock slot (Jornada card), the nav items with their
- * count badges (mono, primary tint), the "Áreas" list of tramos, Ajustes and
+ * count badges (mono, primary tint), the "Etapas" list, Ajustes and
  * the user block (avatar menu with the photo or initials, name and role).
  * Built on the shadcn `sidebar` primitives; the active item uses the
  * `sidebar-primary` tokens.
@@ -152,7 +152,7 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
           {nav.tramos.length > 0 ? (
             <SidebarGroup>
               <SidebarGroupLabel id="sidebar-tramos" className="h-auto px-2.5 pb-1 text-muted-foreground">
-                Áreas
+                Etapas
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu aria-labelledby="sidebar-tramos">

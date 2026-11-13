@@ -194,7 +194,7 @@ describe("InicioEsencial cards", () => {
     expect(screen.getByText("No hay proyectos activos")).toBeTruthy();
   });
 
-  it("attention meta for blocked and tramo", () => {
+  it("attention meta for blocked and etapa", () => {
     expect(attentionMeta(attention({ id: "x" })).map((m) => [m.label, m.dot ?? null, m.tone ?? null])).toEqual([
       ["Diseño", "var(--chart-2)", null],
       ["Oficina Polanco", null, "muted"],

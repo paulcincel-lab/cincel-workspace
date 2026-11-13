@@ -54,8 +54,8 @@ function Fixture() {
       <FiltersBar
         chips={[
           { key: "todas", label: "Todas", count: 24, pressed: true, href: "/tareas" },
-          { key: "diseno", label: "Diseño", count: 9, colorVar: "--chart-2", pressed: false, href: "/tareas?tramo=diseno" },
-          { key: "construccion", label: "Construcción", count: 11, colorVar: "--chart-3", pressed: false, href: "/tareas?tramo=construccion" },
+          { key: "diseno", label: "Diseño", count: 9, colorVar: "--chart-2", pressed: false, href: "/tareas?etapa=diseno" },
+          { key: "construccion", label: "Construcción", count: 11, colorVar: "--chart-3", pressed: false, href: "/tareas?etapa=construccion" },
         ]}
         selects={[
           <button key="r" type="button" aria-haspopup="listbox">

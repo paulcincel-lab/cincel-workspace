@@ -61,7 +61,7 @@ describe("visibleStats", () => {
 });
 
 describe("PersonaDetail", () => {
-  it("renders the header with name, puesto, tramo and contact links", () => {
+  it("renders the header with name, puesto, etapa and contact links", () => {
     renderIn("visual", { canSeeAdminData: false, canViewHours: false });
     expect(screen.getByRole("heading", { level: 1, name: "Paul Langarica Soubic" })).toBeTruthy();
     expect(screen.getByText("Residente de obra · Construcción")).toBeTruthy();

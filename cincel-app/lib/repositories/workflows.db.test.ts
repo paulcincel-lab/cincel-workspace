@@ -42,7 +42,7 @@ vi.mock("@/lib/auth/session", () => ({
 
 const run = randomUUID().slice(0, 8);
 
-describe.skipIf(!url)("tramos color, order and counts (test DB)", async () => {
+describe.skipIf(!url)("etapas color, order and counts (test DB)", async () => {
   // One catalog-changing file at a time (see tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
@@ -65,16 +65,16 @@ describe.skipIf(!url)("tramos color, order and counts (test DB)", async () => {
   beforeAll(async () => {
     const [admin] = await db
       .insert(schema.staff)
-      .values({ name: `Tramos ${run}`, role: "Administrador" })
+      .values({ name: `Etapas ${run}`, role: "Administrador" })
       .returning({ id: schema.staff.id });
     adminId = admin!.id;
     session.memberId = adminId;
     const rows = await db
       .insert(schema.workflows)
       .values([
-        { key: `t1-${run}`, name: `Tramo 1 ${run}`, sortOrder: 2 },
-        { key: `t2-${run}`, name: `Tramo 2 ${run}`, sortOrder: 950 },
-        { key: `t3-${run}`, name: `Tramo 3 ${run}`, sortOrder: 951 },
+        { key: `t1-${run}`, name: `Etapa 1 ${run}`, sortOrder: 2 },
+        { key: `t2-${run}`, name: `Etapa 2 ${run}`, sortOrder: 950 },
+        { key: `t3-${run}`, name: `Etapa 3 ${run}`, sortOrder: 951 },
       ])
       .returning({ id: schema.workflows.id });
     workflowIds.push(...rows.map((r) => r.id));
@@ -146,16 +146,16 @@ describe.skipIf(!url)("tramos color, order and counts (test DB)", async () => {
     await db.update(schema.workflows).set({ sortOrder: sql`${schema.workflows.sortOrder} + 950` }).where(inArray(schema.workflows.id, workflowIds));
   });
 
-  it("active projects per tramo", async () => {
+  it("active projects per etapa", async () => {
     const [a, b] = workflowIds;
     const projects = await db
       .insert(schema.projects)
       .values([
-        { name: `Tramos ${run} 1`, currentWorkflowId: a },
-        { name: `Tramos ${run} 2`, currentWorkflowId: a },
-        { name: `Tramos ${run} 3`, currentWorkflowId: a, status: "pausado" },
-        { name: `Tramos ${run} 4`, currentWorkflowId: a, deletedAt: new Date() },
-        { name: `Tramos ${run} 5`, currentWorkflowId: b },
+        { name: `Etapas ${run} 1`, currentWorkflowId: a },
+        { name: `Etapas ${run} 2`, currentWorkflowId: a },
+        { name: `Etapas ${run} 3`, currentWorkflowId: a, status: "pausado" },
+        { name: `Etapas ${run} 4`, currentWorkflowId: a, deletedAt: new Date() },
+        { name: `Etapas ${run} 5`, currentWorkflowId: b },
       ])
       .returning({ id: schema.projects.id });
     projectIds.push(...projects.map((p) => p.id));

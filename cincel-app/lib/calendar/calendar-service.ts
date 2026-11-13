@@ -4,7 +4,7 @@ import type { TaskListItem } from "@/lib/types/core";
 /** What the calendar reads of a task: a `TaskListItem` or a slim `TaskListRow` (no `notes`). */
 type CalendarTask = Omit<TaskListItem, "notes">;
 
-export const NO_TRAMO_LABEL = "Sin tramo";
+export const NO_TRAMO_LABEL = "Sin etapa";
 export const ADMIN_TRAMO_LABEL = "Administración";
 
 export function dateKey(value: Date): string {

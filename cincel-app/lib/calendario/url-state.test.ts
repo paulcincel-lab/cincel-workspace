@@ -21,7 +21,7 @@ describe("parseCalendarioQuery", () => {
 
   it("reads every parameter", () => {
     const q = parseCalendarioQuery(
-      `?vista=dia&fecha=2026-11-12&mostrar=reuniones&quien=todos&proyectos=${OTHER},${ID}&tramo=${ID}&responsable=${OTHER}&apoyo=0&ocultar=1&modo=planear&evento=e:${ID}&nueva=reunion`,
+      `?vista=dia&fecha=2026-11-12&mostrar=reuniones&quien=todos&proyectos=${OTHER},${ID}&etapa=${ID}&responsable=${OTHER}&apoyo=0&ocultar=1&modo=planear&evento=e:${ID}&nueva=reunion`,
       { today: TODAY },
     );
     expect(q.vista).toBe("dia");

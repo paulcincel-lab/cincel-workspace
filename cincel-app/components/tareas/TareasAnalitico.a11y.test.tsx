@@ -156,7 +156,7 @@ describe("TareasAnalitico accessibility", () => {
       .filter((h) => h.dataset.slot !== "row-actions-head" && h.dataset.slot !== "row-select-head");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Tarea",
-      "Tramo",
+      "Etapa",
       "Fase",
       "Responsable",
       "Apoyo",
@@ -182,7 +182,7 @@ describe("TareasAnalitico accessibility", () => {
     expect(byLabel.get("Apoyo")?.hasAttribute("aria-sort")).toBe(false);
     // The default sort is "retraso" ascending.
     expect(byLabel.get("Días de retraso")?.getAttribute("aria-sort")).toBe("ascending");
-    for (const label of ["Tarea", "Tramo", "Fase", "Responsable", "Estatus", "Vence", "Prioridad", "Subtareas"]) {
+    for (const label of ["Tarea", "Etapa", "Fase", "Responsable", "Estatus", "Vence", "Prioridad", "Subtareas"]) {
       const header = byLabel.get(label)!;
       expect(header.getAttribute("aria-sort")).toBe("none");
       // A native button: Enter and Space press it.
@@ -191,13 +191,13 @@ describe("TareasAnalitico accessibility", () => {
     }
     fireEvent.click(within(byLabel.get("Vence")!).getByRole("button"));
     expect(onQuery).toHaveBeenCalledWith({ orden: { orderBy: "vence", orderDir: "asc" } });
-    expect(screen.getByText("Por proyecto y tramo, ordenada por retraso.")).toBeTruthy();
+    expect(screen.getByText("Por proyecto y etapa, ordenada por retraso.")).toBeTruthy();
   });
 
   it("the subtitle and aria-sort follow ?orden= (#1044)", () => {
     const onQuery = vi.fn();
     renderAnalitico({ ...DEFAULT_TAREAS_QUERY, orden: { orderBy: "vence", orderDir: "desc" } }, onQuery);
-    expect(screen.getByText("Por proyecto y tramo, ordenada por vencimiento (más lejano primero).")).toBeTruthy();
+    expect(screen.getByText("Por proyecto y etapa, ordenada por vencimiento (más lejano primero).")).toBeTruthy();
     const lomas = screen.getByRole("region", { name: "Casa Lomas" });
     const vence = within(within(lomas).getByRole("grid")).getByRole("columnheader", { name: "Vence" });
     expect(vence.getAttribute("aria-sort")).toBe("descending");

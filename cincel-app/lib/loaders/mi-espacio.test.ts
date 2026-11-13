@@ -54,8 +54,8 @@ const PROJECTS = ["p1", "p2"].map((id) => ({
   ...EMPTY_MY_TASKS_COUNTS,
   open: 2,
   tramos: [
-    { tramo: { id: null, key: null, name: "Sin tramo", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
-    { tramo: { id: null, key: null, name: "Sin tramo", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
+    { tramo: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
+    { tramo: { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 }, ...EMPTY_MY_TASKS_COUNTS, open: 1 },
   ],
 }));
 

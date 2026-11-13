@@ -178,7 +178,7 @@ function EsencialRows({ items }: { items: AttentionItem[] }) {
 const ANALITICO_COLUMNS: RecordTableData["columns"] = [
   { key: "title", label: "Tarea" },
   { key: "project", label: "Proyecto" },
-  { key: "tramo", label: "Tramo" },
+  { key: "tramo", label: "Etapa" },
   { key: "assignee", label: "Resp." },
   { key: "reason", label: "Motivo" },
   { key: "due", label: "Vence", mono: true, format: "date" },

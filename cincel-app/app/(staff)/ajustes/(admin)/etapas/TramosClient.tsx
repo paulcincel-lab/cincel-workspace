@@ -389,7 +389,7 @@ export function TramosClient() {
     const base: ColumnDef<WorkflowDetail, unknown>[] = [
       {
         accessorKey: "name",
-        header: "Tramo",
+        header: "Etapa",
         enableSorting: false,
         cell: ({ row }) => (
           <span className="flex items-center gap-2">
@@ -451,7 +451,7 @@ export function TramosClient() {
   if (!capabilities.canViewWorkflows) {
     return (
       <section className="rounded-[14px] border border-border bg-card p-6 text-sm text-muted-foreground shadow-xs">
-        No tienes permiso para ver los tramos.
+        No tienes permiso para ver las etapas.
       </section>
     );
   }
@@ -484,13 +484,13 @@ export function TramosClient() {
         >
           <CatalogListHeader
             id="tramos-lista"
-            title="Tramos y fases"
+            title="Etapas y fases"
             count={sortedWorkflows.length}
             description="El orden define el flujo de cada proyecto. Arrastra para reordenar."
             action={
               canManage ? (
                 <CatalogCreateButton
-                  label="Nuevo tramo"
+                  label="Nueva etapa"
                   onClick={() => addRow.current?.querySelector<HTMLInputElement>("input")?.focus()}
                 />
               ) : undefined
@@ -506,12 +506,12 @@ export function TramosClient() {
               onReorderRows={canManage ? reorder : undefined}
               onRowClick={canManage ? (row) => setEditingId(row.id) : undefined}
               rowClassName={(row) => rowNewClass(row.id, flashed)}
-              emptyMessage="Aún no hay tramos."
+              emptyMessage="Aún no hay etapas."
             />
           </div>
           {canManage ? (
             <div ref={addRow}>
-              <CatalogInlineAdd label="Agregar tramo" placeholder="Agregar tramo…" onCreate={createTramo} />
+              <CatalogInlineAdd label="Agregar etapa" placeholder="Agregar etapa…" onCreate={createTramo} />
             </div>
           ) : null}
         </section>
@@ -534,7 +534,7 @@ export function TramosClient() {
       <AlertDialog open={deleting !== null} onOpenChange={(next) => (next ? undefined : setDeleting(null))}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar el tramo «{deleting?.name}»?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar la etapa «{deleting?.name}»?</AlertDialogTitle>
             <AlertDialogDescription>
               Sus fases y tareas de plantilla dejan de usarse en proyectos nuevos.
             </AlertDialogDescription>
@@ -582,7 +582,7 @@ function ColorPicker({
     refs.current.get(next)?.focus();
   }
   return (
-    <div role="radiogroup" aria-label="Color del tramo" className="flex flex-wrap gap-3">
+    <div role="radiogroup" aria-label="Color de la etapa" className="flex flex-wrap gap-3">
       {TRAMO_COLOR_SLOTS.map((slot) => {
         const checked = value === slot;
         return (
@@ -736,7 +736,7 @@ function TramoEditor({
 
   return (
     <CatalogEditorPanel
-      title={`Editar tramo · ${workflow.name}`}
+      title={`Editar etapa · ${workflow.name}`}
       open
       width={360}
       onClose={onClose}

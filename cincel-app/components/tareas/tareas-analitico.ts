@@ -31,15 +31,15 @@ import { formatHours } from "./task-hours";
 import { HOURS_COLUMN_LABEL, SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 import { PRIORITY_LABEL, daysLate, taskDueDate } from "./tablero-table";
 
-export const ANALITICO_DESCRIPTION = "Por proyecto y tramo, ordenada por retraso.";
+export const ANALITICO_DESCRIPTION = "Por proyecto y etapa, ordenada por retraso.";
 export const ANALITICO_EMPTY_TITLE = "No hay tareas con estos filtros";
 export const ANALITICO_EMPTY_LATE_TITLE = "No hay tareas en retraso";
 export const ANALITICO_ANCHORS_CAPTION = "tareas vencidas por proyecto";
-export const ANALITICO_TABLE_LABEL = "Tareas por proyecto y tramo";
+export const ANALITICO_TABLE_LABEL = "Tareas por proyecto y etapa";
 
 export const ANALITICO_COLUMNS: RecordColumn[] = [
   { key: "tarea", label: "Tarea" },
-  { key: "tramo", label: "Tramo" },
+  { key: "tramo", label: "Etapa" },
   { key: "fase", label: "Fase" },
   { key: "responsable", label: "Responsable" },
   { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL },
@@ -68,7 +68,7 @@ const NUMBER = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 
 const plural = (n: number, one: string, many: string) => `${NUMBER.format(n)} ${n === 1 ? one : many}`;
 export const tareasText = (n: number) => plural(n, "tarea", "tareas");
-export const tramosText = (n: number) => plural(n, "tramo", "tramos");
+export const tramosText = (n: number) => plural(n, "etapa", "etapas");
 export const proyectosText = (n: number) => plural(n, "proyecto", "proyectos");
 export const vencidasText = (n: number) => plural(n, "vencida", "vencidas");
 export const abiertasText = (n: number) => plural(n, "abierta", "abiertas");
@@ -208,7 +208,7 @@ export function hiddenProjectsNote(summary: TareasSummary): string | null {
     hidden.length === 1
       ? `1 proyecto sin tareas vencidas no se muestra: ${names}.`
       : `${NUMBER.format(hidden.length)} proyectos sin tareas vencidas no se muestran: ${names}.`;
-  return `${head} Los tramos sin vencidas también se ocultan.`;
+  return `${head} Las etapas sin vencidas también se ocultan.`;
 }
 
 /** "Se expandieron 12 grupos" / "Se contrajeron 1 grupo". */

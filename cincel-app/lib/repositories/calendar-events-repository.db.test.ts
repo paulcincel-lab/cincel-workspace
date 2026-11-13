@@ -167,7 +167,7 @@ describe.skipIf(!url)("calendar events repository (test DB)", async () => {
     await expect(repo.updateEvent(organizer, created.eventId, { title: "x" })).rejects.toThrow("INVALID");
   });
 
-  it("a linked project gets a comment and the tramo edge defaults to the project's", async () => {
+  it("a linked project gets a comment and the etapa edge defaults to the project's", async () => {
     const item = await create({ projectId: ids.project });
     expect(item.project).toEqual({ id: ids.project, name: `Proyecto ${run}` });
     const comments = await db

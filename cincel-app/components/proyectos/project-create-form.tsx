@@ -192,7 +192,7 @@ export function ProjectStartFields({
     <>
       <FormField>
         <Label htmlFor="project-start-tramo" className="block text-sm font-normal text-muted-foreground">
-          Tramo inicial
+          Etapa inicial
         </Label>
         <Select
           items={items}
@@ -217,7 +217,7 @@ export function ProjectStartFields({
           </SelectContent>
         </Select>
         <p id="project-start-tramo-hint" className="mt-1 text-xs text-muted-foreground">
-          {tramo ? "Las tareas se crean sin asignar." : "El proyecto queda en Sin tramo; puedes iniciarlo después."}
+          {tramo ? "Las tareas se crean sin asignar." : "El proyecto queda en Sin etapa; puedes iniciarlo después."}
         </p>
       </FormField>
       {tramo && tramo.phases.length > 0 ? (

@@ -14,7 +14,7 @@ import { DISENO, LISTA_TASKS, LISTA_TRAMOS } from "./fixtures/lista-tasks";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn(), push: vi.fn() }),
   usePathname: () => "/tareas",
-  useSearchParams: () => new URLSearchParams("estilo=analitico&tramo=diseno"),
+  useSearchParams: () => new URLSearchParams("estilo=analitico&etapa=diseno"),
 }));
 
 vi.mock("next/link", () => ({

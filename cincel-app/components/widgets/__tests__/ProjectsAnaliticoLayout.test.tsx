@@ -85,7 +85,7 @@ function projectLinks(container: HTMLElement): string[] {
 
 /** The Tramo filter chips (the summary bar's legend has buttons with the same names). */
 function tramoChips(): HTMLElement {
-  return screen.getByRole("group", { name: "Tramo" });
+  return screen.getByRole("group", { name: "Etapa" });
 }
 
 /** A project row's expand toggle. */
@@ -114,11 +114,11 @@ afterEach(() => {
 });
 
 describe("ProjectsAnaliticoLayout", () => {
-  it("renders the header, KPIs, the tramo card and the grouped rows", () => {
+  it("renders the header, KPIs, the etapa card and the grouped rows", () => {
     const { container } = renderLayout();
     expect(screen.getByText("Portafolio por proyecto: avance contra plan, carga y retrasos.")).toBeTruthy();
     expect(screen.getByText("PROYECTOS ACTIVOS")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Proyectos por tramo" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Proyectos por etapa" })).toBeTruthy();
     // Two active projects; the paused one only with Incluir pausados.
     expect(projectLinks(container).sort()).toEqual(["/proyectos/p-andares", "/proyectos/p-lomas"]);
     expect(screen.getByText("Heat: % vencidas > 45 % ámbar, > 60 % rojo · Desv. plan ≤ −5 ámbar, ≤ −8 rojo.")).toBeTruthy();
@@ -133,11 +133,11 @@ describe("ProjectsAnaliticoLayout", () => {
     expect(projectLinks(container)).toEqual(["/proyectos/p-lomas"]);
 
     fireEvent.click(within(tramoChips()).getByRole("button", { name: /^Diseño/, pressed: false }));
-    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&tramo=diseno", { scroll: false });
+    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&etapa=diseno", { scroll: false });
     expect(within(tramoChips()).getByRole("button", { name: /^Diseño/, pressed: true })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Incluir pausados/ }));
-    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&tramo=diseno&pausados=1", { scroll: false });
+    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&etapa=diseno&pausados=1", { scroll: false });
 
     // The search waits for the debounce.
     const calls = nav.replace.mock.calls.length;
@@ -146,12 +146,12 @@ describe("ProjectsAnaliticoLayout", () => {
     act(() => {
       vi.advanceTimersByTime(300);
     });
-    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&tramo=diseno&pausados=1&q=lomas", { scroll: false });
+    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?mostrar=vencidas&etapa=diseno&pausados=1&q=lomas", { scroll: false });
     expect(nav.replace.mock.calls.every(([, opts]) => opts?.scroll === false)).toBe(true);
   });
 
   it("restores the filters from the URL and ignores unknown values", () => {
-    nav.params = new URLSearchParams("mostrar=nada&tramo=presale,inventado&mios=1");
+    nav.params = new URLSearchParams("mostrar=nada&etapa=presale,inventado&mios=1");
     const { container } = renderLayout();
     expect(screen.getByRole("radio", { name: /Todos/ }).getAttribute("aria-checked")).toBe("true");
     expect(within(tramoChips()).getByRole("button", { name: /^Presale/, pressed: true })).toBeTruthy();
@@ -173,7 +173,7 @@ describe("ProjectsAnaliticoLayout", () => {
     const headers = within(nested).getAllByRole("columnheader").map((th) => th.textContent?.trim());
     expect(headers).toContain("Tarea");
     expect(headers).toContain("Días de retraso");
-    expect(headers).not.toContain("Tramo");
+    expect(headers).not.toContain("Etapa");
     await waitFor(() =>
       expect([...nested.querySelectorAll<HTMLElement>('[data-slot="leaf-row"]')].map((tr) => tr.dataset.rowId)).toEqual(["t-soon", "t-late"]),
     );
@@ -199,16 +199,16 @@ describe("ProjectsAnaliticoLayout", () => {
     expect(tareas.getTareasListPage).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Contraer todo" }));
     expect(states()).toEqual(["false", "false"]);
-    expect(screen.queryByRole("navigation", { name: "Ir a tramo" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Ir a etapa" })).toBeNull();
   });
 
-  it("a tramo segment of the summary bar filters by that tramo", () => {
+  it("a etapa segment of the summary bar filters by that etapa", () => {
     const { container } = renderLayout();
-    const legend = screen.getByRole("list", { name: "Filtrar por tramo" });
+    const legend = screen.getByRole("list", { name: "Filtrar por etapa" });
     const diseno = within(legend).getByRole("button", { name: /Diseño/ });
     expect(diseno.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(diseno);
-    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?tramo=diseno", { scroll: false });
+    expect(nav.replace).toHaveBeenLastCalledWith("/proyectos?etapa=diseno", { scroll: false });
     expect(projectLinks(container)).toEqual(["/proyectos/p-lomas"]);
     expect(within(legend).getByRole("button", { name: /Diseño/ }).getAttribute("aria-pressed")).toBe("true");
   });
@@ -265,7 +265,7 @@ describe("ProjectsAnaliticoLayout", () => {
     expect(document.querySelector('tfoot td[data-column="budgetSpentPct"]')).toBeNull();
   });
 
-  it("one table: one row per project, no tramo group rows, the totals in its tfoot", () => {
+  it("one table: one row per project, no etapa group rows, the totals in its tfoot", () => {
     const { container } = renderLayout();
     const tables = container.querySelectorAll("table");
     expect(tables.length).toBe(1);
@@ -296,10 +296,10 @@ describe("ProjectsAnaliticoLayout", () => {
       return document.querySelector<HTMLElement>(`td[data-cell-row="${id}"][data-cell-column="${column}"]`)!;
     }
 
-    it("shows Tramo actual and Responsable after Proyecto; calculated columns stay inert", () => {
+    it("shows Etapa actual and Responsable after Proyecto; calculated columns stay inert", () => {
       renderLayout();
       const headers = screen.getAllByRole("columnheader").map((th) => th.textContent ?? "");
-      expect(headers.slice(0, 3).map((h) => h.trim())).toEqual(["Proyecto", "Tramo actual", "Responsable"]);
+      expect(headers.slice(0, 3).map((h) => h.trim())).toEqual(["Proyecto", "Etapa actual", "Responsable"]);
       expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
       expect(cell("p-lomas", "manager").textContent).toBe("Ana López");
       expect(cell("p-lomas", "tramo").dataset.cellState).toBe("editable");
@@ -316,7 +316,7 @@ describe("ProjectsAnaliticoLayout", () => {
       expect(cell("p-lomas", "tramo").textContent).toBe("Diseño");
     });
 
-    it("changing Tramo actual updates the row at once and saves through setProjectCurrentTramoAction", async () => {
+    it("changing Etapa actual updates the row at once and saves through setProjectCurrentTramoAction", async () => {
       let resolve!: (value: unknown) => void;
       actions.setProjectCurrentTramoAction.mockReturnValue(new Promise((r) => (resolve = r)));
       renderLayout();
@@ -329,10 +329,10 @@ describe("ProjectsAnaliticoLayout", () => {
       // Optimistic: the cell reads Presale before the server answers; the row stays a row.
       await waitFor(() => expect(cell("p-lomas", "tramo").textContent).toBe("Presale"));
       await act(async () => resolve({ ok: true, data: {} }));
-      expect(toasts).toHaveBeenCalledWith("Tramo actual guardado.", expect.anything());
+      expect(toasts).toHaveBeenCalledWith("Etapa actual guardado.", expect.anything());
     });
 
-    it("a refused tramo change puts the row back", async () => {
+    it("a refused etapa change puts the row back", async () => {
       actions.setProjectCurrentTramoAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
       renderLayout();
       fireEvent.click(cell("p-lomas", "tramo"));

@@ -122,6 +122,6 @@ describe("KpiWidget a11y", () => {
     const { getAllByRole } = renderWidget("visual", kpiFixture);
     const labels = getAllByRole("img").map((n) => n.getAttribute("aria-label") ?? "");
     expect(labels.every((l) => l.length > 0)).toBe(true);
-    expect(labels).toContain("Por tramo: Presale 25 %, Diseño 33 %, Construcción 42 %");
+    expect(labels).toContain("Por etapa: Presale 25 %, Diseño 33 %, Construcción 42 %");
   });
 });

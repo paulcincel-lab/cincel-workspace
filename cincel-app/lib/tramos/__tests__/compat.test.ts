@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 describe("with Project Flow data", () => {
-  it("lists the workflows tramos in sortOrder", async () => {
+  it("lists the workflows etapas in sortOrder", async () => {
     const { listTramos } = await loadCompat(true);
     fetchTramosNavAction.mockResolvedValue([
       tramo("construccion", 3, "Construcción"),
@@ -45,7 +45,7 @@ describe("with Project Flow data", () => {
     expect((await listTramos()).map((t) => t.key)).toEqual(["presale", "diseno", "construccion"]);
   });
 
-  it("names and colors the four known tramos", async () => {
+  it("names and colors the four known etapas", async () => {
     const { tramoLabel, tramoColorSlot, tramoColorVar } = await loadCompat(true);
     expect(tramoLabel("presale")).toBe("Presale");
     expect(tramoLabel("diseno")).toBe("Diseño");
@@ -98,7 +98,7 @@ describe("without Project Flow data", () => {
     expect(tramoColorVar("otro")).toBe("var(--muted-foreground)");
   });
 
-  it("colors a tramo outside the known keys by its sortOrder (frame `Sidebar`: Decoración → chart-4)", async () => {
+  it("colors a etapa outside the known keys by its sortOrder (frame `Sidebar`: Decoración → chart-4)", async () => {
     const { tramoColorVar } = await loadCompat(false);
     expect(tramoColorVar("decoracion", 4)).toBe("var(--chart-4)");
     expect(tramoColorVar("presale", 9)).toBe("var(--chart-1)");

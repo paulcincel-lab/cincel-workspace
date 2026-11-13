@@ -143,7 +143,7 @@ export function quickAddSuggestion(input: {
       : `#${input.tramos.find((t) => t.id === first.id)?.key ?? first.label}`;
     const names = joinNames(ambiguous.candidates.slice(0, 3).map((c) => c.label));
     return {
-      text: `${isPerson ? "¿Quién?" : "¿Qué tramo?"} ${names}.`,
+      text: `${isPerson ? "¿Quién?" : "¿Qué etapa?"} ${names}.`,
       action: { label: `Elegir ${first.label}`, apply: (text) => replaceToken(text, ambiguous, replacement) },
     };
   }
@@ -391,7 +391,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
   const placeholder =
     context.placeholder ??
     (variant === "row"
-      ? `Nueva tarea en ${context.label}…  @persona  #tramo  fecha  !prioridad  ·  / asistente`
+      ? `Nueva tarea en ${context.label}…  @persona  #etapa  fecha  !prioridad  ·  / asistente`
       : "Escribe para agregar una tarea…");
   const active = focused || hasText;
 
@@ -422,7 +422,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
       {tramoModel ? (
         <span className="anim-in inline-flex items-center gap-1">
           <AreaBadge name={tramoModel.label} colorSlot={tramoModel.slot} tinted />
-          {tramoFromContext ? <span className="text-xs font-normal text-muted-foreground">· del tramo</span> : null}
+          {tramoFromContext ? <span className="text-xs font-normal text-muted-foreground">· de la etapa</span> : null}
         </span>
       ) : null}
       {draft.dueDate ? (

@@ -19,7 +19,7 @@ if (url) process.env.DATABASE_URL = url;
 
 const run = randomUUID().slice(0, 8);
 
-describe.skipIf(!url)("tasks repository: tramo move (test DB)", async () => {
+describe.skipIf(!url)("tasks repository: etapa move (test DB)", async () => {
   const { and, eq, inArray } = await import("drizzle-orm");
   const { db } = await import("@/lib/db/client");
   const schema = await import("@/lib/db/schema");
@@ -70,7 +70,7 @@ describe.skipIf(!url)("tasks repository: tramo move (test DB)", async () => {
     actorId = actor!.id;
     const [project] = await db
       .insert(schema.projects)
-      .values({ name: `Tramo move ${run}` })
+      .values({ name: `Etapa move ${run}` })
       .returning({ id: schema.projects.id });
     projectId = project!.id;
     const flows = await db
@@ -133,7 +133,7 @@ describe.skipIf(!url)("tasks repository: tramo move (test DB)", async () => {
     expect(events.some((e) => e.field === "workflowId")).toBe(false);
   });
 
-  it("keeps a fase of the new tramo set in the same patch", async () => {
+  it("keeps a fase of the new etapa set in the same patch", async () => {
     const t = await task();
     const moved = await repo.updateTask(
       t.id,
@@ -144,7 +144,7 @@ describe.skipIf(!url)("tasks repository: tramo move (test DB)", async () => {
     expect(moved).toMatchObject({ workflowId: construccion, phaseId: faseConstruccion });
   });
 
-  it("rejects a fase of the old tramo in the same patch as PHASE_MISMATCH", async () => {
+  it("rejects a fase of the old etapa in the same patch as PHASE_MISMATCH", async () => {
     const t = await task();
     await expect(
       repo.updateTask(t.id, { workflowId: construccion, phaseId: faseDiseno }, actorId, { canMoveTramo: true })
@@ -172,7 +172,7 @@ describe.skipIf(!url)("tasks repository: tramo move (test DB)", async () => {
     );
   });
 
-  it("rejects an unknown or deleted tramo, or clearing it, as INVALID", async () => {
+  it("rejects an unknown or deleted etapa, or clearing it, as INVALID", async () => {
     const t = await task();
     const opts = { canMoveTramo: true };
     await expect(repo.updateTask(t.id, { workflowId: randomUUID() }, actorId, opts)).rejects.toThrow(/^INVALID/);
@@ -181,14 +181,14 @@ describe.skipIf(!url)("tasks repository: tramo move (test DB)", async () => {
     expect(await load(t.id)).toMatchObject({ workflowId: diseno, phaseId: faseDiseno });
   });
 
-  it("still lets a task writer set a tramo on a task without one", async () => {
+  it("still lets a task writer set a etapa on a task without one", async () => {
     const t = await task({ workflowId: null, phaseId: null });
     await expect(repo.updateTask(t.id, { workflowId: diseno }, actorId)).resolves.toMatchObject({
       workflowId: diseno,
     });
   });
 
-  it("rejects a tramo on an admin task as ADMIN_TASK", async () => {
+  it("rejects a etapa on an admin task as ADMIN_TASK", async () => {
     const t = await task({ kind: "admin", workflowId: null, phaseId: null });
     await expect(repo.updateTask(t.id, { workflowId: construccion }, actorId, { canMoveTramo: true })).rejects.toThrow(
       /^ADMIN_TASK$/

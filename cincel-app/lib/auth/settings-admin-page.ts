@@ -10,7 +10,7 @@ export type SettingsAdminUser = NonNullable<SessionAccess["user"]>;
 
 /**
  * Page-level check of the Organización segments that keep today's rule
- * (`/ajustes/monday`, `/ajustes/google`, `/ajustes/tramos`, `/ajustes/puestos`;
+ * (`/ajustes/monday`, `/ajustes/google`, `/ajustes/etapas`, `/ajustes/puestos`;
  * redesign FE §8: "Administrador (today's rule)"). The segment `layout.tsx`
  * guards the same rule; the page repeats it because it loads admin data.
  * A guest goes to `/login`, a first-access account to `/change-password`, any

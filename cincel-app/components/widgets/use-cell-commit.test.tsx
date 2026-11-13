@@ -90,7 +90,7 @@ describe("useCellCommit", () => {
     const { result } = setup();
     await act(() => result.current.commit(makeEdit(async () => ({ ok: false, error: "PHASE_MISMATCH" })), row, "x"));
     expect(cached()?.[0].status).toBe("curso");
-    expect(toastMock.error).toHaveBeenCalledWith("Esa fase no pertenece al tramo de la tarea.");
+    expect(toastMock.error).toHaveBeenCalledWith("Esa fase no pertenece a la etapa de la tarea.");
     expect(toastMock).not.toHaveBeenCalled();
   });
 

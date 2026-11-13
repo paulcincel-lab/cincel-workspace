@@ -18,7 +18,7 @@ describe("actionErrorCode", () => {
 
 describe("actionErrorText", () => {
   it("maps PHASE_MISMATCH", () => {
-    expect(actionErrorText(new Error("PHASE_MISMATCH"))).toBe("Esa fase no pertenece al tramo de la tarea.");
+    expect(actionErrorText(new Error("PHASE_MISMATCH"))).toBe("Esa fase no pertenece a la etapa de la tarea.");
   });
 
   it("maps SPACE_MISMATCH", () => {

@@ -38,7 +38,7 @@ const PLAN_MESSAGES: [PlanIssueCode, string][] = [
   ["FILE_MISSING", 'File 88 ("plano.pdf") is in files/index.json but /data/monday/run-1/files/88/plano.pdf is not on disk'],
   ["FILE_MISSING", 'File 89 ("foto.jpg") is not in files/index.json'],
   ["STATUS_DEFAULTED", 'Status label 5 ("Urgente") of column status has no equivalent; defaulted to pendiente'],
-  ["TRAMO_MISSING", "3 tasks of board 901 resolve no tramo; choose the board's tramo or a tramo for the group"],
+  ["TRAMO_MISSING", "3 tasks of board 901 resolve no etapa; choose the board's etapa or a etapa for the group"],
   ["PHASE_UNRESOLVED", '"Muros" matches no fase; it imports without one for review'],
   ["CLIENT_MISSING", 'Project "Casa Norte" has no client; it gets the task "Asignar cliente y origen"'],
   ["ADMIN_ASSIGNEE_CLEARED", "Admin task: Luis Pérez removed (not administrators)"],

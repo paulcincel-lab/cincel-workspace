@@ -88,11 +88,11 @@ describe("Proyecto · Resumen Esencial accessibility", () => {
     });
   }
 
-  it("tramo line has a text alternative", () => {
+  it("etapa line has a text alternative", () => {
     renderPage();
-    const line = within(screen.getByRole("region", { name: "Tramos" })).getByRole("img");
+    const line = within(screen.getByRole("region", { name: "Etapas" })).getByRole("img");
     expect(line.getAttribute("aria-label")).toBe(
-      "Tramos: Presale terminado 100 %, Diseño terminado 100 %, Construcción en curso fase 2 de 3",
+      "Etapas: Presale terminado 100 %, Diseño terminado 100 %, Construcción en curso fase 2 de 3",
     );
     for (const dot of line.querySelectorAll("span")) expect(dot.getAttribute("aria-hidden")).toBe("true");
   });

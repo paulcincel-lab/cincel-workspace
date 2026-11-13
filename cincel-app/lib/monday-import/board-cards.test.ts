@@ -113,7 +113,7 @@ describe("board card problems and chips (#685)", () => {
     expect(boardChip([], false, true)).toEqual({ kind: "mapear" });
     expect(boardChip([], true, false)).toEqual({ kind: "mapear" });
     expect(boardChip([], true, true)).toEqual({ kind: "listo" });
-    expect(boardChip(["Elige un tramo."], true, false)).toEqual({ kind: "problemas", count: 1 });
+    expect(boardChip(["Elige una etapa."], true, false)).toEqual({ kind: "problemas", count: 1 });
     expect(chipLabel({ kind: "problemas", count: 3 })).toBe("⚠ 3");
   });
 
@@ -121,9 +121,9 @@ describe("board card problems and chips (#685)", () => {
     expect(boardProblems(mappingOf(ruiz({ client: null })), "b1", ruizSource)).toEqual([]);
   });
 
-  it("asks for a tramo when some tasks resolve none, and clears it as soon as the draft fixes it", () => {
+  it("asks for a etapa when some tasks resolve none, and clears it as soon as the draft fixes it", () => {
     const broken = mappingOf(ruiz({ workflowId: null }));
-    expect(boardProblems(broken, "b1", ruizSource)).toEqual(["Elige un tramo."]);
+    expect(boardProblems(broken, "b1", ruizSource)).toEqual(["Elige una etapa."]);
     const fixed = updateBoard(broken, "b1", (board) => ({ ...board, workflowId: OBRA }));
     expect(boardProblems(fixed, "b1", ruizSource)).toEqual([]);
     // Every group with items placed in a tramo or fase needs no board tramo; an espacio does.
@@ -134,15 +134,15 @@ describe("board card problems and chips (#685)", () => {
     const space = mappingOf(
       ruiz({ workflowId: null, groupTargets: { g1: { kind: "tramo", workflowId: DISENO }, g2: { kind: "space" } } }),
     );
-    expect(boardProblems(space, "b1", ruizSource)).toEqual(["Elige un tramo."]);
+    expect(boardProblems(space, "b1", ruizSource)).toEqual(["Elige una etapa."]);
   });
 
-  it("counts groups named like a tramo or fase as placed when the catalog is given", () => {
+  it("counts groups named like a etapa or fase as placed when the catalog is given", () => {
     const mapping = mappingOf(ruiz({ workflowId: null }));
     // "Diseño" is a tramo and "Obra" a fase of Construcción.
     expect(boardProblems(mapping, "b1", ruizSource, null, choices)).toEqual([]);
     const other = { ...ruizSource, groups: [{ id: "g1", title: "Diseño" }, { id: "g2", title: "Varios" }] };
-    expect(boardProblems(mapping, "b1", other, null, choices)).toEqual(["Elige un tramo."]);
+    expect(boardProblems(mapping, "b1", other, null, choices)).toEqual(["Elige una etapa."]);
   });
 
   it("warns about tasks without a fase and lists the preview's blocking issues of the board", () => {
@@ -158,9 +158,9 @@ describe("board card problems and chips (#685)", () => {
     expect(boardProblems(mappingOf(ruiz()), "b1", ruizSource, one)).toEqual(["1 tarea sin fase."]);
   });
 
-  it("doesn't repeat the preview's TRAMO_MISSING next to «Elige un tramo.»", () => {
-    const preview = previewWith(issueOf("TRAMO_MISSING", "b1", "Elige un tramo: hay tareas sin tramo."));
-    expect(boardProblems(mappingOf(ruiz({ workflowId: null })), "b1", ruizSource, preview)).toEqual(["Elige un tramo."]);
+  it("doesn't repeat the preview's TRAMO_MISSING next to «Elige una etapa.»", () => {
+    const preview = previewWith(issueOf("TRAMO_MISSING", "b1", "Elige una etapa: hay tareas sin etapa."));
+    expect(boardProblems(mappingOf(ruiz({ workflowId: null })), "b1", ruizSource, preview)).toEqual(["Elige una etapa."]);
   });
 
   it("asks to export again when the board is in the draft but not in the export", () => {

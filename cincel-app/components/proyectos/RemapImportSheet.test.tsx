@@ -150,7 +150,7 @@ describe("RemapImportSheet", () => {
     fireEvent.click(button("Vista previa"));
     expect(
       await screen.findByText(
-        "40 tareas cambian de tramo, 12 de fase, 3 de espacio, 5 pasan a administración, 150 sin cambios, 2 sin fase · revisar",
+        "40 tareas cambian de etapa, 12 de fase, 3 de espacio, 5 pasan a administración, 150 sin cambios, 2 sin fase · revisar",
       ),
     ).toBeTruthy();
     expect(screen.getByText("Levantamiento")).toBeTruthy();
@@ -165,14 +165,14 @@ describe("RemapImportSheet", () => {
     renderSheet();
     await screen.findByText("Cambiar grupo de Madrid 22");
     fireEvent.click(button("Vista previa"));
-    await screen.findByText(/40 tareas cambian de tramo/);
+    await screen.findByText(/40 tareas cambian de etapa/);
 
     fireEvent.click(button("Cambiar grupo de Madrid 22"));
-    expect(screen.queryByText(/40 tareas cambian de tramo/)).toBeNull();
+    expect(screen.queryByText(/40 tareas cambian de etapa/)).toBeNull();
     expect(button("Aplicar").disabled).toBe(true);
 
     fireEvent.click(button("Vista previa"));
-    await screen.findByText(/40 tareas cambian de tramo/);
+    await screen.findByText(/40 tareas cambian de etapa/);
     expect(actions.previewMondayRemapAction).toHaveBeenLastCalledWith(PROJECT_ID, [
       { boardId: "b1", workflowId: DISENO, groupTargets: { "b1-g1": { kind: "admin" } } },
     ]);
@@ -182,7 +182,7 @@ describe("RemapImportSheet", () => {
     const { onApplied, onOpenChange } = renderSheet();
     await screen.findByText("Cambiar grupo de Madrid 22");
     fireEvent.click(button("Vista previa"));
-    await screen.findByText(/40 tareas cambian de tramo/);
+    await screen.findByText(/40 tareas cambian de etapa/);
 
     fireEvent.click(button("Aplicar"));
     expect(await screen.findByText("¿Reacomodar 60 tareas de Madrid 22?")).toBeTruthy();
@@ -201,7 +201,7 @@ describe("RemapImportSheet", () => {
     const { onApplied } = renderSheet();
     await screen.findByText("Cambiar grupo de Madrid 22");
     fireEvent.click(button("Vista previa"));
-    await screen.findByText(/40 tareas cambian de tramo/);
+    await screen.findByText(/40 tareas cambian de etapa/);
     fireEvent.click(button("Aplicar"));
     fireEvent.click(await screen.findByRole("button", { name: "Reacomodar" }));
     expect(await screen.findByText("No tienes permiso para realizar esta acción.")).toBeTruthy();
@@ -221,7 +221,7 @@ describe("RemapImportSheet", () => {
     expect(screen.queryByText("Cambiar grupo de Madrid 22 · Obra")).toBeNull();
 
     fireEvent.click(button("Vista previa"));
-    await screen.findByText(/40 tareas cambian de tramo/);
+    await screen.findByText(/40 tareas cambian de etapa/);
     expect(actions.previewMondayRemapAction).toHaveBeenCalledWith(PROJECT_ID, [
       { boardId: "b1", workflowId: DISENO, groupTargets: {} },
     ]);
@@ -274,7 +274,7 @@ describe("RemapImportSheet", () => {
     const { invalidated } = renderSheet();
     await screen.findByText("Cambiar grupo de Madrid 22");
     fireEvent.click(button("Vista previa"));
-    await screen.findByText(/40 tareas cambian de tramo/);
+    await screen.findByText(/40 tareas cambian de etapa/);
     expect(invalidated()).toEqual([]);
   });
 
@@ -282,7 +282,7 @@ describe("RemapImportSheet", () => {
     const { onApplied, invalidated } = renderSheet();
     await screen.findByText("Cambiar grupo de Madrid 22");
     fireEvent.click(button("Vista previa"));
-    await screen.findByText(/40 tareas cambian de tramo/);
+    await screen.findByText(/40 tareas cambian de etapa/);
     fireEvent.click(button("Aplicar"));
     fireEvent.click(await screen.findByRole("button", { name: "Reacomodar" }));
 

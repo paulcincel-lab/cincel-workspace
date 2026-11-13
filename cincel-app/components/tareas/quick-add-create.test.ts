@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 describe("quickAddTaskVars", () => {
-  it("maps the draft to a UserTaskInput on the tramo's first fase", () => {
+  it("maps the draft to a UserTaskInput on the etapa's first fase", () => {
     expect(quickAddTaskVars(DRAFT, WORKFLOWS)).toEqual({
       input: {
         projectId: "p-roble",
@@ -81,7 +81,7 @@ describe("quickAddTaskVars", () => {
     expect(vars.statusKey).toBe("en_proceso");
   });
 
-  it("falls back to the first tramo and rejects a draft without project", () => {
+  it("falls back to the first etapa and rejects a draft without project", () => {
     expect(quickAddTaskVars({ ...DRAFT, tramoId: null }, WORKFLOWS).input.workflowId).toBe(WORKFLOWS[0].id);
     expect(() => quickAddTaskVars({ ...DRAFT, projectId: null }, WORKFLOWS)).toThrow("INVALID");
   });

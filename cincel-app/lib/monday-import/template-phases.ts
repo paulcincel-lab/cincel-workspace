@@ -105,6 +105,6 @@ export function templateItemPlacement(
 export function placementLabel(placement: TemplateItemPlacement): string {
   if (placement.ignored) return "No se importa";
   if (placement.admin) return "Tareas de administración";
-  if (!placement.tramo) return "Sin tramo";
+  if (!placement.tramo) return "Sin etapa";
   return placement.phase ? `${placement.tramo} · ${placement.phase}` : placement.tramo;
 }

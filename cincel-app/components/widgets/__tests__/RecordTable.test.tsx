@@ -74,7 +74,7 @@ describe("RecordTable, same fixture in every style", () => {
   it("visual: rows in a table, no totals and no heat; budget hidden by hideOn", () => {
     const { container } = renderTable("visual");
     expect(headerLabels()).toEqual([
-      "Tramo",
+      "Etapa",
       "Abiertas",
       "Vencidas",
       "% venc.",

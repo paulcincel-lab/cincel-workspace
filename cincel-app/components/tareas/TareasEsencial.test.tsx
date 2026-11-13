@@ -246,7 +246,7 @@ describe("TareasEsencial", () => {
     expect(replaceState).toHaveBeenLastCalledWith(null, "", "/tareas?responsable=todos");
     cleanup();
 
-    nav.search = "tramo=diseno";
+    nav.search = "etapa=diseno";
     renderEsencial(empty);
     expect(screen.getByText("No hay tareas con estos filtros")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));

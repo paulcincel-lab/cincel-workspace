@@ -147,7 +147,7 @@ describe("ThemeEditor layout", () => {
     for (const [title, count] of [
       ["Interfaz", "19 COLORES"],
       ["Navegación", "8 COLORES"],
-      ["Tramos y estatus", "21 COLORES"],
+      ["Etapas y estatus", "21 COLORES"],
     ] as const) {
       expect(within(screen.getByRole("region", { name: title })).getByText(count)).toBeTruthy();
     }

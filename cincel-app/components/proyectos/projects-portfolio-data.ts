@@ -14,17 +14,18 @@ import type { ProjectListItem, WorkflowRef } from "@/lib/types/core";
 import type { PortfolioRow, PresentationStyle } from "@/lib/types/redesign";
 import type { DistributionSegment, EntityCard, RecordColumn, RecordTableData } from "@/lib/types/widgets";
 import { CSV_BOM, escapeCsvFormula } from "@/lib/utils/export-service";
+import { readEtapaParam } from "@/lib/ui/etapa-param";
 
 /** Statuses the list shows (the archived ones live in the ficha and the legacy list). */
 const LISTED_STATUSES: ReadonlySet<ProjectListItem["status"]> = new Set(["activo", "pausado"]);
 
 export const NO_TRAMO_KEY = "sin-tramo";
-export const NO_TRAMO_LABEL = "Sin tramo";
+export const NO_TRAMO_LABEL = "Sin etapa";
 const NEUTRAL_COLOR_VAR = "var(--muted-foreground)";
 const NO_VALUE = "—";
 
 export const PROJECTS_TITLE = "Proyectos";
-export const PROJECTS_BY_TRAMO_TITLE = "Proyectos por tramo";
+export const PROJECTS_BY_TRAMO_TITLE = "Proyectos por etapa";
 export const BUDGET_COLUMN_LABEL = "Presup. ejercido";
 export const NEXT_DELIVERY_LABEL = "Próxima entrega";
 /** Pill on admin-only columns (Presup. ejercido). */
@@ -182,7 +183,7 @@ export function buildPortfolioTable(
   const columns: RecordColumn[] = [
     { key: "name", label: "Proyecto" },
     { key: "lugar", label: "Lugar", hideOn: ONLY_ANALITICO },
-    { key: "tramo", label: "Tramo" },
+    { key: "tramo", label: "Etapa" },
     { key: "avance", label: "Avance", format: "percent", hideOn: ONLY_ANALITICO },
     { key: "real", label: "Real", format: "percent", hideOn: HIDE_ESENCIAL },
     { key: "plan", label: "Plan", format: "percent", hideOn: HIDE_ESENCIAL },
@@ -421,7 +422,7 @@ export function esencialProjectRows(
 
 /** "7 activos · en qué tramo va cada obra y qué sigue." ("1 activo" in singular). */
 export function esencialDescription(count: number): string {
-  return `${count} ${count === 1 ? "activo" : "activos"} · en qué tramo va cada obra y qué sigue.`;
+  return `${count} ${count === 1 ? "activo" : "activos"} · en qué etapa va cada obra y qué sigue.`;
 }
 
 // ── Analítico (#994): filters, KPI strip, portfolio grouped by tramo, CSV ────
@@ -442,7 +443,7 @@ export const PORTFOLIO_MOSTRAR: readonly PortfolioMostrar[] = ["todos", "vencida
 export const DEFAULT_PORTFOLIO_FILTERS: PortfolioFilters = { mostrar: "todos", tramos: [], mios: false, pausados: false, q: "" };
 
 /** URL params of the Analítico filters (defaults are left out of the URL). */
-export const PORTFOLIO_FILTER_PARAMS = { mostrar: "mostrar", tramo: "tramo", mios: "mios", pausados: "pausados", q: "q" } as const;
+export const PORTFOLIO_FILTER_PARAMS = { mostrar: "mostrar", tramo: "etapa", mios: "mios", pausados: "pausados", q: "q" } as const;
 
 export const PORTFOLIO_ANALITICO_DESCRIPTION = "Portafolio por proyecto: avance contra plan, carga y retrasos.";
 export const PORTFOLIO_NO_MATCH = "Ningún proyecto coincide con los filtros.";
@@ -460,7 +461,7 @@ const MINUS = "−";
 /** The Analítico filters of a URL; unknown values fall back to the defaults. */
 export function parsePortfolioFilters(params: URLSearchParams): PortfolioFilters {
   const mostrar = params.get(PORTFOLIO_FILTER_PARAMS.mostrar);
-  const tramos = (params.get(PORTFOLIO_FILTER_PARAMS.tramo) ?? "")
+  const tramos = (readEtapaParam(params) ?? "")
     .split(",")
     .map((key) => key.trim())
     .filter((key, index, all) => TRAMO_KEY_PATTERN.test(key) && all.indexOf(key) === index);
@@ -595,7 +596,7 @@ export function portfolioFilterGroups(
         ...(mostrar === "vencidas" ? { tone: "destructive" as const, color: "var(--destructive)" } : {}),
       })),
     },
-    { id: PORTFOLIO_FILTER_GROUP.tramo, label: "Tramo", value: filters.tramos.join(","), options: tramoOptions },
+    { id: PORTFOLIO_FILTER_GROUP.tramo, label: "Etapa", value: filters.tramos.join(","), options: tramoOptions },
     {
       id: PORTFOLIO_FILTER_GROUP.mios,
       label: "Solo míos",
@@ -1012,7 +1013,7 @@ function csvField(value: string | number | null): string {
  */
 export function portfolioCsv(rows: PortfolioTableRow[], opts: { canSeeAdminData: boolean }): string {
   const columns = portfolioColumns(opts);
-  const header = ["Tramo", ...columns.flatMap((c) => (c.key === "name" ? [c.label, "Cliente"] : [c.label]))];
+  const header = ["Etapa", ...columns.flatMap((c) => (c.key === "name" ? [c.label, "Cliente"] : [c.label]))];
   const lines = [header.map(csvField).join(";")];
   for (const row of rows) {
     const cells: (string | number | null)[] = [row.tramo];

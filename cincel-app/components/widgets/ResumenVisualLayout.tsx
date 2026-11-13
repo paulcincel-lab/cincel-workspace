@@ -158,9 +158,9 @@ function Hero({
       <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-[18px]">
         {progress.length > 0 ? (
           <div className="flex flex-col gap-1">
-            <span className="text-[13px] text-muted-foreground">Tramo actual</span>
+            <span className="text-[13px] text-muted-foreground">Etapa actual</span>
             <span className="text-[22px] font-semibold" style={{ color: tone.ink }}>
-              {current ? [current.label, taskStats.currentPhase].filter(Boolean).join(" · ") : "Sin tramo asignado"}
+              {current ? [current.label, taskStats.currentPhase].filter(Boolean).join(" · ") : "Sin etapa asignada"}
             </span>
           </div>
         ) : (
@@ -234,7 +234,7 @@ function Hero({
 // ── Tramo bars ──────────────────────────────────────────────────────────────
 
 function TramoBars({ progress, data }: { progress: TramoProgress[]; data: ProjectSummaryInput }) {
-  const label = `Avance por tramo: ${progress.map((step) => `${step.label} ${step.pct} %`).join(", ")}`;
+  const label = `Avance por etapa: ${progress.map((step) => `${step.label} ${step.pct} %`).join(", ")}`;
   return (
     <>
       <div role="img" aria-label={label} className="flex flex-col gap-3.5">
@@ -257,10 +257,10 @@ function TramoBars({ progress, data }: { progress: TramoProgress[]; data: Projec
         })}
       </div>
       <table className="sr-only">
-        <caption>Avance por tramo</caption>
+        <caption>Avance por etapa</caption>
         <thead>
           <tr>
-            <th scope="col">Tramo</th>
+            <th scope="col">Etapa</th>
             <th scope="col">Avance</th>
             <th scope="col">Tareas</th>
           </tr>
@@ -599,7 +599,7 @@ export function ResumenVisualLayout({
             }
           />
         </SectionCard>
-        <SectionCard title="Avance por tramo" index={2}>
+        <SectionCard title="Avance por etapa" index={2}>
           {progress.length > 0 ? (
             <TramoBars progress={progress} data={data} />
           ) : (

@@ -18,7 +18,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const COLUMNS: RecordColumn[] = [
   { key: "tarea", label: "Tarea" },
   { key: "proyecto", label: "Proyecto" },
-  { key: "tramo", label: "Tramo", hideOn: ["esencial"] },
+  { key: "tramo", label: "Etapa", hideOn: ["esencial"] },
   { key: "fase", label: "Fase", hideOn: ["esencial"] },
   { key: "responsable", label: "Responsable" },
   { key: "estatus", label: "Estatus", hideOn: ["esencial"] },

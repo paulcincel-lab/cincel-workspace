@@ -130,11 +130,11 @@ describe("ResumenEsencialLayout", () => {
     const sections = [...container.querySelectorAll("section")].map(
       (s) => s.getAttribute("aria-label") ?? document.getElementById(s.getAttribute("aria-labelledby") ?? "")?.textContent ?? null,
     );
-    expect(sections).toEqual(["Tramos", "Próximas tareas", "Equipo", "Archivos recientes"]);
+    expect(sections).toEqual(["Etapas", "Próximas tareas", "Equipo", "Archivos recientes"]);
 
-    const tramos = screen.getByRole("region", { name: "Tramos" });
+    const tramos = screen.getByRole("region", { name: "Etapas" });
     expect(within(tramos).getByRole("heading", { name: "En Construcción · Obra negra" })).toBeTruthy();
-    expect(within(tramos).getByRole("img").getAttribute("aria-label")).toMatch(/^Tramos: Presale terminado/);
+    expect(within(tramos).getByRole("img").getAttribute("aria-label")).toMatch(/^Etapas: Presale terminado/);
 
     const rows = screen.getAllByTestId("item-row");
     expect(rows.map((r) => r.textContent)).toEqual(["Colocar plafón5 d tarde", "Instalar luminariasBloqueada", "Pintar fachada14 nov"]);
@@ -195,16 +195,16 @@ describe("ResumenEsencialLayout", () => {
     expect(screen.getByRole("link", { name: "Subir archivos" }).getAttribute("href")).toBe("/proyectos/p1/archivos");
   });
 
-  it("no started tramo: the empty state with Iniciar un tramo, no suggested tramos (#1043)", () => {
+  it("no started etapa: the empty state with Iniciar una etapa, no suggested etapas (#1043)", () => {
     renderLayout({
       input: fixtureSummaryInput({
         project: fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [] }),
       }),
     });
-    const card = screen.getByRole("region", { name: "Tramos" });
-    expect(card.textContent).toContain("Este proyecto aún no tiene tramo.");
+    const card = screen.getByRole("region", { name: "Etapas" });
+    expect(card.textContent).toContain("Este proyecto aún no tiene etapa.");
     expect(card.textContent).not.toContain("Presale");
-    expect(within(card).getByRole("button", { name: "Iniciar un tramo" })).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Iniciar una etapa" })).toBeTruthy();
   });
 
   it("started in Diseño: only Diseño, plus Siguiente: Construcción (#1043)", () => {
@@ -218,7 +218,7 @@ describe("ResumenEsencialLayout", () => {
         }),
       }),
     });
-    const card = screen.getByRole("region", { name: "Tramos" });
+    const card = screen.getByRole("region", { name: "Etapas" });
     expect(card.textContent).toContain("Siguiente: Construcción");
     expect(card.textContent).not.toContain("Presale");
   });

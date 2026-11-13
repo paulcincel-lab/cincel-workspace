@@ -98,7 +98,7 @@ describe("EntityCardGrid", () => {
     }
   });
 
-  it("Visual: items without a tramo render an icon chip instead of a tinted head", () => {
+  it("Visual: items without a etapa render an icon chip instead of a tinted head", () => {
     const { container } = renderGrid("visual", { items: entityCardLibraryFixture });
     expect(container.querySelector('[data-slot="entity-head"]')).toBeNull();
     expect(container.querySelectorAll('[data-slot="entity-icon"]')).toHaveLength(entityCardLibraryFixture.length);
@@ -136,7 +136,7 @@ describe("EntityCardGrid", () => {
     expect(container.querySelector('[data-slot="card"]')).toBeNull();
     expect(screen.getByRole("table")).toBeTruthy();
 
-    for (const header of ["Nombre", "Detalle", "Tramo", "Avance", "Abiertas", "Vencidas", "Próxima entrega", "Estado"]) {
+    for (const header of ["Nombre", "Detalle", "Etapa", "Avance", "Abiertas", "Vencidas", "Próxima entrega", "Estado"]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeTruthy();
     }
     expect(shownNumbers(container, entityCardProjectsFixture)).toEqual(expectedNumbers(entityCardProjectsFixture));

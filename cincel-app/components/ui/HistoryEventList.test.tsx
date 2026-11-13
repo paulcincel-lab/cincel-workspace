@@ -52,7 +52,7 @@ describe("HistoryEventList", () => {
     expect(screen.queryByText("Vacío")).toBeNull();
   });
 
-  it("words a tramo move with the tramo names", () => {
+  it("words a etapa move with the etapa names", () => {
     const move: HistoryEvent = {
       ...comment,
       kind: "cambio",

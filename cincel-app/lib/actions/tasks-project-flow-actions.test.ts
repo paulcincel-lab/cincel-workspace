@@ -285,7 +285,7 @@ describe("task reads: filters, viewer scope and order", () => {
     );
   });
 
-  it("keeps the repository order (tramo, fase, sort order)", async () => {
+  it("keeps the repository order (etapa, fase, sort order)", async () => {
     const ordered = [
       detail({ ...userTask, id: "t1" }),
       detail({ ...userTask, id: "t2", phaseId: OTHER_PHASE }),
@@ -298,7 +298,7 @@ describe("task reads: filters, viewer scope and order", () => {
 });
 
 describe("createUserTaskAction", () => {
-  it("creates a task in a fase of its tramo and an espacio of its project", async () => {
+  it("creates a task in a fase of its etapa and an espacio of its project", async () => {
     const row = await createUserTaskAction({
       projectId: PROJECT,
       title: "Medir muros",
@@ -309,13 +309,13 @@ describe("createUserTaskAction", () => {
     expect(row).toMatchObject({ workflowId: WORKFLOW, phaseId: PHASE, spaceId: SPACE });
   });
 
-  it("throws INVALID without a tramo", async () => {
+  it("throws INVALID without a etapa", async () => {
     await expect(createUserTaskAction({ projectId: PROJECT, title: "Medir muros" } as UserTaskInput)).rejects.toThrow(
       /^INVALID/
     );
   });
 
-  it("throws PHASE_MISMATCH for a fase of another tramo", async () => {
+  it("throws PHASE_MISMATCH for a fase of another etapa", async () => {
     await expect(
       createUserTaskAction({ projectId: PROJECT, title: "x", workflowId: WORKFLOW, phaseId: OTHER_PHASE })
     ).rejects.toThrow(/^PHASE_MISMATCH/);
@@ -336,7 +336,7 @@ describe("updateTaskAction", () => {
     });
   });
 
-  it("throws PHASE_MISMATCH for a fase outside the task's tramo", async () => {
+  it("throws PHASE_MISMATCH for a fase outside the task's etapa", async () => {
     await expect(updateTaskAction(TASK, { phaseId: OTHER_PHASE })).rejects.toThrow(/^PHASE_MISMATCH/);
   });
 
@@ -344,7 +344,7 @@ describe("updateTaskAction", () => {
     await expect(updateTaskAction(TASK, { spaceId: OTHER_SPACE })).rejects.toThrow(/^SPACE_MISMATCH/);
   });
 
-  describe("moving a task to another tramo", () => {
+  describe("moving a task to another etapa", () => {
     it("is FORBIDDEN for a non-admin", async () => {
       await expect(updateTaskAction(TASK, { workflowId: OTHER_WORKFLOW })).rejects.toThrow(
         TASK_TRAMO_CHANGE_FORBIDDEN
@@ -354,7 +354,7 @@ describe("updateTaskAction", () => {
       });
     });
 
-    it("lets an admin move it and refreshes both tramos' closing state", async () => {
+    it("lets an admin move it and refreshes both etapas' closing state", async () => {
       session.access = "Administrador";
       await expect(updateTaskAction(TASK, { workflowId: OTHER_WORKFLOW })).resolves.toMatchObject({
         workflowId: OTHER_WORKFLOW,
@@ -370,13 +370,13 @@ describe("updateTaskAction", () => {
       ]);
     });
 
-    it("throws INVALID for an unknown tramo, ADMIN_TASK on an admin task", async () => {
+    it("throws INVALID for an unknown etapa, ADMIN_TASK on an admin task", async () => {
       session.access = "Administrador";
       await expect(updateTaskAction(TASK, { workflowId: UNKNOWN_WORKFLOW })).rejects.toThrow(/^INVALID/);
       await expect(updateTaskAction(ADMIN_TASK, { workflowId: OTHER_WORKFLOW })).rejects.toThrow(/^ADMIN_TASK/);
     });
 
-    it("sending the current tramo again schedules no closing hook", async () => {
+    it("sending the current etapa again schedules no closing hook", async () => {
       await updateTaskAction(TASK, { workflowId: WORKFLOW });
       await runAfter();
       expect(hooks.onTaskClosingChanged).not.toHaveBeenCalled();
@@ -407,7 +407,7 @@ describe("updateTaskAction", () => {
 });
 
 describe("createSubtaskAction", () => {
-  it("inherits the parent's tramo, fase and kind", async () => {
+  it("inherits the parent's etapa, fase and kind", async () => {
     const child = await createSubtaskAction(TASK, { title: "Medir muros" });
     expect(child).toMatchObject({ projectId: PROJECT, workflowId: WORKFLOW, phaseId: PHASE, kind: "usuario" });
     // The child input carries no tramo or fase of its own: they come from the parent.

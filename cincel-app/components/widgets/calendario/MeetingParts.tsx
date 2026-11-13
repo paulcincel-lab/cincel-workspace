@@ -196,7 +196,7 @@ function MeetingDetailBody({
           </Field>
           <Field label="LUGAR">{item.location ?? "—"}</Field>
           <Field label="PROYECTO">{item.project?.name ?? "—"}</Field>
-          <Field label="TRAMO">{item.tramo?.name ?? "—"}</Field>
+          <Field label="ETAPA">{item.tramo?.name ?? "—"}</Field>
           <Field label="ASISTENTES">
             <span className="flex flex-wrap items-center gap-2">
               <PeopleStack people={item.attendees.map((p, i) => ({ id: `${i}:${p.name}`, name: p.name }))} label="Asistentes" />

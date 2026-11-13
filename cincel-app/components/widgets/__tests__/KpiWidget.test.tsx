@@ -47,8 +47,8 @@ describe("KpiWidget · Visual", () => {
     expect(container.querySelectorAll('[data-slot="sparkline"]')).toHaveLength(4);
     expect(screen.getByRole("img", { name: /Tendencia 7 días de Proyectos activos: 9, 10, 10, 11, 11, 12, 12/ })).toBeTruthy();
 
-    const split = screen.getByRole("img", { name: /Por tramo/ });
-    expect(split.getAttribute("aria-label")).toBe("Por tramo: Presale 25 %, Diseño 33 %, Construcción 42 %");
+    const split = screen.getByRole("img", { name: /Por etapa/ });
+    expect(split.getAttribute("aria-label")).toBe("Por etapa: Presale 25 %, Diseño 33 %, Construcción 42 %");
     const segments = split.querySelectorAll("span");
     expect(segments).toHaveLength(3);
     expect(segments[0].getAttribute("style")).toContain("width: 25%");

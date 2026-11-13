@@ -194,7 +194,7 @@ function renderTeam(props: Partial<TeamProps> = {}) {
 }
 
 function table() {
-  return screen.getByRole("table", { name: "Personas por tramo" });
+  return screen.getByRole("table", { name: "Personas por etapa" });
 }
 
 function text(el: Element | null) {
@@ -258,7 +258,7 @@ describe("PeopleWidget · Personas Analítico", () => {
   });
 
   it("keeps ?abiertos and ?persona", () => {
-    window.history.replaceState(null, "", "/personas?abiertos=diseno&persona=ana&tramo=diseno");
+    window.history.replaceState(null, "", "/personas?abiertos=diseno&persona=ana&etapa=diseno");
     const first = renderTeam();
     expect(screen.getByRole("button", { name: "Contraer Ana Ruiz" })).toBeTruthy();
     expect(screen.getByText("Oficina Polanco")).toBeTruthy();
@@ -268,7 +268,7 @@ describe("PeopleWidget · Personas Analítico", () => {
     const params = new URLSearchParams(window.location.search);
     expect(params.get("persona")).toBe("valeria");
     expect(params.get("abiertos")).toBe("diseno");
-    expect(params.get("tramo")).toBe("diseno");
+    expect(params.get("etapa")).toBe("diseno");
 
     // A reload reads the same state back.
     first.unmount();
@@ -337,7 +337,7 @@ describe("PeopleWidget · Personas Analítico", () => {
   it("Exportar downloads visible rows", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-09T18:00:00Z"));
-    window.history.replaceState(null, "", "/personas?tramo=diseno");
+    window.history.replaceState(null, "", "/personas?etapa=diseno");
     const blobs: Blob[] = [];
     const createObjectURL = vi.fn((blob: Blob) => {
       blobs.push(blob);

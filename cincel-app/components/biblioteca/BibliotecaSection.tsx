@@ -95,7 +95,7 @@ function patchLinks(client: QueryClient, section: BibliotecaSectionSlug, update:
 function filterHref(section: ResourceSection, next: { tipo: TipoFilter | null; tramo: TramoFilter | null }): string {
   const params = new URLSearchParams();
   if (next.tipo) params.set("tipo", next.tipo);
-  if (next.tramo) params.set("tramo", next.tramo);
+  if (next.tramo) params.set("etapa", next.tramo);
   const qs = params.toString();
   return `/biblioteca/${section}${qs ? `?${qs}` : ""}`;
 }
@@ -240,7 +240,7 @@ export function BibliotecaSection({ section, tipo = null, tramo = null }: Biblio
     })),
   ];
   const tramoChips = [
-    { key: "tramo-todos", label: "Todos los tramos", pressed: tramo === null, href: filterHref(section, { tipo, tramo: null }) },
+    { key: "tramo-todos", label: "Todas las etapas", pressed: tramo === null, href: filterHref(section, { tipo, tramo: null }) },
     ...(Object.keys(TRAMO_FILTER_LABEL) as TramoFilter[]).map((key) => ({
       key: `tramo-${key}`,
       label: TRAMO_FILTER_LABEL[key],

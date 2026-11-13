@@ -50,7 +50,7 @@ import type { RecordTableData } from "@/lib/types/widgets";
 const table: RecordTableData = {
   columns: [
     { key: "nombre", label: "Nombre" },
-    { key: "tramo", label: "Tramo" },
+    { key: "tramo", label: "Etapa" },
   ],
   rows: [{ id: "p1", nombre: "Casa Espino", tramo: "Diseño" }],
 };

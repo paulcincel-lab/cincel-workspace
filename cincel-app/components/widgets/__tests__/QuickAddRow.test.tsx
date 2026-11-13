@@ -154,7 +154,7 @@ describe("QuickAddRow", () => {
     expect(input.value).toBe("@luis revisar");
   });
 
-  it("suggests the least-loaded person of the tramo when nobody is set", () => {
+  it("suggests the least-loaded person of the etapa when nobody is set", () => {
     const { input } = renderRow({ context: { label: "Diseño", projectId: "p-roble", tramoId: "w-diseno" } });
     typeInto(input, "Revisar planos");
     expect(hint()).toContain("Luisa Gómez tiene 1 abierta en");
@@ -200,12 +200,12 @@ describe("QuickAddRow", () => {
 
   it("slash opens the Asistente with the query", () => {
     const { input, onCreate } = renderRow();
-    typeInto(input, "/ cerrar el tramo de Diseño");
-    expect(hint()).toContain("Pedir al asistente: “cerrar el tramo de Diseño”");
+    typeInto(input, "/ cerrar la etapa de Diseño");
+    expect(hint()).toContain("Pedir al asistente: “cerrar la etapa de Diseño”");
     fireEvent.keyDown(input, { key: "Enter" });
     const state = useAssistantUi.getState();
     expect(state.open).toBe(true);
-    expect(state.pendingPrompt?.text).toBe("cerrar el tramo de Diseño");
+    expect(state.pendingPrompt?.text).toBe("cerrar la etapa de Diseño");
     expect(state.contextOverride).toEqual({ projectId: "p-roble" });
     expect(onCreate).not.toHaveBeenCalled();
     expect(input.value).toBe("");
@@ -258,20 +258,20 @@ describe("QuickAddRow", () => {
     expect(input.value).toBe("");
   });
 
-  it("uses the context tramo with · del tramo", () => {
+  it("uses the context etapa with · de la etapa", () => {
     const { input } = renderRow();
     typeInto(input, "Revisar");
     const chips = document.querySelector('[data-slot="quick-add-chips"]');
-    expect(chips?.textContent).toContain("· del tramo");
+    expect(chips?.textContent).toContain("· de la etapa");
     expect(chips?.textContent).toContain("Tarea Revisar");
     expect(chips?.textContent).toContain("Sin asignar");
     expect(chips?.textContent).toContain("Media");
   });
 
-  it("a #tramo token replaces the context tramo", async () => {
+  it("a #etapa token replaces the context etapa", async () => {
     const { input, onCreate } = renderRow();
     typeInto(input, "Revisar #presale");
-    expect(document.querySelector('[data-slot="quick-add-chips"]')?.textContent).not.toContain("· del tramo");
+    expect(document.querySelector('[data-slot="quick-add-chips"]')?.textContent).not.toContain("· de la etapa");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisar", tramoId: "w-presale" }));
     await screen.findByText("Creada: Creada");
@@ -283,7 +283,7 @@ describe("QuickAddRow", () => {
     expect(root?.getAttribute("data-variant")).toBe(variant);
     expect(input.placeholder).toBe(
       variant === "row"
-        ? "Nueva tarea en Diseño…  @persona  #tramo  fecha  !prioridad  ·  / asistente"
+        ? "Nueva tarea en Diseño…  @persona  #etapa  fecha  !prioridad  ·  / asistente"
         : "Escribe para agregar una tarea…",
     );
     if (variant === "row") expect(root?.tagName).toBe("TR");

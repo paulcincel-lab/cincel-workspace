@@ -163,11 +163,11 @@ describe("ResumenAnaliticoLayout", () => {
     expect(screen.getByText("Tareas abiertas")).toBeTruthy();
     expect(screen.getByText("Retraso promedio")).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Ir a sección" });
-    for (const name of ["Tramos y fases", "Avance vs plan", "Carga del equipo"]) {
+    for (const name of ["Etapas y fases", "Avance vs plan", "Carga del equipo"]) {
       expect(within(nav).getByRole("link", { name })).toBeTruthy();
     }
     expect(within(nav).getByRole("link", { name: /^Tareas/ }).getAttribute("href")).toBe("#s-tareas");
-    for (const heading of ["Tramos y fases", "Avance contra plan", "Carga del equipo", "Tareas por tramo"]) {
+    for (const heading of ["Etapas y fases", "Avance contra plan", "Carga del equipo", "Tareas por etapa"]) {
       expect(screen.getByRole("heading", { level: 2, name: heading })).toBeTruthy();
     }
     expect(document.getElementById("s-tramos")).toBeTruthy();
@@ -178,7 +178,7 @@ describe("ResumenAnaliticoLayout", () => {
     expect(actions.getTareasListPage).not.toHaveBeenCalled();
   });
 
-  it("«Tareas por tramo» pages each group from the server; the counts come from the summary (#1051)", async () => {
+  it("«Tareas por etapa» pages each group from the server; the counts come from the summary (#1051)", async () => {
     actions.getTareasListPage.mockResolvedValue({ rows: [], nextCursor: null, total: 4 });
     renderLayout(fixtureSummaryInput(), { pageSize: 2 });
     const section = document.getElementById("s-tareas")!;
@@ -269,15 +269,15 @@ describe("ResumenAnaliticoLayout", () => {
     expect(screen.queryByText("Detectado")).toBeNull();
   });
 
-  it("Tramos y fases: the empty state without a started tramo; only started tramos plus the Siguiente hint (#1043)", () => {
+  it("Etapas y fases: the empty state without a started etapa; only started etapas plus the Siguiente hint (#1043)", () => {
     renderLayout(
       fixtureSummaryInput({
         project: fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [], stages: [] }),
       }),
     );
     const section = document.getElementById("s-tramos")!;
-    expect(section.textContent).toContain("Este proyecto aún no tiene tramo.");
-    expect(within(section).getByRole("button", { name: "Iniciar un tramo" })).toBeTruthy();
+    expect(section.textContent).toContain("Este proyecto aún no tiene etapa.");
+    expect(within(section).getByRole("button", { name: "Iniciar una etapa" })).toBeTruthy();
     expect(within(section).queryByText("Levantamiento")).toBeNull();
     cleanup();
 
@@ -329,7 +329,7 @@ describe("ResumenAnaliticoLayout", () => {
     const taskCell = (rowId: string, column: string) =>
       document.querySelector<HTMLElement>(`#s-tareas td[data-cell-row="${rowId}"][data-cell-column="${column}"]`)!;
 
-    it("Tarea, Fase, Responsable, Estatus and Vence edit; Días de retraso and Tramos y fases stay inert", () => {
+    it("Tarea, Fase, Responsable, Estatus and Vence edit; Días de retraso and Etapas y fases stay inert", () => {
       renderLayout();
       for (const column of ["title", "phase", "responsable", "status", "due"]) {
         expect(taskCell("t-obra-1", column).dataset.cellState).toBe("editable");
@@ -360,7 +360,7 @@ describe("ResumenAnaliticoLayout", () => {
       for (const column of ["title", "phase", "due"]) expect(taskCell("t-obra-1", column).dataset.cellState).toBe("locked");
     });
 
-    it("Fase lists the fases of the task's tramo and saves through updateTaskAction", async () => {
+    it("Fase lists the fases of the task's etapa and saves through updateTaskAction", async () => {
       actions.updateTaskAction.mockResolvedValue({ ok: true, data: {} });
       renderLayout();
       fireEvent.click(taskCell("t-obra-3", "phase"));

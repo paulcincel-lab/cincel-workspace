@@ -18,7 +18,7 @@ describe("theme editor model", () => {
   it("shows every token exactly once across the sections", () => {
     const shown = TOKEN_SECTIONS.flatMap((s) => s.tokens.map((t) => t.name));
     expect([...shown].sort()).toEqual([...TOKEN_NAMES].sort());
-    expect(TOKEN_SECTIONS.map((s) => s.title)).toEqual(["Interfaz", "Navegación", "Tramos y estatus"]);
+    expect(TOKEN_SECTIONS.map((s) => s.title)).toEqual(["Interfaz", "Navegación", "Etapas y estatus"]);
   });
 
   it("labels every type role", () => {

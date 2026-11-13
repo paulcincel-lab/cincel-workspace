@@ -10,6 +10,7 @@ import { Hydrate } from "@/lib/query/hydrate";
 import { qk } from "@/lib/query/keys";
 import { bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
 import { getQueryClient } from "@/lib/query/server";
+import { pickEtapaParam } from "@/lib/ui/etapa-param";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -44,7 +45,7 @@ export default async function BibliotecaSeccionPage({
 
   return (
     <Hydrate qc={qc}>
-      <BibliotecaSection section={seccion} tipo={parseTipo(sp.tipo)} tramo={parseTramo(sp.tramo)} />
+      <BibliotecaSection section={seccion} tipo={parseTipo(sp.tipo)} tramo={parseTramo(pickEtapaParam(sp))} />
     </Hydrate>
   );
 }

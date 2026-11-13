@@ -48,9 +48,9 @@ import { weekLabel } from "./WeeklyPaceChart";
 const STYLES: PresentationStyle[] = ["visual", "esencial", "analitico"];
 /** Each style's section titles (frames Inicio-Visual, Inicio-Esencial, Inicio-Analitico). */
 const SECTION_TITLES: Record<PresentationStyle, string[]> = {
-  visual: ["Ritmo semanal", "Tareas por tramo", "Requiere atención", "Agenda de hoy", "Proyectos en curso"],
+  visual: ["Ritmo semanal", "Tareas por etapa", "Requiere atención", "Agenda de hoy", "Proyectos en curso"],
   esencial: ["Lo que vence esta semana", "Requiere atención", "Ritmo semanal", "Avance de proyectos"],
-  analitico: ["Atención", "Ritmo semanal", "Carga por persona", "Tareas abiertas por tramo", "Agenda de hoy"],
+  analitico: ["Atención", "Ritmo semanal", "Carga por persona", "Tareas abiertas por etapa", "Agenda de hoy"],
 };
 /** Each style's empty copy with no data. */
 const EMPTY_COPY: Record<PresentationStyle, string[]> = {

@@ -142,7 +142,7 @@ export const LOCK_REASON = {
   /** Not the task's responsable nor an admin (`requireTaskWriter`). */
   taskWriter: "Solo el responsable o un admin puede cambiar esta tarea.",
   /** Tramo change (#1022): admins only. */
-  tramo: "Solo un admin puede mover la tarea de tramo.",
+  tramo: "Solo un admin puede mover la tarea de etapa.",
   /** Responsable without `canChangeResponsible`. */
   responsible: "Solo un admin puede cambiar el responsable.",
   /** Apoyo (equipo de apoyo, #1038): the same permission as the Responsable. */
@@ -152,7 +152,7 @@ export const LOCK_REASON = {
   /** Fase of a subtask: it inherits the parent's. */
   subtaskPhase: "La fase viene de la tarea principal.",
   /** Admin tasks have no tramo, fase nor espacio. */
-  adminTask: "Las tareas de administración no tienen tramo, fase ni espacio.",
+  adminTask: "Las tareas de administración no tienen etapa, fase ni espacio.",
   /** Project fields: project admin rules of `updateProjectAction` / `setProjectCurrentTramoAction`. */
   project: "Solo un admin puede cambiar este proyecto.",
 } as const;
