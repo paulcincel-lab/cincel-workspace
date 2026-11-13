@@ -38,7 +38,7 @@ const PLAN_MESSAGES: [PlanIssueCode, string][] = [
   ["FILE_MISSING", 'File 88 ("plano.pdf") is in files/index.json but /data/monday/run-1/files/88/plano.pdf is not on disk'],
   ["FILE_MISSING", 'File 89 ("foto.jpg") is not in files/index.json'],
   ["STATUS_DEFAULTED", 'Status label 5 ("Urgente") of column status has no equivalent; defaulted to pendiente'],
-  ["TRAMO_MISSING", "3 tasks of board 901 resolve no etapa; choose the board's etapa or a etapa for the group"],
+  ["ETAPA_MISSING", "3 tasks of board 901 resolve no etapa; choose the board's etapa or a etapa for the group"],
   ["PHASE_UNRESOLVED", '"Muros" matches no fase; it imports without one for review'],
   ["CLIENT_MISSING", 'Project "Casa Norte" has no client; it gets the task "Asignar cliente y origen"'],
   ["ADMIN_ASSIGNEE_CLEARED", "Admin task: Luis Pérez removed (not administrators)"],
@@ -87,7 +87,7 @@ describe("ISSUE_FIX_STEP", () => {
 
   it("fixes clients on Equivalencias, people on Personas and Drive on Opciones", () => {
     expect(ISSUE_FIX_STEP.CLIENT_UNRESOLVED).toBe("equivalencias");
-    expect(ISSUE_FIX_STEP.TRAMO_MISSING).toBe("equivalencias");
+    expect(ISSUE_FIX_STEP.ETAPA_MISSING).toBe("equivalencias");
     expect(ISSUE_FIX_STEP.PHASE_UNRESOLVED).toBe("equivalencias");
     expect(ISSUE_FIX_STEP.PERSON_UNMATCHED).toBe("personas");
     expect(ISSUE_FIX_STEP.DRIVE_NOT_CONFIGURED).toBe("opciones");
@@ -117,7 +117,7 @@ describe("groupPreviewWarnings", () => {
   it("groups warnings by code with a counted title, leaving blocking issues out", () => {
     const groups = groupPreviewWarnings([
       issue("PHASE_UNRESOLVED"),
-      issue("TRAMO_MISSING", true),
+      issue("ETAPA_MISSING", true),
       issue("PERSON_UNMATCHED"),
       issue("PHASE_UNRESOLVED"),
       issue("CLIENT_MISSING"),

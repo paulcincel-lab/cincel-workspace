@@ -41,11 +41,11 @@ se sobrescribe.
 | `create_rfc` | escritura externa | `canCreateActivity` | todos |
 
 `onboard_client` da de alta el cliente (o reutiliza el que ya existe con el mismo
-nombre), crea el proyecto sin tramo y lo liga al cliente —como cliente del
+nombre), crea el proyecto sin etapa y lo liga al cliente —como cliente del
 proyecto si quien lo pide es administrador; si no, como contacto del proyecto, y
-avisa que un administrador debe asignarlo— y luego inicia el tramo elegido
+avisa que un administrador debe asignarlo— y luego inicia el etapa elegido
 (las plantillas de `workflow_task_templates` de sus fases activas, vía
-`startTramoAction`; Presale por defecto) con el responsable indicado, más
+`startEtapaAction`; Presale por defecto) con el responsable indicado, más
 `extraTasks` opcionales.
 
 Acciones de servidor: `lib/actions/activities-actions.ts`

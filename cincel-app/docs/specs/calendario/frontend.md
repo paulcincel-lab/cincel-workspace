@@ -4,13 +4,13 @@ Companion of [backend.md](./backend.md) (types, loaders, tools). Phases and issu
 
 Board names used below: `Main` (Visual · Día / Semana / Mes), `Esencial`, `Analitico`, `Asistente` (panel on Semana), `Sidebar`, `P1-Barra` (Barra para pedir, Visual semana), `P2-Resumen` (Resumen, Esencial), `P3-Alertas` (Días que avisan, Visual semana), `P4-Reunion` (Antes y después, Analítico), `P5-Planear` (Planear mi semana, Visual por persona). Boards named `Artboard-…` are not part of the design.
 
-Rules from `cincel-app/AGENTS.md`, ADR 0004 and 0005 apply everywhere: one layout per Estilo through `PageStyleLayout`; per-style markup only in `components/widgets/*`; tokens only (no hex in components; the canvas hexes map to the Azul Cincel tokens and tramo slots of #981); font weight ≤ 600; motion off under `prefers-reduced-motion`; Spanish sentence-case copy; reuse the kit before adding a component. Data rules from `docs/specs/query-migration/plan.md` and `zustand.md`: server state in TanStack Query, UI state in Zustand, shareable state in the URL; `scripts/check-data-patterns.mjs` must pass.
+Rules from `cincel-app/AGENTS.md`, ADR 0004 and 0005 apply everywhere: one layout per Estilo through `PageStyleLayout`; per-style markup only in `components/widgets/*`; tokens only (no hex in components; the canvas hexes map to the Azul Cincel tokens and etapa slots of #981); font weight ≤ 600; motion off under `prefers-reduced-motion`; Spanish sentence-case copy; reuse the kit before adding a component. Data rules from `docs/specs/query-migration/plan.md` and `zustand.md`: server state in TanStack Query, UI state in Zustand, shareable state in the URL; `scripts/check-data-patterns.mjs` must pass.
 
 ## 1. Overview
 
 `/calendario` is a new main menu item after Tareas. It shows, for the visible range only:
-- **Tasks** on their commitment date (fallback delivery date), coloured by tramo slot, overdue with a destructive outline, completed greyed (and hidden with "Ocultar completadas").
-- **Meetings and events** with time, white card with a tramo-coloured left edge, from Google Calendar (the viewer's own) or created in Cincel, with attendees and place or Meet link.
+- **Tasks** on their commitment date (fallback delivery date), coloured by etapa slot, overdue with a destructive outline, completed greyed (and hidden with "Ocultar completadas").
+- **Meetings and events** with time, white card with a etapa-coloured left edge, from Google Calendar (the viewer's own) or created in Cincel, with attendees and place or Meet link.
 
 Each Estilo has a Día / Semana / Mes selector and "Hoy". The asistente plans from here: the Barra para pedir, Resumen del día / semana, Días que avisan, Antes y después de la reunión and Planear mi semana. **The asistente never changes data on its own**: every change is a proposal first (dashed on the calendar, a soft card, or a table with checkboxes), then Aplicar / Cancelar, then Deshacer.
 
@@ -39,7 +39,7 @@ Each Estilo has a Día / Semana / Mes selector and "Hoy". The asistente plans fr
 | `mostrar` | `todo` \| `tareas` \| `reuniones` | `todo` |
 | `quien` | `yo` \| `todos` | `yo`; `todos` only with `canViewTeamCalendar` |
 | `proyectos` | comma-separated ids | none |
-| `tramo`, `responsable` | id | none |
+| `etapa`, `responsable` | id | none |
 | `apoyo` | `0` to exclude support tasks | included |
 | `ocultar` | `1` / `0` | `useHideCompletedPreference()` |
 | `modo` | `planear` | none; in Semana it opens the Planear mi semana section expanded and scrolls to it (§7.7) |
@@ -69,14 +69,14 @@ ProposalOverlay    (Phase 3) draws the open proposal on the body
 - **+ Nuevo** is a menu: "Tarea" (`useNewTaskUi(s => s.openNewTask)({ deliveryDate: fecha }, "calendario")`; `NewTaskSource` gains `"calendario"`; the date field the dialog fills is the commitment date, Decision F4) and "Reunión" (Phase 2, `NewMeetingDialog`).
 - **Toolbar**: `role="group" aria-label="Vista"` with three `aria-pressed` buttons; "Anterior" / "Siguiente" are icon buttons with `aria-label` "Anterior" / "Siguiente" and prefetch the adjacent range on hover/focus (§9.3); "Hoy" jumps to today (disabled when the range contains today and `fecha` is today).
 - **Filters** (one state, three presentations):
-  - Visual (`Main`): segmented "Mostrar" (Todo / Tareas / Reuniones), segmented "Responsable" (Yo / Todos), `ProjectFilter` ("Proyecto: Todos ▾"), `HideCompletedSwitch` ("Ocultar completadas"), legend (Presale / Diseño / Construcción / Reunión (con hora) / Vencida; tramo names from `qk.catalog.tramos()`), hint "Clic en un número de día para abrir ese día" (Mes only).
+  - Visual (`Main`): segmented "Mostrar" (Todo / Tareas / Reuniones), segmented "Responsable" (Yo / Todos), `ProjectFilter` ("Proyecto: Todos ▾"), `HideCompletedSwitch` ("Ocultar completadas"), legend (Presale / Diseño / Construcción / Reunión (con hora) / Vencida; etapa names from `qk.catalog.etapas()`), hint "Clic en un número de día para abrir ese día" (Mes only).
   - Esencial (`Esencial`): pills "Mi agenda" / "Todo el equipo" (= quien), checkbox "Ocultar completadas". No project filter (Decision F5: it stays in the URL if set elsewhere and shows a removable chip).
-  - Analítico (`Analitico`): `FilterCard` with groups MOSTRAR, RESPONSABLE, TRAMO, plus `ProjectFilter` and `IncludeSupportSwitch` in `extra`.
+  - Analítico (`Analitico`): `FilterCard` with groups MOSTRAR, RESPONSABLE, ETAPA, plus `ProjectFilter` and `IncludeSupportSwitch` in `extra`.
   - A shared `CalendarioYoTodos` control is **not** added; each style uses its kit control bound to the same URL param (Yo/Todos has no shared component today, `TareasAnalitico.tsx:495`).
 
 ## 4. Body per Estilo and vista
 
-All three read the same `CalendarioRange` (`qk.calendario.range`). Item colours: tramo slot via `tramoColorVar` / `tramoColorClass` (`lib/tramos/tramo-color.ts`); no slot → `--muted-foreground`. Overdue: inset 1.5px `--destructive` ring; completed: 50 % opacity + line-through title; meeting: `--card` background, 1px `--border`, 3px left edge in the tramo colour, time in mono.
+All three read the same `CalendarioRange` (`qk.calendario.range`). Item colours: etapa slot via `etapaColorVar` / `etapaColorClass` (`lib/etapas/etapa-color.ts`); no slot → `--muted-foreground`. Overdue: inset 1.5px `--destructive` ring; completed: 50 % opacity + line-through title; meeting: `--card` background, 1px `--border`, 3px left edge in the etapa colour, time in mono.
 
 ### 4.1 Visual (`Main`, `components/widgets/calendario/CalendarioVisual.tsx`)
 - **Mes**: 7-column month grid (Mon–Sun) of 6 weeks, built on `buildMonthCells` + `CalendarWeekdayHeader` (`components/calendario/calendar-grid.tsx`). Each cell: day number as a button "Abrir el {día} {n}" that switches to Día; up to 3 chips (time prefix for meetings); "+n más" button (opens Día). Today: filled `--primary` circle on the number. Weekend cells `--muted` tint. Days outside the month muted.
@@ -91,14 +91,14 @@ All three read the same `CalendarioRange` (`qk.calendario.range`). Item colours:
   - Semana: + **Mañana**, **Esta semana** (rest of the week).
   - Mes: + **Resto de {mes}** ("Resto de noviembre", sub "16 – 30 nov").
   - Group sub: count (Vencidas) or date ("mié 11 nov", "vie 13 – dom 15").
-- Row: leading mark (a tramo-coloured ring for tasks, a tinted clock disc for meetings), title, line ("Reunión · Madrid 22" or "Madrid 22 · Diseño"), trailing mono when ("10:00", "hoy", "12 nov"; overdue dates as a destructive tint pill).
+- Row: leading mark (a etapa-coloured ring for tasks, a tinted clock disc for meetings), title, line ("Reunión · Madrid 22" or "Madrid 22 · Diseño"), trailing mono when ("10:00", "hoy", "12 nov"; overdue dates as a destructive tint pill).
 - **One-tap complete**: tapping the ring marks the task completed (`setTaskStatusAction` through `useActionMutation`, optimistic, toast "Tarea completada." + Deshacer). The rest of the row opens the detail sheet.
 - Empty group hidden; all empty → empty state (§12).
 
 ### 4.3 Analítico (`Analitico`, `components/widgets/calendario/CalendarioAnalitico.tsx`)
 - `KpiStrip`: TAREAS "{n}" secondary "en el rango"; REUNIONES "{n}" secondary "{h} h en total"; VENCIDAS "{n}" (destructive) secondary "{p} % del rango"; SIN RESPONSABLE "{n}" secondary "asígnalas desde la celda".
 - `GroupedTable` grouped by Día (one group, the day, rows ordered by time), Semana (one group per day), Mes (one group per week "Semana 46 · 9 – 15 nov"; the canvas also merges the tail as "Semanas 48 – 49"; we keep one group per week, Decision F7). Group caption "{n} elementos". Range caption: "Hoy, miércoles 11 nov · por hora", "Semana 46, 9 – 15 nov · por día", "Noviembre 2026 · agrupado por semana".
-- Columns: FECHA (sortable asc/desc, mono "mié 11"), HORA (mono, "—" for tasks), TIPO ("Tarea" / "Reunión"), TÍTULO (link: opens the drawer), PROYECTO, TRAMO (`TramoBadge variant="dot"`), RESPONSABLE / ASISTENTES (name, or "Ana García +2").
+- Columns: FECHA (sortable asc/desc, mono "mié 11"), HORA (mono, "—" for tasks), TIPO ("Tarea" / "Reunión"), TÍTULO (link: opens the drawer), PROYECTO, ETAPA (`EtapaBadge variant="dot"`), RESPONSABLE / ASISTENTES (name, or "Ana García +2").
 - Task rows use the task-table kit: `TableSelection` / `RowSelectCheckbox`, `TaskBulkBar` (status, responsable, fecha, delete via `useDeleteTasks`), `EditableCell` for Responsable and Fecha (`use-task-cell-edits.ts`). Meeting rows are not selectable.
 - Rows come from `calendarioListInfiniteOptions` (§9.2); each group's "Cargar más" uses `LOAD_MORE_TEXT` / `loadMoreText(remaining)` (`components/widgets/table-rows.ts`), groups are computed from `CalendarioRange.days` counts so headers show totals before rows load. No client sort over pages (rule 9): sort is server order (`orderDir`).
 
@@ -107,14 +107,14 @@ All three read the same `CalendarioRange` (`qk.calendario.range`). Item colours:
 One model, three presentations. `useCalendarioDetail()` reads `?evento=` and resolves the item from the range cache, else fetches `qk.calendario.meeting(id)` / `taskSheetOptions(id)`. Closing removes the param (`replaceState`) and returns focus to the item.
 
 Shared fields:
-- Meeting: tramo band, kind chip "Reunión · {tramo}", when ("Hoy, 10:00 – 11:00", "Viernes 13 nov, 12:00 – 13:00"), project · tramo, place, attendee avatars (`PeopleStack`) with "{n} asistentes · Google Calendar" or "· Cincel", note ("Enlace de Meet listo. 2 tareas del proyecto vencen antes de esta reunión." / "Lleva el plano actualizado. …" — the count from `MeetingDetail.relatedOverdue`).
-- Task: kind chip "Tarea · {tramo}", "Vence el {fecha}" or "Vencía el {fecha}", responsable · estatus, note ("Fecha compromiso. Arrastra la tarea a otro día para cambiarla." or, overdue, "Lleva días de retraso. Reprográmala o pide al asistente que proponga una fecha.").
+- Meeting: etapa band, kind chip "Reunión · {etapa}", when ("Hoy, 10:00 – 11:00", "Viernes 13 nov, 12:00 – 13:00"), project · etapa, place, attendee avatars (`PeopleStack`) with "{n} asistentes · Google Calendar" or "· Cincel", note ("Enlace de Meet listo. 2 tareas del proyecto vencen antes de esta reunión." / "Lleva el plano actualizado. …" — the count from `MeetingDetail.relatedOverdue`).
+- Task: kind chip "Tarea · {etapa}", "Vence el {fecha}" or "Vencía el {fecha}", responsable · estatus, note ("Fecha compromiso. Arrastra la tarea a otro día para cambiarla." or, overdue, "Lleva días de retraso. Reprográmala o pide al asistente que proponga una fecha.").
 
 | | Visual (`Main`) | Esencial (`Esencial`) | Analítico (`Analitico`) |
 |---|---|---|---|
 | Container | floating card anchored to the item over the grid (`Popover`, `role="dialog"`, `aria-label` = title, "Cerrar detalle") | bottom sheet (`Sheet side="bottom"`), drag handle, big title 24/600 | right drawer (`Sheet side="right"`, 420px) |
-| Meeting actions | "Unirse a Meet" (when `meetUrl`) or "Cómo llegar" (maps link of `location`), "Abrir proyecto", "✦ Prepara la reunión" | one primary 54px: "Cómo llegar" (or "Unirse a Meet"); secondaries "Abrir proyecto", "✦ Prepara la reunión" | field list (fecha, hora, lugar, proyecto, tramo, asistentes, origen "Google Calendar · sincronizado hace 5 min" or "Cincel"), RELACIONADO (tasks of the project due before: "Ingenierías (Madrid 22) · vencida 9 nov"), HISTORIAL (`history_events` of the event: "Ana García creó la reunión", "Se agregó a Luis Martínez", "El cliente confirmó asistencia"), actions "Unirse a Meet" / "Abrir en Google Calendar", "Crear minuta", "✦ Resume lo pendiente" |
-| Task actions | "Marcar completada" (or "Reabrir"), "Abrir tarea" (`?tarea=`), "✦ Propón otra fecha" | primary "Marcar completada"; secondaries "Cambiar fecha" (date picker), "✦ Propón otra fecha" | fields código, estatus, responsable, fase, prioridad, subtareas; HISTORIAL ("Se creó desde el tramo Diseño", "Cambió la fecha compromiso"); actions "Marcar completada", "Abrir ficha", "✦ Propón otra fecha" |
+| Meeting actions | "Unirse a Meet" (when `meetUrl`) or "Cómo llegar" (maps link of `location`), "Abrir proyecto", "✦ Prepara la reunión" | one primary 54px: "Cómo llegar" (or "Unirse a Meet"); secondaries "Abrir proyecto", "✦ Prepara la reunión" | field list (fecha, hora, lugar, proyecto, etapa, asistentes, origen "Google Calendar · sincronizado hace 5 min" or "Cincel"), RELACIONADO (tasks of the project due before: "Ingenierías (Madrid 22) · vencida 9 nov"), HISTORIAL (`history_events` of the event: "Ana García creó la reunión", "Se agregó a Luis Martínez", "El cliente confirmó asistencia"), actions "Unirse a Meet" / "Abrir en Google Calendar", "Crear minuta", "✦ Resume lo pendiente" |
+| Task actions | "Marcar completada" (or "Reabrir"), "Abrir tarea" (`?tarea=`), "✦ Propón otra fecha" | primary "Marcar completada"; secondaries "Cambiar fecha" (date picker), "✦ Propón otra fecha" | fields código, estatus, responsable, fase, prioridad, subtareas; HISTORIAL ("Se creó desde el etapa Diseño", "Cambió la fecha compromiso"); actions "Marcar completada", "Abrir ficha", "✦ Propón otra fecha" |
 
 - ✦ actions call tools (never free text): "Prepara la reunión" → opens the meeting's Antes tab (Phase 6; before that, the asistente panel with `meeting_prep`); "Propón otra fecha" → `move_tasks` via the asistente with `{ taskIds: [id] }` and the proposal overlay; "Resume lo pendiente" → `meeting_prep`; "Crear minuta" → Después tab.
 - Google-only events (source google, not organizer): read-only; "Abrir en Google Calendar" only.
@@ -160,7 +160,7 @@ Success of a retry: toast "Ya está en Google Calendar." and the note disappears
 
 ### 6.5 Calendario settings (Phase 5)
 - **Ajustes › General** (`lib/shell/settings-sections/general/`, admin): a number field "Horas de trabajo por día" (`calendario.workday_hours`, 1–12, step 0.5, default 6) with the hint "Se usa para la carga del Calendario cuando el puesto no tiene capacidad semanal." Save through the existing general settings action.
-- **Ajustes › Tramos** (`app/(staff)/ajustes/(admin)/tramos/TramosClient.tsx`): each task template row gains "Horas estimadas" (number, 0.5 step, empty = 1 h) for `workflow_task_templates.default_estimated_hours`.
+- **Ajustes › Etapas** (`app/(staff)/ajustes/(admin)/etapas/EtapasClient.tsx`): each task template row gains "Horas estimadas" (number, 0.5 step, empty = 1 h) for `workflow_task_templates.default_estimated_hours`.
 
 ## 7. Asistente features
 
@@ -207,7 +207,7 @@ Success of a retry: toast "Ya está en Google Calendar." and the note disappears
 
 ### 7.6 Antes y después de la reunión (Phase 6, `P4-Reunion`)
 - Lives in the meeting detail as tabs "Antes · preparar" / "Después · minuta" (`Tabs`), and in a "Reuniones" list (Analítico: table FECHA / REUNIÓN / PROYECTO / ESTADO; Visual and Esencial: a list card) with state chips **Hoy**, **Próxima**, **Minuta lista**.
-- **Antes** (`qk.calendario.prep(eventId)`): KPI row AVANCE ("−8 vs plan"), TRAMO ("Diseño · Proyecto ejecutivo"), VENCIDAS ("2 de 15 abiertas"), ÚLTIMA JUNTA ("28 oct · 3 acuerdos, 1 abierto"); "✦ Resumen:" paragraph (template; "✦ Reescribir" asks `meeting_prep { phrasing: true }`); LO VENCIDO list ("Ingenierías · Luis Martínez · 9 nov · 2 d"); ORDEN DEL DÍA PROPUESTO checklist (editable, reorderable with buttons "Subir"/"Bajar"); "Enviar orden del día a asistentes" (`send_agenda` via its confirmation: a dialog listing recipients) and "Copiar" (clipboard, toast "Orden del día copiado.").
+- **Antes** (`qk.calendario.prep(eventId)`): KPI row AVANCE ("−8 vs plan"), ETAPA ("Diseño · Proyecto ejecutivo"), VENCIDAS ("2 de 15 abiertas"), ÚLTIMA JUNTA ("28 oct · 3 acuerdos, 1 abierto"); "✦ Resumen:" paragraph (template; "✦ Reescribir" asks `meeting_prep { phrasing: true }`); LO VENCIDO list ("Ingenierías · Luis Martínez · 9 nov · 2 d"); ORDEN DEL DÍA PROPUESTO checklist (editable, reorderable with buttons "Subir"/"Bajar"); "Enviar orden del día a asistentes" (`send_agenda` via its confirmation: a dialog listing recipients) and "Copiar" (clipboard, toast "Orden del día copiado.").
 - **Después** (`qk.calendario.minutes(eventId)`): NOTAS DE LA REUNIÓN textarea (autosave 1 s debounce via `saveMeetingNotesAction`, "Guardado" status); "✦ Crear minuta" → `extract_minutes` → ACUERDOS · {d} DECISIÓN · {t} TAREAS: decisions ("Decisión: cocina en cuarzo blanco (se guarda en el historial del proyecto).") and a checkbox table TAREA / RESPONSABLE / FECHA (editable before applying; unresolved owner shows "Sin responsable" in `--warning`), follow-up row "Junta de seguimiento con cliente · 25 nov" when mentioned; primary "Crear {n} tareas en {proyecto}" (`create_tasks_from_minutes`) → toast "Creé 4 tareas y agendé la junta del 25 nov." + Deshacer; secondary "Enviar minuta por correo" (`send_minutes`).
 - Per Estilo: Visual = tabs inside the floating card enlarged to a side card over the grid; Esencial = the bottom sheet with two tabs and one big action per tab ("Enviar orden del día" / "Crear tareas"); Analítico = drawer with tables (the `P4-Reunion` board).
 
@@ -244,7 +244,7 @@ New, per-style markup (guarded) — `components/widgets/calendario/`:
 | `MeetingPrepPanel`, `MeetingMinutesPanel`, `MeetingsList` | | 6 |
 | `PlanWeekBoard` | `{ data: PlanWeekData; proposal?: Proposal; … }` | 7 |
 
-Page level (no per-style markup) — `components/calendario/`: `CalendarioClient.tsx` (reads URL + queries, renders `PageHeader`, toolbar, then `PageStyleLayout({ visual, esencial, analitico })`), `CalendarioToolbar.tsx`, `NewMeetingDialog.tsx`, `use-calendario-page.ts` (queries, mutations), `use-calendario-detail.ts`, `use-proposal.ts`. Existing reused: `PageHeader`, `KpiStrip`, `FilterCard`, `GroupedTable`, `EsencialCard`, `EsencialItemRow`, `QuickAddRow`, `ProjectFilter`, `HideCompletedSwitch`, `IncludeSupportSwitch`, `TramoBadge`, `PeopleStack`, `StatusChip`, `TaskBulkBar`, `EditableCell`, `RowActionsMenu`, `ConfirmDeleteDialog`, `EmptyState`, `ErrorState`, `CalendarFeedDialog`, `calendar-grid.tsx`.
+Page level (no per-style markup) — `components/calendario/`: `CalendarioClient.tsx` (reads URL + queries, renders `PageHeader`, toolbar, then `PageStyleLayout({ visual, esencial, analitico })`), `CalendarioToolbar.tsx`, `NewMeetingDialog.tsx`, `use-calendario-page.ts` (queries, mutations), `use-calendario-detail.ts`, `use-proposal.ts`. Existing reused: `PageHeader`, `KpiStrip`, `FilterCard`, `GroupedTable`, `EsencialCard`, `EsencialItemRow`, `QuickAddRow`, `ProjectFilter`, `HideCompletedSwitch`, `IncludeSupportSwitch`, `EtapaBadge`, `PeopleStack`, `StatusChip`, `TaskBulkBar`, `EditableCell`, `RowActionsMenu`, `ConfirmDeleteDialog`, `EmptyState`, `ErrorState`, `CalendarFeedDialog`, `calendar-grid.tsx`.
 
 Guard allowlists (`components/*/…guard.test.ts`, `tests/guards/style-view.guard.test.ts`): add the `calendario` widgets; `CalendarioClient` imports only `@/components/widgets/*` names.
 
@@ -353,11 +353,11 @@ The asistente page context is built by `useCalendarioAssistantContext()` from th
 | title / subtitle | Calendario · "{Mes} {año} · {t} tareas y {r} reuniones · {v} vencidas" · "Semana {n} · …" · "Hoy · …" |
 | views | Día · Semana · Mes · Hoy · Anterior · Siguiente |
 | header actions | Suscribirse · + Nuevo · Tarea · Reunión |
-| filters | Mostrar · Todo · Tareas · Reuniones · Responsable · Yo · Todos · Mi agenda · Todo el equipo · Proyecto: Todos · Tramo · Incluir apoyo · Ocultar completadas · Quitar filtros |
+| filters | Mostrar · Todo · Tareas · Reuniones · Responsable · Yo · Todos · Mi agenda · Todo el equipo · Proyecto: Todos · Etapa · Incluir apoyo · Ocultar completadas · Quitar filtros |
 | legend | Reunión (con hora) · Vencida · Cambio propuesto por el asistente (sin aplicar) |
 | grid | Clic en un número de día para abrir ese día · +{n} más · Abrir el {día} {n} · TAREAS DEL DÍA · SIN HORA · + Tarea para este día · Asistente · Pedir al asistente para el {día} {n} |
 | esencial groups | Vencidas · Hoy · Mañana · Esta semana · Resto de {mes} |
-| analítico | TAREAS · en el rango · REUNIONES · {h} h en total · VENCIDAS · {p} % del rango · SIN RESPONSABLE · asígnalas desde la celda · FECHA · HORA · TIPO · TÍTULO · PROYECTO · TRAMO · RESPONSABLE / ASISTENTES · Tarea · Reunión · {n} elementos · Cargar más |
+| analítico | TAREAS · en el rango · REUNIONES · {h} h en total · VENCIDAS · {p} % del rango · SIN RESPONSABLE · asígnalas desde la celda · FECHA · HORA · TIPO · TÍTULO · PROYECTO · ETAPA · RESPONSABLE / ASISTENTES · Tarea · Reunión · {n} elementos · Cargar más |
 | detail (meeting) | Reunión · {n} asistentes · Google Calendar · Cincel · Unirse a Meet · Cómo llegar · Abrir proyecto · ✦ Prepara la reunión · Abrir en Google Calendar · Crear minuta · ✦ Resume lo pendiente · Enlace de Meet listo. · {n} tareas del proyecto vencen antes de esta reunión. · RELACIONADO · HISTORIAL · Google Calendar · sincronizado hace {t} · Editar · Cancelar reunión · Cerrar detalle |
 | detail (task) | Tarea · Vence el {fecha} · Vencía el {fecha} · Marcar completada · Reabrir · Abrir tarea · Abrir ficha · Cambiar fecha · ✦ Propón otra fecha · Fecha compromiso. Arrastra la tarea a otro día para cambiarla. · Lleva días de retraso. Reprográmala o pide al asistente que proponga una fecha. · Sin asignar |
 | meeting dialog | Nueva reunión · Título · Fecha · Inicio · Fin · Proyecto · Asistentes · Agregar al equipo del proyecto · Lugar · Crear enlace de Meet · Descripción · Crear reunión · Guardar cambios · Reunión creada. Envié la invitación a {n} personas. · Reunión creada en Cincel. Envié la invitación por correo. · ¿Cancelar la reunión? Se avisará a los asistentes. |
@@ -368,7 +368,7 @@ The asistente page context is built by `useCalendarioAssistantContext()` from th
 | proposal | Aplicar · Editar · Cancelar · Aplicar cambios · Aplicar {n} cambios · Aplicar y avisar · Deshacer · propuesta: desde {fecha} · propuesta: nueva reunión · Cambiar {n} fechas compromiso · Incluir {título} · Esta propuesta ya no está vigente. · Pedir de nuevo · Apliqué {a} de {n} cambios. {s} no se pudo: {motivo}. · Cambio deshecho. · No cupo |
 | resumen | Buenos días, {nombre} · Buenas tardes, {nombre} · Buenas noches, {nombre} · Reuniones · Vence hoy · Vence esta semana · En riesgo · Bloqueas a otros · Prepárame · Pasar a mañana · Asignar · Avisa a {nombre} · Propón fecha · Resolver · Reparte esto · ✦ Pasa a mañana lo que no alcances hoy · ✦ Planea mi semana · Reparte el {día} · Tu día · Tu semana, {rango} · Ocultar resumen · Mostrar resumen |
 | alertas | Carga del día · {h} h de {w} h · Libre · Bien · Casi lleno · Sobrecargado · Ausente · Se traslapan · El {día} {n} tiene {h} h de {w} h · ✦ Reparte esto · El {día} se traslapan {n} reuniones · ✦ Resolver traslape · Semana {n} · tu carga por día (jornada de {w} h de trabajo) · Horas estimadas |
-| reunión | Antes · preparar · Después · minuta · AVANCE · {d} vs plan · TRAMO · VENCIDAS · de {n} abiertas · ÚLTIMA JUNTA · {n} acuerdos, {m} abierto · ✦ Resumen: · ✦ Reescribir · LO VENCIDO · ORDEN DEL DÍA PROPUESTO · Subir · Bajar · Enviar orden del día a asistentes · Copiar · Orden del día copiado. · NOTAS DE LA REUNIÓN · Guardado · ✦ Crear minuta · ACUERDOS · {d} DECISIÓN · {t} TAREAS · Decisión: {texto} (se guarda en el historial del proyecto). · TAREA · RESPONSABLE · FECHA · Sin responsable · Crear {n} tareas en {proyecto} · Enviar minuta por correo · Creé {n} tareas y agendé la junta del {fecha}. · Reuniones · Hoy · Próxima · Minuta lista · Sin minuta |
+| reunión | Antes · preparar · Después · minuta · AVANCE · {d} vs plan · ETAPA · VENCIDAS · de {n} abiertas · ÚLTIMA JUNTA · {n} acuerdos, {m} abierto · ✦ Resumen: · ✦ Reescribir · LO VENCIDO · ORDEN DEL DÍA PROPUESTO · Subir · Bajar · Enviar orden del día a asistentes · Copiar · Orden del día copiado. · NOTAS DE LA REUNIÓN · Guardado · ✦ Crear minuta · ACUERDOS · {d} DECISIÓN · {t} TAREAS · Decisión: {texto} (se guarda en el historial del proyecto). · TAREA · RESPONSABLE · FECHA · Sin responsable · Crear {n} tareas en {proyecto} · Enviar minuta por correo · Creé {n} tareas y agendé la junta del {fecha}. · Reuniones · Hoy · Próxima · Minuta lista · Sin minuta |
 | planear | Planear la semana · Planear mi semana · Semana {n} · {rango} · equipo de {proyectos} · tu semana · Por planear · ✦ Arrastra tareas aquí para que el asistente las acomode · ✦ Planear mi semana · PERSONA · Con espacio · Lleno · Sobrecargado · {x}/{w} · No cupo · {Nombre} ya está al 100 % · Planeé {n} tareas de la semana. Avisé a {m} personas. · Mover a… · Desliza para ver más días |
 | asistente | Contexto: Calendario · {rango} · {filtro} · ¿Qué vence antes de la entrega del {fecha}? · Resume mi día de hoy · Busca un hueco de 2 horas para {persona} esta semana · Mueve todo lo vencido a días con menos carga · Agenda la visita de sitio de {proyecto} el jueves… |
 | states | No hay nada en este rango. · Tu agenda está libre. · No hay tareas ni reuniones en este rango. · No hay resultados con estos filtros. · No se pudo cargar el calendario. · Demasiadas solicitudes. Intenta de nuevo en unos minutos. |
@@ -401,5 +401,5 @@ The asistente page context is built by `useCalendarioAssistantContext()` from th
 | F8 | Google refresh trigger | Once-per-session mutation on mount when older than 5 min, plus "Actualizar" |
 | F9 | Where Resumen and Barra sit in Esencial on mobile | Barra first, Resumen collapsed to the greeting line |
 | F10 | Keep the Nueva reunión draft across the Google grant redirect | Yes: `sessionStorage` draft + `?nueva=reunion` reopens the dialog |
-| F11 | The "Tramos" legend in the sidebar (`Sidebar` board) | **Decided (2026-11-11): not built.** The shell sidebar stays as it is; the tramo legend lives in the Visual filter row (§3) |
+| F11 | The "Etapas" legend in the sidebar (`Sidebar` board) | **Decided (2026-11-11): not built.** The shell sidebar stays as it is; the etapa legend lives in the Visual filter row (§3) |
 | F12 | Where Planear mi semana lives | **Decided (2026-11-11):** a collapsible section of the Semana view (§7.7); left for later if it is much trouble |

@@ -10,13 +10,13 @@
  *    aborts before anything is written.
  * 4. Phase A, one transaction: `import_batches (applying)` → contacts
  *    (+ `contact_people`, `provider_profiles`) → projects (`origin
- *    'monday'`, client optional, a `project_stages` row per tramo with
+ *    'monday'`, client optional, a `project_stages` row per etapa with
  *    tasks) → `project_schedules` → espacios (`findOrCreateSpace`, ref
  *    `project_space`) → tasks → child tasks → the "Asignar cliente y
  *    origen" admin task of projects without a client → checklist →
  *    `task_support` → `task_dependencies` → `history_events` →
  *    `schedule_tasks`; `import_files (pending)`; `refreshStageClosed` per
- *    (project, tramo) written (project flow BE §10.5); an `import_refs` row for
+ *    (project, etapa) written (project flow BE §10.5); an `import_refs` row for
  *    every created row, with `row_updated_at` = the row's `updated_at`
  *    after insert (null for rows without one). Rows already in
  *    `import_refs` are skipped, so a second apply of the same export
@@ -189,7 +189,7 @@ export interface PhaseACounts {
   files: number;
   /** Espacios created for `space` groups (project flow BE §10.5). */
   spaces: number;
-  /** `project_stages` rows: one per tramo with tasks of each new project. */
+  /** `project_stages` rows: one per etapa with tasks of each new project. */
   stages: number;
   /** "Asignar cliente y origen" admin tasks of projects without a client. */
   assignClientTasks: number;
@@ -263,7 +263,7 @@ type FlowTask = Omit<PlannedTask, "kind"> & {
 
 /** The project flow fields of a planned project (BE §10.3). */
 type FlowProject = PlannedProject & {
-  tramos?: string[];
+  etapas?: string[];
   currentWorkflowId?: string | null;
 };
 
@@ -288,7 +288,7 @@ export function spaceExternalId(
 
 /**
  * The task columns of a planned task under the project flow rules: an admin
- * task has no tramo, fase, espacio or template; a fase needs a tramo;
+ * task has no etapa, fase, espacio or template; a fase needs a etapa;
  * `closed_at` only on a `completado` task (the table's checks).
  */
 export function flowTaskColumns(
@@ -320,20 +320,20 @@ export function flowTaskColumns(
 }
 
 /**
- * The tramos a new project gets a `project_stages` row for and its current
- * tramo (BE §10.3, §10.5): every tramo its tasks carry (`tramos` when
+ * The etapas a new project gets a `project_stages` row for and its current
+ * etapa (BE §10.3, §10.5): every etapa its tasks carry (`etapas` when
  * translate sets it), and the current one = translate's `currentWorkflowId`,
- * else the highest `sort_order` tramo with tasks, else the board's tramo.
- * The current tramo always has a stage row (BE §3.7).
+ * else the highest `sort_order` etapa with tasks, else the board's etapa.
+ * The current etapa always has a stage row (BE §3.7).
  */
-export function projectTramos(
+export function projectEtapas(
   project: FlowProject,
   taskWorkflowIds: readonly (string | null)[],
   sortOrder: ReadonlyMap<string, number>,
-): { tramos: string[]; currentWorkflowId: string | null } {
+): { etapas: string[]; currentWorkflowId: string | null } {
   const withTasks = [
     ...new Set([
-      ...(project.tramos ?? []),
+      ...(project.etapas ?? []),
       ...taskWorkflowIds.filter((w): w is string => !!w),
     ]),
   ];
@@ -344,11 +344,11 @@ export function projectTramos(
     project.currentWorkflowId !== undefined
       ? project.currentWorkflowId
       : (highest ?? project.workflowId ?? null);
-  const tramos = currentWorkflowId && !withTasks.includes(currentWorkflowId)
+  const etapas = currentWorkflowId && !withTasks.includes(currentWorkflowId)
     ? [...withTasks, currentWorkflowId]
     : withTasks;
   return {
-    tramos: [...tramos].sort((a, b) => (sortOrder.get(a) ?? 0) - (sortOrder.get(b) ?? 0)),
+    etapas: [...etapas].sort((a, b) => (sortOrder.get(a) ?? 0) - (sortOrder.get(b) ?? 0)),
     currentWorkflowId,
   };
 }
@@ -526,7 +526,7 @@ export async function writePhaseA(
     )
   ).length;
 
-  // --- projects (+ a stage per tramo with tasks), project_schedules --------
+  // --- projects (+ a stage per etapa with tasks), project_schedules --------
   const plannedTasks = result.tasks as FlowTask[];
   const tasksOf = new Map<string, FlowTask[]>();
   for (const t of plannedTasks) {
@@ -541,11 +541,11 @@ export async function writePhaseA(
         .from(workflows)
     ).map((w) => [w.id, w.sortOrder]),
   );
-  const tramosOf = new Map<string, ReturnType<typeof projectTramos>>();
+  const etapasOf = new Map<string, ReturnType<typeof projectEtapas>>();
   for (const p of result.projects as FlowProject[]) {
-    tramosOf.set(
+    etapasOf.set(
       p.externalId,
-      projectTramos(
+      projectEtapas(
         p,
         (tasksOf.get(p.externalId) ?? []).map((t) =>
           t.kind === "admin" ? null : t.workflowId,
@@ -568,14 +568,14 @@ export async function writePhaseA(
       progress: p.progress,
       startDate: p.startDate,
       endDate: p.endDate,
-      currentWorkflowId: tramosOf.get(p.externalId)?.currentWorkflowId ?? null,
+      currentWorkflowId: etapasOf.get(p.externalId)?.currentWorkflowId ?? null,
     }),
     byId,
     // The project's import ref names the stages apply wrote (`stageWorkflowIds`), so rollback owns them.
     (p) => ({
       ...p.data,
       stageWorkflowId: undefined,
-      stageWorkflowIds: tramosOf.get(p.externalId)?.tramos ?? [],
+      stageWorkflowIds: etapasOf.get(p.externalId)?.etapas ?? [],
     }),
   );
   counts.projects = newProjects.length;
@@ -587,7 +587,7 @@ export async function writePhaseA(
   const stages = newProjects.flatMap((p) => {
     const projectId = idOf({ kind: "planned", entity: "project", externalId: p.externalId });
     const list = tasksOf.get(p.externalId) ?? [];
-    return (tramosOf.get(p.externalId)?.tramos ?? []).map((workflowId) => {
+    return (etapasOf.get(p.externalId)?.etapas ?? []).map((workflowId) => {
       const first = earliest(list.filter((t) => t.kind !== "admin" && t.workflowId === workflowId));
       return {
         projectId,
@@ -843,7 +843,7 @@ export async function writePhaseA(
     counts.files = translation.files.length;
   }
 
-  // --- project_stages.closed_at of every (project, tramo) written ----------
+  // --- project_stages.closed_at of every (project, etapa) written ----------
   const written = new Map<string, { projectId: string; workflowId: string }>();
   for (const s of stages) written.set(`${s.projectId}:${s.workflowId}`, s);
   for (const t of freshTasks) {
@@ -914,7 +914,7 @@ class Blocked extends Error {
 }
 
 function formatCounts(c: PhaseACounts): string {
-  return `${c.contacts} contacts, ${c.contactPeople} contact people, ${c.providerProfiles} provider profiles, ${c.projects} projects, ${c.projectSchedules} cronogramas, ${c.tasks} tasks, ${c.childTasks} child tasks, ${c.checklistItems} checklist items, ${c.taskSupport} task support rows, ${c.dependencies} dependencies, ${c.comments} comments, ${c.cronogramaRows} cronograma rows, ${c.files} files pending upload, ${c.stages} tramo stages${c.spaces ? `, ${c.spaces} espacios` : ""}${c.assignClientTasks ? `, ${c.assignClientTasks} "Asignar cliente y origen" tasks` : ""}`;
+  return `${c.contacts} contacts, ${c.contactPeople} contact people, ${c.providerProfiles} provider profiles, ${c.projects} projects, ${c.projectSchedules} cronogramas, ${c.tasks} tasks, ${c.childTasks} child tasks, ${c.checklistItems} checklist items, ${c.taskSupport} task support rows, ${c.dependencies} dependencies, ${c.comments} comments, ${c.cronogramaRows} cronograma rows, ${c.files} files pending upload, ${c.stages} etapa stages${c.spaces ? `, ${c.spaces} espacios` : ""}${c.assignClientTasks ? `, ${c.assignClientTasks} "Asignar cliente y origen" tasks` : ""}`;
 }
 
 /** Builds the `apply` handler; tests pass their own database, Drive and phase B. */

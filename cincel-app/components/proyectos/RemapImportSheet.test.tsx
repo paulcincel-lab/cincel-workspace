@@ -97,7 +97,7 @@ function state(boards: Array<{ id: string; name: string; missing?: boolean }>): 
 
 const preview: MondayRemapPreview = {
   tasks: 210,
-  changes: { tramo: 40, phase: 12, space: 3, admin: 5, otherProject: 0, unchanged: 150, phaseUnresolved: 2 },
+  changes: { etapa: 40, phase: 12, space: 3, admin: 5, otherProject: 0, unchanged: 150, phaseUnresolved: 2 },
   samples: [{ taskId: "t1", title: "Levantamiento", before: "Diseño · — · —", after: "Presale · Levantamiento · —" }],
   issues: [],
 };

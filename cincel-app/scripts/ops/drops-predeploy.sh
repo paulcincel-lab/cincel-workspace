@@ -176,7 +176,7 @@ step_check() {
     echo "$n"
     echo '```'
   } | tee "$OUT_DIR/check.md"
-  [ "$n" = "0" ] || die "$n templates have no phase_id; fix them in Tramos y fases before deploying 0025"
+  [ "$n" = "0" ] || die "$n templates have no phase_id; fix them in Etapas y fases before deploying 0025"
 }
 
 step_report() {

@@ -169,7 +169,7 @@ describe("translate: subitems", () => {
         externalId: "3001",
       });
       expect(t.project.externalId).toBe("902");
-      // Child tasks share their parent's group place (no tramo on this board).
+      // Child tasks share their parent's group place (no etapa on this board).
       expect(t).toMatchObject({ kind: "usuario", workflowId: null, phaseId: null, space: null });
     }
     expect(task(r, "3101")).toMatchObject({

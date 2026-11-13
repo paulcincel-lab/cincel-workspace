@@ -31,6 +31,7 @@ export const REPORT_KIND_INFO: Record<(typeof PROJECT_FLOW_REPORT_KINDS)[number]
     title: "Tareas sin fase («Sin fase · revisar»)",
     action: "Líderes de la etapa, o el remapeo",
   },
+  // Compatibility: `task_tramo_inferred` and `project_without_tramo` are stored DATA values (rows already written), not schema names.
   task_tramo_inferred: {
     title: "Tareas sin etapa a las que se asignó la única etapa con esa fase",
     action: "Solo revisar",

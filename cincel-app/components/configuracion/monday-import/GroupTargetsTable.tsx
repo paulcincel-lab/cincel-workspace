@@ -17,7 +17,7 @@ import { decodeClient, encodeClient, type BoardDraft } from "@/lib/monday-import
 import type { MondayBoardSource, MondayImportChoices } from "@/lib/types/monday-import";
 
 /**
- * Groups of a board_as_project or item_as_project board: each one becomes one of the six targets (a tramo, a
+ * Groups of a board_as_project or item_as_project board: each one becomes one of the six targets (a etapa, a
  * fase, an espacio, a separate project, admin tasks or nothing), defaulting to `resolveGroupTarget`. Suggests
  * "Grupo como proyecto" for the whole board when its groups are named like clients. Also used by the remap.
  */
@@ -40,7 +40,7 @@ export function GroupTargetsTable({
   for (const item of source.items) {
     if (item.groupId) itemsByGroup.set(item.groupId, (itemsByGroup.get(item.groupId) ?? 0) + 1);
   }
-  /** "{Tramo} · {Fase}" of a fase target. */
+  /** "{Etapa} · {Fase}" of a fase target. */
   const phaseLabel = (phaseId: string): string | null => {
     for (const workflow of choices.workflows) {
       const phase = workflow.phases.find((candidate) => candidate.id === phaseId);

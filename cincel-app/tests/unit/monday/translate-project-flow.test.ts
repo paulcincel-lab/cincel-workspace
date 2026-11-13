@@ -11,7 +11,7 @@ import {
   type TranslateResult,
 } from "@/scripts/monday/translate";
 
-// Tramos, fases and templates of the catalog.
+// Etapas, fases and templates of the catalog.
 const PRESALE = "a1000000-0000-4000-8000-000000000001";
 const DISENO = "a1000000-0000-4000-8000-000000000002";
 const CONSTRUCCION = "a1000000-0000-4000-8000-000000000003";
@@ -225,7 +225,7 @@ const task = (r: TranslateResult, id: string) => {
 const issuesOf = (r: TranslateResult, code: string) => r.issues.filter((i) => i.code === code);
 
 describe("translate: fase resolution order (brief §4.3)", () => {
-  it("1) the item's template of the tramo gives its fase, even over the title", () => {
+  it("1) the item's template of the etapa gives its fase, even over the title", () => {
     expect(task(run(), "i1")).toMatchObject({
       kind: "workflow",
       templateId: T_PLANOS,
@@ -235,7 +235,7 @@ describe("translate: fase resolution order (brief §4.3)", () => {
     });
   });
 
-  it("1) a template titled like the cleaned title is matched within the task's tramo", () => {
+  it("1) a template titled like the cleaned title is matched within the task's etapa", () => {
     expect(task(run(), "i6")).toMatchObject({
       kind: "workflow",
       templateId: T_COBRO,
@@ -244,7 +244,7 @@ describe("translate: fase resolution order (brief §4.3)", () => {
     });
   });
 
-  it("1) a hand-picked template of another tramo is not used; the title match still applies", () => {
+  it("1) a hand-picked template of another etapa is not used; the title match still applies", () => {
     const input = mappingInput();
     input.boards[0].templateMatches = { i1: T_COBRO };
     const r = run(input);
@@ -269,7 +269,7 @@ describe("translate: fase resolution order (brief §4.3)", () => {
     );
   });
 
-  it("a group never creates a fase; a group named like a fase of one other tramo takes it", () => {
+  it("a group never creates a fase; a group named like a fase of one other etapa takes it", () => {
     const r = run();
     expect(task(r, "i8")).toMatchObject({ workflowId: CONSTRUCCION, phaseId: P_OBRA });
   });
@@ -284,7 +284,7 @@ describe("translate: fase resolution order (brief §4.3)", () => {
 });
 
 describe("translate: espacio, admin and ignored groups", () => {
-  it("an Espacio group puts its tasks in a project espacio named after it; tramo and fase per task", () => {
+  it("an Espacio group puts its tasks in a project espacio named after it; etapa and fase per task", () => {
     expect(task(run(), "i7")).toMatchObject({
       space: "Sala",
       spaceExternalId: "100:g_sala",
@@ -296,7 +296,7 @@ describe("translate: espacio, admin and ignored groups", () => {
     expect(task(run(), "i1")).toMatchObject({ space: null, spaceExternalId: null });
   });
 
-  it("an admin group: kind admin, no tramo, fase, espacio or template; non-admin assignees cleared", () => {
+  it("an admin group: kind admin, no etapa, fase, espacio or template; non-admin assignees cleared", () => {
     const r = run();
     const t = task(r, "i5");
     expect(t).toMatchObject({
@@ -338,8 +338,8 @@ describe("translate: optional client (brief §4.4)", () => {
       phaseId: null,
       project: { externalId: "200" },
     });
-    // It doesn't count in the project's progress or tramos.
-    expect(project).toMatchObject({ progress: 0, tramos: [PRESALE] });
+    // It doesn't count in the project's progress or etapas.
+    expect(project).toMatchObject({ progress: 0, etapas: [PRESALE] });
   });
 
   it("a project with a client gets neither", () => {
@@ -442,22 +442,22 @@ describe("translate: titles (brief §4.7)", () => {
   });
 });
 
-describe("translate: project tramos and current tramo", () => {
-  it("tramos are the distinct tramos of the tasks by sort order; current = the highest", () => {
+describe("translate: project etapas and current etapa", () => {
+  it("etapas are the distinct etapas of the tasks by sort order; current = the highest", () => {
     const project = run().projects.find((p) => p.externalId === "100")!;
     expect(project).toMatchObject({
       workflowId: DISENO,
-      tramos: [PRESALE, DISENO, CONSTRUCCION],
+      etapas: [PRESALE, DISENO, CONSTRUCCION],
       currentWorkflowId: CONSTRUCCION,
     });
     expect(project.data.stageWorkflowIds).toEqual([PRESALE, DISENO, CONSTRUCCION]);
     expect(project).not.toHaveProperty("phases");
   });
 
-  it("a project whose tasks have no tramo keeps the board's as current", () => {
+  it("a project whose tasks have no etapa keeps the board's as current", () => {
     const input = mappingInput();
     input.boards[1].workflowId = null;
     const project = run(input).projects.find((p) => p.externalId === "200")!;
-    expect(project).toMatchObject({ tramos: [], currentWorkflowId: null });
+    expect(project).toMatchObject({ etapas: [], currentWorkflowId: null });
   });
 });

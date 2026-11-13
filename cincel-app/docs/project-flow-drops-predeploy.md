@@ -40,7 +40,7 @@ the scratch copy. It stops at the first failure. Each step can also run alone
 | `report` | `npm run flow:report` against production with the deployed migrate image (`REPORT_IMAGE_TAG` overrides the tag) | saved to `flow-report.md` |
 | `rehearse` | `npm run db:migrate` with `cincel-app-migrate:$NEW_IMAGE_TAG` on the scratch copy | migrations applied, no legacy columns or área tables, `phase_id` not null, `flow_name_key` gone, row counts unchanged |
 
-If `check` is not 0: open Configuración → Tramos y fases, give those templates
+If `check` is not 0: open Configuración → Etapas y fases, give those templates
 a fase, and run the script again. Do not deploy.
 
 ## Record on the release issue

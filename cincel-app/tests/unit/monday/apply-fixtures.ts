@@ -146,19 +146,19 @@ export function io() {
   return { cli, out: () => out.join(""), err: () => err.join("") };
 }
 
-/** The tramo of the project boards of `nestedMapping` unless a test passes its own (see `seedFixtureWorkflow`). */
+/** The etapa of the project boards of `nestedMapping` unless a test passes its own (see `seedFixtureWorkflow`). */
 export const FIXTURE_WORKFLOW = "56656656-0000-4000-8000-0000000000a0";
 
-/** Inserts the `FIXTURE_WORKFLOW` tramo; call it inside the test's rolled-back transaction. */
+/** Inserts the `FIXTURE_WORKFLOW` etapa; call it inside the test's rolled-back transaction. */
 export async function seedFixtureWorkflow(tx: ImportDb): Promise<void> {
-  await tx.insert(workflows).values({ id: FIXTURE_WORKFLOW, key: `wf-${FIXTURE_WORKFLOW}`, name: "Tramo de prueba" });
+  await tx.insert(workflows).values({ id: FIXTURE_WORKFLOW, key: `wf-${FIXTURE_WORKFLOW}`, name: "Etapa de prueba" });
 }
 
 /**
  * The mapping of translate-nested-export.json (checklist, child tasks,
  * item_as_project, crm), with `staffId` as monday user 11 and `clientId` as
  * the client of every project board. Every project board, and both groups of
- * board 901, go to `workflowId`, so tramos already in the database (a group
+ * board 901, go to `workflowId`, so etapas already in the database (a group
  * named "Diseño") never change where the tasks land.
  */
 export function nestedMapping(staffId: string, clientId: string, workflowId: string = FIXTURE_WORKFLOW): MappingInput {
@@ -180,8 +180,8 @@ export function nestedMapping(staffId: string, clientId: string, workflowId: str
         client,
         workflowId,
         groupTargets: {
-          g_obra: { kind: "tramo", workflowId },
-          g_diseno: { kind: "tramo", workflowId },
+          g_obra: { kind: "etapa", workflowId },
+          g_diseno: { kind: "etapa", workflowId },
         },
         columns: {
           name: "title",

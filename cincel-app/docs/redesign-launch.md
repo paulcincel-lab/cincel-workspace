@@ -84,7 +84,7 @@ staff (password or Google, whichever is enabled):
       portfolio, team load; no empty-state errors or spinners that never end.
 - [ ] **Tareas**, all three views: **Lista**, **Tablero** (drag a card to
       another column and back) and **Calendario** (Mes / Semana / Día); the
-      filters (Mías, tramo) change the list.
+      filters (Mías, etapa) change the list.
 - [ ] **A project**: open one from **Proyectos**; its header and every
       section in the project's section nav load.
 - [ ] **Personas**: the directory loads; open one person.

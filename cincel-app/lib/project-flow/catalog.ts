@@ -24,23 +24,23 @@ export const ASSIGN_CLIENT_TASK_TITLE = "Asignar cliente y origen";
 /** Time zone of "today" for system-made task dates (same as TASK_TREND_TIME_ZONE). */
 export const FLOW_TIME_ZONE = "America/Mexico_City";
 
-/** What started an etapa (`tramo_start_batches.trigger`). */
+/** What started an etapa (`etapa_start_batches.trigger`). */
 export type EtapaStartTrigger = "manual" | "on_create" | "on_ready";
 export const ETAPA_START_TRIGGERS: readonly EtapaStartTrigger[] = ["manual", "on_create", "on_ready"];
 
-/** `tramo_start_batches.assignment_mode`. */
+/** `etapa_start_batches.assignment_mode`. */
 export type EtapaAssignmentMode = "self" | "by_phase" | "none";
 
 /**
  * Project history fields (`history_events.field`) written by a start and its undo.
- * Compatibility: the stored values keep the old name (`tramo_*`); rows already in the database use them (renamed with the database in #1130).
+ * Compatibility: these are stored DATA values, not schema names; they keep the old name (`tramo_*`) because rows already in the database use them.
  */
 export const ETAPA_STARTED_FIELD = "tramo_started";
 export const ETAPA_START_UNDONE_FIELD = "tramo_start_undone";
 
 /**
  * `project_flow_migration_report.kind` values (BE §4.4). Compatibility: `task_tramo_inferred` and
- * `project_without_tramo` are stored values and CHECK constraint names, kept until #1130.
+ * `project_without_tramo` are stored DATA values (rows already written use them), not schema names; they keep the old name.
  */
 export const PROJECT_FLOW_REPORT_KINDS = [
   "task_phase_unmatched",

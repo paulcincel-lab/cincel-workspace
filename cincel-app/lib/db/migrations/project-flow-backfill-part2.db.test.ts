@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * 0023 + 0024 on a fresh scratch database, BE §4.2 steps 9–15: stages, current tramo, duplicate
+ * 0023 + 0024 on a fresh scratch database, BE §4.2 steps 9–15: stages, current etapa, duplicate
  * names and the projects_name_lower_uq swap, áreas report, group mapping kind 'area' → 'position'
  * (with and without an existing area mapping), puestos seed, and a second run of 0024.
  * Runs only when TEST_DATABASE_URL points at a Postgres whose user may create databases.
@@ -82,7 +82,7 @@ async function makeFixture(withAreaMapping: boolean): Promise<Fixture> {
     return row.id as string;
   };
   ids.flow = await project("Casa Lomas", "2026-01-01");
-  ids.empty = await project("Sin Tramo", "2026-01-02");
+  ids.empty = await project("Sin Etapa", "2026-01-02");
   ids.x1 = await project("X", "2026-01-03");
   ids.x2 = await project("X", "2026-01-04", "activo", ids.clientB);
   ids.x3 = await project("X (2)", "2026-01-05");
@@ -163,7 +163,7 @@ function backfillSuite(withAreaMapping: boolean) {
     expect(diseno.closed_at).toBeNull();
   });
 
-  it("sets the current tramo to the highest started one and reports projects without one", async () => {
+  it("sets the current etapa to the highest started one and reports projects without one", async () => {
     const [flow] = await fx.sql`select current_workflow_id from core.projects where id = ${fx.ids.flow}`;
     expect(flow.current_workflow_id).toBe(fx.ids.diseno);
 
@@ -210,7 +210,7 @@ function backfillSuite(withAreaMapping: boolean) {
     await fx.sql`update core.projects set deleted_at = now() where id = ${archived.id}`;
   });
 
-  it("reports áreas, their members and their tramos", async () => {
+  it("reports áreas, their members and their etapas", async () => {
     const areas = await reportRows(fx.sql, "area");
     expect(areas).toHaveLength(1);
     expect(areas[0]).toMatchObject({ entity: "area", entity_id: fx.ids.area, value: "Diseño" });
@@ -220,9 +220,9 @@ function backfillSuite(withAreaMapping: boolean) {
     expect(members).toHaveLength(1);
     expect(members[0].detail).toMatchObject({ staffId: fx.ids.staff, areaName: "Diseño", role: "Lider" });
 
-    const tramos = await reportRows(fx.sql, "area_workflow");
-    expect(tramos).toHaveLength(1);
-    expect(tramos[0].detail).toMatchObject({ areaName: "Diseño", workflowKey: "diseno" });
+    const etapas = await reportRows(fx.sql, "area_workflow");
+    expect(etapas).toHaveLength(1);
+    expect(etapas[0].detail).toMatchObject({ areaName: "Diseño", workflowKey: "diseno" });
   });
 
   it("renames the group mapping kind, swaps the check and reports removed area mappings", async () => {
@@ -279,7 +279,7 @@ function backfillSuite(withAreaMapping: boolean) {
     expect(byName.get("Dibujante")).toBe(2);
     expect(byName.get("Comercial")).toBe(4);
     expect(byName.get("Administración")).toBe(1);
-    // No construccion tramo in this fixture, so no candidates for it.
+    // No construccion etapa in this fixture, so no candidates for it.
     expect(byName.get("Residente de obra")).toBe(0);
   });
 

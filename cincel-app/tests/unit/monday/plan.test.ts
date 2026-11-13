@@ -85,7 +85,7 @@ interface FakeDb {
   foreignSchedules: string[];
 }
 
-/** The project flow lookups (BE §10.3): tramos with fases, templates by fase, the saved status map. */
+/** The project flow lookups (BE §10.3): etapas with fases, templates by fase, the saved status map. */
 function translateLookups(): CincelLookups {
   return {
     customStatuses: {
@@ -376,7 +376,7 @@ describe("plan: codes", () => {
       "PROVIDER_SUBTYPE_MISSING",
       "SCHEDULE_EXISTS",
       "DRIVE_NOT_CONFIGURED",
-      "TRAMO_MISSING",
+      "ETAPA_MISSING",
     ]);
     expect([...WARNING_CODES]).toEqual([
       "PERSON_UNMATCHED",
@@ -553,11 +553,11 @@ describe("plan: blocking issues (each cleared by editing the mapping)", () => {
     ]);
   });
 
-  it("MAPPING_INVALID: a group mapped to a tramo that doesn't exist", async () => {
+  it("MAPPING_INVALID: a group mapped to a etapa that doesn't exist", async () => {
     const input = mappingInput();
     board(input, "301").groupTargets = {
-      g_obra: { kind: "tramo", workflowId: "f0000000-0000-4000-8000-000000000002" },
-      g_diseno: { kind: "tramo", workflowId: OTHER_WORKFLOW },
+      g_obra: { kind: "etapa", workflowId: "f0000000-0000-4000-8000-000000000002" },
+      g_diseno: { kind: "etapa", workflowId: OTHER_WORKFLOW },
     };
     const p = await plan(input);
     expect(ofCode(p, "MAPPING_INVALID")).toEqual([
@@ -812,7 +812,7 @@ describe("plan: warnings", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Project flow (BE §10.4, §16): re-runs, tramos, grouped report
+// Project flow (BE §10.4, §16): re-runs, etapas, grouped report
 // ---------------------------------------------------------------------------
 
 /** Every row a plan would create, as import refs: what the database has after its apply. */
@@ -887,31 +887,31 @@ describe("plan: already imported items (brief §4.9)", () => {
   });
 });
 
-describe("plan: TRAMO_MISSING", () => {
-  it("blocks while a board's groups and items resolve no tramo", async () => {
+describe("plan: ETAPA_MISSING", () => {
+  it("blocks while a board's groups and items resolve no etapa", async () => {
     const input = mappingInput();
     board(input, "301").workflowId = null;
     const p = await plan(input);
-    const missing = ofCode(p, "TRAMO_MISSING");
+    const missing = ofCode(p, "ETAPA_MISSING");
     expect(missing.length).toBeGreaterThan(0);
     for (const i of missing) {
       expect(i).toMatchObject({ boardId: "301", blocking: true });
-      expect(i.message).toMatch(/resolves? no tramo/);
+      expect(i.message).toMatch(/resolves? no etapa/);
     }
-    expect(blocking(p).map((i) => i.code)).toContain("TRAMO_MISSING");
+    expect(blocking(p).map((i) => i.code)).toContain("ETAPA_MISSING");
   });
 
-  it("clears with a tramo for each group, or the board's tramo", async () => {
+  it("clears with a etapa for each group, or the board's etapa", async () => {
     const perGroup = mappingInput();
     board(perGroup, "301").workflowId = null;
     board(perGroup, "301").groupTargets = Object.fromEntries(
       ["g_obra", "g_diseno", "g_extra", "g_final"].map((g) => [
         g,
-        { kind: "tramo" as const, workflowId: BOARD_WORKFLOW },
+        { kind: "etapa" as const, workflowId: BOARD_WORKFLOW },
       ]),
     );
-    expect(ofCode(await plan(perGroup), "TRAMO_MISSING")).toEqual([]);
-    expect(ofCode(await plan(mappingInput()), "TRAMO_MISSING")).toEqual([]);
+    expect(ofCode(await plan(perGroup), "ETAPA_MISSING")).toEqual([]);
+    expect(ofCode(await plan(mappingInput()), "ETAPA_MISSING")).toEqual([]);
   });
 
   it("doesn't count admin groups nor already imported tasks", async () => {
@@ -921,7 +921,7 @@ describe("plan: TRAMO_MISSING", () => {
     board(admin, "301").groupTargets = Object.fromEntries(
       ["g_obra", "g_diseno", "g_extra", "g_final"].map((g) => [g, { kind: "admin" as const }]),
     );
-    expect(ofCode(await plan(admin), "TRAMO_MISSING")).toEqual([]);
+    expect(ofCode(await plan(admin), "ETAPA_MISSING")).toEqual([]);
 
     const input = mappingInput();
     board(input, "301").workflowId = null;
@@ -929,7 +929,7 @@ describe("plan: TRAMO_MISSING", () => {
       ["1001", "1002", "1003", "1004", "1005"].map((id) => [id, ROW]),
     );
     const db = fakeDb({ refs: { project: { "301": ROW }, task: tasks } });
-    expect(ofCode(await plan(input, db), "TRAMO_MISSING")).toEqual([]);
+    expect(ofCode(await plan(input, db), "ETAPA_MISSING")).toEqual([]);
   });
 });
 
@@ -963,9 +963,9 @@ describe("plan: grouped plan.md", () => {
   const grouped: Plan = {
     issues: [
       issue("PROJECT_NAME_TAKEN", true, 'An active project named "Casa Lomas" exists already; set another name in projectNames', "301"),
-      issue("PHASE_UNRESOLVED", false, '"Muros" matches no fase of its tramo', "301", "1004"),
-      issue("TRAMO_MISSING", true, '2 tasks of group "Depto Roma" resolve no tramo; choose the board\'s tramo or a tramo for the group', "701"),
-      issue("PHASE_UNRESOLVED", false, '"Acabados | final" matches no fase of its tramo', "301", "1005"),
+      issue("PHASE_UNRESOLVED", false, '"Muros" matches no fase of its etapa', "301", "1004"),
+      issue("ETAPA_MISSING", true, '2 tasks of group "Depto Roma" resolve no etapa; choose the board\'s etapa or a etapa for the group', "701"),
+      issue("PHASE_UNRESOLVED", false, '"Acabados | final" matches no fase of its etapa', "301", "1005"),
       issue("CLIENT_MISSING", false, '"Casa sin cliente" has no client', "501", "6003"),
     ],
     boards: [{ boardId: "301", name: "Casa Lomas", strategy: "board_as_project", ...counts }],
@@ -999,11 +999,11 @@ describe("plan: grouped plan.md", () => {
         "|---|---|---|",
         '| 301 | - | An active project named "Casa Lomas" exists already; set another name in projectNames |',
         "",
-        "### TRAMO_MISSING (1)",
+        "### ETAPA_MISSING (1)",
         "",
         "| Board | Item | Message |",
         "|---|---|---|",
-        '| 701 | - | 2 tasks of group "Depto Roma" resolve no tramo; choose the board\'s tramo or a tramo for the group |',
+        '| 701 | - | 2 tasks of group "Depto Roma" resolve no etapa; choose the board\'s etapa or a etapa for the group |',
         "",
         "## Warnings",
         "",
@@ -1011,8 +1011,8 @@ describe("plan: grouped plan.md", () => {
         "",
         "| Board | Item | Message |",
         "|---|---|---|",
-        '| 301 | 1004 | "Muros" matches no fase of its tramo |',
-        '| 301 | 1005 | "Acabados \\| final" matches no fase of its tramo |',
+        '| 301 | 1004 | "Muros" matches no fase of its etapa |',
+        '| 301 | 1005 | "Acabados \\| final" matches no fase of its etapa |',
         "",
         "### CLIENT_MISSING (1)",
         "",

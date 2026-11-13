@@ -249,10 +249,8 @@ export const projectSpaces = core.table(
  * One "Iniciar etapa" run that created tasks (BE §3.9), for undo. Written only
  * when at least one task was created.
  */
-// Compatibility: the SQL names (table, indexes, checks) keep `tramo_*` until the database rename (#1130);
-// only the TypeScript export is `etapa*`.
 export const etapaStartBatches = core.table(
-  "tramo_start_batches",
+  "etapa_start_batches",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id")
@@ -278,13 +276,13 @@ export const etapaStartBatches = core.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("tramo_start_batches_trigger_check", sql`${t.trigger} in ('manual','on_create','on_ready')`),
-    check("tramo_start_batches_mode_check", sql`${t.assignmentMode} in ('self','by_phase','none')`),
-    index("idx_tramo_start_batches_project_workflow").on(t.projectId, t.workflowId, t.createdAt),
-    index("idx_tramo_start_batches_workflow_id").on(t.workflowId),
-    index("idx_tramo_start_batches_started_by_id").on(t.startedById),
-    index("idx_tramo_start_batches_undone_by_id").on(t.undoneById),
-    index("idx_tramo_start_batches_previous_current").on(t.previousCurrentWorkflowId),
+    check("etapa_start_batches_trigger_check", sql`${t.trigger} in ('manual','on_create','on_ready')`),
+    check("etapa_start_batches_mode_check", sql`${t.assignmentMode} in ('self','by_phase','none')`),
+    index("idx_etapa_start_batches_project_workflow").on(t.projectId, t.workflowId, t.createdAt),
+    index("idx_etapa_start_batches_workflow_id").on(t.workflowId),
+    index("idx_etapa_start_batches_started_by_id").on(t.startedById),
+    index("idx_etapa_start_batches_undone_by_id").on(t.undoneById),
+    index("idx_etapa_start_batches_previous_current").on(t.previousCurrentWorkflowId),
   ]
 );
 

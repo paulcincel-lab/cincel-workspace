@@ -42,7 +42,7 @@
 6. Control de horario is an org setting with `enabled` and `requiredFrom`; before that date entries are optional and excluded from payroll export; location is never stored.
 7. The assistant runs on every page with page context; tools marked "Confirmar" require an approval from the user (AI SDK `needsApproval`) before acting.
 8. Cutto is a separate product; Cincel only deep-links and keeps an adapter whose API methods are disabled until `CUTTO_API_URL` is set.
-9. Vocabulary follows Project Flow (Tramo, Fase, Espacio, Puesto). Tramo colors are `chart-1..3` (Presale, Diseño, Construcción).
+9. Vocabulary follows Project Flow (Etapa, Fase, Espacio, Puesto). Etapa colors are `chart-1..3` (Presale, Diseño, Construcción).
 10. No blocked chains: Phase 1 (contracts) lands the migration, types, capabilities, shell, widget library, registries and extension points; every later phase depends only on it and owns its own files (§21).
 11. Rollout via `user_preferences.redesign_enabled` with org default `OrgAppearance.redesignDefault` and kill switch `OrgAppearance.redesignAvailable`, enforced server-side.
 12. Round 1 of the senior review (`docs/review/redesign-review.md`) is applied with the coordinator's binding decisions; see "Review round 1 fixes" at the end.
@@ -75,7 +75,7 @@
 | `lib/ui/preferences.ts`, `lib/ui/themes.ts` | extends `lib/theme/primary-color{,-server}.ts` (same read-with-fallback pattern, `app-settings-repository`) | `getAppSetting` / `setAppSetting` |
 | `lib/ui/appearance-css.ts` | extends the `<style id="primary-color">` injection in `app/layout.tsx` | replaces it |
 | `lib/ui/contrast.ts` | new (pure, client-importable; one pair list for editor, action and test) | — |
-| `lib/tramos/compat.ts` | new; wraps existing `workflows` rows, `lib/areas/area-color.ts`, `isAdministratorRole` (Project Flow helpers when present) | review B7 |
+| `lib/etapas/compat.ts` | new; wraps existing `workflows` rows, `lib/areas/area-color.ts`, `isAdministratorRole` (Project Flow helpers when present) | review B7 |
 | `lib/shell/nav-items/<domain>.ts` | new extension point (one file per phase) | review B5 |
 | `lib/notifications/notify.ts`, `digest.ts` | new (no notification system); sends through `lib/email/index.ts` `sendMail` and `lib/email/templates/layout.ts` | `after()` like `projects-actions.ts` |
 | `lib/my-space/reminder-parser.ts` | new (no existing equivalent) | `localIsoDate` from `task-trend.ts` |
@@ -481,7 +481,7 @@ A `*.db.test.ts` applies the migration on an empty DB and on a fixture with `app
 
 ## 5. Seed data: themes, type scale, shape
 
-`lib/ui/themes.ts` (the frontend's module name, FE §14.1; one module for both sides) exports `THEME_PRESETS: Record<ThemeId, OrgAppearance>`. **This section is the single source of truth for token values (review B1): the frontend spec §14 references these tables instead of repeating them, and the seed migration (§4), `THEME_PRESETS` and the presets test use them. The `globals.css` fallback stays today's Grafito values until Phase 9 (review B17).** `chart-1..3` are the tramo colors (Presale, Diseño, Construcción); `chart-4`/`chart-5` are extra series; `chart-N-ink` is text on a `chart-N` tint (accepted from FE, Annex C · FE2).
+`lib/ui/themes.ts` (the frontend's module name, FE §14.1; one module for both sides) exports `THEME_PRESETS: Record<ThemeId, OrgAppearance>`. **This section is the single source of truth for token values (review B1): the frontend spec §14 references these tables instead of repeating them, and the seed migration (§4), `THEME_PRESETS` and the presets test use them. The `globals.css` fallback stays today's Grafito values until Phase 9 (review B17).** `chart-1..3` are the etapa colors (Presale, Diseño, Construcción); `chart-4`/`chart-5` are extra series; `chart-N-ink` is text on a `chart-N` tint (accepted from FE, Annex C · FE2).
 
 ### 5.1 Token values (light/dark per theme; source of truth for both specs)
 
@@ -716,13 +716,13 @@ import type { PresentationStyle } from "@/lib/types/redesign";
 
 export type Series7 = number[];                                   // 7 points, oldest → newest
 export type Tone = "default" | "ok" | "warn" | "critical";
-export type TramoKey = string;                                    // workflows.key
+export type EtapaKey = string;                                    // workflows.key
 
 export type KpiDatum = {
   key: string; label: string; value: number; display?: string;
   delta?: { value: number; good: boolean; caption: string };     // week-over-week
   series7?: Series7; avg30?: number; min30?: number; max30?: number;
-  split?: { tramo: TramoKey; share: number }[];                  // share 0–1
+  split?: { etapa: EtapaKey; share: number }[];                  // share 0–1
   caption?: string; href?: string;
   visibleIn?: PresentationStyle[];                               // omitted = all styles (review B13)
 };
@@ -739,7 +739,7 @@ export type ProgressItem = {
 };
 
 export type AttentionItem = {
-  id: string; title: string; href: string; project: string; tramo: TramoKey | null;
+  id: string; title: string; href: string; project: string; etapa: EtapaKey | null;
   reason: string; tone: Tone;
   assignee: { id: string; name: string; initials: string } | null;
   due: string | null; daysLate: number | null;
@@ -747,7 +747,7 @@ export type AttentionItem = {
 
 export type AgendaItem = {
   id: string; title: string; start: string; end?: string; allDay?: boolean; estimated?: boolean;
-  project?: string; tramo?: TramoKey | null; attendees?: string[]; href?: string;
+  project?: string; etapa?: EtapaKey | null; attendees?: string[]; href?: string;
   meetingUrl?: string;           // only when a Cutto URL is stored on the event (none until Cutto Q1)
 };
 
@@ -756,13 +756,13 @@ export type Availability = "libre" | "ocupado" | "saturado" | "vacaciones";
 export type PersonDatum = {
   id: string; name: string; initials: string; photoUrl?: string | null;
   puesto?: string | null;        // Project Flow positions when present, else null (no access role as puesto)
-  tramo?: TramoKey | null; open: number; overdue: number; activeProjects?: number; occupancyPct?: number;
+  etapa?: EtapaKey | null; open: number; overdue: number; activeProjects?: number; occupancyPct?: number;
   weekHours?: number | null; availability?: Availability[]; href?: string;
 };
 
 export type EntityCard = {
   id: string; title: string; subtitle?: string; href?: string; iconName?: string;   // lucide icon name
-  tramo?: TramoKey | null; progress?: number;
+  etapa?: EtapaKey | null; progress?: number;
   badges?: { label: string; tone: Tone }[];
   meta?: { label: string; value: string }[];
 };
@@ -779,7 +779,7 @@ export type RecordTableData = {
 };
 ```
 
-Rules: Esencial and Analítico render from the same data (Analítico reads `avg30`/`min30`/`max30`, `plan`, `secondary`/`extra`, heat; Esencial reads `label`/`value`); `visibleIn` lets a datum appear only in some styles without the page branching on style. `colorVar` for tramos comes from `tramoColorVar(workflowKey)` in `lib/tramos/compat.ts`; `vacaciones` comes from approved vacation requests.
+Rules: Esencial and Analítico render from the same data (Analítico reads `avg30`/`min30`/`max30`, `plan`, `secondary`/`extra`, heat; Esencial reads `label`/`value`); `visibleIn` lets a datum appear only in some styles without the page branching on style. `colorVar` for etapas comes from `etapaColorVar(workflowKey)` in `lib/etapas/compat.ts`; `vacaciones` comes from approved vacation requests.
 
 ---
 
@@ -787,7 +787,7 @@ Rules: Esencial and Analítico render from the same data (Analítico reads `avg3
 
 Every actions file listed below has a sibling flags module `<file>.flags.ts` exporting `IMPLEMENTED` (§9.10); the actions files themselves are `"use server"` and export only async functions.
 
-Auth notation: **staff** = any session from `requireCapabilityUser()` (the caller is `user.member.id`); **owner** = staff, and every query filters by the caller's id (a row of someone else → `FORBIDDEN`, a missing row → `NOT_FOUND`); capabilities are the §12 helpers (`canManageAppearance`, `canManageTimeTracking`, `canViewTeamHours`, `canDecideVacations`) or existing resolved capabilities by their real names (`team.canViewTeam`, `clients.canViewClients`, `activities.canCreateActivity`, `activities.canChangeResponsible`, `portal.manageAccess`). Admin-only data (Project Flow admin tasks, client and origin fields) is filtered in every read through `canSeeAdminData` from `lib/tramos/compat.ts` (§9.7). Error codes are thrown as `Error("CODE")` or `Error("CODE: detail")` and mapped by `actionErrorText(err, context?)` (§9.10).
+Auth notation: **staff** = any session from `requireCapabilityUser()` (the caller is `user.member.id`); **owner** = staff, and every query filters by the caller's id (a row of someone else → `FORBIDDEN`, a missing row → `NOT_FOUND`); capabilities are the §12 helpers (`canManageAppearance`, `canManageTimeTracking`, `canViewTeamHours`, `canDecideVacations`) or existing resolved capabilities by their real names (`team.canViewTeam`, `clients.canViewClients`, `activities.canCreateActivity`, `activities.canChangeResponsible`, `portal.manageAccess`). Admin-only data (Project Flow admin tasks, client and origin fields) is filtered in every read through `canSeeAdminData` from `lib/etapas/compat.ts` (§9.7). Error codes are thrown as `Error("CODE")` or `Error("CODE: detail")` and mapped by `actionErrorText(err, context?)` (§9.10).
 
 ### 7.1 Preferences and org appearance
 
@@ -924,7 +924,7 @@ Chat route `POST /api/asistente/chat`, body `{ id: string (thread uuid generated
 ```ts
 export type InicioData = {
   kpis: KpiDatum[];               // proyectos_activos, vencidas, bloqueadas, revisiones_7d, completadas_semana (visibleIn: ["analitico"])
-  tasksByTramo: DistributionSegment[];   // value = open, secondary = overdue, extra = { diasProm }
+  tasksByEtapa: DistributionSegment[];   // value = open, secondary = overdue, extra = { diasProm }
   weeklyPace: { weekStart: string; created: number; completed: number }[];   // 8 weeks
   attention: AttentionItem[];
   myDay: AgendaItem[];            // events, tasks due today, the caller's reminders
@@ -933,7 +933,7 @@ export type InicioData = {
 };
 ```
 
-KPI values come from the metrics helper (§8.0.1) over the existing dashboard sources; `tasksByTramo` uses the generalized grouping (§8.0.2) with `tramoColorVar` from `lib/tramos/compat.ts`. `plan`/`budgetPct` are `null` until a plan source exists (budget only with `canSeeAdminData`).
+KPI values come from the metrics helper (§8.0.1) over the existing dashboard sources; `tasksByEtapa` uses the generalized grouping (§8.0.2) with `etapaColorVar` from `lib/etapas/compat.ts`. `plan`/`budgetPct` are `null` until a plan source exists (budget only with `canSeeAdminData`).
 
 ### 7.11 `lib/actions/people-actions.ts` (new)
 
@@ -1004,7 +1004,7 @@ export type PortfolioRow = {
 | `POST /api/cron/tick` | §13 (host cron only) |
 | `lib/integrations/cutto-links.ts` (client-safe) | `channelUrl(projectId)`, `meetingUrl(meetingId)`, `personChatUrl(email)` from `NEXT_PUBLIC_CUTTO_BASE_URL` (§11.2) |
 | `lib/ui/contrast.ts` (client-safe) | `CONTRAST_PAIRS`, `checkContrast(tokens, mode)` (§8.2) |
-| `lib/tramos/compat.ts` | `listTramos`, `tramoLabel`, `tramoColorSlot`, `tramoColorVar`, `phaseLabel`, `canSeeAdminData` (§9.7) |
+| `lib/etapas/compat.ts` | `listEtapas`, `etapaLabel`, `etapaColorSlot`, `etapaColorVar`, `phaseLabel`, `canSeeAdminData` (§9.7) |
 
 ---
 
@@ -1158,7 +1158,7 @@ Examples (now = Fri 2026-11-06 14:14):
 ### 8.9 Search (`lib/search/search.ts`)
 
 One query per type, run in parallel, each limited to `limit`, then merged:
-- `proyecto`: `projects.name` and `code` (`ILIKE %q%`, trigram similarity for ranking) — scoped like `fetchProjectsAction`. url `/proyectos/<id>`; subtitle = current tramo label · status.
+- `proyecto`: `projects.name` and `code` (`ILIKE %q%`, trigram similarity for ranking) — scoped like `fetchProjectsAction`. url `/proyectos/<id>`; subtitle = current etapa label · status.
 - `tarea`: `tasks.title` live and not archived, scoped like `fetchTasksAction`; url `/tareas/<id>`; subtitle = project name · due date.
 - `persona`: active `staff` (name, last_name, email) → `/personas/equipo/<id>`; `contacts` (name) only with `clients.canViewClients` → `/personas/clientes?contacto=<id>` (subtitle "Cliente"/"Proveedor"/"Socio"; client contacts only with `canSeeAdminData` once Project Flow makes clients admin-only).
 - `archivo`: `drive_files.file_name` joined to `project_links` visible to the caller → web view link.
@@ -1225,7 +1225,7 @@ Notes, checklists, reminders, notifications, Gmail data, assistant threads/actio
 - `kind` privacy: §8.8.
 
 ### 9.7 Admin-only data and Project Flow compatibility (review B7, B8)
-- `lib/tramos/compat.ts` (contracts phase) is the only place the redesign touches tramo/fase/admin concepts. It exposes `listTramos()` (from `workflows` rows, keys `presale`/`diseno`/`construccion`), `tramoLabel(key)`, `tramoColorSlot(key)` (1–3), `tramoColorVar(key)`, `phaseLabel(phaseId)` (null while no fase catalog exists) and `canSeeAdminData(user)` (re-exports Project Flow's helper when present, else `isAdministratorRole`). Nothing in this feature imports Project Flow modules directly.
+- `lib/etapas/compat.ts` (contracts phase) is the only place the redesign touches etapa/fase/admin concepts. It exposes `listEtapas()` (from `workflows` rows, keys `presale`/`diseno`/`construccion`), `etapaLabel(key)`, `etapaColorSlot(key)` (1–3), `etapaColorVar(key)`, `phaseLabel(phaseId)` (null while no fase catalog exists) and `canSeeAdminData(user)` (re-exports Project Flow's helper when present, else `isAdministratorRole`). Nothing in this feature imports Project Flow modules directly.
 - Every aggregate and read in this feature filters through `canSeeAdminData`: `fetchInicioAction` (attention, myDay, KPIs), `fetchPersonaDetailAction` (tasks, counts), `fetchProjectsPortfolioAction` (`open`, `overdue`, `nextDelivery`, `budgetSpentPct`), `fetchPeopleOverviewAction` (counts), `searchWorkspaceAction`, and the assistant read tools (`get_task`, `list_my_tasks`, `get_project`, `team_workload_summary`, `list_activities_due`). Without the capability, admin tasks (`kind = 'admin'` once Project Flow lands) and client/origin fields are absent; `nextDelivery` never names an admin task.
 - Proyecto · Resumen "Cliente y contactos" data is returned only to `canSeeAdminData` or to project members (`project_members`) while clients are not admin-only; once Project Flow makes the client admin-only, only `canSeeAdminData`.
 
@@ -1300,7 +1300,7 @@ Input schemas are sketches (`z.object` keys; `?` = optional); names resolve thro
 | `add_task_comment` | `{ taskId: uuid, text: string, mentions?: string[] }` | all (task visible) | yes | `addTaskCommentAction` |
 | `add_checklist_item` | `{ taskId: uuid, item: string, done?: boolean }` | task manager or act-assign | no | checklist actions |
 | `create_tasks_from_notes` | `{ text?: string, emailThreadId?: string, project: string }` (one of text/emailThreadId; audio out of scope) | act-create | yes | `createUserTaskAction` × n |
-| `rebalance_workload` | `{ tramo?: string, maxPerPerson?: number }` | lead | yes | `assignTaskAction` × n |
+| `rebalance_workload` | `{ etapa?: string, maxPerPerson?: number }` | lead | yes | `assignTaskAction` × n |
 
 **Agenda y calendario (6)** — Cincel events are task dates plus Google Calendar (the existing one-way "Cincel" calendar); creating events with attendees writes to the staff member's primary calendar and therefore needs the `calendar` grant upgraded to `calendar.events` (Annex C, §11.1).
 
@@ -1385,7 +1385,7 @@ Input schemas are sketches (`z.object` keys; `?` = optional); names resolve thro
 | `parametric_cost_estimate` | `{ area: number, use: string, finishLevel: "economico" \| "medio" \| "alto" }` | lead | no | org cost table (Annex C: `app_settings('parametric_costs')`, empty by default → tool explains it is not configured) |
 | `zoning_check` | `{ project }` | all | no | compares ficha fields (niveles, área libre, altura, cajones) with the zoning fields stored in the ficha; missing data → lists what is missing |
 | `site_photo_log` | `{ project, photos: string[] (attachment ids), notes? }` | Residente/lead | yes | attaches to the project's bitácora (Cronograma `schedule_task_events`) and proposes % per partida |
-| `schedule_from_template` | `{ project, template: string, startDate: date }` | lead | yes | Project Flow `startTramo` when present; otherwise template tasks via `createUserTaskAction` |
+| `schedule_from_template` | `{ project, template: string, startDate: date }` | lead | yes | Project Flow `startEtapa` when present; otherwise template tasks via `createUserTaskAction` |
 | `moodboard_from_references` | `{ project, images: string[] }` | Diseño puesto or lead | no | model vision → palette + materials `render_table` |
 | `progress_report` | `{ project, period: "semana" \| "mes" }` | lead | yes | Cronograma report export URL + summary |
 
@@ -1458,7 +1458,7 @@ Added to `lib/auth/permissions.ts` (these are the only new names; everything els
 | `canManageTimeTracking(user)` | `user.access === "Administrador"` | |
 | `canViewTeamHours(user)` | `user.access === "Administrador" \|\| user.access === "Dirección"` | same pattern as `canViewSensitiveStaffData` (Q4) |
 | `canDecideVacations(user)` | `user.access === "Administrador" \|\| user.access === "Dirección"` | review B12 |
-| `canSeeAdminData(user)` | from `lib/tramos/compat.ts` (Project Flow helper when present, else `isAdministratorRole`) | re-exported here for one import site |
+| `canSeeAdminData(user)` | from `lib/etapas/compat.ts` (Project Flow helper when present, else `isAdministratorRole`) | re-exported here for one import site |
 
 Existing names used by this spec: `team.canViewTeam`, `clients.canViewClients`, `clients.canCreateClient`, `activities.canCreateActivity`, `activities.canChangeResponsible`, `activities.canDeleteActivity`, `clients.canDeleteClient`, `projects.canDeleteProject`, `portal.manageAccess`.
 
@@ -1471,7 +1471,7 @@ Existing names used by this spec: `team.canViewTeam`, `clients.canViewClients`, 
 | `general` | `canManageGeneralSettings` (today's rule, keeps Dirección where today allows it) |
 | `tema` | `canManageAppearance` (Administrador) |
 | `horario` (settings) | `canManageTimeTracking` (Administrador); the page's team-report section and `/api/horario/export` accept `canViewTeamHours` (Administrador, Dirección), so the segment guard is `canManageTimeTracking \|\| canViewTeamHours` and the settings form renders only with `canManageTimeTracking` |
-| `estatus`, `permisos`, `monday`, `google`, `tramos`, `puestos` | Administrador (today's rule) |
+| `estatus`, `permisos`, `monday`, `google`, `etapas`, `puestos` | Administrador (today's rule) |
 
 - `saveGeneralSettingsAction` / `restoreGeneralSettingsAction` switch to `canManageGeneralSettings` in Phase 6 (same rule as today).
 - Personal settings (`perfil`, `apariencia`, `notificaciones`, `integraciones`) need only a staff session.
@@ -1529,7 +1529,7 @@ lib/db/schema/{_schema,shared,people,index}.ts                                  
 lib/db/migrations/<generated>_redesign_contracts.sql (+ meta)                       new, generated once (§4)
 lib/types/{redesign,widgets}.ts, lib/validation/redesign.ts                         new
 lib/ui/{preferences,themes,appearance-css,contrast}.ts                              new
-lib/tramos/compat.ts                                                                new
+lib/etapas/compat.ts                                                                new
 lib/shell/nav-items/<domain>.ts (+ index.ts)                                        new (extension point)
 lib/metrics/{series,widgets}.ts                                                     new (extend lib/dashboard/*)
 lib/repositories/owner-scoped.ts                                                    new
@@ -1708,12 +1708,12 @@ This section is identical in both redesign specs (only cross-references differ).
 
 | Phase | Name | Owns (implements) |
 |---|---|---|
-| 1 | Contracts and foundation | ONE migration PR with all new tables (incl. `cron_leases`) (§4); `lib/types/redesign.ts`, `lib/types/widgets.ts` (§6); all 62 §7 action signatures + zod schemas as stubs (Rule 1), each actions file with its sibling flags module `lib/actions/<domain>-actions.flags.ts` (`IMPLEMENTED`, §9.10); user-preference actions `fetchMyPreferencesAction` / `updateMyPreferencesAction` fully implemented; `fetchOrgAppearanceAction` implemented as a reader in `org-appearance-actions.ts`; `general_settings.company` schema fields `instagramUrl`, `contactEmail` + defaults in `lib/settings/general-settings-schema.ts`; photo routes `POST /api/staff/me/photo`, `GET /api/staff/[id]/photo` + `removeMyPhotoAction` fully implemented (§7.2); `lib/errors.ts` (`actionErrorText` + new codes incl. `NOT_IMPLEMENTED`, §9.10); capabilities in `lib/auth/permissions.ts` (`canManageAppearance`, `canManageGeneralSettings`, `canManageTimeTracking`, `canViewTeamHours`, `canDecideVacations`, `canSeeAdminData` re-export) and per-segment guards (§12); `lib/tramos/compat.ts`; `lib/ui/contrast.ts`, `lib/ui/themes.ts`, appearance resolver + cookie + SSR style block (flag-gated, B17/B18, §8.1–§8.2); `app/(staff)/layout.tsx`, AppShell, Sidebar (TimeClock slot hidden while `IMPLEMENTED.clockInAction` in `time-tracking-actions.flags.ts` is false / the `fetchMyTodayAction` stub reports `enabled: false`), PageHeader, EstiloSwitch, StyleProvider/StyleView, Toaster, EmptyState/ErrorState/LoadingSkeleton; the whole widget library + ListPage/FiltersBar/FormSheet/FormDialog/SettingsSection; nav config with extension points; `lib/notifications/notify.ts` (full: row insert, preferences, quiet hours, email pending, §8.3) + cron jobs `notifications-deliver` and `daily-digest`; the daily-producers registry `lib/cron/daily-producers/index.ts` with a stub `vencimiento.ts` (§13); ALL new email templates (recordatorio, resumen-diario, vacaciones-decision, vacaciones-solicitud, §11.3); read helpers fully implemented: `lib/time-tracking/week-hours.ts`, `lib/vacations/approved-absences.ts`, `lib/my-space/reminders-for-day.ts` (§8.12); cron registry + lease + `/api/cron/tick` (§8.0.4, §13); assistant `defineTool` + registry + `summarize(input)` + client-safe `lib/assistant/tool-summaries.ts` + ConfirmationCard + render_table/render_timeline/render_confirmation (UI only; chat route untouched) (§10) |
+| 1 | Contracts and foundation | ONE migration PR with all new tables (incl. `cron_leases`) (§4); `lib/types/redesign.ts`, `lib/types/widgets.ts` (§6); all 62 §7 action signatures + zod schemas as stubs (Rule 1), each actions file with its sibling flags module `lib/actions/<domain>-actions.flags.ts` (`IMPLEMENTED`, §9.10); user-preference actions `fetchMyPreferencesAction` / `updateMyPreferencesAction` fully implemented; `fetchOrgAppearanceAction` implemented as a reader in `org-appearance-actions.ts`; `general_settings.company` schema fields `instagramUrl`, `contactEmail` + defaults in `lib/settings/general-settings-schema.ts`; photo routes `POST /api/staff/me/photo`, `GET /api/staff/[id]/photo` + `removeMyPhotoAction` fully implemented (§7.2); `lib/errors.ts` (`actionErrorText` + new codes incl. `NOT_IMPLEMENTED`, §9.10); capabilities in `lib/auth/permissions.ts` (`canManageAppearance`, `canManageGeneralSettings`, `canManageTimeTracking`, `canViewTeamHours`, `canDecideVacations`, `canSeeAdminData` re-export) and per-segment guards (§12); `lib/etapas/compat.ts`; `lib/ui/contrast.ts`, `lib/ui/themes.ts`, appearance resolver + cookie + SSR style block (flag-gated, B17/B18, §8.1–§8.2); `app/(staff)/layout.tsx`, AppShell, Sidebar (TimeClock slot hidden while `IMPLEMENTED.clockInAction` in `time-tracking-actions.flags.ts` is false / the `fetchMyTodayAction` stub reports `enabled: false`), PageHeader, EstiloSwitch, StyleProvider/StyleView, Toaster, EmptyState/ErrorState/LoadingSkeleton; the whole widget library + ListPage/FiltersBar/FormSheet/FormDialog/SettingsSection; nav config with extension points; `lib/notifications/notify.ts` (full: row insert, preferences, quiet hours, email pending, §8.3) + cron jobs `notifications-deliver` and `daily-digest`; the daily-producers registry `lib/cron/daily-producers/index.ts` with a stub `vencimiento.ts` (§13); ALL new email templates (recordatorio, resumen-diario, vacaciones-decision, vacaciones-solicitud, §11.3); read helpers fully implemented: `lib/time-tracking/week-hours.ts`, `lib/vacations/approved-absences.ts`, `lib/my-space/reminders-for-day.ts` (§8.12); cron registry + lease + `/api/cron/tick` (§8.0.4, §13); assistant `defineTool` + registry + `summarize(input)` + client-safe `lib/assistant/tool-summaries.ts` + ConfirmationCard + render_table/render_timeline/render_confirmation (UI only; chat route untouched) (§10) |
 | 2 | Shell, navigation and states | redirects (both directions, flag-aware), CommandPalette (⌘K) + `search-actions.ts`, avatar menu UI (photo upload/remove via the Phase 1 routes), opt-in banner UI (calls the Phase 1 `updateMyPreferencesAction`), BottomTabs (mobile), Error404/error.tsx/loading.tsx per route group |
 | 3 | Inicio, Tareas y Calendario | `fetchInicioAction`, `/inicio`, `/tareas` (tablero, lista, calendario views), TaskSheet, NewTaskDialog, calendar style variants, notify hooks inside `tasks-actions.ts` (asignación, mención, comentario), daily producer `lib/cron/daily-producers/vencimiento.ts` (vencimiento) |
 | 4 | Proyectos, Personas, Biblioteca y Vacaciones | `fetchProjectsPortfolioAction`, `fetchPeopleOverviewAction`, `fetchPersonaDetailAction`, `/proyectos` + project tabs, `/personas/*`, `/biblioteca/*`, `vacations-actions.ts` (all), Mis vacaciones incl. "Días de vacaciones" settings section and "Solicitudes del equipo" |
 | 5 | Mi espacio, Bandeja y Gmail | `my-space-actions.ts`, `notifications-actions.ts`, `gmail-actions.ts`, Gmail consent grant + attachment route, cron jobs `reminders-fire`, `gmail-sync`, `/mi-espacio/*`, Ajustes › Notificaciones and Ajustes › Integraciones pages |
-| 6 | Ajustes, tema y Control de horario | `org-appearance-actions.ts` save/reset (`saveOrgAppearanceAction`, `resetOrgAppearanceAction`) + Tema y estilo editor, Apariencia page, `time-tracking-actions.ts`, TimeClock behavior, login clock-in prompt, team hours report + `/api/horario/export`, cron job `auto-close-jornadas`, Perfil page, Ajustes › General UI (company links form; schema fields land in Phase 1) and the save/restore switch to `canManageGeneralSettings` in `app-settings-actions.ts`, per-segment admin pages restyle (estatus, permisos, monday, google; tramos/puestos link to Project Flow pages when present) |
+| 6 | Ajustes, tema y Control de horario | `org-appearance-actions.ts` save/reset (`saveOrgAppearanceAction`, `resetOrgAppearanceAction`) + Tema y estilo editor, Apariencia page, `time-tracking-actions.ts`, TimeClock behavior, login clock-in prompt, team hours report + `/api/horario/export`, cron job `auto-close-jornadas`, Perfil page, Ajustes › General UI (company links form; schema fields land in Phase 1) and the save/restore switch to `canManageGeneralSettings` in `app-settings-actions.ts`, per-segment admin pages restyle (estatus, permisos, monday, google; etapas/puestos link to Project Flow pages when present) |
 | 7 | Asistente en todas partes | `app/api/asistente/chat/route.ts`, `assistant-actions.ts`, AssistantButton/AssistantSheet, `/asistente` page, tool domain files `lib/assistant/tools/<domain>.ts` for all 65 new tools (each guarded by Rule 3), legacy thread import |
 | 8 | Acceso y portal | login, denegado, cambio de contraseña, first-login wizards restyle, portal pages restyle + styles |
 | 9 | Cleanup | remove flag and legacy shell/routes/pages, ThemeToggle data-theme legacy, switch `globals.css` fallback from Grafito to Azul, delete localStorage readers |
@@ -1728,7 +1728,7 @@ This section is identical in both redesign specs (only cross-references differ).
 - One `<Toaster>` in the root layout (Phase 1); Project Flow Phase 2 must not add a second (if Project Flow lands first, Phase 1 reuses its Toaster).
 - Migrations follow §4 (the feature that merges second regenerates on top).
 - `lib/actions/tasks-actions.ts` is also rewritten by Project Flow Phase 2; whichever merges second rebases. The redesign's change is three `after(() => notify(...))` calls at the end of `assignTaskAction`, `createUserTaskAction` and `addTaskCommentAction` (Phase 3); due-date notifications come from the daily producer, not from `tasks-actions.ts`.
-- Redirect `/actividades/[tramo]?project=X` → `/tareas?tramo=<key>&project=X&iniciar=1` keeps the start-sheet deep link (Phase 2).
+- Redirect `/actividades/[etapa]?project=X` → `/tareas?tramo=<key>&project=X&iniciar=1` keeps the start-sheet deep link (Phase 2).
 - A short addendum with these rules is added to the Project Flow specs separately.
 
 ---
@@ -1770,7 +1770,7 @@ This section is identical in both redesign specs (only cross-references differ).
 | B4 | Admin settings lost their access check | Server guard `app/(staff)/ajustes/(admin)/layout.tsx` per segment; capabilities listed in §12.1 (Administrador / Dirección rules) |
 | B5 | No phase plan or ownership; widget types defined twice | §21 ownership; Phase 1 lands all shared pieces and extension points; `lib/types/widgets.ts` is the single source (§6.1) |
 | B6 | Renumbering migrations skips them | One generated migration in Phase 1; never hand-renumber; second feature to merge regenerates (§4) |
-| B7 | Hidden Project Flow dependencies | `lib/tramos/compat.ts`; no direct Project Flow imports; one Toaster; start deep link preserved (§9.7, §21.3) |
+| B7 | Hidden Project Flow dependencies | `lib/etapas/compat.ts`; no direct Project Flow imports; one Toaster; start deep link preserved (§9.7, §21.3) |
 | B8 | Admin-only data leaks | Every aggregate, search and read tool filters through `canSeeAdminData`; Resumen client rule; `nextDelivery` excludes admin tasks (§9.7) |
 | B9 | Assistant confirmations | AI SDK `needsApproval` + `addToolApprovalResponse`; `assistant_actions` is audit only; client thread ids; server-loaded history; legacy import without model call (§7.9, §8.10) |
 | B10 | Notifications data gap | `notify` always inserts; `in_app`, `email_status`, `digest`, `deliver_after`; jobs `notifications-deliver`, `daily-digest` (§3.5, §8.3) |

@@ -209,7 +209,7 @@ const ID = {
   areaMapping: id(802),
 };
 
-/** Shared base of both pre-0023 fixtures: staff, a client and the three tramos. */
+/** Shared base of both pre-0023 fixtures: staff, a client and the three etapas. */
 const BASE_FIXTURE = `
 insert into core.staff (id, name, email, role) values ('${ID.staff}', 'Ana Admin', 'ana@example.test', 'admin');
 insert into core.contacts (id, type, name) values
@@ -286,7 +286,7 @@ insert into core.tasks (id, project_id, kind, workflow_id, phase, title, created
   ('${ID.t12}', '${ID.madrid}', 'usuario', '${ID.diseno}', 'Anteproyecto', 'Tarea 12', '${ID.staff}', 'completado', '${ID.aprobado}',
     '2024-02-19T00:00:00Z', '2024-02-22T00:00:00Z');
 
--- Usuario tasks without a tramo: one fase name is unique, "Minutas" is in two tramos.
+-- Usuario tasks without a etapa: one fase name is unique, "Minutas" is in two etapas.
 insert into core.tasks (id, project_id, kind, phase, title, created_by_id, created_at) values
   ('${ID.t8}', '${ID.madrid}', 'usuario', 'Paisajismo', 'Tarea 8', '${ID.staff}', '2024-02-20T00:00:00Z'),
   ('${ID.t9}', '${ID.madrid}', 'usuario', 'Minutas', 'Tarea 9', '${ID.staff}', '2024-02-21T00:00:00Z');
@@ -332,11 +332,11 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
     it("seeds 14 fases, 51 templates with a fase, the six puestos with candidates and both statuses", async () => {
       const [{ n: phases }] = await sql`select count(*)::int as n from core.workflow_phases`;
       expect(phases).toBe(14);
-      const perTramo = await sql`
+      const perEtapa = await sql`
         select w.key, count(t.id)::int as n, count(t.phase_id)::int as with_phase
         from core.workflows w left join core.workflow_task_templates t on t.workflow_id = w.id
         group by w.key order by w.key`;
-      expect(perTramo.map((r) => [r.key, r.n, r.with_phase])).toEqual([
+      expect(perEtapa.map((r) => [r.key, r.n, r.with_phase])).toEqual([
         ["construccion", 12, 12],
         ["diseno", 29, 29],
         ["presale", 10, 10],
@@ -394,7 +394,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
         return { phase };
       }
 
-      it("refuses a task with a fase of another tramo (tasks_phase_fk)", async () => {
+      it("refuses a task with a fase of another etapa (tasks_phase_fk)", async () => {
         await inRollback(sql, async (tx) => {
           const { phase } = await seedProjects(tx);
           const cobro = phase("presale", "cobro");
@@ -407,7 +407,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
                 values (${ID.madrid}, 'usuario', ${diseno}, ${cobro.id}, 'Cruzada', ${ID.staff})`
             )
           ).toBe("tasks_phase_fk");
-          // Same fase with its own tramo is fine.
+          // Same fase with its own etapa is fine.
           expect(
             await violated(
               tx,
@@ -419,7 +419,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
         });
       });
 
-      it("refuses a fase without a tramo", async () => {
+      it("refuses a fase without a etapa", async () => {
         await inRollback(sql, async (tx) => {
           const { phase } = await seedProjects(tx);
           expect(
@@ -427,13 +427,13 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
               tx,
               (sp) => sp`
                 insert into core.tasks (project_id, kind, phase_id, title, created_by_id)
-                values (${ID.madrid}, 'usuario', ${phase("presale", "cobro").id}, 'Sin tramo', ${ID.staff})`
+                values (${ID.madrid}, 'usuario', ${phase("presale", "cobro").id}, 'Sin etapa', ${ID.staff})`
             )
           ).toBe("tasks_phase_needs_workflow_check");
         });
       });
 
-      it("refuses an admin task with a tramo, a fase or an espacio", async () => {
+      it("refuses an admin task with a etapa, a fase or an espacio", async () => {
         await inRollback(sql, async (tx) => {
           const { phase } = await seedProjects(tx);
           const cobro = phase("presale", "cobro");
@@ -556,7 +556,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
       expect((await report(sql)).filter((r) => r.kind === "group_mapping_area_removed")).toEqual([]);
     });
 
-    it("seeds the catalog onto the existing tramos and creates Cancelado and En espera once", async () => {
+    it("seeds the catalog onto the existing etapas and creates Cancelado and En espera once", async () => {
       const [{ n }] = await sql`select count(*)::int as n from core.workflow_phases`;
       expect(n).toBe(14);
       const [{ t, nophase }] = await sql`
@@ -598,7 +598,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
       rows = await report(sql);
     }, 120_000);
 
-    it("renames the Diseño tramo and turns on Presale auto-start", async () => {
+    it("renames the Diseño etapa and turns on Presale auto-start", async () => {
       const workflows = await sql`select key, name, auto_start::text as auto_start from core.workflows order by sort_order`;
       expect(workflows.map((w) => [w.key, w.name, w.auto_start])).toEqual([
         ["presale", "Presale", "on_create"],
@@ -641,7 +641,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
       );
     });
 
-    it("infers the tramo when the fase name exists in only one", async () => {
+    it("infers the etapa when the fase name exists in only one", async () => {
       expect(await phaseOf(ID.t8)).toMatchObject({ workflow_key: "diseno", phase_key: "paisajismo" });
       expect(rows.filter((r) => r.kind === "task_tramo_inferred").map((r) => r.entityId)).toEqual([ID.t8]);
     });
@@ -689,7 +689,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
       expect((await constraintDef(sql, "tasks_closed_at_check"))?.validated).toBe(true);
     });
 
-    it("writes stages with started_at and closes the tramo whose tasks are all closed", async () => {
+    it("writes stages with started_at and closes the etapa whose tasks are all closed", async () => {
       const stages = await sql`
         select w.key, s.started_at, s.closed_at from core.project_stages s
         join core.workflows w on w.id = s.workflow_id
@@ -701,7 +701,7 @@ describe.skipIf(!canCreate)("project flow migrations 0023 + 0024 (scratch databa
       expect(diseno.closed_at).toBeNull();
     });
 
-    it("sets the current tramo from the stages and keeps an existing one with its stage", async () => {
+    it("sets the current etapa from the stages and keeps an existing one with its stage", async () => {
       const projects = await sql`
         select p.id::text, w.key as current from core.projects p
         left join core.workflows w on w.id = p.current_workflow_id`;

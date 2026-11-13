@@ -30,12 +30,12 @@
  *             trigram (≥ 0.8) → contact; else null.
  *   Contacts  crm_contacts items named like an existing contact of the same
  *             type (lower-case equal) → contactMatches.
- *   Tramo     the tramo whose name the board name contains → workflowId
- *             ("Tramo del tablero"), else null.
- *   Groups    `resolveGroupTarget` defaults (tramo / fase / admin by name,
- *             else the board's tramo); a group that resolves no tramo is
- *             left unset (plan reports TRAMO_MISSING).
- *   Templates the task items' names vs the active templates of the tramo
+ *   Etapa     the etapa whose name the board name contains → workflowId
+ *             ("Etapa del tablero"), else null.
+ *   Groups    `resolveGroupTarget` defaults (etapa / fase / admin by name,
+ *             else the board's etapa); a group that resolves no etapa is
+ *             left unset (plan reports ETAPA_MISSING).
+ *   Templates the task items' names vs the active templates of the etapa
  *             their group places them in (≥ 0.85) → templateMatches.
  *   Schedule  enabled for board_as_project boards with a timeline column.
  *
@@ -201,7 +201,7 @@ export interface TemplateCandidate {
   phaseId?: string | null;
 }
 
-/** A tramo of the catalog with its fases (catalog order), as init reads it. */
+/** A etapa of the catalog with its fases (catalog order), as init reads it. */
 export interface InitWorkflow {
   id: string;
   name: string;
@@ -223,7 +223,7 @@ export interface InitLookups {
     type: ContactType,
     names: string[],
   ): Promise<Map<string, string>>;
-  /** Active tramos (not deleted) with their fases, in catalog order. */
+  /** Active etapas (not deleted) with their fases, in catalog order. */
   workflows(): Promise<InitWorkflow[]>;
   /** The saved firm-wide status map (app_settings `monday.status_map`); empty when none is saved. */
   savedStatusMap(): Promise<MondayStatusMap>;
@@ -760,7 +760,7 @@ function catalogOf(workflows: InitWorkflow[]): GroupTargetCatalog {
 }
 
 /**
- * "Tramo del tablero": the tramo whose name the board name contains as a whole word (accents and case ignored);
+ * "Etapa del tablero": the etapa whose name the board name contains as a whole word (accents and case ignored);
  * the longest name wins, so "Diseño ejecutivo" beats "Diseño". Null when none does.
  */
 export function boardWorkflowId(
@@ -779,7 +779,7 @@ export function boardWorkflowId(
 
 /**
  * Default group targets (project flow BE §10.2, §10.6): `resolveGroupTarget` for each group of a board whose
- * strategy maps groups; a group that resolves no tramo is left out, so the plan reports it (TRAMO_MISSING).
+ * strategy maps groups; a group that resolves no etapa is left out, so the plan reports it (ETAPA_MISSING).
  */
 export function draftGroupTargets(
   board: { strategy: BoardStrategy; workflowId: string | null; groups: { id: string; title: string }[] },
@@ -789,7 +789,7 @@ export function draftGroupTargets(
   const out: Record<string, GroupTarget> = {};
   for (const group of board.groups) {
     const target = resolveGroupTarget({ strategy: board.strategy, workflowId: board.workflowId }, group, catalog);
-    if (target.kind === "tramo" && !target.workflowId) continue;
+    if (target.kind === "etapa" && !target.workflowId) continue;
     out[group.id] = target as GroupTarget;
   }
   return out;
@@ -872,13 +872,13 @@ export async function draftMapping(
       }
       draft.client = client;
 
-      // Tramo by board name; groups by the defaults; templates by item name within the tramo the group places them.
+      // Etapa by board name; groups by the defaults; templates by item name within the etapa the group places them.
       const workflowId = boardWorkflowId(board.name, workflows);
       draft.workflowId = workflowId;
       const groupTargets = draftGroupTargets({ strategy, workflowId, groups: board.groups ?? [] }, catalog);
       draft.groupTargets = groupTargets;
       const groupTitles = new Map((board.groups ?? []).map((g) => [g.id, g.title]));
-      const tramoOf = (groupId: string | null): string | null => {
+      const etapaOf = (groupId: string | null): string | null => {
         const target = groupId ? groupTargets[groupId] : undefined;
         if (!target) return workflowId;
         const placement = groupPlacement(target, { title: groupTitles.get(groupId!) ?? "" }, catalog);
@@ -889,14 +889,14 @@ export async function draftMapping(
       const perProject = taskItemsPerProject(strategy, items).map((tasks) =>
         tasks.filter((t) => !t.groupId || groupTargets[t.groupId]?.kind !== "ignore"),
       );
-      const tramos = new Set(perProject.flat().map((t) => tramoOf(t.groupId)).filter((id): id is string => !!id));
+      const etapas = new Set(perProject.flat().map((t) => etapaOf(t.groupId)).filter((id): id is string => !!id));
       const templateMatches: Record<string, string> = {};
-      for (const tramo of tramos) {
-        const inTramo = perProject.map((tasks) => tasks.filter((t) => tramoOf(t.groupId) === tramo));
-        const names = inTramo.flat().map((t) => t.name);
+      for (const etapa of etapas) {
+        const inEtapa = perProject.map((tasks) => tasks.filter((t) => etapaOf(t.groupId) === etapa));
+        const names = inEtapa.flat().map((t) => t.name);
         if (names.length === 0) continue;
-        const candidates = await lookups.templateCandidates(tramo, names);
-        Object.assign(templateMatches, pickTemplates(inTramo, candidates));
+        const candidates = await lookups.templateCandidates(etapa, names);
+        Object.assign(templateMatches, pickTemplates(inEtapa, candidates));
       }
       draft.templateMatches = templateMatches;
 

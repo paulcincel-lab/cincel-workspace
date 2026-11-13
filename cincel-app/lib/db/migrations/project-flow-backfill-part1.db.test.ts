@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * 0023 + 0024 on fresh scratch databases, BE §4.2 steps 1–8: tramo rows, the fase catalog, the 51
+ * 0023 + 0024 on fresh scratch databases, BE §4.2 steps 1–8: etapa rows, the fase catalog, the 51
  * seed templates, template and task fase backfill (incl. 5e template linking), the projects.phases
  * report, Cancelado / En espera reused or created, and tasks.closed_at. Also an empty database
  * (fresh install) and a second run of 0024.
@@ -97,7 +97,7 @@ describe.skipIf(!url)("0024 steps 1–8 on a dev-like scratch database", () => {
       insert into core.workflow_task_templates (workflow_id, phase, title, sort_order)
       values (${ids.diseno}, 'Proyecto Arquitectonico', 'Planos Arquitectonicos', 0) returning id`;
     ids.oldTemplate = old.id;
-    // A template whose fase text matches nothing goes to the tramo's first fase.
+    // A template whose fase text matches nothing goes to the etapa's first fase.
     const [stray] = await sql`
       insert into core.workflow_task_templates (workflow_id, phase, title, sort_order)
       values (${ids.presale}, 'Otra cosa', 'Tarea vieja', 1) returning id`;
@@ -176,7 +176,7 @@ describe.skipIf(!url)("0024 steps 1–8 on a dev-like scratch database", () => {
     return row;
   };
 
-  it("updates the tramo rows", async () => {
+  it("updates the etapa rows", async () => {
     const rows = await db.sql`
       select key, name, description, auto_start::text as auto_start from core.workflows order by sort_order`;
     expect(rows.map((r) => [r.key, r.name, r.auto_start])).toEqual([
@@ -247,7 +247,7 @@ describe.skipIf(!url)("0024 steps 1–8 on a dev-like scratch database", () => {
     expect((await taskRow(ids.postventa)).phase_key).toBe("postventa");
   });
 
-  it("infers the tramo of a task whose fase exists in one tramo only", async () => {
+  it("infers the etapa of a task whose fase exists in one etapa only", async () => {
     const inferred = await taskRow(ids.inferred);
     expect(inferred.workflow_id).toBe(ids.diseno);
     expect(inferred.phase_key).toBe("paisajismo");

@@ -380,9 +380,9 @@ npm run monday -- rollback --batch <import_batch_id>
 After a rollback, the same export can be applied again with a corrected
 mapping.
 
-### 8.1 remap: re-sort an imported project onto tramos and fases
+### 8.1 remap: re-sort an imported project onto etapas and fases
 
-Moves an imported project's tasks between tramo, fase, espacio, their own
+Moves an imported project's tasks between etapa, fase, espacio, their own
 project ("Proyecto aparte") and Tareas de administración, by monday group
 (project flow BE §11). Statuses, dates, titles and people stay; no task or
 history is deleted, and the batch can still be rolled back afterwards. It
@@ -393,23 +393,23 @@ that folder must still be there.
 set -a; . ./.env.monday.prod; set +a          # or .env.monday.staging
 # dry run: prints each project's boards, counts, samples and issues
 npm run monday -- remap --projects "Madrid 22,Guadalajara 83" \
-  --target "Obra=tramo:construccion"
+  --target "Obra=etapa:construccion"
 # write (an active Administrador's email)
 npm run monday -- remap --projects "Madrid 22,Guadalajara 83" \
-  --target "Obra=tramo:construccion" --apply --by <admin email>
+  --target "Obra=etapa:construccion" --apply --by <admin email>
 ```
 
 - Without `--target`, each group keeps its saved target (from an earlier
-  remap) or the default: a group named like a tramo goes to that tramo, like
+  remap) or the default: a group named like a etapa goes to that etapa, like
   a fase to that fase, "Administrativo" to Tareas de administración, anything
-  else to the board's tramo. `--target "<group title>=<target>"` overrides
-  one group; targets are `tramo:<key or name>`, `phase:<tramo>/<fase>`,
+  else to the board's etapa. `--target "<group title>=<target>"` overrides
+  one group; targets are `etapa:<key or name>`, `phase:<etapa>/<fase>`,
   `space`, `project`, `admin` and `ignore`.
 - A board listed as `missing from the stored export (source null)` is left as
   it is; re-export it before relying on the remap. When the whole export is
   gone the command exits non-zero with `EXPORT_MISSING`.
 - Check that `Tasks: N before, N after` matches the project's live task count.
-- Any `BLOCKING` issue (no tramo for a group, a "Proyecto aparte" name already
+- Any `BLOCKING` issue (no etapa for a group, a "Proyecto aparte" name already
   taken) stops `--apply` for every listed project. Re-running the same
   targets changes nothing.
 

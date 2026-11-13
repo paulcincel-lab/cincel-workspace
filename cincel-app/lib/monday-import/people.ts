@@ -86,7 +86,7 @@ export interface TaskPlacementSource {
   unmatchedPeople: readonly { id: string }[];
 }
 
-/** Where one of the person's tasks lands: its tramo and fase (null when unresolved). */
+/** Where one of the person's tasks lands: its etapa and fase (null when unresolved). */
 export interface TaskPlacement {
   workflowId: string | null;
   phaseId: string | null;
@@ -144,7 +144,7 @@ export function personTaskPlacements(
   return out;
 }
 
-/** The catalog the scoring reads: live, active puestos with candidate fases, and fase and tramo names. */
+/** The catalog the scoring reads: live, active puestos with candidate fases, and fase and etapa names. */
 export interface PositionSuggestionCatalog {
   positions: readonly { id: string; name: string; sortOrder: number; phaseIds: readonly string[] }[];
   phases: Readonly<Record<string, { workflowId: string; name: string; sortOrder?: number }>>;
@@ -161,7 +161,7 @@ export interface PositionSuggestion {
 /**
  * Scores each puesto by the person's tasks in its candidate fases. The suggestion is the highest score (ties: the
  * lower `sortOrder`), or no puesto when no task has a fase or no puesto scores. `topPhases` lists up to three fases
- * by task count (ties: catalog order) with their tramo name.
+ * by task count (ties: catalog order) with their etapa name.
  */
 export function suggestPositionFrom(
   placements: readonly TaskPlacement[],

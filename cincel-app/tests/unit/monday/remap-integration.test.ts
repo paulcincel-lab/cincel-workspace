@@ -2,10 +2,10 @@
 /**
  * "Reacomodar importación" on a Madrid 22 fixture (project flow BE §11, §16):
  * a project imported before the project flow (every task on the board's
- * tramo, no fase) with groups Presale, Diseño, Proyecto Ejecutivo,
+ * etapa, no fase) with groups Presale, Diseño, Proyecto Ejecutivo,
  * Administrativo and Obra, 210 tasks in all.
  *
- * Covers the default targets plus `Obra=tramo:construccion` (tramos Presale →
+ * Covers the default targets plus `Obra=etapa:construccion` (etapas Presale →
  * Diseño → Construcción, current Construcción, 210 tasks before and after, no
  * deletions), a re-apply that changes nothing, a rollback of the batch after
  * the remap, the CLI dry run and EXPORT_MISSING / NOT_IMPORTED.
@@ -59,7 +59,7 @@ function io() {
 }
 
 describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_000 }, () => {
-  // It finds or creates the default tramos by key: one catalog-changing file at a time (tests/setup/catalog-lock.ts).
+  // It finds or creates the default etapas by key: one catalog-changing file at a time (tests/setup/catalog-lock.ts).
   let unlockCatalog: (() => Promise<void>) | null = null;
   beforeAll(async () => {
     unlockCatalog = await lockEtapaCatalog(url!);
@@ -300,11 +300,11 @@ describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_
       });
   }
 
-  /** The default targets plus "Obra=tramo:construccion" (BE §11.2); the CLI test parses the same flag. */
+  /** The default targets plus "Obra=etapa:construccion" (BE §11.2); the CLI test parses the same flag. */
   async function madridInput(f: Fixture) {
     const state = await loadRemapState(f.mdb, f.projectId);
     const input = currentRemapInput(state);
-    input[0].groupTargets.g_obra = { kind: "tramo", workflowId: f.construccion };
+    input[0].groupTargets.g_obra = { kind: "etapa", workflowId: f.construccion };
     return { state, input };
   }
 
@@ -329,11 +329,11 @@ describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_
       expect(board.source?.groups.map((g) => g.id)).toEqual(["g_pre", "g_dis", "g_eje", "g_adm", "g_obra"]);
       expect(board.workflowId).toBe(f.diseno);
       expect(board.groupTargets).toEqual({
-        g_pre: { kind: "tramo", workflowId: f.presale },
-        g_dis: { kind: "tramo", workflowId: f.diseno },
+        g_pre: { kind: "etapa", workflowId: f.presale },
+        g_dis: { kind: "etapa", workflowId: f.diseno },
         g_eje: { kind: "phase", phaseId: f.ejecutivo },
         g_adm: { kind: "admin" },
-        g_obra: { kind: "tramo", workflowId: f.diseno },
+        g_obra: { kind: "etapa", workflowId: f.diseno },
       });
     });
   });
@@ -345,7 +345,7 @@ describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_
 
       const { preview, changes } = await planRemap(f.mdb, f.projectId, input);
       expect(preview.tasks).toBe(210);
-      expect(preview.changes).toMatchObject({ admin: 10, otherProject: 0, unchanged: 90, tramo: 30 + 40 + 10 });
+      expect(preview.changes).toMatchObject({ admin: 10, otherProject: 0, unchanged: 90, etapa: 30 + 40 + 10 });
       expect(changes).toHaveLength(120);
       expect(preview.samples).toHaveLength(10);
       expect(preview.issues.find((i) => i.code === ("ADMIN_ASSIGNEE_CLEARED" as typeof i.code))).toBeTruthy();
@@ -445,7 +445,7 @@ describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_
       const before = await historyCount(f);
       const c = io();
       const remap = createRemapCommand({ openDb: () => f.handle });
-      const code = await remap(["--projects", PROJECT_NAME, "--target", "Obra=tramo:construccion"], c.cli);
+      const code = await remap(["--projects", PROJECT_NAME, "--target", "Obra=etapa:construccion"], c.cli);
       expect(c.err()).toBe("");
       expect(code).toBe(0);
       expect(c.out()).toContain(`## ${PROJECT_NAME}`);
@@ -460,7 +460,7 @@ describe.skipIf(!url)("remap on the Madrid 22 fixture (test DB)", { timeout: 60_
 
       const applied = io();
       expect(
-        await remap(["--projects", PROJECT_NAME, "--target", "Obra=tramo:construccion", "--apply", "--by", ADMIN_EMAIL], applied.cli),
+        await remap(["--projects", PROJECT_NAME, "--target", "Obra=etapa:construccion", "--apply", "--by", ADMIN_EMAIL], applied.cli),
       ).toBe(0);
       expect(applied.out()).toContain(`${PROJECT_NAME}: 120 tasks updated.`);
     });

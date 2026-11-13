@@ -71,7 +71,7 @@ const ID = {
   tplEjecutivo: "00000000-0000-4000-8000-000000000202",
 };
 
-/** The catalog: tramo "Construcción" with the fase "Obra", tramo "Diseño" with the fase "Ejecutivo". */
+/** The catalog: etapa "Construcción" with the fase "Obra", etapa "Diseño" with the fase "Ejecutivo". */
 const WORKFLOWS: InitWorkflow[] = [
   { id: ID.wfObra, name: "Construcción", phases: [{ id: ID.faseObra, name: "Obra", sortOrder: 1, active: true }] },
   { id: ID.wfDiseno, name: "Diseño", phases: [{ id: ID.faseEjecutivo, name: "Ejecutivo", sortOrder: 1, active: true }] },
@@ -293,31 +293,31 @@ describe("init: the fixture draft", () => {
     });
   });
 
-  it("maps groups with the defaults: a tramo's name, else a fase of one tramo; unresolved groups stay unset", async () => {
+  it("maps groups with the defaults: a etapa's name, else a fase of one etapa; unresolved groups stay unset", async () => {
     const [casa, desarrollos, clientes] = (await draft()).boards;
-    // "Casa Pérez" names no tramo.
+    // "Casa Pérez" names no etapa.
     expect(casa.workflowId).toBeNull();
     expect(casa.groupTargets).toEqual({
-      topics: { kind: "tramo", workflowId: ID.wfDiseno },
+      topics: { kind: "etapa", workflowId: ID.wfDiseno },
       g_obra: { kind: "phase", phaseId: ID.faseObra },
     });
-    // "Activos" resolves no tramo and the board has none: left for the plan (TRAMO_MISSING).
+    // "Activos" resolves no etapa and the board has none: left for the plan (ETAPA_MISSING).
     expect(desarrollos.groupTargets).toEqual({});
     expect(clientes.groupTargets).toEqual({});
   });
 
-  it("matches templates within the tramo each group places its items in, one per template per project", async () => {
+  it("matches templates within the etapa each group places its items in, one per template per project", async () => {
     const [casa] = (await draft()).boards;
-    // Levantamiento (group Diseño) is in the Diseño tramo: no match there; Levantamiento previo (fase Obra) matches.
+    // Levantamiento (group Diseño) is in the Diseño etapa: no match there; Levantamiento previo (fase Obra) matches.
     expect(casa.templateMatches).toEqual({ "1003": ID.tplLevantamiento });
   });
 
-  it("takes the board's tramo from its name, and its templates per project", async () => {
+  it("takes the board's etapa from its name, and its templates per project", async () => {
     const data = await readExport(FIXTURE);
     data.boards[1].board.name = "Desarrollos · Diseño";
     const [, desarrollos] = (await draftMapping(data, fakeLookups())).boards;
     expect(desarrollos.workflowId).toBe(ID.wfDiseno);
-    expect(desarrollos.groupTargets).toEqual({ g1: { kind: "tramo", workflowId: ID.wfDiseno } });
+    expect(desarrollos.groupTargets).toEqual({ g1: { kind: "etapa", workflowId: ID.wfDiseno } });
     // item_as_project: subitems are the tasks; each item is its own project.
     expect(desarrollos.templateMatches).toEqual({
       "2101": ID.tplEjecutivo,
@@ -408,7 +408,7 @@ describe("init: heuristics", () => {
     ).toEqual({ d1: "closed_date", d2: "delivery_date", s: "status" });
   });
 
-  it("picks the board's tramo by the longest tramo name the board name contains", () => {
+  it("picks the board's etapa by the longest etapa name the board name contains", () => {
     const workflows = [
       { id: ID.wfDiseno, name: "Diseño" },
       { id: ID.wfDisenoEjecutivo, name: "Diseño ejecutivo" },
@@ -428,7 +428,7 @@ describe("init: heuristics", () => {
     ];
     expect(draftGroupTargets({ strategy: "board_as_project", workflowId: ID.wfObra, groups }, catalog)).toEqual({
       a: { kind: "admin" },
-      b: { kind: "tramo", workflowId: ID.wfObra },
+      b: { kind: "etapa", workflowId: ID.wfObra },
     });
     expect(draftGroupTargets({ strategy: "group_as_project", workflowId: ID.wfObra, groups }, catalog)).toEqual({});
   });
@@ -740,7 +740,7 @@ describe.skipIf(!url)("init lookups (test DB)", () => {
     });
   });
 
-  it("reads tramos with their fases, templates ≥ 0.85 with their fase, and the saved status map", async () => {
+  it("reads etapas with their fases, templates ≥ 0.85 with their fase, and the saved status map", async () => {
     await inTx(async (tx) => {
       const [wf] = await tx
         .insert(schema.workflows)

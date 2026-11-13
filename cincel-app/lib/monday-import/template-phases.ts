@@ -1,8 +1,8 @@
 /**
- * "Tareas de plantilla" in Equivalencias (FE §4.6 item 3): the tramo and fase each monday item ends up with, the
- * same order translate uses (BE §10.3). 1) The item's template match of its tramo gives the fase. 2) A group
- * mapped to a fase gives it. 3) The cleaned title contains a fase name of the tramo as a whole word (longest
- * wins). 4) Else the item keeps its tramo with no fase: "Sin fase · revisar". A group never creates a fase.
+ * "Tareas de plantilla" in Equivalencias (FE §4.6 item 3): the etapa and fase each monday item ends up with, the
+ * same order translate uses (BE §10.3). 1) The item's template match of its etapa gives the fase. 2) A group
+ * mapped to a fase gives it. 3) The cleaned title contains a fase name of the etapa as a whole word (longest
+ * wins). 4) Else the item keeps its etapa with no fase: "Sin fase · revisar". A group never creates a fase.
  * Pure and client-safe.
  */
 import { currentGroupTarget, hasGroupTargets } from "@/lib/monday-import/group-targets";
@@ -11,16 +11,16 @@ import type { BoardDraft } from "@/lib/monday-import/wizard-steps";
 import type { MondayBoardSource, MondayImportChoices } from "@/lib/types/monday-import";
 
 export interface TemplateItemPlacement {
-  /** The item's tramo, null for admin and ignored items and when nothing resolves one. */
+  /** The item's etapa, null for admin and ignored items and when nothing resolves one. */
   workflowId: string | null;
-  tramo: string | null;
+  etapa: string | null;
   phaseId: string | null;
   phase: string | null;
-  /** The group becomes "Tareas de administración": no tramo, no fase. */
+  /** The group becomes "Tareas de administración": no etapa, no fase. */
   admin: boolean;
   /** The group is not imported. */
   ignored: boolean;
-  /** The item has a tramo but no fase: shown as "Sin fase · revisar". */
+  /** The item has a etapa but no fase: shown as "Sin fase · revisar". */
   review: boolean;
 }
 
@@ -36,7 +36,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** The fase of the tramo whose name the cleaned title contains as a whole word; the longest name wins. */
+/** The fase of the etapa whose name the cleaned title contains as a whole word; the longest name wins. */
 export function phaseFromTitle(title: string, phases: readonly { id: string; name: string }[]): string | null {
   const key = nameKey(stripMondayNumbering(title));
   let best: { id: string; length: number } | null = null;
@@ -49,7 +49,7 @@ export function phaseFromTitle(title: string, phases: readonly { id: string; nam
   return best?.id ?? null;
 }
 
-/** Where one item of the board lands: its tramo and fase, or admin / not imported. */
+/** Where one item of the board lands: its etapa and fase, or admin / not imported. */
 export function templateItemPlacement(
   board: BoardDraft,
   source: MondayBoardSource,
@@ -57,9 +57,9 @@ export function templateItemPlacement(
   choices: MondayImportChoices,
 ): TemplateItemPlacement {
   const phases = phasesOf(choices);
-  const tramoName = (id: string | null) => choices.workflows.find((workflow) => workflow.id === id)?.name ?? null;
+  const etapaName = (id: string | null) => choices.workflows.find((workflow) => workflow.id === id)?.name ?? null;
   const phaseName = (id: string | null) => phases.find((phase) => phase.id === id)?.name ?? null;
-  const empty = { workflowId: null, tramo: null, phaseId: null, phase: null, review: false };
+  const empty = { workflowId: null, etapa: null, phaseId: null, phase: null, review: false };
 
   let workflowId: string | null = board.workflowId ?? null;
   let groupPhaseId: string | null = null;
@@ -68,7 +68,7 @@ export function templateItemPlacement(
     const target = currentGroupTarget(board, group, choices);
     if (target.kind === "ignore") return { ...empty, admin: false, ignored: true };
     if (target.kind === "admin") return { ...empty, admin: true, ignored: false };
-    if (target.kind === "tramo" && target.workflowId) workflowId = target.workflowId;
+    if (target.kind === "etapa" && target.workflowId) workflowId = target.workflowId;
     if (target.kind === "phase") {
       const phase = phases.find((candidate) => candidate.id === target.phaseId);
       if (phase) {
@@ -92,7 +92,7 @@ export function templateItemPlacement(
     );
   return {
     workflowId,
-    tramo: tramoName(workflowId),
+    etapa: etapaName(workflowId),
     phaseId,
     phase: phaseName(phaseId),
     admin: false,
@@ -101,10 +101,10 @@ export function templateItemPlacement(
   };
 }
 
-/** The "Tramo · Fase" text of a placement. */
+/** The "Etapa · Fase" text of a placement. */
 export function placementLabel(placement: TemplateItemPlacement): string {
   if (placement.ignored) return "No se importa";
   if (placement.admin) return "Tareas de administración";
-  if (!placement.tramo) return "Sin etapa";
-  return placement.phase ? `${placement.tramo} · ${placement.phase}` : placement.tramo;
+  if (!placement.etapa) return "Sin etapa";
+  return placement.phase ? `${placement.etapa} · ${placement.phase}` : placement.etapa;
 }

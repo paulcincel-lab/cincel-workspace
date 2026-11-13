@@ -45,11 +45,11 @@ const catalog: RemapCatalog = {
 describe("parseRemapArgs", () => {
   it("is a dry run by default and keeps targets in order", () => {
     expect(
-      parseRemapArgs(["--projects", "Madrid 22, Guadalajara 83", "--target", "Obra=tramo:construccion", "--target=Pagos=admin"]),
+      parseRemapArgs(["--projects", "Madrid 22, Guadalajara 83", "--target", "Obra=etapa:construccion", "--target=Pagos=admin"]),
     ).toEqual({
       projects: ["Madrid 22", "Guadalajara 83"],
       targets: [
-        { group: "Obra", spec: "tramo:construccion" },
+        { group: "Obra", spec: "etapa:construccion" },
         { group: "Pagos", spec: "admin" },
       ],
       apply: false,
@@ -73,30 +73,35 @@ describe("parseRemapArgs", () => {
 });
 
 describe("parseTargetSpec", () => {
-  it("reads tramos by key, name or id", () => {
-    expect(parseTargetSpec("tramo:construccion", catalog)).toEqual({ kind: "tramo", workflowId: CONSTRUCCION });
-    expect(parseTargetSpec("tramo:Diseño", catalog)).toEqual({ kind: "tramo", workflowId: DISENO });
-    expect(parseTargetSpec(`tramo:${PRESALE}`, catalog)).toEqual({ kind: "tramo", workflowId: PRESALE });
+  it("reads etapas by key, name or id", () => {
+    expect(parseTargetSpec("etapa:construccion", catalog)).toEqual({ kind: "etapa", workflowId: CONSTRUCCION });
+    expect(parseTargetSpec("etapa:Diseño", catalog)).toEqual({ kind: "etapa", workflowId: DISENO });
+    expect(parseTargetSpec(`etapa:${PRESALE}`, catalog)).toEqual({ kind: "etapa", workflowId: PRESALE });
   });
 
-  it("reads fases by tramo/fase, unique name or id", () => {
+  it("keeps `tramo:<key>` working as an alias of `etapa:<key>`", () => {
+    expect(parseTargetSpec("tramo:construccion", catalog)).toEqual(parseTargetSpec("etapa:construccion", catalog));
+    expect(parseTargetSpec("tramo:Diseño", catalog)).toEqual({ kind: "etapa", workflowId: DISENO });
+  });
+
+  it("reads fases by etapa/fase, unique name or id", () => {
     expect(parseTargetSpec("phase:diseno/ejecutivo", catalog)).toEqual({ kind: "phase", phaseId: EJECUTIVO });
     expect(parseTargetSpec("phase:Ejecutivo", catalog)).toEqual({ kind: "phase", phaseId: EJECUTIVO });
     expect(parseTargetSpec("phase:presale/Minutas", catalog)).toEqual({ kind: "phase", phaseId: MINUTAS_P });
-    expect(parseTargetSpec("phase:minutas", catalog)).toMatch(/more than one tramo/);
+    expect(parseTargetSpec("phase:minutas", catalog)).toMatch(/more than one etapa/);
   });
 
   it("reads the plain kinds and refuses unknown ones", () => {
     for (const kind of ["space", "project", "admin", "ignore"] as const) expect(parseTargetSpec(kind, catalog)).toEqual({ kind });
-    expect(parseTargetSpec("tramo:decoracion", catalog)).toMatch(/unknown tramo/);
+    expect(parseTargetSpec("etapa:decoracion", catalog)).toMatch(/unknown etapa/);
     expect(parseTargetSpec("area:1", catalog)).toMatch(/unknown target/);
   });
 });
 
 describe("defaultGroupTarget", () => {
-  it("maps tramo names, fases of the board's tramo and 'Administrativo'", () => {
-    expect(defaultGroupTarget("Presale", DISENO, catalog)).toEqual({ kind: "tramo", workflowId: PRESALE });
-    expect(defaultGroupTarget("DISEÑO", null, catalog)).toEqual({ kind: "tramo", workflowId: DISENO });
+  it("maps etapa names, fases of the board's etapa and 'Administrativo'", () => {
+    expect(defaultGroupTarget("Presale", DISENO, catalog)).toEqual({ kind: "etapa", workflowId: PRESALE });
+    expect(defaultGroupTarget("DISEÑO", null, catalog)).toEqual({ kind: "etapa", workflowId: DISENO });
     expect(defaultGroupTarget("Minutas", DISENO, catalog)).toEqual({ kind: "phase", phaseId: MINUTAS_D });
     expect(defaultGroupTarget("Cobro", DISENO, catalog)).toEqual({ kind: "phase", phaseId: COBRO });
     expect(defaultGroupTarget("Administrativo", DISENO, catalog)).toEqual({ kind: "admin" });
@@ -107,8 +112,8 @@ describe("defaultGroupTarget", () => {
     expect(defaultGroupTarget("Proyecto Ejecutivo", PRESALE, catalog)).toEqual({ kind: "phase", phaseId: EJECUTIVO });
   });
 
-  it("falls back to the board's tramo, else unresolved", () => {
-    expect(defaultGroupTarget("Obra", DISENO, catalog)).toEqual({ kind: "tramo", workflowId: DISENO });
+  it("falls back to the board's etapa, else unresolved", () => {
+    expect(defaultGroupTarget("Obra", DISENO, catalog)).toEqual({ kind: "etapa", workflowId: DISENO });
     expect(defaultGroupTarget("Obra", null, catalog)).toBeNull();
   });
 });
@@ -116,7 +121,7 @@ describe("defaultGroupTarget", () => {
 describe("storedGroupTarget", () => {
   it("upgrades v1 kinds", () => {
     expect(storedGroupTarget({ kind: "stage", workflowId: CONSTRUCCION }, "Obra", DISENO, catalog)).toEqual({
-      kind: "tramo",
+      kind: "etapa",
       workflowId: CONSTRUCCION,
     });
     expect(storedGroupTarget({ kind: "workflow_phase", phase: "ejecutivo" }, "X", DISENO, catalog)).toEqual({
@@ -124,7 +129,7 @@ describe("storedGroupTarget", () => {
       phaseId: EJECUTIVO,
     });
     expect(storedGroupTarget({ kind: "workflow_phase", phase: "Nada" }, "X", DISENO, catalog)).toEqual({
-      kind: "tramo",
+      kind: "etapa",
       workflowId: DISENO,
     });
     expect(storedGroupTarget({ kind: "phase" }, "Residencia", DISENO, catalog)).toEqual({
@@ -162,7 +167,7 @@ describe("applyTargetOverrides", () => {
           name: "Madrid 22",
           workflowId: DISENO,
           source: { groups: [{ id: "g_obra", title: "Obra" }] },
-          groupTargets: { g_obra: { kind: "tramo", workflowId: DISENO } },
+          groupTargets: { g_obra: { kind: "etapa", workflowId: DISENO } },
         },
         { boardId: "2", name: "Gone", workflowId: null, source: null, groupTargets: {} },
       ],
@@ -174,13 +179,13 @@ describe("applyTargetOverrides", () => {
       state,
       input,
       [
-        { group: "obra", spec: "tramo:construccion" },
+        { group: "obra", spec: "etapa:construccion" },
         { group: "Pagos", spec: "admin" },
-        { group: "Obra", spec: "tramo:nada" },
+        { group: "Obra", spec: "etapa:nada" },
       ],
       catalog,
     );
-    expect(out.input[0].groupTargets.g_obra).toEqual({ kind: "tramo", workflowId: CONSTRUCCION });
+    expect(out.input[0].groupTargets.g_obra).toEqual({ kind: "etapa", workflowId: CONSTRUCCION });
     expect(out.unused).toEqual(["Pagos"]);
     expect(out.errors).toHaveLength(1);
   });

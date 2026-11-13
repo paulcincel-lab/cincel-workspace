@@ -272,7 +272,7 @@ describe("draft edits over the fixture", () => {
     const board = { ...findBoard(mapping, "101")!, workflowId: ID.wfOther, templateMatches: { x: ID.tplOther } };
     expect(setBoardWorkflow(board, ID.wfObra, choices).templateMatches).toEqual({});
     expect(setBoardWorkflow(board, ID.wfOther, choices).templateMatches).toEqual({ x: ID.tplOther });
-    // A group mapped to a fase of the other tramo keeps that tramo's templates.
+    // A group mapped to a fase of the other etapa keeps that etapa's templates.
     const grouped = { ...board, groupTargets: { topics: { kind: "phase" as const, phaseId: ID.faseOther } } };
     expect(setBoardWorkflow(grouped, ID.wfObra, choices).templateMatches).toEqual({ x: ID.tplOther });
   });

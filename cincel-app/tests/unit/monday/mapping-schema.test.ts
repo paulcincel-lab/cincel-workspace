@@ -33,7 +33,7 @@ function validMapping(): MappingInput {
         projectNames: { "1001": "Casa Lomas" },
         subitemColumns: { status_sub: "status", done: "closed_date" },
         groupTargets: {
-          g_tramo: { kind: "tramo", workflowId: UUID_A },
+          g_etapa: { kind: "etapa", workflowId: UUID_A },
           g_phase: { kind: "phase", phaseId: UUID_B },
           g_space: { kind: "space" },
           g_project: { kind: "project" },
@@ -172,6 +172,17 @@ describe("Mapping", () => {
       expect(issuePaths(m)).toEqual([`boards.0.${field}`]);
     },
   );
+
+  it("accepts both `etapa` and the old `tramo` as the group target kind", () => {
+    for (const kind of ["etapa", "tramo"]) {
+      const input = {
+        ...validMapping(),
+        boards: [{ ...minimalBoard(), groupTargets: { g: { kind, workflowId: UUID_A } } }],
+      };
+      const parsed = Mapping.parse(input);
+      expect(parsed.boards[0].groupTargets.g).toEqual({ kind: "etapa", workflowId: UUID_A });
+    }
+  });
 
   it("rejects the v1 group kinds", () => {
     for (const target of [

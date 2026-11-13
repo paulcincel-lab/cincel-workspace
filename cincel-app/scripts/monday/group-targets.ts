@@ -1,5 +1,5 @@
 /**
- * What each monday group becomes under the project flow: a tramo, a fase of a tramo, a project espacio, its own
+ * What each monday group becomes under the project flow: a etapa, a fase of a etapa, a project espacio, its own
  * project, tareas de administración, or nothing. Shared by `translate` (so plan, preview, apply and the remap
  * agree) and the wizard's Equivalencias step (so the default it shows is the one imported). A group never creates
  * a fase: fases come from the catalog. Pure; safe in client code.
@@ -11,8 +11,8 @@ export const GROUP_TARGET_STRATEGIES: ReadonlySet<BoardStrategy> = new Set(["boa
 
 /** The target kinds a strategy offers: `project` only where a group isn't already inside an item's project. */
 export function groupTargetKinds(strategy: BoardStrategy): GroupTarget["kind"][] {
-  if (strategy === "board_as_project") return ["tramo", "phase", "space", "project", "admin", "ignore"];
-  if (strategy === "item_as_project") return ["tramo", "phase", "space", "admin", "ignore"];
+  if (strategy === "board_as_project") return ["etapa", "phase", "space", "project", "admin", "ignore"];
+  if (strategy === "item_as_project") return ["etapa", "phase", "space", "admin", "ignore"];
   return [];
 }
 
@@ -24,16 +24,16 @@ export interface GroupTargetPhase {
   active?: boolean;
 }
 
-/** The tramos and their fases, in catalog order (`MondayImportChoices.workflows` has this shape). */
+/** The etapas and their fases, in catalog order (`MondayImportChoices.workflows` has this shape). */
 export interface GroupTargetCatalog {
   workflows: readonly { id: string; name: string; phases?: readonly GroupTargetPhase[] }[];
 }
 
-/** A board without a tramo whose group resolves no tramo: plan reports it as `TRAMO_MISSING`. */
-export type UnresolvedTramoTarget = { kind: "tramo"; workflowId: null };
+/** A board without a etapa whose group resolves no etapa: plan reports it as `ETAPA_MISSING`. */
+export type UnresolvedEtapaTarget = { kind: "etapa"; workflowId: null };
 
-/** What `resolveGroupTarget` answers: a mapping target, or the unresolved tramo. */
-export type ResolvedGroupTarget = GroupTarget | UnresolvedTramoTarget;
+/** What `resolveGroupTarget` answers: a mapping target, or the unresolved etapa. */
+export type ResolvedGroupTarget = GroupTarget | UnresolvedEtapaTarget;
 
 /** Where a group's tasks go: the fields translate fills from the group; the rest resolve per task. */
 export interface GroupPlacement {
@@ -66,12 +66,12 @@ export function groupTargetCatalog(
   };
 }
 
-/** A tramo's active fases, in catalog order. */
+/** A etapa's active fases, in catalog order. */
 export function activeCatalogPhases(workflow: GroupTargetCatalog["workflows"][number]): GroupTargetPhase[] {
   return (workflow.phases ?? []).filter((phase) => phase.active !== false);
 }
 
-/** The tramo an active fase of the catalog belongs to, or null when the fase is unknown or inactive. */
+/** The etapa an active fase of the catalog belongs to, or null when the fase is unknown or inactive. */
 export function phaseWorkflowId(catalog: GroupTargetCatalog, phaseId: string): string | null {
   for (const workflow of catalog.workflows) {
     if (activeCatalogPhases(workflow).some((phase) => phase.id === phaseId)) return workflow.id;
@@ -79,18 +79,18 @@ export function phaseWorkflowId(catalog: GroupTargetCatalog, phaseId: string): s
   return null;
 }
 
-/** Whether a saved target still points at something the catalog has (a tramo, an active fase). */
+/** Whether a saved target still points at something the catalog has (a etapa, an active fase). */
 export function isGroupTargetValid(target: GroupTarget, catalog: GroupTargetCatalog): boolean {
-  if (target.kind === "tramo") return catalog.workflows.some((workflow) => workflow.id === target.workflowId);
+  if (target.kind === "etapa") return catalog.workflows.some((workflow) => workflow.id === target.workflowId);
   if (target.kind === "phase") return phaseWorkflowId(catalog, target.phaseId) !== null;
   return true;
 }
 
 /**
  * The board's own choice for the group when its strategy offers it and the catalog still has it, else the
- * default (matched by `nameKey`): the title is a tramo's name → that tramo; a fase of the board's tramo → that
- * fase; a fase of exactly one other tramo → that fase; "Administrativo" → tareas de administración; else the
- * board's tramo, or the unresolved tramo when the board has none.
+ * default (matched by `nameKey`): the title is a etapa's name → that etapa; a fase of the board's etapa → that
+ * fase; a fase of exactly one other etapa → that fase; "Administrativo" → tareas de administración; else the
+ * board's etapa, or the unresolved etapa when the board has none.
  */
 export function resolveGroupTarget(
   board: { strategy: BoardStrategy; workflowId?: string | null; groupTargets?: Record<string, GroupTarget> },
@@ -104,8 +104,8 @@ export function resolveGroupTarget(
   const title = nameKey(group.title);
   const boardWorkflowId = board.workflowId ?? null;
 
-  const tramo = catalog.workflows.find((workflow) => nameKey(workflow.name) === title);
-  if (tramo) return { kind: "tramo", workflowId: tramo.id };
+  const etapa = catalog.workflows.find((workflow) => nameKey(workflow.name) === title);
+  if (etapa) return { kind: "etapa", workflowId: etapa.id };
 
   const own = catalog.workflows.find((workflow) => workflow.id === boardWorkflowId);
   const ownPhase = own ? activeCatalogPhases(own).find((phase) => nameKey(phase.name) === title) : undefined;
@@ -118,12 +118,12 @@ export function resolveGroupTarget(
 
   if (title === "administrativo") return { kind: "admin" };
 
-  return boardWorkflowId ? { kind: "tramo", workflowId: boardWorkflowId } : { kind: "tramo", workflowId: null };
+  return boardWorkflowId ? { kind: "etapa", workflowId: boardWorkflowId } : { kind: "etapa", workflowId: null };
 }
 
 /**
- * Where a group's tasks go: a tramo, a fase (with its tramo when the catalog is given), an espacio named after
- * the group, tareas de administración, or its own project. Ignored groups and the unresolved tramo place nothing.
+ * Where a group's tasks go: a etapa, a fase (with its etapa when the catalog is given), an espacio named after
+ * the group, tareas de administración, or its own project. Ignored groups and the unresolved etapa place nothing.
  */
 export function groupPlacement(
   target: ResolvedGroupTarget,
@@ -131,7 +131,7 @@ export function groupPlacement(
   catalog?: GroupTargetCatalog,
 ): GroupPlacement {
   switch (target.kind) {
-    case "tramo":
+    case "etapa":
       return target.workflowId ? { workflowId: target.workflowId } : {};
     case "phase": {
       const workflowId = catalog ? phaseWorkflowId(catalog, target.phaseId) : null;
