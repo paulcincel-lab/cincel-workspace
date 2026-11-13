@@ -27,7 +27,7 @@ export function MeetingGoogleNote({
   eventsGrant,
   variant = "card",
 }: {
-  item: Pick<CalEventItem, "eventId" | "source" | "syncError" | "canEdit">;
+  item: Pick<CalEventItem, "eventId" | "source" | "syncError" | "canEdit"> & Partial<Pick<CalEventItem, "attendees" | "organizer">>;
   eventsGrant: boolean;
   variant?: "card" | "line" | "field";
 }) {

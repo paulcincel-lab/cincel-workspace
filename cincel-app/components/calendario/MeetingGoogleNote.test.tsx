@@ -40,6 +40,13 @@ describe("MeetingGoogleNote", () => {
     }
   });
 
+  it("drops the invitation line when the organizer is the only attendee", () => {
+    const item = { ...base, syncError: "NO_GRANT", organizer: { id: "s1", name: "Ana" }, attendees: [{ name: "Ana", staffId: "s1", response: "acepta" as const }] };
+    renderWithQueryClient(<MeetingGoogleNote item={item} eventsGrant={false} />);
+    expect(screen.getByText("Esta reunión solo está en Cincel.")).toBeTruthy();
+    expect(screen.queryByText(/se envió por correo/)).toBeNull();
+  });
+
   it("shows no action to an attendee", () => {
     renderWithQueryClient(<MeetingGoogleNote item={{ ...base, syncError: "UNAVAILABLE", canEdit: false }} eventsGrant />);
     expect(screen.queryByRole("button")).toBeNull();

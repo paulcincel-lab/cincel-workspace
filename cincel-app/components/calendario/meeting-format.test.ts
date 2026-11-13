@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { attendeesLabel, googleStateOf, isReadOnlyMeeting, mapsUrl, shortDate, timeOf, whenLabel } from "./meeting-format";
+import { attendeesLabel, googleStateOf, invitesOthers, isReadOnlyMeeting, mapsUrl, shortDate, timeOf, whenLabel } from "./meeting-format";
 
 describe("meeting-format", () => {
   it("reads the wall clock of an ISO string", () => {
@@ -26,6 +26,21 @@ describe("meeting-format", () => {
     expect(googleStateOf({ source: "cincel", syncError: "UNAVAILABLE", canEdit: false }).action).toBeNull();
     expect(googleStateOf({ source: "cincel", syncError: "ACCESS_DENIED", canEdit: true }).action).toBeNull();
     expect(googleStateOf({ source: "cincel", syncError: null, canEdit: true }).note).toBeNull();
+  });
+  it("never says an invitation went out when only the organizer is on the meeting", () => {
+    const organizer = { id: "s1", name: "Ana" };
+    const self = { name: "Ana", staffId: "s1", response: "acepta" as const };
+    const other = { name: "Luis", staffId: "s2", response: "pendiente" as const };
+    const byEmail = { name: "cliente@example.com", staffId: null, response: "pendiente" as const };
+    const alone = { source: "cincel" as const, canEdit: true, organizer, attendees: [self] };
+    expect(googleStateOf({ ...alone, syncError: "NO_GRANT" }).note).toBe("Esta reunión solo está en Cincel.");
+    expect(googleStateOf({ ...alone, syncError: "UNAVAILABLE" }).note).toBe("Google Calendar no respondió; la agregaré a Google en cuanto responda.");
+    expect(googleStateOf({ ...alone, syncError: "NO_GRANT", attendees: [] }).note).toBe("Esta reunión solo está en Cincel.");
+    expect(googleStateOf({ ...alone, syncError: "NO_GRANT" }).action?.label).toBe("Conectar y crear en Google");
+    expect(googleStateOf({ ...alone, syncError: "NO_GRANT", attendees: [self, other] }).note).toBe("Esta reunión solo está en Cincel. La invitación se envió por correo.");
+    expect(googleStateOf({ ...alone, syncError: "NO_GRANT", attendees: [self, byEmail] }).note).toContain("La invitación se envió por correo.");
+    expect(invitesOthers({ attendees: [self], organizer })).toBe(false);
+    expect(invitesOthers({})).toBe(true);
   });
   it("marks Google events of others as read-only", () => {
     expect(isReadOnlyMeeting({ source: "google", canEdit: false })).toBe(true);
