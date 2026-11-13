@@ -96,7 +96,7 @@ beforeEach(() => {
 });
 
 describe("loadPersonasEquipo", () => {
-  it("joins one staff list into people, emails and tramos", async () => {
+  it("joins one staff list into people, emails and etapas", async () => {
     const data = await loadPersonasEquipo(USER);
     expect(reads.listStaff).toHaveBeenCalledTimes(1);
     expect(data.people.map((p) => p.name)).toEqual(["Ana Ruiz", "Bruno Soto", "Carla Méndez"]);

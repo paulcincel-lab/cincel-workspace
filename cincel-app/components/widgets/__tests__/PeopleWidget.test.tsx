@@ -118,7 +118,7 @@ describe("PeopleWidget per style (same fixture)", () => {
     expect(headers).toEqual([
       "Persona",
       "Puesto",
-      "Tramo",
+      "Etapa",
       "Abiertas",
       "Vencidas",
       "Horas semana",
@@ -270,8 +270,8 @@ describe("PeopleWidget empty and loading states", () => {
   });
 
   it("uses `emptyText` and lets `emptyState` win over it", () => {
-    const a = renderIn("visual", <PeopleWidget people={[]} show={ALL} emptyText="Sin personas en este tramo" />);
-    expect(a.getByTestId("empty-state").textContent).toBe("Sin personas en este tramo");
+    const a = renderIn("visual", <PeopleWidget people={[]} show={ALL} emptyText="Sin personas en esta etapa" />);
+    expect(a.getByTestId("empty-state").textContent).toBe("Sin personas en esta etapa");
     a.unmount();
     const b = renderIn(
       "analitico",

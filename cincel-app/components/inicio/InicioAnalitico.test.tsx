@@ -151,7 +151,7 @@ describe("InicioAnalitico", () => {
     renderAnalitico();
     await settle();
     const nav = screen.getByRole("navigation", { name: "Ir a sección" });
-    fireEvent.click(within(nav).getByRole("link", { name: /Por tramo/ }));
+    fireEvent.click(within(nav).getByRole("link", { name: /Por etapa/ }));
     expect(section("s-tramos").contains(document.activeElement)).toBe(true);
     // A collapsed section opens when reached from "Ir a".
     act(() => useInicioDashboard.getState().setCollapsed("attention", true));

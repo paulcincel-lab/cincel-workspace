@@ -162,18 +162,18 @@ describe("groupProjectTasks", () => {
     expect(topLevelTasks([task("x", { parentTaskId: "gone" })]).map((t) => t.id)).toEqual(["x"]);
   });
 
-  it("falls back to tramo groups when no task has a fase", () => {
+  it("falls back to etapa groups when no task has a fase", () => {
     const { mode, groups } = groupProjectTasks(TRAMO_TASKS, { includeAdmin: false, today: TODAY });
     expect(mode).toBe("tramo");
     expect(groups.map((g) => [g.label, g.kind, g.total, g.progressPct])).toEqual([
       ["Presale", "tramo", 2, 50],
       ["Construcción", "tramo", 1, 0],
-      ["Sin tramo", "sin_tramo", 1, 0],
+      ["Sin etapa", "sin_tramo", 1, 0],
     ]);
     expect(groups.every((g) => g.phase === null)).toBe(true);
   });
 
-  it("prefixes the tramo when fases of several tramos are shown", () => {
+  it("prefixes the etapa when fases of several etapas are shown", () => {
     const tasks = [
       task("p", { workflow: PRESALE, workflowId: PRESALE.id, phase: { id: "fp", name: "Inicial", sortOrder: 1 } }),
       task("c", { phase: DEMOLICIONES }),
@@ -233,7 +233,7 @@ describe("table data", () => {
     expect(data.totals).toMatchObject({ nombre: "Total", total: 5, completadas: 3, avance: 60 });
     const analiticoOnly = data.columns.filter((c) => c.hideOn?.includes("visual")).map((c) => c.key);
     expect(analiticoOnly).toEqual(["completadas", "enProceso", "pendientes", "vencidas"]);
-    expect(buildGroupsTable([], "tramo").columns[0].label).toBe("Tramo");
+    expect(buildGroupsTable([], "tramo").columns[0].label).toBe("Etapa");
   });
 
   it("formats dates and days in es-MX lowercase", () => {
@@ -296,9 +296,9 @@ describe("ProjectTasksByFase", () => {
     },
   );
 
-  it("groups by tramo when the project has no fase data", () => {
+  it("groups by etapa when the project has no fase data", () => {
     renderTab("visual", { tasks: TRAMO_TASKS });
-    expect(screen.getByRole("heading", { name: "Avance por tramo" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Avance por etapa" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Avance por fase" })).toBeNull();
     expect(screen.getByRole("button", { name: "Agregar tarea a Presale" })).toBeTruthy();
   });
@@ -317,7 +317,7 @@ describe("ProjectTasksByFase", () => {
     expect(screen.getByText(/1 de 5 mostradas/)).toBeTruthy();
   });
 
-  it("opens the shell's new-task dialog through the store with the group's project and tramo", () => {
+  it("opens the shell's new-task dialog through the store with the group's project and etapa", () => {
     const openNewTask = vi.spyOn(useNewTaskUi.getState(), "openNewTask");
     renderTab("visual");
     fireEvent.click(screen.getByRole("button", { name: "Agregar tarea a Instalaciones" }));

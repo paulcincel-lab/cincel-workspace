@@ -139,7 +139,7 @@ async function openRowAction(name: string, label: string) {
 
 async function openEditor(name: string) {
   await openRowAction(name, "Editar");
-  return screen.findByRole("complementary", { name: `Editar tramo · ${name}` });
+  return screen.findByRole("complementary", { name: `Editar etapa · ${name}` });
 }
 
 describe("TramosClient", () => {
@@ -149,14 +149,14 @@ describe("TramosClient", () => {
 
   afterEach(cleanup);
 
-  it("lists the tramos in flow order with color, fases, templates and active projects", () => {
+  it("lists the etapas in flow order with color, fases, templates and active projects", () => {
     renderTramos([DISENO, PRESALE]);
 
-    expect(screen.getByRole("heading", { name: "Tramos y fases" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Etapas y fases" })).toBeTruthy();
     expect(screen.getByText("El orden define el flujo de cada proyecto. Arrastra para reordenar.")).toBeTruthy();
     expect(screen.getByLabelText("2 en total")).toBeTruthy();
     expect(tramoNames()).toEqual(["Presale", "Diseño"]);
-    for (const header of ["Orden", "Tramo", "Color", "Fases", "Plantillas", "Proyectos activos"]) {
+    for (const header of ["Orden", "Etapa", "Color", "Fases", "Plantillas", "Proyectos activos"]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeTruthy();
     }
     const presale = within(row("Presale")).getAllByRole("cell").map((c) => c.textContent);
@@ -170,16 +170,16 @@ describe("TramosClient", () => {
     expect(within(row("Presale")).getByText("Verde")).toBeTruthy();
   });
 
-  it("makes no call on mount: the tramos are hydrated", () => {
+  it("makes no call on mount: the etapas are hydrated", () => {
     renderTramos();
     expect(pageData.getAjustesTramosPageData).not.toHaveBeenCalled();
     expect(actions.fetchWorkflowsAction).not.toHaveBeenCalled();
   });
 
-  it("shows the empty text and the inline add without tramos", () => {
+  it("shows the empty text and the inline add without etapas", () => {
     renderTramos([]);
-    expect(screen.getByText("Aún no hay tramos.")).toBeTruthy();
-    expect(screen.getByPlaceholderText("Agregar tramo…")).toBeTruthy();
+    expect(screen.getByText("Aún no hay etapas.")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Agregar etapa…")).toBeTruthy();
   });
 
   it("keyboard reorder announces the new position", async () => {
@@ -205,7 +205,7 @@ describe("TramosClient", () => {
     await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual([...TRAMO_INVALIDATIONS]));
   });
 
-  it("rolls the order back and shows the Tramos copy when the reorder fails", async () => {
+  it("rolls the order back and shows the Etapas copy when the reorder fails", async () => {
     actions.reorderWorkflowsAction.mockResolvedValue({ ok: false, error: "FORBIDDEN" });
     renderTramos();
 
@@ -227,7 +227,7 @@ describe("TramosClient", () => {
       return created;
     });
 
-    const input = screen.getByLabelText("Agregar tramo");
+    const input = screen.getByLabelText("Agregar etapa");
     fireEvent.change(input, { target: { value: "Decoración" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
@@ -240,7 +240,7 @@ describe("TramosClient", () => {
 
   it("Escape clears the inline add without creating", () => {
     renderTramos();
-    const input = screen.getByLabelText("Agregar tramo") as HTMLInputElement;
+    const input = screen.getByLabelText("Agregar etapa") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Otro" } });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input.value).toBe("");
@@ -253,7 +253,7 @@ describe("TramosClient", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries");
     const panel = await openEditor("Diseño");
 
-    const group = within(panel).getByRole("radiogroup", { name: "Color del tramo" });
+    const group = within(panel).getByRole("radiogroup", { name: "Color de la etapa" });
     expect(within(group).getByRole("radio", { name: "Violeta" }).getAttribute("aria-checked")).toBe("true");
     fireEvent.click(within(group).getByRole("radio", { name: "Verde" }));
     expect(within(group).getByRole("radio", { name: "Verde" }).getAttribute("aria-checked")).toBe("true");
@@ -265,7 +265,7 @@ describe("TramosClient", () => {
     await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual([...TRAMO_INVALIDATIONS]));
   });
 
-  it("saves a renamed fase and the tramo name with Guardar cambios", async () => {
+  it("saves a renamed fase and the etapa name with Guardar cambios", async () => {
     actions.updateWorkflowAction.mockResolvedValue({ ...DISENO, name: "Diseño arquitectónico" });
     actions.updateWorkflowPhaseAction.mockResolvedValue({ ok: true, data: phase({ id: "p-ejecutivo", name: "Proyecto ejecutivo" }) });
     renderTramos();
@@ -294,7 +294,7 @@ describe("TramosClient", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Guardar cambios" }));
 
     expect(await within(panel).findByText("Ya existe una fase con ese nombre en Diseño.")).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "Editar tramo · Diseño" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Editar etapa · Diseño" })).toBeTruthy();
   });
 
   it("lists each fase with its index and task count", async () => {
@@ -342,7 +342,7 @@ describe("TramosClient", () => {
     expect(await within(panel).findByText("Nueva")).toBeTruthy();
   });
 
-  it("shows NAME_TAKEN with the tramo name when a new fase repeats one", async () => {
+  it("shows NAME_TAKEN with the etapa name when a new fase repeats one", async () => {
     actions.createWorkflowPhaseAction.mockRejectedValueOnce(new Error("NAME_TAKEN"));
     renderTramos();
     const panel = await openEditor("Diseño");
@@ -402,7 +402,7 @@ describe("TramosClient", () => {
     await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
   });
 
-  it("can't delete a tramo with active projects", async () => {
+  it("can't delete a etapa with active projects", async () => {
     renderTramos();
     fireEvent.click(screen.getByRole("button", { name: "Acciones de Presale" }));
     const item = (await screen.findByText("Eliminar")).closest('[role="menuitem"]')!;
@@ -411,19 +411,19 @@ describe("TramosClient", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
-  it("asks before deleting a tramo and then deletes it", async () => {
+  it("asks before deleting a etapa and then deletes it", async () => {
     actions.deleteWorkflowAction.mockResolvedValue(undefined);
     renderTramos();
     await openRowAction("Diseño", "Eliminar");
 
-    const dialog = await screen.findByRole("alertdialog", { name: "¿Eliminar el tramo «Diseño»?" });
+    const dialog = await screen.findByRole("alertdialog", { name: "¿Eliminar la etapa «Diseño»?" });
     expect(actions.deleteWorkflowAction).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
 
     await waitFor(() => expect(actions.deleteWorkflowAction).toHaveBeenCalledWith("w-diseno"));
   });
 
-  it("describes the read-only readiness rule for later tramos", () => {
+  it("describes the read-only readiness rule for later etapas", () => {
     expect(autoStartHelpText(DISENO, false)).toBe(
       "Se inicia solo cuando el proyecto está listo (Cobro de Presale completada). Si está apagado, el proyecto aparece en «Listos para iniciar».",
     );
@@ -435,7 +435,7 @@ describe("TramosClient", () => {
     expect(sorted.map((t) => t.title)).toEqual(["Reporte Estado Actual", "Planos ejecutivos"]);
   });
 
-  it("derives a unique key from the tramo name", () => {
+  it("derives a unique key from the etapa name", () => {
     expect(tramoKeyFor("Decoración", new Set())).toBe("decoracion");
     expect(tramoKeyFor("  Diseño de interiores ", new Set(["diseno-de-interiores"]))).toBe("diseno-de-interiores-2");
     expect(tramoKeyFor("¡!", new Set())).toBe("tramo");

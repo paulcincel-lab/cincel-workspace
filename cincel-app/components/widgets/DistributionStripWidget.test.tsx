@@ -27,7 +27,7 @@ const SEGMENTS = [
 function renderIn(style: PresentationStyle, segments = SEGMENTS) {
   return render(
     <StyleProvider style={style} scope="staff">
-      <DistributionStripWidget title="Proyectos por tramo" segments={segments} totalLabel="Proyectos" />
+      <DistributionStripWidget title="Proyectos por etapa" segments={segments} totalLabel="Proyectos" />
     </StyleProvider>,
   );
 }
@@ -35,7 +35,7 @@ function renderIn(style: PresentationStyle, segments = SEGMENTS) {
 function renderWith(style: PresentationStyle, props: Partial<DistributionStripWidgetProps>) {
   return render(
     <StyleProvider style={style} scope="staff">
-      <DistributionStripWidget title="Proyectos por tramo" segments={SEGMENTS} totalLabel="Proyectos" {...props} />
+      <DistributionStripWidget title="Proyectos por etapa" segments={SEGMENTS} totalLabel="Proyectos" {...props} />
     </StyleProvider>,
   );
 }
@@ -49,7 +49,7 @@ describe("DistributionStripWidget", () => {
     expect([...items].map((li) => li.getAttribute("data-segment"))).toEqual(["presale", "diseno"]);
     expect((items[1] as HTMLElement).style.flex).toContain("5");
     expect(items[1].textContent).toBe("5Diseño");
-    expect(screen.getByRole("region", { name: "Proyectos por tramo" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Proyectos por etapa" })).toBeTruthy();
     expect(screen.queryByTestId("distribution")).toBeNull();
   });
 
@@ -103,7 +103,7 @@ describe("DistributionStripWidget selection (opt-in)", () => {
     for (const style of ["esencial", "analitico"] as const) {
       const onSelect = vi.fn();
       renderWith(style, { selectedKey: "presale", onSelect });
-      const group = screen.getByRole("group", { name: "Filtrar: Proyectos por tramo" });
+      const group = screen.getByRole("group", { name: "Filtrar: Proyectos por etapa" });
       const buttons = within(group).getAllByRole("button");
       expect(buttons.map((b) => b.getAttribute("data-segment"))).toEqual(["presale", "diseno"]);
       expect(buttons[0].getAttribute("aria-pressed")).toBe("true");

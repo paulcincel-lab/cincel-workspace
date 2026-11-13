@@ -122,7 +122,7 @@ describe.skipIf(!url)("taskSummary (test DB)", () => {
     });
   }
 
-  it("grouping sets return tramo, project and total rows", async () => {
+  it("grouping sets return etapa, project and total rows", async () => {
     await inTx(async (tx, ctx) => {
       await seed(tx, ctx);
       const { result: summary, count } = await countQueries(() => taskSummary({ search: ctx.marker }, MEMBER, TODAY));

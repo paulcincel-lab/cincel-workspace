@@ -28,7 +28,7 @@ describe("resolveTemplatePhaseId", () => {
     expect(resolveTemplatePhaseId({ phase: "levantamiento" }, phases)).toBe("f-levantamiento");
   });
 
-  it("falls back to the tramo's first active fase in catalog order", () => {
+  it("falls back to the etapa's first active fase in catalog order", () => {
     expect(resolveTemplatePhaseId({ phase: "Otra cosa" }, phases)).toBe("f-anteproyecto");
     expect(resolveTemplatePhaseId({ phase: null }, phases)).toBe("f-anteproyecto");
     expect(resolveTemplatePhaseId({}, phases)).toBe("f-anteproyecto");

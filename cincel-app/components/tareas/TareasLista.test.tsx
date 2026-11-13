@@ -211,7 +211,7 @@ describe("TareasLista", () => {
     ]);
   });
 
-  it("links each task to its sheet over the current view and shows its tramo", () => {
+  it("links each task to its sheet over the current view and shows its etapa", () => {
     renderLista();
     const link = screen.getByRole("link", { name: "Levantamiento" });
     expect(link.getAttribute("href")).toBe("/tareas?estilo=analitico&tarea=t1");
@@ -219,8 +219,8 @@ describe("TareasLista", () => {
     expect(screen.getByTestId("lista-table").getAttribute("data-columns")).toContain("pctVencidas");
   });
 
-  it("shows only the selected tramo's tasks", () => {
-    nav.search = "estilo=analitico&tramo=diseno";
+  it("shows only the selected etapa's tasks", () => {
+    nav.search = "estilo=analitico&etapa=diseno";
     renderLista({ tramo: "diseno" });
     const rows = screen.getByTestId("lista-table").querySelectorAll("tr[data-row-id]");
     expect([...rows].map((r) => r.getAttribute("data-row-id"))).toEqual(["t1", "t2"]);
@@ -266,20 +266,20 @@ describe("TareasLista", () => {
 });
 
 describe("TareasLista start slot", () => {
-  it("mounts the start slot for exactly one known tramo", () => {
-    nav.search = "estilo=analitico&tramo=diseno";
+  it("mounts the start slot for exactly one known etapa", () => {
+    nav.search = "estilo=analitico&etapa=diseno";
     renderLista({ tramo: "diseno" });
     expect(screen.getByTestId("tareas-start-slot").getAttribute("data-workflow")).toBe("w-diseno");
     expect(screen.getByTestId("lista-table")).toBeTruthy();
   });
 
-  it("renders no slot with several tramos selected", () => {
-    nav.search = "estilo=analitico&tramo=presale,diseno&project=p9&iniciar=1";
+  it("renders no slot with several etapas selected", () => {
+    nav.search = "estilo=analitico&etapa=presale,diseno&project=p9&iniciar=1";
     renderLista({ tramo: "presale,diseno" });
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
   });
 
-  it("renders no slot for Todas or an unknown tramo", () => {
+  it("renders no slot for Todas or an unknown etapa", () => {
     renderLista({ tramo: null });
     expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
     cleanup();
@@ -288,7 +288,7 @@ describe("TareasLista start slot", () => {
   });
 
   it("never reloads the route", () => {
-    nav.search = "estilo=analitico&tramo=diseno";
+    nav.search = "estilo=analitico&etapa=diseno";
     renderLista({ tramo: "diseno" });
     expect(nav.refresh).not.toHaveBeenCalled();
     expect(nav.replace).not.toHaveBeenCalled();

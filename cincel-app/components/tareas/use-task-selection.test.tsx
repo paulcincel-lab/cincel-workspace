@@ -143,7 +143,7 @@ describe("task bulk changes", () => {
     expect(bulkResultToast({ updated: ["a"], skipped: [] })).toBe("1 tarea actualizada.");
   });
 
-  it("Fase lists the fases of the selected tasks' tramos, named by tramo when there are several", () => {
+  it("Fase lists the fases of the selected tasks' etapas, named by etapa when there are several", () => {
     const phases = (id: string) => [{ id: `${id}-1`, name: "Diseño" } as never];
     const t1 = task("a", { workflowId: "w1", workflow: { id: "w1", name: "Obra" } as never });
     const t2 = task("b", { workflowId: "w2", workflow: { id: "w2", name: "Proyecto" } as never });

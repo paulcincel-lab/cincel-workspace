@@ -142,7 +142,7 @@ describe("TareasAnalitico", () => {
       "% vencidas": "75 %",
       "Retraso promedio": "6.3 d",
     });
-    expect(screen.getByTestId("page-description").textContent).toBe("Por proyecto y tramo, ordenada por retraso.");
+    expect(screen.getByTestId("page-description").textContent).toBe("Por proyecto y etapa, ordenada por retraso.");
     expect(container.querySelector('[data-slot="tareas-totals"]')?.textContent).toBe(
       "Total · 5 tareas en 2 proyectos4 abiertas · 3 vencidas · 75 % · 6.3 d",
     );
@@ -161,7 +161,7 @@ describe("TareasAnalitico", () => {
     );
     // Header and tramo captions say how many of all.
     const lomas = screen.getByRole("region", { name: "Casa Lomas" });
-    expect(lomas.textContent).toContain("3 de 4 tareas · 2 tramos");
+    expect(lomas.textContent).toContain("3 de 4 tareas · 2 etapas");
     expect(lomas.textContent).toContain("1 de 2 tareas");
   });
 
@@ -208,11 +208,11 @@ describe("TareasAnalitico", () => {
         unfiltered: { ...ANALITICO_LATE_SUMMARY.unfiltered, projectList: ANALITICO_LATE_SUMMARY.unfiltered.projectList!.slice(0, 2) },
       }),
     ).toBe(
-      "1 proyecto sin tareas vencidas no se muestra: Casa Valle de Bravo. Los tramos sin vencidas también se ocultan.",
+      "1 proyecto sin tareas vencidas no se muestra: Casa Valle de Bravo. Las etapas sin vencidas también se ocultan.",
     );
     renderAnalitico("mostrar=en_retraso");
     expect(document.querySelector('[data-slot="hidden-projects"]')?.textContent).toBe(
-      "2 proyectos sin tareas vencidas no se muestran: Casa Valle de Bravo, Depto Roma. Los tramos sin vencidas también se ocultan.",
+      "2 proyectos sin tareas vencidas no se muestran: Casa Valle de Bravo, Depto Roma. Las etapas sin vencidas también se ocultan.",
     );
     cleanup();
     renderAnalitico();
@@ -262,18 +262,18 @@ describe("TareasAnalitico", () => {
   });
 
   it("row opens ?tarea=", () => {
-    renderAnalitico("tramo=presale");
+    renderAnalitico("etapa=presale");
     const link = screen.getByRole("link", { name: "Contrato" });
-    expect(link.getAttribute("href")).toBe("/tareas?tramo=presale&tarea=t1");
+    expect(link.getAttribute("href")).toBe("/tareas?etapa=presale&tarea=t1");
   });
 
-  it("writes the Mostrar and Tramo filters to the URL", () => {
+  it("writes the Mostrar and Etapa filters to the URL", () => {
     renderAnalitico();
     const mostrar = screen.getByRole("radiogroup", { name: "Mostrar" });
     expect(within(mostrar).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Todas7", "Abiertas6", "En retraso3"]);
     fireEvent.click(within(mostrar).getByRole("radio", { name: /En retraso/ }));
     expect(onQuery).toHaveBeenCalledWith({ mostrar: "en_retraso" });
-    const tramo = screen.getByRole("radiogroup", { name: "Tramo" });
+    const tramo = screen.getByRole("radiogroup", { name: "Etapa" });
     fireEvent.click(within(tramo).getByRole("radio", { name: /Presale/ }));
     expect(onQuery).toHaveBeenCalledWith({ tramo: "presale" });
     fireEvent.click(within(tramo).getByRole("radio", { name: /Todos/ }));

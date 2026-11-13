@@ -79,7 +79,7 @@ export function TemplateTaskDrawer({
       <SheetContent className="w-[560px] max-w-[560px] overflow-y-auto text-foreground">
         <SheetHeader>
           <SheetTitle>{editingId === null ? "Nueva tarea de plantilla" : "Editar tarea de plantilla"}</SheetTitle>
-          <p className="text-xs text-muted-foreground">Tramo: {workflowName}</p>
+          <p className="text-xs text-muted-foreground">Etapa: {workflowName}</p>
         </SheetHeader>
 
         <div className="space-y-4 px-6 py-4">
@@ -114,7 +114,7 @@ export function TemplateTaskDrawer({
               </SelectContent>
             </Select>
             <p id="template-phase-help" className="mt-1 text-xs text-muted-foreground">
-              {hasPhases ? "Obligatoria. La tarea se crea cuando se inicia esta fase." : "Este tramo aún no tiene fases."}
+              {hasPhases ? "Obligatoria. La tarea se crea cuando se inicia esta fase." : "Esta etapa aún no tiene fases."}
             </p>
           </div>
 
@@ -166,7 +166,7 @@ export function TemplateTaskDrawer({
             </div>
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">
-            Días relativos al inicio del tramo, usados al crear las tareas del proyecto.
+            Días relativos al inicio de la etapa, usados al crear las tareas del proyecto.
           </p>
 
           <div>
@@ -185,7 +185,7 @@ export function TemplateTaskDrawer({
               className="sm:max-w-40"
             />
             <p id="template-hours-help" className="mt-1 text-xs text-muted-foreground">
-              Vacío cuenta como 1 h. Se copia a la tarea cuando inicia el tramo.
+              Vacío cuenta como 1 h. Se copia a la tarea cuando inicia la etapa.
             </p>
           </div>
 

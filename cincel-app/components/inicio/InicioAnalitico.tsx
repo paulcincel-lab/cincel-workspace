@@ -95,7 +95,7 @@ const PACE_SERIES: LineSeries[] = [
 // ── Columns and heat (strict rules on whole numbers: ≥ n is > n − 1) ────────
 
 const ATTENTION_COLUMNS: RecordColumn[] = [
-  { key: "nombre", label: "Proyecto / tramo / tarea", width: 320 },
+  { key: "nombre", label: "Proyecto / etapa / tarea", width: 320 },
   { key: "responsable", label: "Responsable", width: 150 },
   { key: "estatus", label: "Estatus", width: 130 },
   { key: "vence", label: "Vence", mono: true, format: "date", width: 90 },
@@ -124,7 +124,7 @@ const WORKLOAD_COLUMNS: RecordColumn[] = [
 const SHARE_HEAT_RULE: HeatRule = { key: "pctVencidas", warnAt: SHARE_WARN_AT - 1, critAt: SHARE_CRIT_AT - 1 };
 
 const TRAMO_COLUMNS: RecordColumn[] = [
-  { key: "tramo", label: "Tramo", width: 180 },
+  { key: "tramo", label: "Etapa", width: 180 },
   { key: "distribucion", label: "Distribución", width: 224 },
   { key: "abiertas", label: "Abiertas", align: "right", mono: true, format: "count", width: 80 },
   { key: "vencidas", label: "Vencidas", align: "right", mono: true, format: "count", width: 80 },
@@ -136,7 +136,7 @@ const AGENDA_COLUMNS: RecordColumn[] = [
   { key: "hora", label: "Hora", mono: true, width: 70 },
   { key: "actividad", label: "Actividad", width: 280 },
   { key: "proyecto", label: "Proyecto", width: 180 },
-  { key: "tramo", label: "Tramo", width: 140 },
+  { key: "tramo", label: "Etapa", width: 140 },
   { key: "tipo", label: "Tipo", width: 90 },
   { key: "responsable", label: "Responsable", width: 150 },
 ];
@@ -380,7 +380,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
     return {
       id: project.id,
       label: project.name,
-      caption: countLabel(project.tramos.length, "tramo", "tramos"),
+      caption: countLabel(project.tramos.length, "etapa", "etapas"),
       metrics: [
         ...(project.overduePct !== null
           ? [
@@ -407,7 +407,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
           context={{
             label: "Nueva tarea",
             projectId: project.id,
-            placeholder: "Nueva tarea… (@persona #tramo mañana)",
+            placeholder: "Nueva tarea… (@persona #etapa mañana)",
           }}
           onCreate={(draft) => quickAdd.create({ projectId: project.id, tramoKeys: project.tramos.map((t) => t.key) }, draft)}
           disabled={quickAdd.pending}
@@ -622,7 +622,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
     ...(showWorkload
       ? [{ section: "carga" as const, label: "Carga por persona", count: String(people.length), tone: "text-muted-foreground" }]
       : []),
-    { section: "tramos", label: "Por tramo", count: String(tramos.length), tone: "text-muted-foreground" },
+    { section: "tramos", label: "Por etapa", count: String(tramos.length), tone: "text-muted-foreground" },
     { section: "agenda", label: "Agenda", count: String(agenda.length), tone: "text-muted-foreground" },
   ];
 
@@ -662,7 +662,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
               options={responsableOptions}
               onChange={(v) => setFilter("responsable", v)}
             />
-            <FilterSelect label="Tramo" value={filters.tramo} options={tramoOptions} onChange={(v) => setFilter("tramo", v)} />
+            <FilterSelect label="Etapa" value={filters.tramo} options={tramoOptions} onChange={(v) => setFilter("tramo", v)} />
             <span className="flex-1" aria-hidden="true" />
             <div className="flex items-center gap-1">
               <Button type="button" variant="ghost" size="sm" onClick={() => setAll(true)}>
@@ -704,7 +704,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
             {
               id: ANALITICO_SECTION.atencion,
               label: "Atención",
-              caption: "por proyecto → tramo",
+              caption: "por proyecto → etapa",
               metrics: [
                 metric("vencidas", "Vencidas", attention.overdue, attention.overdue > 0 ? "destructive" : undefined),
                 metric("bloqueadas", "Bloqueadas", attention.blocked),
@@ -825,14 +825,14 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
       <div className="min-w-0">
         <GroupedTable<TramoRow>
           toggleAll={false}
-          label="Tareas abiertas por tramo"
+          label="Tareas abiertas por etapa"
           columns={TRAMO_COLUMNS}
           heat={[SHARE_HEAT_RULE]}
           groups={[
             {
               id: ANALITICO_SECTION.tramos,
-              label: "Tareas abiertas por tramo",
-              caption: countLabel(tramos.length, "tramo", "tramos"),
+              label: "Tareas abiertas por etapa",
+              caption: countLabel(tramos.length, "etapa", "etapas"),
               metrics: [metric("abiertas", "Abiertas", tramoSum.open)],
               rows: tramoRows,
               quickAdd: emptyRow(TRAMO_COLUMNS.length, tramos.length === 0, allTramoOpen > 0, "Sin tareas abiertas"),
@@ -840,7 +840,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
                 tramos.length === 0
                   ? undefined
                   : {
-                      tramo: `Total · ${countLabel(tramos.length, "tramo", "tramos")}`,
+                      tramo: `Total · ${countLabel(tramos.length, "etapa", "etapas")}`,
                       distribucion: "",
                       abiertas: tramoSum.open,
                       vencidas: tramoSum.overdue,

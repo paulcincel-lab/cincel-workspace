@@ -391,7 +391,7 @@ describe("writes", () => {
     expect(h.addProjectCommentAction).toHaveBeenCalledTimes(1);
   });
 
-  it("schedule_from_template starts the tramo, shifts the dates to startDate and logs vía asistente", async () => {
+  it("schedule_from_template starts the etapa, shifts the dates to startDate and logs vía asistente", async () => {
     h.fetchWorkflowsAction.mockResolvedValue([
       { id: "w1", key: "presale", name: "Presale" },
       { id: "w2", key: "diseno", name: "Diseño" },

@@ -96,7 +96,7 @@ describe.skipIf(!url)("meetings in the range (test DB)", async () => {
 
   const titles = (items: { title: string }[]) => items.map((i) => i.title.replace(` ${run}`, ""));
 
-  it("returns the meetings of the viewer by start, with offset, tramo and attendees", async () => {
+  it("returns the meetings of the viewer by start, with offset, etapa and attendees", async () => {
     const { items } = await repo.eventItemsInRange(asUser(ana, "Ana", "Colaborador"), range, filters, { canViewTeam: false });
     expect(titles(items)).toEqual(["Google de Ana", "M1", "M2", "M4", "M5"]);
     const m1Item = items.find((i) => i.eventId === m1)!;

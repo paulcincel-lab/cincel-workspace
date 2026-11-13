@@ -67,7 +67,7 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "TEMPLATE_COLLISION":
       return `${named(name, "Un elemento")} coincide con una plantilla que ya se usa en su proyecto. Quita una en Tareas de plantilla.`;
     case "TEMPLATE_INVALID":
-      return "La plantilla elegida no existe o no es del tramo de la tarea. Revisa Tareas de plantilla.";
+      return "La plantilla elegida no existe o no es de la etapa de la tarea. Revisa Tareas de plantilla.";
     case "PROVIDER_SUBTYPE_MISSING":
       return "Elige el tipo de proveedor de los contactos.";
     case "SCHEDULE_EXISTS":
@@ -75,9 +75,9 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "DRIVE_NOT_CONFIGURED":
       return "Google Drive no está listo para subir los archivos. Apaga los archivos en Opciones.";
     case "MAPPING_INVALID":
-      if (message.startsWith("workflowId")) return "El tramo elegido ya no existe. Elige otro en Tramo del tablero.";
+      if (message.startsWith("workflowId")) return "La etapa elegida ya no existe. Elige otra en Etapa del tablero.";
       if (message.startsWith("groupTargets"))
-        return "El tramo o la fase elegida para un grupo ya no existe. Elige otra en Grupos y tramo.";
+        return "La etapa o la fase elegida para un grupo ya no existe. Elige otra en Grupos y etapa.";
       if (message.startsWith("contactMatches")) return "Un contacto elegido no existe o no es del tipo del tablero. Elige otro.";
       return "Falta una equivalencia o no es válida. Revisa este tablero.";
     case "PERSON_UNMATCHED": {
@@ -91,7 +91,7 @@ export function issueText(code: PlanIssueCode, message: string): string {
     case "FILE_MISSING":
       return `El archivo ${named(name, "de un elemento")} no se descargó; no se importa. Exporta otra vez o apaga los archivos en Opciones.`;
     case "TRAMO_MISSING":
-      return "Elige un tramo: hay tareas de este tablero sin tramo. Elige el Tramo del tablero o un tramo para su grupo.";
+      return "Elige una etapa: hay tareas de este tablero sin etapa. Elige la Etapa del tablero o una etapa para su grupo.";
     case "PHASE_UNRESOLVED":
       return `${named(name, "Una tarea")} no coincide con ninguna fase; se importa sin fase para revisarla.`;
     case "CLIENT_MISSING":

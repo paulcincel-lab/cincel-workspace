@@ -48,7 +48,7 @@ export function foldIcsLine(line: string): string {
 
 /** "Tramo: Diseño · Fase: Ejecutivo", or "Tramo: Diseño" when the task has no fase. */
 export function tramoPhaseLine(event: Pick<CalendarEvent, "tramoLabel" | "phaseLabel">): string {
-  return event.phaseLabel ? `Tramo: ${event.tramoLabel} · Fase: ${event.phaseLabel}` : `Tramo: ${event.tramoLabel}`;
+  return event.phaseLabel ? `Etapa: ${event.tramoLabel} · Fase: ${event.phaseLabel}` : `Etapa: ${event.tramoLabel}`;
 }
 
 function compactDate(isoDate: string): string {

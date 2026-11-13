@@ -39,7 +39,7 @@ export function tasksByBaseStatus(
   }));
 }
 
-export const NO_TRAMO_LABEL = "Sin tramo";
+export const NO_TRAMO_LABEL = "Sin etapa";
 
 /** Chart fill for a tramo: its fixed chart token, or the neutral gray. */
 function tramoChartColor(tramo: WorkflowRef | null): string {

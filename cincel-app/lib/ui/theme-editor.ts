@@ -55,7 +55,7 @@ export const TOKEN_SECTIONS: readonly TokenSection[] = [
     ],
   },
   {
-    title: "Tramos y estatus",
+    title: "Etapas y estatus",
     tokens: [
       { name: "chart-1", label: "Presale" },
       { name: "chart-1-ink", label: "Texto de Presale" },
@@ -104,7 +104,7 @@ export const SHADOW_LABELS: Record<OrgAppearance["shape"]["shadow"], string> = {
 };
 
 export const STYLE_CARDS: readonly { value: OrgAppearance["styleDefault"]; label: string; description: string }[] = [
-  { value: "visual", label: "Visual", description: "Gráficas grandes, donas, anillos y color por tramo." },
+  { value: "visual", label: "Visual", description: "Gráficas grandes, donas, anillos y color por etapa." },
   { value: "esencial", label: "Esencial", description: "Solo números, texto y listas. Sin gráficas." },
   { value: "analitico", label: "Analítico", description: "Tablas densas con variaciones y desvíos." },
 ];

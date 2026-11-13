@@ -41,7 +41,7 @@ function Counts({ counts }: { counts: MondayPreviewCounts }) {
 /** "Tramo · Fase: Diseño · Ejecutivo", or just the tramo or fase it has. */
 function tramoPhase(tramo: string | null | undefined, phase: string | null): string | null {
   const parts = [tramo, phase].filter(Boolean);
-  return parts.length > 0 ? `Tramo · Fase: ${parts.join(" · ")}` : null;
+  return parts.length > 0 ? `Etapa · Fase: ${parts.join(" · ")}` : null;
 }
 
 export function sampleDetails(sample: MondayPreviewSample): string {
@@ -50,7 +50,7 @@ export function sampleDetails(sample: MondayPreviewSample): string {
   const isAdmin = isTask && (c.admin === true || c.kind === "admin");
   const parts = [
     c.project ? `Proyecto: ${c.project}` : null,
-    sample.entity === "proyecto" ? (c.tramo ? `Tramos: ${c.tramo}` : null) : null,
+    sample.entity === "proyecto" ? (c.tramo ? `Etapas: ${c.tramo}` : null) : null,
     // A task's tramo, fase and espacio (project flow §4.9), or "Administración" for an admin task.
     isAdmin ? "Administración" : null,
     isTask && !isAdmin ? tramoPhase(c.tramo, c.phase) : null,

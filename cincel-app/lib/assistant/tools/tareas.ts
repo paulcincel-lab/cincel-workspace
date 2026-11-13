@@ -348,7 +348,7 @@ export function emailBodyForTasks(text: string): string {
 
 export const create_tasks_from_notes = defineTool({
   name: "create_tasks_from_notes",
-  description: `Crea varias tareas en un proyecto a partir de notas o de un correo: una tarea por línea o viñeta (máximo ${MAX_TASKS_FROM_NOTES}), en el tramo actual del proyecto. Pide confirmación al usuario antes de crearlas.`,
+  description: `Crea varias tareas en un proyecto a partir de notas o de un correo: una tarea por línea o viñeta (máximo ${MAX_TASKS_FROM_NOTES}), en la etapa actual del proyecto. Pide confirmación al usuario antes de crearlas.`,
   schema: fromNotesSchema,
   capability: canCreate,
   available: always,
@@ -361,7 +361,7 @@ export const create_tasks_from_notes = defineTool({
     const project = await fetchProjectAction(target.id);
     if (!project) return failure("NOT_FOUND", "No se encontró el proyecto o no tienes acceso a él.");
     if (!project.currentWorkflow) {
-      return failure("NOT_STARTED", `${quoted(project.name)} no tiene un tramo actual; inicia un tramo antes de crear tareas.`);
+      return failure("NOT_STARTED", `${quoted(project.name)} no tiene una etapa actual; inicia una etapa antes de crear tareas.`);
     }
 
     let source = input.text ?? "";
@@ -421,7 +421,7 @@ export const create_tasks_from_notes = defineTool({
 // ── rebalance_workload ──────────────────────────────────────────────────────
 
 const rebalanceSchema = z.object({
-  tramo: z.string().trim().min(2).optional().describe("Tramo a repartir (p. ej. Diseño); por defecto todos"),
+  tramo: z.string().trim().min(2).optional().describe("Etapa a repartir (p. ej. Diseño); por defecto todos"),
   maxPerPerson: z
     .number()
     .int()
@@ -525,7 +525,7 @@ function findWorkflow(workflows: WorkflowDetail[], name: string): WorkflowDetail
 export const rebalance_workload = defineTool({
   name: "rebalance_workload",
   description:
-    "Reparte las tareas abiertas entre el equipo cuando alguien rebasa su capacidad (o el máximo indicado): mueve tareas pendientes de menor prioridad a quien tiene espacio, dentro de un tramo o en todos. Pide confirmación al usuario antes de reasignar.",
+    "Reparte las tareas abiertas entre el equipo cuando alguien rebasa su capacidad (o el máximo indicado): mueve tareas pendientes de menor prioridad a quien tiene espacio, dentro de una etapa o en todos. Pide confirmación al usuario antes de reasignar.",
   schema: rebalanceSchema,
   capability: isLead,
   available: always,
@@ -536,7 +536,7 @@ export const rebalance_workload = defineTool({
     let workflow: WorkflowDetail | null = null;
     if (input.tramo) {
       workflow = findWorkflow(await fetchWorkflowsAction(), input.tramo);
-      if (!workflow) return failure("NOT_FOUND", `No existe el tramo "${input.tramo}".`);
+      if (!workflow) return failure("NOT_FOUND", `No existe la etapa "${input.tramo}".`);
     }
 
     const [tasks, staff] = await Promise.all([

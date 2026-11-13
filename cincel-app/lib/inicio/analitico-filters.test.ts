@@ -67,7 +67,7 @@ describe("Inicio Analítico filters", () => {
     expect(filterTramos(TRAMOS, f, SPLIT).map((s) => s.key)).toEqual(["diseno"]);
   });
 
-  it("filters by tramo", () => {
+  it("filters by etapa", () => {
     const f = { responsable: null, tramo: "presale" };
     expect(filterAttention(ATTENTION, f).map((a) => a.id)).toEqual(["c"]);
     expect(filterTramos(TRAMOS, f, SPLIT).map((s) => s.key)).toEqual(["presale"]);

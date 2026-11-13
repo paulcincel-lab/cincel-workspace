@@ -278,7 +278,7 @@ describe("present with CUTTO_API_URL", () => {
     });
   });
 
-  it("meeting_to_tasks creates one task per action item in the current tramo", async () => {
+  it("meeting_to_tasks creates one task per action item in the current etapa", async () => {
     h.client = fakeClient();
     const result = (await run("meeting_to_tasks", { meetingId: "m-1" })) as {
       ok: boolean;

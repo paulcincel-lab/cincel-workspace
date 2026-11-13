@@ -6,7 +6,7 @@ export const DETAIL_COPY = {
   unassigned: "Sin asignar",
   taskKind: "Tarea",
   meetingKind: "Reunión",
-  noTramo: "Sin tramo",
+  noTramo: "Sin etapa",
   noProject: "Sin proyecto",
   history: "HISTORIAL",
   historyEmpty: "Todavía no hay movimientos.",

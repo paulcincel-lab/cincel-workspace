@@ -109,7 +109,7 @@ export const agendaItemSchema = z
     allDay: z.boolean().optional(),
     estimated: z.boolean().optional().describe("Fecha estimada (sin compromiso)"),
     project: z.string().trim().max(200).optional(),
-    tramo: z.string().trim().max(60).nullable().optional().describe("Clave del tramo (workflows.key)"),
+    tramo: z.string().trim().max(60).nullable().optional().describe("Clave de la etapa (workflows.key)"),
     attendees: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
     href: z
       .string()
@@ -159,7 +159,7 @@ const render_table = defineTool({
 const render_timeline = defineTool({
   name: "render_timeline",
   description:
-    "Renderiza una línea de tiempo en la conversación con eventos o fechas de tareas (id, título, inicio ISO, fin, proyecto, tramo, asistentes, enlace interno). Úsala para agendas, entregas y cronogramas cortos.",
+    "Renderiza una línea de tiempo en la conversación con eventos o fechas de tareas (id, título, inicio ISO, fin, proyecto, etapa, asistentes, enlace interno). Úsala para agendas, entregas y cronogramas cortos.",
   schema: renderTimelineSchema,
   capability: () => true,
   available: () => true,

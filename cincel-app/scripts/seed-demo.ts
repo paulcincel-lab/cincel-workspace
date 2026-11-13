@@ -6,7 +6,7 @@
  *   - 5 people (Paul Langarica, Alejandro Riofrio, María González, Luis
  *     Ramírez, Sofía Castro); the roster's "Paul" and "Alejandro" are reused
  *   - the 6 canvas projects (Local Espinopapa, Guadalajara 83, Madrid 22,
- *     Salim Ortopedia, Casa Lomas, Oficinas Roma) with clients, tramo and
+ *     Salim Ortopedia, Casa Lomas, Oficinas Roma) with clients, etapas and
  *     team, plus the "Workspace" internal project (paused, so the active
  *     count stays 6 as in the canvas)
  *   - about 30 open tasks across Pendiente, En proceso and Vencida (open with
@@ -221,7 +221,7 @@ const PROJECTS: ReadonlyArray<{
   code: string;
   projectType: string;
   city: string;
-  /** Decoración was retired as a tramo (migration 0010); the canvas's Madrid 22 runs in Construcción. */
+  /** Decoración was retired as an etapa (migration 0010); the canvas's Madrid 22 runs in Construcción. */
   tramo: TramoKey;
   progress: number;
   start: number;
@@ -329,7 +329,7 @@ async function seedProjects(
 type TaskSeed = {
   title: string;
   project: string;
-  /** null = General (no tramo). */
+  /** null = General (no etapa). */
   tramo: TramoKey | null;
   manager: PersonKey | null;
   support?: PersonKey[];

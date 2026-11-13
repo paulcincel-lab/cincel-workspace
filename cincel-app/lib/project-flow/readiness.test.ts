@@ -20,14 +20,14 @@ function facts(over: Partial<ReadinessFacts>): ReadinessFacts {
 }
 
 describe("readinessBucket (BE §9.1)", () => {
-  it("first tramo: every project without its stage is ready since it was created", () => {
+  it("first etapa: every project without its stage is ready since it was created", () => {
     expect(readinessBucket(facts({ hasRule: false, afterStageStartedAt: null }))).toEqual({
       bucket: "ready",
       readySince: created,
     });
   });
 
-  it("no stage for the previous tramo: upcoming with zero counts when it is the first tramo", () => {
+  it("no stage for the previous etapa: upcoming with zero counts when it is the first etapa", () => {
     expect(readinessBucket(facts({ afterStageStartedAt: null, afterIsFirst: true }))).toEqual({
       bucket: "upcoming",
       open: 0,
@@ -35,7 +35,7 @@ describe("readinessBucket (BE §9.1)", () => {
     });
   });
 
-  it("no stage for the previous tramo, not the first: not listed", () => {
+  it("no stage for the previous etapa, not the first: not listed", () => {
     expect(readinessBucket(facts({ afterStageStartedAt: null, afterIsFirst: false }))).toEqual({ bucket: "hidden" });
   });
 

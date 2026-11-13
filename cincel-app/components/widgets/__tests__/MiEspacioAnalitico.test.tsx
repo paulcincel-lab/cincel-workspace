@@ -368,16 +368,16 @@ describe("MiEspacioAnalitico", () => {
     expect(within(checklists).getAllByText("50 %").length).toBeGreaterThan(0);
   });
 
-  it("filters by estado and tramo and keeps the URL", () => {
+  it("filters by estado and etapa and keeps the URL", () => {
     renderAnalitico();
     fireEvent.click(screen.getByRole("radio", { name: /En retraso/ }));
     expect(params.replaceMiEspacioParam).toHaveBeenCalledWith("estado", "retraso");
     fireEvent.click(screen.getByRole("radio", { name: /Presale/ }));
-    expect(params.replaceMiEspacioParam).toHaveBeenCalledWith("tramo", "presale");
+    expect(params.replaceMiEspacioParam).toHaveBeenCalledWith("etapa", "presale");
     cleanup();
 
     // A reload with the params shows the same filtered view.
-    nav.search = "estado=retraso&tramo=presale";
+    nav.search = "estado=retraso&etapa=presale";
     renderAnalitico();
     expect(screen.getByRole("radio", { name: /En retraso/ }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText("Permisos de obra")).toBeTruthy();
@@ -453,7 +453,7 @@ describe("MiEspacioAnalitico", () => {
 
     const input = screen.getByRole("textbox", { name: "Agregar tarea en Casa Lomas" });
     expect(input.getAttribute("placeholder")).toBe(
-      "Escribe para agregar una tarea en Casa Lomas…  #tramo  fecha  !prioridad",
+      "Escribe para agregar una tarea en Casa Lomas…  #etapa  fecha  !prioridad",
     );
     fireEvent.change(input, { target: { value: "Cotizar herrería" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -487,7 +487,7 @@ describe("MiEspacioAnalitico", () => {
     await waitFor(() => expect(click).toHaveBeenCalled());
     const csv = await blobs[0]!.text();
     const lines = csv.replace(/^﻿/, "").trim().split("\r\n");
-    expect(lines[0]).toBe("Proyecto;Tramo;Tarea;Estatus;Vence;Prioridad;Subtareas;Días de retraso");
+    expect(lines[0]).toBe("Proyecto;Etapa;Tarea;Estatus;Vence;Prioridad;Subtareas;Días de retraso");
     expect(lines.slice(1).map((line) => line.split(";")[2])).toEqual(["Planos de cimentación", "Permisos de obra"]);
     click.mockRestore();
   });
@@ -511,7 +511,7 @@ describe("MiEspacioAnalitico paging (#1051)", () => {
   );
   const diseno = () => grouped.props!.groups.find((g) => g.id === "p1")!.children!.find((c) => c.id === "p1:w-dis")!;
 
-  it("a tramo group loads 30 rows, says how many remain and loads the next page", async () => {
+  it("a etapa group loads 30 rows, says how many remain and loads the next page", async () => {
     const { client } = renderAnalitico({ tasks: MANY });
     expect(diseno().rows).toHaveLength(30);
     expect(diseno()).toMatchObject({ hasMore: true, remaining: 5 });

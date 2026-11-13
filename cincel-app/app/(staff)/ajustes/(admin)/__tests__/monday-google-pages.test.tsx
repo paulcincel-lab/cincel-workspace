@@ -95,7 +95,7 @@ vi.mock("@/components/ajustes/MondayImportSections", () => ({
 }));
 vi.mock("@/components/ajustes/GoogleSettings", () => ({ GoogleSettings: stand("GoogleSettings") }));
 vi.mock("@/components/configuracion/GoogleSetupWizard", () => ({ GoogleSetupWizard: stand("GoogleSetupWizard") }));
-vi.mock("@/app/(staff)/ajustes/(admin)/tramos/TramosClient", () => ({ TramosClient: stand("TramosClient") }));
+vi.mock("@/app/(staff)/ajustes/(admin)/etapas/TramosClient", () => ({ TramosClient: stand("TramosClient") }));
 vi.mock("@/app/(staff)/ajustes/(admin)/puestos/PuestosClient", () => ({ PuestosClient: stand("PuestosClient") }));
 vi.mock("@/components/patterns/SettingsSection", () => import("@/tests/unit/fixtures/settings-pattern-stand-ins"));
 
@@ -104,8 +104,8 @@ import MondayPage from "../monday/page";
 import GoogleLayout from "../google/layout";
 import GooglePage from "../google/page";
 import GoogleSetupPage from "../google/primeros-pasos/page";
-import TramosLayout from "../tramos/layout";
-import TramosPage from "../tramos/page";
+import TramosLayout from "../etapas/layout";
+import TramosPage from "../etapas/page";
 import PuestosLayout from "../puestos/layout";
 import PuestosPage from "../puestos/page";
 import { renderWithQueryClient } from "@/lib/query/test-utils";
@@ -156,7 +156,7 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-describe("Ajustes admin segments: monday, Google, Tramos y fases, Puestos", () => {
+describe("Ajustes admin segments: monday, Google, Etapas y fases, Puestos", () => {
   for (const { name, Page, Layout } of PAGES) {
     describe(name, () => {
       it("the segment layout 404s for anyone but an Administrador", async () => {
@@ -355,7 +355,7 @@ describe("/ajustes/google/primeros-pasos", () => {
   });
 });
 
-describe("/ajustes/tramos and /ajustes/puestos", () => {
+describe("/ajustes/etapas and /ajustes/puestos", () => {
   it("prefetch their page data for the viewer and hydrate it (the clients take no props)", async () => {
     const tramos = { workflows: [{ id: "w-1", key: "diseno", name: "Diseño", sortOrder: 1, active: true }] };
     catalogLoaders.loadAjustesTramos.mockResolvedValue(tramos);

@@ -29,7 +29,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) =>
 
 const run = randomUUID().slice(0, 8);
 
-describe.skipIf(!url)("Tareas tramo cell: move and fase reset through the page (test DB)", async () => {
+describe.skipIf(!url)("Tareas etapa cell: move and fase reset through the page (test DB)", async () => {
   const { eq, inArray } = await import("drizzle-orm");
   const { db, schema } = await import("@/lib/db/client");
   const { asViewer } = await import("@/lib/query/test-utils");
@@ -62,14 +62,14 @@ describe.skipIf(!url)("Tareas tramo cell: move and fase reset through the page (
     const members = await db
       .insert(schema.staff)
       .values([
-        { name: `Admin tramo ${run}`, email: `admin-tramo-${run}@cincel.example`, role: "Administrador" },
-        { name: `Colaborador tramo ${run}`, email: `colab-tramo-${run}@cincel.example`, role: "Colaborador" },
+        { name: `Admin etapa ${run}`, email: `admin-tramo-${run}@cincel.example`, role: "Administrador" },
+        { name: `Colaborador etapa ${run}`, email: `colab-tramo-${run}@cincel.example`, role: "Colaborador" },
       ])
       .returning({ id: schema.staff.id });
     [adminId, workerId] = members.map((m) => m.id) as [string, string];
     const [project] = await db
       .insert(schema.projects)
-      .values({ name: `Celdas tramo ${run}`, status: "activo", managerId: workerId })
+      .values({ name: `Celdas etapa ${run}`, status: "activo", managerId: workerId })
       .returning({ id: schema.projects.id });
     projectId = project!.id;
     const flows = await db
@@ -121,7 +121,7 @@ describe.skipIf(!url)("Tareas tramo cell: move and fase reset through the page (
     expect(await group(tramos.obra.key)).toEqual([]);
   });
 
-  it("moves the task for an admin: the fase is cleared and the row is read in the new tramo group", async () => {
+  it("moves the task for an admin: the fase is cleared and the row is read in the new etapa group", async () => {
     const result = await asViewer(admin(), () => updateTaskAction(taskId, { workflowId: tramos.obra.id }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;

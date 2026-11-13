@@ -110,21 +110,21 @@ describe("resolveGroupTarget defaults", () => {
     describe(strategy, () => {
       const b = (overrides: Partial<BoardDraft> = {}) => board({ strategy, ...overrides });
 
-      it("a title equal to a tramo name (case and accents aside) → that tramo", () => {
+      it("a title equal to a etapa name (case and accents aside) → that etapa", () => {
         expect(resolveGroupTarget(b(), group("CONSTRUCCION"), choices)).toEqual({ kind: "tramo", workflowId: OBRA });
         expect(resolveGroupTarget(b(), group(" diseno "), choices)).toEqual({ kind: "tramo", workflowId: DISENO });
       });
 
-      it("a fase of the board's tramo → that fase, even when other tramos have one of that name", () => {
+      it("a fase of the board's etapa → that fase, even when other etapas have one of that name", () => {
         expect(resolveGroupTarget(b(), group("anteproyecto"), choices)).toEqual({ kind: "phase", phaseId: ANTE });
         expect(resolveGroupTarget(b(), group("Minutas"), choices)).toEqual({ kind: "phase", phaseId: MINUTAS_D });
       });
 
-      it("a fase of exactly one other tramo → that fase", () => {
+      it("a fase of exactly one other etapa → that fase", () => {
         expect(resolveGroupTarget(b(), group("Residencia"), choices)).toEqual({ kind: "phase", phaseId: RESID });
       });
 
-      it("a fase name shared by several other tramos falls back to the board's tramo", () => {
+      it("a fase name shared by several other etapas falls back to the board's etapa", () => {
         const onObra = b({ workflowId: OBRA });
         expect(resolveGroupTarget(onObra, group("Minutas"), choices)).toEqual({ kind: "tramo", workflowId: OBRA });
       });
@@ -133,7 +133,7 @@ describe("resolveGroupTarget defaults", () => {
         expect(resolveGroupTarget(b(), group("ADMINISTRATIVO"), choices)).toEqual({ kind: "admin" });
       });
 
-      it("anything else → the board's tramo, or the unresolved tramo without one", () => {
+      it("anything else → the board's etapa, or the unresolved etapa without one", () => {
         expect(resolveGroupTarget(b(), group("Extras"), choices)).toEqual({ kind: "tramo", workflowId: DISENO });
         expect(resolveGroupTarget(b({ workflowId: null }), group("Extras"), choices)).toEqual({
           kind: "tramo",
@@ -228,11 +228,11 @@ describe("group target encoding", () => {
 });
 
 describe("group target choices", () => {
-  it("offers tramos, fases by tramo, espacio, proyecto aparte, administración and ignorar", () => {
+  it("offers etapas, fases by etapa, espacio, proyecto aparte, administración and ignorar", () => {
     expect(groupTargetChoices(board(), source.groups[1], choices)).toEqual([
-      { value: `tramo:${PRESALE}`, label: "Tramo «Presale»" },
-      { value: `tramo:${DISENO}`, label: "Tramo «Diseño»" },
-      { value: `tramo:${OBRA}`, label: "Tramo «Construcción»" },
+      { value: `tramo:${PRESALE}`, label: "Etapa «Presale»" },
+      { value: `tramo:${DISENO}`, label: "Etapa «Diseño»" },
+      { value: `tramo:${OBRA}`, label: "Etapa «Construcción»" },
       { value: `phase:${MINUTAS_P}`, label: "Fase «Minutas» · Presale", group: "Presale" },
       { value: `phase:${ANTE}`, label: "Fase «Anteproyecto» · Diseño", group: "Diseño" },
       { value: `phase:${EJEC}`, label: "Fase «Ejecutivo» · Diseño", group: "Diseño" },
@@ -273,7 +273,7 @@ describe("pruneGroupTargets", () => {
     expect(pruneGroupTargets(draft, choices)).toBe(draft);
   });
 
-  it("drops fase targets whose fase is inactive or gone, and tramos that are gone", () => {
+  it("drops fase targets whose fase is inactive or gone, and etapas that are gone", () => {
     const withInactive = {
       ...choices,
       workflows: choices.workflows.map((w) =>

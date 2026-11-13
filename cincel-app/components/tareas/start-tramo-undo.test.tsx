@@ -80,7 +80,7 @@ describe("notifyTramoStarted", () => {
     expect(lastToastOptions().action?.label).toBe("Deshacer");
   });
 
-  it("Deshacer hands the batch, project and tramo to the undo mutation", () => {
+  it("Deshacer hands the batch, project and etapa to the undo mutation", () => {
     const undo = vi.fn();
     notifyTramoStarted(result, { undo });
 

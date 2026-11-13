@@ -157,7 +157,7 @@ export function remapChangedTasks(preview: MondayRemapPreview): number {
 export function remapCountsText(preview: MondayRemapPreview): string {
   const c = preview.changes;
   return (
-    `${c.tramo} tareas cambian de tramo, ${c.phase} de fase, ${c.space} de espacio, ` +
+    `${c.tramo} tareas cambian de etapa, ${c.phase} de fase, ${c.space} de espacio, ` +
     `${c.admin} pasan a administración, ${c.unchanged} sin cambios, ${c.phaseUnresolved} sin fase · revisar`
   );
 }
@@ -334,7 +334,7 @@ export function RemapImportSheet({
         <SheetHeader>
           <SheetTitle>Reacomodar importación</SheetTitle>
           <SheetDescription>
-            Elige a qué tramo, fase o espacio va cada grupo de monday. No cambia estatus, personas, fechas ni
+            Elige a qué etapa, fase o espacio va cada grupo de monday. No cambia estatus, personas, fechas ni
             títulos, y no borra tareas.
           </SheetDescription>
         </SheetHeader>
@@ -377,12 +377,12 @@ export function RemapImportSheet({
                     ) : (
                       <>
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-foreground">Tramo del tablero</p>
+                          <p className="text-sm font-medium text-foreground">Etapa del tablero</p>
                           <ChoiceSelect
-                            label={`Tramo del tablero ${board.name}`}
+                            label={`Etapa del tablero ${board.name}`}
                             value={boardTargets.workflowId}
                             choices={workflowChoices}
-                            placeholder="Elige un tramo"
+                            placeholder="Elige una etapa"
                             onChange={(workflowId) => updateBoard(board.boardId, (current) => ({ ...current, workflowId }))}
                           />
                         </div>
@@ -429,7 +429,7 @@ export function RemapImportSheet({
                 ¿Reacomodar {changed} tareas de {remap?.project.name ?? "este proyecto"}?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Solo cambian tramo, fase, espacio, proyecto o administración. Estatus, personas, fechas y títulos
+                Solo cambian etapa, fase, espacio, proyecto o administración. Estatus, personas, fechas y títulos
                 se quedan igual.
               </AlertDialogDescription>
             </AlertDialogHeader>

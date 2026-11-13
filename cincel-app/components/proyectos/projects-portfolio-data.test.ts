@@ -70,19 +70,19 @@ function named(base: ProjectListItem, id: string, name: string): ProjectListItem
 }
 
 describe("tramoPills", () => {
-  it("counts per tramo and hides empty ones", () => {
+  it("counts per etapa and hides empty ones", () => {
     const pills = tramoPills([LOMAS, ANDARES, named(ANDARES, "p-3", "Casa Norte"), PAUSADO], TRAMOS);
     expect(pills).toEqual([
       { key: ALL_TRAMOS_KEY, label: "Todos", count: 4 },
       { key: "presale", label: "Presale", count: 2 },
       { key: "diseno", label: "Diseño", count: 1 },
-      { key: NO_TRAMO_KEY, label: "Sin tramo", count: 1 },
+      { key: NO_TRAMO_KEY, label: "Sin etapa", count: 1 },
     ]);
     // Construcción has no project: no pill.
     expect(pills.some((p) => p.key === "construccion")).toBe(false);
   });
 
-  it("keeps only Todos without projects and leaves Sin tramo out when every project has one", () => {
+  it("keeps only Todos without projects and leaves Sin etapa out when every project has one", () => {
     expect(tramoPills([], TRAMOS)).toEqual([{ key: ALL_TRAMOS_KEY, label: "Todos", count: 0 }]);
     expect(tramoPills([LOMAS], TRAMOS).map((p) => p.key)).toEqual([ALL_TRAMOS_KEY, "diseno"]);
   });
@@ -133,9 +133,9 @@ describe("esencialProjectRows", () => {
 
 describe("esencialDescription", () => {
   it("singular and plural", () => {
-    expect(esencialDescription(1)).toBe("1 activo · en qué tramo va cada obra y qué sigue.");
-    expect(esencialDescription(7)).toBe("7 activos · en qué tramo va cada obra y qué sigue.");
-    expect(esencialDescription(0)).toBe("0 activos · en qué tramo va cada obra y qué sigue.");
+    expect(esencialDescription(1)).toBe("1 activo · en qué etapa va cada obra y qué sigue.");
+    expect(esencialDescription(7)).toBe("7 activos · en qué etapa va cada obra y qué sigue.");
+    expect(esencialDescription(0)).toBe("0 activos · en qué etapa va cada obra y qué sigue.");
   });
 });
 
@@ -173,7 +173,7 @@ describe("parsePortfolioFilters", () => {
   it("defaults and unknown values", () => {
     expect(parsePortfolioFilters(new URLSearchParams(""))).toEqual(DEFAULT_PORTFOLIO_FILTERS);
     expect(
-      parsePortfolioFilters(new URLSearchParams("mostrar=xyz&tramo=diseno,,DISEÑO,diseno,presale&mios=true&pausados=1&q=%20%20casa%20")),
+      parsePortfolioFilters(new URLSearchParams("mostrar=xyz&etapa=diseno,,DISEÑO,diseno,presale&mios=true&pausados=1&q=%20%20casa%20")),
     ).toEqual({ mostrar: "todos", tramos: ["diseno", "presale"], mios: false, pausados: true, q: "casa" });
     expect(parsePortfolioFilters(new URLSearchParams("mostrar=atrasados&mios=1")).mostrar).toBe("atrasados");
     expect(parsePortfolioFilters(new URLSearchParams("mostrar=vencidas&mios=1"))).toMatchObject({ mostrar: "vencidas", mios: true });
@@ -198,7 +198,7 @@ describe("parsePortfolioFilters", () => {
 describe("applyPortfolioFilters", () => {
   const portfolio = portfolioById(PORTFOLIO);
 
-  it("vencidas, atrasados (≤ −3), tramo multi-select, mios via manager/coordinator/members, pausados", () => {
+  it("vencidas, atrasados (≤ −3), etapa multi-select, mios via manager/coordinator/members, pausados", () => {
     // Default: active only (paused out unless asked, archived never).
     expect(ids(applyPortfolioFilters(PROJECTS, portfolio, filters(), "s1"))).toEqual(["p-lomas", "p-andares"]);
     expect(ids(applyPortfolioFilters(PROJECTS, portfolio, filters({ pausados: true }), "s1"))).toEqual([
@@ -265,7 +265,7 @@ describe("portfolioFilterGroups", () => {
 describe("portfolioTable", () => {
   const projects = [LOMAS, ANDARES, BOSQUE];
 
-  it("one row per project by name, with its tramo; footer totals", () => {
+  it("one row per project by name, with its etapa; footer totals", () => {
     const { rows, totals } = portfolioTable(projects, ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
     expect(rows.map((r) => r.name)).toEqual(["Casa Bosque", "Casa Lomas", "Depto Andares"]);
     expect(rows.map((r) => r.tramo)).toEqual(["Diseño", "Diseño", "Presale"]);
@@ -290,11 +290,11 @@ describe("portfolioTable", () => {
     expect(none.totals).toMatchObject({ name: "Total · 0 proyectos", real: "—", overduePct: "—", avgDelayDays: "—" });
   });
 
-  it("a project without a tramo is a row like the rest, Sin tramo, sorted after every tramo", () => {
+  it("a project without a etapa is a row like the rest, Sin etapa, sorted after every etapa", () => {
     const loose: ProjectListItem = { ...named(ANDARES, "p-suelto", "Abeto"), needsTramo: true };
     const { rows } = portfolioTable([...projects, loose], ADMIN_PORTFOLIO, TRAMOS, { canSeeAdminData: false });
     expect(rows.map((r) => r.id)).toEqual(["p-suelto", "p-bosque", "p-lomas", "p-andares"]);
-    expect(rows[0]).toMatchObject({ tramo: "Sin tramo", tramoKey: null });
+    expect(rows[0]).toMatchObject({ tramo: "Sin etapa", tramoKey: null });
     expect(sortPortfolioRows(rows, { key: "tramo", direction: "asc" }).map((r) => r.id)).toEqual([
       "p-andares",
       "p-bosque",
@@ -366,7 +366,7 @@ describe("portfolioTable", () => {
 });
 
 describe("project tasks under a row", () => {
-  it("reads the project's open tasks, every tramo and responsable", () => {
+  it("reads the project's open tasks, every etapa and responsable", () => {
     expect(projectOpenTasksFilters("p-lomas")).toEqual({
       tramo: null,
       proyecto: "p-lomas",
@@ -434,7 +434,7 @@ describe("portfolioCsv", () => {
     const csv = portfolioCsv(rows, { canSeeAdminData: false });
     expect(csv.startsWith("﻿")).toBe(true);
     const lines = csv.slice(1).split("\r\n");
-    expect(lines[0]).toBe("Tramo;Proyecto;Cliente;Avance;Desv. plan;Abiertas;Vencidas;% vencidas;Retraso prom.;Próxima entrega");
+    expect(lines[0]).toBe("Etapa;Proyecto;Cliente;Avance;Desv. plan;Abiertas;Vencidas;% vencidas;Retraso prom.;Próxima entrega");
     // By name: Casa Lomas, then Depto Andares.
     expect(lines[1]).toBe(`Diseño;"Casa ""Lomas""; fase 2";'=HYPERLINK(1);62;-8;4;2;50;4.5;Plano de acabados · 2026-11-12`);
     expect(lines[2]).toBe("Presale;Depto Andares;;15;3;8;0;0;;");
@@ -537,7 +537,7 @@ describe("attentionProjects", () => {
     expect(list[0].steps.map((s) => s.state)).toEqual(["done", "current", "next"]);
   });
 
-  it("badges the tramo and the active fase", () => {
+  it("badges the etapa and the active fase", () => {
     const project = { ...LOMAS, activePhase: { id: "f1", name: "Proyecto ejecutivo", sortOrder: 1 } };
     const [first] = attentionProjects([project], portfolioById(PORTFOLIO), TRAMOS);
     expect(first.badge).toBe("Diseño · Proyecto ejecutivo");
@@ -546,18 +546,18 @@ describe("attentionProjects", () => {
 });
 
 describe("portfolioProjectCards", () => {
-  it("one card per project by name, a project without tramo included", () => {
+  it("one card per project by name, a project without etapa included", () => {
     const sinTramo = { ...PAUSADO, status: "activo" as const };
     const cards = portfolioProjectCards([LOMAS, ANDARES, sinTramo], portfolioById(PORTFOLIO), TRAMOS);
     expect(cards.map((c) => c.name)).toEqual(["Casa Lomas", "Depto Andares", "Oficina Centro"]);
-    expect(cards[2]).toMatchObject({ tramoKey: null, badge: "Sin tramo" });
+    expect(cards[2]).toMatchObject({ tramoKey: null, badge: "Sin etapa" });
     // Same shape as an attention card.
     expect(cards[0]).toEqual(attentionProjects([LOMAS], portfolioById(PORTFOLIO), TRAMOS)[0]);
   });
 });
 
 describe("moveProjectToTramo", () => {
-  it("moves currentWorkflow and flips tramos[].current", () => {
+  it("moves currentWorkflow and flips etapas[].current", () => {
     const data = { projects: [LOMAS, ANDARES], tramos: TRAMOS };
     const next = moveProjectToTramo(data, LOMAS.id, "w1");
     const moved = next.projects[0];
@@ -611,7 +611,7 @@ describe("visualDescription", () => {
 });
 
 describe("tramoTone", () => {
-  it("maps a tramo to its chart color, ink and tint; Sin tramo is neutral", () => {
+  it("maps a etapa to its chart color, ink and tint; Sin etapa is neutral", () => {
     expect(tramoTone("diseno")).toEqual({ color: "var(--chart-2)", ink: "var(--chart-2-ink)", soft: "var(--tint-violet)" });
     expect(tramoTone(NO_TRAMO_KEY)).toEqual({ color: "var(--muted-foreground)", ink: "var(--foreground)", soft: "var(--muted)" });
     expect(tramoTone(null).color).toBe("var(--muted-foreground)");

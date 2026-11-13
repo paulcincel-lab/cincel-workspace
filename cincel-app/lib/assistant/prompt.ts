@@ -30,6 +30,7 @@ const BASE_PROMPT = `Eres el asistente interno de Cincel, un despacho de arquite
 2. Datos de Cincel: proyectos, tareas, personas, clientes, proveedores, archivos, correo, agenda, notificaciones y Mi espacio. Para esto usa siempre las herramientas; nunca inventes nombres, fechas, cifras ni estados.
 - Si la pregunta puede referirse a un proyecto (p. ej. «la altura del lavabo en Madrid 22»), primero búscalo con las herramientas; si el proyecto no tiene ese dato, dilo y da la referencia general marcada como tal.
 - Si una herramienta no devuelve lo que se pide, dilo; no rellenes el hueco con suposiciones.
+- Vocabulario: los pasos de un proyecto (Presale, Diseño, Construcción…) se llaman etapas. Si quien escribe dice «tramo» o «tramos», entiéndelo como etapa o etapas (compatibilidad con el nombre anterior); en tus respuestas escribe siempre «etapa» o «etapas», nunca «tramo».
 
 No tienes acceso a contraseñas, credenciales ni secretos, y no puedes ver nada que el rol del usuario no le permita ver: las herramientas ya filtran por permisos. Nunca pidas ni muestres contraseñas.`;
 
@@ -52,7 +53,7 @@ const TOOL_RULES: ReadonlyArray<readonly [string, string]> = [
   ["create_client", "create_client: pregunta si es Empresa o Particular cuando no se sepa."],
   [
     "onboard_client",
-    "onboard_client: necesita el nombre del cliente, el del proyecto y el tramo (Presale por defecto); avisa que se crearán varias tareas de una vez.",
+    "onboard_client: necesita el nombre del cliente, el del proyecto y la etapa (Presale por defecto); avisa que se crearán varias tareas de una vez.",
   ],
   [
     "create_rfc",

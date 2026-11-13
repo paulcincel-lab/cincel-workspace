@@ -3,7 +3,7 @@ import { tramoColorClass } from "@/lib/tramos/tramo-color";
 import type { WorkflowRef } from "@/lib/types/core";
 import { cn } from "@/lib/utils";
 
-export const NO_TRAMO_BADGE_LABEL = "Sin tramo";
+export const NO_TRAMO_BADGE_LABEL = "Sin etapa";
 
 /** A tramo label: outline badge with the tramo's color dot and its name, so the
  * color is never the only cue. Without a tramo it reads "Sin tramo" with the

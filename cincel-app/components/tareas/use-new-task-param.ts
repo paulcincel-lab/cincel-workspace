@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useNewTaskUi } from "@/lib/stores/new-task-store";
 
 import type { NewTaskDefaults } from "./new-task-form";
+import { readEtapaParam } from "@/lib/ui/etapa-param";
 
 /** The search param that opens `NewTaskDialog` (`/tareas?nueva=1`, FE §2.1). */
 export const NEW_TASK_PARAM = "nueva";
@@ -23,7 +24,7 @@ export function newTaskSearch(params: URLSearchParams, open: boolean): string {
 export function newTaskDefaultsFromSearch(params: URLSearchParams): NewTaskDefaults {
   const defaults: NewTaskDefaults = {};
   const projectId = params.get("proyecto");
-  const tramoKey = params.get("tramo");
+  const tramoKey = readEtapaParam(params);
   if (projectId) defaults.projectId = projectId;
   if (tramoKey) defaults.tramoKey = tramoKey;
   return defaults;

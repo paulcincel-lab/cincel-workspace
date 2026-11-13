@@ -112,7 +112,7 @@ describe("closing hook from the task status actions", () => {
     }
   });
 
-  it("a task without a tramo (admin task) skips the hook", async () => {
+  it("a task without a etapa (admin task) skips the hook", async () => {
     repo.setTaskStatus.mockResolvedValue(taskRow("t1", null));
 
     await setTaskStatusAction("t1", "completado");

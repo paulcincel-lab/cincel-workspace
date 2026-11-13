@@ -728,11 +728,11 @@ async function computePlan(db: Exec, ctx: RemapContext, input: MondayRemapInput,
   for (const [boardId, entry] of inputs) {
     const board = boardsById.get(boardId)!;
     if (entry.workflowId && !workflowById(catalog, entry.workflowId))
-      issue("MAPPING_INVALID", true, board, "El tramo del tablero ya no existe.");
+      issue("MAPPING_INVALID", true, board, "La etapa del tablero ya no existe.");
     for (const [groupId, t] of Object.entries(entry.groupTargets)) {
       const title = board.file!.groups.find((g) => g.id === groupId)?.title ?? groupId;
       if (t.kind === "tramo" && !workflowById(catalog, t.workflowId))
-        issue("MAPPING_INVALID", true, board, `El tramo elegido para el grupo «${title}» ya no existe.`);
+        issue("MAPPING_INVALID", true, board, `La etapa elegida para el grupo «${title}» ya no existe.`);
       if (t.kind === "phase" && !phaseById(catalog, t.phaseId))
         issue("MAPPING_INVALID", true, board, `La fase elegida para el grupo «${title}» ya no existe.`);
     }
@@ -859,7 +859,7 @@ async function computePlan(db: Exec, ctx: RemapContext, input: MondayRemapInput,
       "TRAMO_MISSING",
       true,
       boardsById.get(boardId)!,
-      `Elige un tramo para el tablero o para ${titles.size === 1 ? "el grupo" : "los grupos"} ${list}.`,
+      `Elige una etapa para el tablero o para ${titles.size === 1 ? "el grupo" : "los grupos"} ${list}.`,
     );
   }
 
@@ -1033,7 +1033,7 @@ function placementLabel(p: TaskPlacement, plan: Plan): string {
   const project =
     p.projectId !== plan.ctx.project.id ? `${plan.projectNames.get(p.projectId) ?? "Otro proyecto"} · ` : "";
   if (p.kind === "admin") return `${project}Tareas de administración`;
-  const tramo = workflowById(plan.catalog, p.workflowId)?.name ?? "Sin tramo";
+  const tramo = workflowById(plan.catalog, p.workflowId)?.name ?? "Sin etapa";
   const phase = phaseById(plan.catalog, p.phaseId)?.name ?? "Sin fase";
   const space = p.spaceId ? ` · ${plan.spaceNames.get(p.spaceId) ?? "Espacio"}` : "";
   return `${project}${tramo} · ${phase}${space}`;

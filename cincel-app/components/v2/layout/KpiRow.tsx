@@ -81,7 +81,7 @@ function SplitBar({ split }: { split: NonNullable<KpiTileProps["split"]> }) {
   return (
     <div
       role="img"
-      aria-label={split.length > 0 ? `Por tramo: ${label}` : "Por tramo: sin datos"}
+      aria-label={split.length > 0 ? `Por etapa: ${label}` : "Por etapa: sin datos"}
       data-slot="kpi-split"
       className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
     >

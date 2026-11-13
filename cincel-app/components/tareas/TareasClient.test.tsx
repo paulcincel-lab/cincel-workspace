@@ -241,7 +241,7 @@ describe("TareasClient data", () => {
   it("a filter change is a new key: one bundle request, no facets request of its own", () => {
     const { rerender } = renderClient();
     pageData.getTareasPageData.mockReturnValue(new Promise(() => {}));
-    navigation.search = "tramo=diseno";
+    navigation.search = "etapa=diseno";
     rerender(styled(<TareasClient />));
     expect(pageData.getTareasPageData).toHaveBeenCalledTimes(1);
     expect(pageData.getTareasPageData).toHaveBeenCalledWith(
@@ -262,7 +262,7 @@ describe("TareasClient search", () => {
     act(() => {
       vi.advanceTimersByTime(TAREAS_SEARCH_DEBOUNCE_MS);
     });
-    expect(lastReplaced()).toBe("/tareas?tramo=diseno&q=renders");
+    expect(lastReplaced()).toBe("/tareas?etapa=diseno&q=renders");
   });
 
   it("restores the search box when the URL changes (back / forward)", () => {
@@ -294,7 +294,7 @@ describe("TareasClient per style", () => {
     expect(screen.getByTestId("view-esencial")).toBeTruthy();
   });
 
-  it("Analítico renders the tables by project and tramo", () => {
+  it("Analítico renders the tables by project and etapa", () => {
     renderClient();
     expect(screen.getByTestId("view-analitico")).toBeTruthy();
     expect(screen.queryByTestId("view-visual")).toBeNull();
@@ -319,7 +319,7 @@ describe("TareasClient start slot", () => {
   const VIEWS = { visual: "view-visual", esencial: "view-esencial", analitico: "view-analitico" } as const;
 
   for (const [s, testId] of Object.entries(VIEWS) as [PresentationStyle, string][]) {
-    it(`${s}: one tramo filter mounts the slot for that tramo inside the layout`, () => {
+    it(`${s}: one etapa filter mounts the slot for that etapa inside the layout`, () => {
       style = s;
       renderClient({ tramo: "diseno" });
       const slot = within(screen.getByTestId(testId)).getByTestId("tareas-start-slot");
@@ -327,7 +327,7 @@ describe("TareasClient start slot", () => {
       expect(screen.getAllByTestId("tareas-start-slot")).toHaveLength(1);
     });
 
-    it(`${s}: no slot without a tramo filter`, () => {
+    it(`${s}: no slot without a etapa filter`, () => {
       style = s;
       renderClient();
       expect(screen.getByTestId(testId)).toBeTruthy();
@@ -335,7 +335,7 @@ describe("TareasClient start slot", () => {
     });
   }
 
-  it("no slot for several tramos or an unknown tramo", () => {
+  it("no slot for several etapas or an unknown etapa", () => {
     for (const tramo of ["presale,diseno", "nope"]) {
       renderClient({ tramo });
       expect(screen.queryByTestId("tareas-start-slot")).toBeNull();
@@ -344,7 +344,7 @@ describe("TareasClient start slot", () => {
   });
 
   it("keeps ?project=X&iniciar=1 in the URL for the slot to open the sheet", () => {
-    navigation.search = "tramo=diseno&project=p9&iniciar=1";
+    navigation.search = "etapa=diseno&project=p9&iniciar=1";
     const client = createTestQueryClient();
     seed(client, parseTareasQuery(new URLSearchParams(navigation.search)), FACETS);
     renderWithQueryClient(styled(<TareasClient />), { client });
@@ -354,7 +354,7 @@ describe("TareasClient start slot", () => {
 });
 
 describe("TareasClient Nueva tarea", () => {
-  it("opens the shell's NewTaskDialogHost with the tramo and project as defaults, without a navigation", () => {
+  it("opens the shell's NewTaskDialogHost with the etapa and project as defaults, without a navigation", () => {
     renderClient({ tramo: "presale", proyecto: P1 });
     fireEvent.click(screen.getByRole("button", { name: "Nueva tarea" }));
     expect(navigation.replace).not.toHaveBeenCalled();

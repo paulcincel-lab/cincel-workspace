@@ -218,7 +218,7 @@ describe("TareasTablero · three styles from tareas.board(f)", () => {
   });
 
   it("Visual: one column per estatus, empty column collapsed, card links keep the view and filters", () => {
-    nav.search = "tramo=diseno&estado=pendiente";
+    nav.search = "etapa=diseno&estado=pendiente";
     const { container } = renderTablero("visual");
 
     expect(container.querySelectorAll("[data-task-id]").length).toBe(TOTAL);
@@ -227,7 +227,7 @@ describe("TareasTablero · three styles from tareas.board(f)", () => {
     expect(screen.getByRole("region", { name: boardColumnLabel("Completado", 1) })).toBeTruthy();
     expect(screen.getByRole("region", { name: boardColumnLabel("Bloqueado", 0) }).getAttribute("data-collapsed")).toBe("true");
     expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe(
-      "/tareas?tramo=diseno&estado=pendiente&tarea=t2",
+      "/tareas?etapa=diseno&estado=pendiente&tarea=t2",
     );
   });
 

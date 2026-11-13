@@ -72,7 +72,7 @@ export function groupTargetChoices(
   const out: GroupChoice[] = [];
   if (kinds.includes("tramo")) {
     for (const workflow of choices.workflows) {
-      out.push({ value: `tramo:${workflow.id}`, label: `Tramo «${workflow.name}»` });
+      out.push({ value: `tramo:${workflow.id}`, label: `Etapa «${workflow.name}»` });
     }
   }
   if (kinds.includes("phase")) {

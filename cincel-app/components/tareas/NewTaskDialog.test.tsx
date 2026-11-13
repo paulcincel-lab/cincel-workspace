@@ -122,7 +122,7 @@ afterEach(() => {
 });
 
 describe("new-task-form helpers", () => {
-  it("lists only the tramo's active fases in catalog order", () => {
+  it("lists only the etapa's active fases in catalog order", () => {
     expect(tramoFases(DISENO).map((f) => f.name)).toEqual(["Anteproyecto", "Ejecutivo"]);
     expect(tramoFases(null)).toEqual([]);
   });
@@ -146,8 +146,8 @@ describe("new-task-form helpers", () => {
     expect(newTaskSearch(new URLSearchParams("nueva=1"), false)).toBe("");
   });
 
-  it("reads the proyecto and tramo defaults from the URL", () => {
-    expect(newTaskDefaultsFromSearch(new URLSearchParams("proyecto=p-1&tramo=diseno&nueva=1"))).toEqual({
+  it("reads the proyecto and etapa defaults from the URL", () => {
+    expect(newTaskDefaultsFromSearch(new URLSearchParams("proyecto=p-1&etapa=diseno&nueva=1"))).toEqual({
       projectId: "p-1",
       tramoKey: "diseno",
     });
@@ -156,13 +156,13 @@ describe("new-task-form helpers", () => {
 });
 
 describe("NewTaskDialog", () => {
-  it("loads active projects and tramos through the catalog queries when it opens", async () => {
+  it("loads active projects and etapas through the catalog queries when it opens", async () => {
     const { client } = await renderDialog();
     expect(actions.fetchCatalogProjectOptions).toHaveBeenCalledWith({});
     expect(actions.fetchWorkflowsAction).toHaveBeenCalled();
     expect(screen.getByRole("combobox", { name: "Proyecto" }).textContent).toContain("Casa Roble");
     // The project's current tramo is the default.
-    expect(screen.getByRole("combobox", { name: "Tramo" }).textContent).toContain("Diseño");
+    expect(screen.getByRole("combobox", { name: "Etapa" }).textContent).toContain("Diseño");
     expect(actions.fetchCatalogAssignableStaff).toHaveBeenCalledWith({ workflowId: "w-diseno" });
     expect(client.getQueryData(qk.catalog.projectOptions())).toEqual(PROJECT_OPTIONS);
     expect(client.getQueryData(qk.catalog.assignableStaff("w-diseno"))).toEqual(CATALOG_STAFF);
@@ -207,7 +207,7 @@ describe("NewTaskDialog", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("No tienes permiso para realizar esta acción.");
   });
 
-  it("fills the Fase list from the selected tramo only", async () => {
+  it("fills the Fase list from the selected etapa only", async () => {
     await renderDialog();
     const trigger = screen.getByRole("combobox", { name: "Fase" });
     expect(trigger.textContent).toContain("Anteproyecto");
@@ -216,43 +216,43 @@ describe("NewTaskDialog", () => {
     expect(options.map((o) => o.textContent)).toEqual(["Anteproyecto", "Ejecutivo"]);
   });
 
-  it("hides Fase when the tramo has no catalog", async () => {
+  it("hides Fase when the etapa has no catalog", async () => {
     await renderDialog();
-    await pick("Tramo", "Presale");
+    await pick("Etapa", "Presale");
     await waitFor(() => expect(screen.queryByRole("combobox", { name: "Fase" })).toBeNull());
   });
 
-  it("follows the project's current tramo until a tramo is picked", async () => {
+  it("follows the project's current etapa until a etapa is picked", async () => {
     await renderDialog();
     await pick("Proyecto", "Torre Norte");
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Tramo" }).textContent).toContain("Presale"));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Etapa" }).textContent).toContain("Presale"));
     expect(screen.queryByRole("combobox", { name: "Fase" })).toBeNull();
   });
 
-  it("prefills project, tramo, title and description from defaults", async () => {
+  it("prefills project, etapa, title and description from defaults", async () => {
     await renderDialog({
       defaults: { projectId: "p-norte", tramoKey: "diseno", title: "Revisar planos", description: "Del correo" },
     });
     expect(screen.getByRole("combobox", { name: "Proyecto" }).textContent).toContain("Torre Norte");
-    expect(screen.getByRole("combobox", { name: "Tramo" }).textContent).toContain("Diseño");
+    expect(screen.getByRole("combobox", { name: "Etapa" }).textContent).toContain("Diseño");
     expect(titleInput().value).toBe("Revisar planos");
     expect((screen.getByRole("textbox", { name: "Descripción" }) as HTMLTextAreaElement).value).toBe("Del correo");
   });
 
-  it("fills subtareas from the tramo template of the selected fase", async () => {
+  it("fills subtareas from the etapa template of the selected fase", async () => {
     await renderDialog();
-    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla del tramo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla de la etapa" }));
     expect(subtaskValues()).toEqual(["Levantamiento", "Medidas del sitio"]);
 
     await pick("Fase", "Ejecutivo");
-    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla del tramo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla de la etapa" }));
     expect(subtaskValues()).toEqual(["Levantamiento", "Medidas del sitio", "Planos de conjunto"]);
   });
 
-  it("hides the template link when the tramo has no templates", async () => {
+  it("hides the template link when the etapa has no templates", async () => {
     await renderDialog();
-    await pick("Tramo", "Presale");
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Usar plantilla del tramo" })).toBeNull());
+    await pick("Etapa", "Presale");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Usar plantilla de la etapa" })).toBeNull());
   });
 
   it("adds and removes subtareas by hand", async () => {
@@ -302,7 +302,7 @@ describe("NewTaskDialog", () => {
     await renderDialog();
     fireEvent.change(titleInput(), { target: { value: "Planos" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("Esa fase no pertenece al tramo de la tarea.");
+    expect((await screen.findByRole("alert")).textContent).toBe("Esa fase no pertenece a la etapa de la tarea.");
   });
 
   it("creates the task and its subtareas, closes and invalidates the views showing tasks", async () => {
@@ -313,7 +313,7 @@ describe("NewTaskDialog", () => {
     fireEvent.change(screen.getByLabelText("Fecha de entrega"), { target: { value: "2026-11-20" } });
     fireEvent.click(screen.getByRole("radio", { name: "Alta" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Descripción" }), { target: { value: "Con cotas" } });
-    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla del tramo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla de la etapa" }));
     fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -364,16 +364,16 @@ describe("NewTaskDialog", () => {
     actions.createSubtaskAction.mockResolvedValue({ ok: false, error: "NESTED" });
     const { onOpenChange } = await renderDialog();
     fireEvent.change(titleInput(), { target: { value: "Planos" } });
-    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla del tramo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla de la etapa" }));
     fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(actions.createSubtaskAction.mock.calls[0][0]).toBe("task-9");
     expect(toasts.error).toHaveBeenCalledWith("No se pudo completar la acción. Intenta de nuevo.");
   });
 
-  it("saves no fase for a tramo without a catalog", async () => {
+  it("saves no fase for a etapa without a catalog", async () => {
     await renderDialog();
-    await pick("Tramo", "Presale");
+    await pick("Etapa", "Presale");
     fireEvent.change(titleInput(), { target: { value: "Primera visita" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
     await waitFor(() => expect(actions.createUserTaskAction).toHaveBeenCalled());
@@ -384,7 +384,7 @@ describe("NewTaskDialog", () => {
     actions.createSubtaskAction.mockRejectedValue(new Error("NESTED"));
     const { onOpenChange } = await renderDialog();
     fireEvent.change(titleInput(), { target: { value: "Planos" } });
-    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla del tramo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar plantilla de la etapa" }));
     fireEvent.click(screen.getByRole("button", { name: "Crear tarea" }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(actions.createSubtaskAction).toHaveBeenCalledTimes(2);

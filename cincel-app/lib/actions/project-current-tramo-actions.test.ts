@@ -61,7 +61,7 @@ describe("setProjectCurrentTramoAction", () => {
     await expect(setProjectCurrentTramoAction(PROJECT, "nope")).rejects.toThrow("NOT_FOUND");
   });
 
-  it("sets a started tramo as current, with no project flow route revalidated", async () => {
+  it("sets a started etapa as current, with no project flow route revalidated", async () => {
     const row = await setProjectCurrentTramoAction(PROJECT, TRAMO);
     expect(row).toBe(DETAIL);
     expect(repo.setProjectCurrentTramo).toHaveBeenCalledWith(PROJECT, TRAMO, ACTOR);
@@ -76,21 +76,21 @@ describe("setProjectCurrentTramoAction", () => {
     expect(revalidatePath).not.toHaveBeenCalledWith("/tablero");
   });
 
-  it("returns NOT_STARTED for a non-admin on a tramo that wasn't started", async () => {
+  it("returns NOT_STARTED for a non-admin on a etapa that wasn't started", async () => {
     session.access = "Colaborador";
     repo.setProjectCurrentTramo.mockRejectedValue(new Error("NOT_STARTED"));
     await expect(setProjectCurrentTramoAction(PROJECT, TRAMO)).rejects.toThrow("NOT_STARTED");
     expect(repo.assignProjectTramo).not.toHaveBeenCalled();
   });
 
-  it("lets an admin assign a tramo that wasn't started (Asignar tramo)", async () => {
+  it("lets an admin assign a etapa that wasn't started (Asignar etapa)", async () => {
     repo.setProjectCurrentTramo.mockRejectedValue(new Error("NOT_STARTED"));
     const row = await setProjectCurrentTramoAction(PROJECT, TRAMO);
     expect(row).toBe(DETAIL);
     expect(repo.assignProjectTramo).toHaveBeenCalledWith(PROJECT, TRAMO, ACTOR);
   });
 
-  it("passes the admin path's NOT_STARTED through when the project already has a current tramo", async () => {
+  it("passes the admin path's NOT_STARTED through when the project already has a current etapa", async () => {
     repo.setProjectCurrentTramo.mockRejectedValue(new Error("NOT_STARTED"));
     repo.assignProjectTramo.mockRejectedValue(new Error("NOT_STARTED"));
     await expect(setProjectCurrentTramoAction(PROJECT, TRAMO)).rejects.toThrow("NOT_STARTED");

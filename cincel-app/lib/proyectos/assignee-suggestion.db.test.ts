@@ -72,7 +72,7 @@ describe.skipIf(!url)("suggestAssignee (test DB)", async () => {
   beforeAll(async () => {
     const [workflow] = await db
       .insert(schema.workflows)
-      .values({ key: `sugerencia-${run}`, name: `Tramo ${run}`, sortOrder: 90 })
+      .values({ key: `sugerencia-${run}`, name: `Etapa ${run}`, sortOrder: 90 })
       .returning({ id: schema.workflows.id });
     workflowId = workflow!.id;
     const phases = await db

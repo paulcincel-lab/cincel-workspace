@@ -191,7 +191,7 @@ describe("PeopleLoadBoard banner", () => {
     expect(m.fetchPersonaDetailAction).not.toHaveBeenCalled();
   });
 
-  it("hides the button without a candidate in the same tramo", () => {
+  it("hides the button without a candidate in the same etapa", () => {
     renderBoard(SATURATED.filter((p) => p.id !== BRUNO));
     expect(screen.queryByRole("button", { name: /^Mover 1 tarea/ })).toBeNull();
   });
@@ -213,7 +213,7 @@ describe("PeopleLoadBoard heatmap", () => {
 });
 
 describe("PeopleLoadBoard helpers", () => {
-  it("picks the latest open task that is not overdue in the candidate's tramo", () => {
+  it("picks the latest open task that is not overdue in the candidate's etapa", () => {
     expect(taskToMove(ANA_TASKS, "diseno", TODAY)?.id).toBe("t-latest");
     expect(taskToMove(ANA_TASKS, "presale", TODAY)).toBeNull();
     expect(taskToMove(ANA_TASKS, null, TODAY)).toBeNull();

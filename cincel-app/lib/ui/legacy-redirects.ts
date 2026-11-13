@@ -11,12 +11,15 @@
  * own page, `/calendario`, keeping `fecha` and mapping `cal` to `vista`.
  */
 
+import { ETAPA_PARAM, LEGACY_TRAMO_PARAM } from "@/lib/ui/etapa-param";
+
 /** What a Next.js page receives as `searchParams`, or a ready `URLSearchParams`. */
 export type LegacySearchParams = Record<string, string | string[] | undefined> | URLSearchParams | null | undefined;
 
 /** `/configuracion/[x]` segments renamed under `/ajustes` (FE §2.2). */
 const CONFIGURACION_RENAMES: Readonly<Record<string, string>> = {
-  workflows: "tramos",
+  workflows: "etapas",
+  tramos: "etapas",
   areas: "puestos",
   "importar-monday": "monday",
 };
@@ -73,7 +76,7 @@ function calendarioTarget(entries: [string, string][]): string {
   if (fecha) query.append("fecha", fecha);
   if (vista) query.append("vista", vista);
   for (const [key, value] of entries) {
-    if (!TAREAS_OLD_PARAMS.has(key)) query.append(key, value);
+    if (!TAREAS_OLD_PARAMS.has(key)) query.append(key === LEGACY_TRAMO_PARAM ? ETAPA_PARAM : key, value);
   }
   const serialized = query.toString();
   return serialized ? `/calendario?${serialized}` : "/calendario";
@@ -88,7 +91,7 @@ function tareasVistaTarget(entries: [string, string][]): string | null {
   const estilo = VISTA_ESTILOS[vista] ?? null;
   if (estilo && !entries.some(([key]) => key === "estilo")) query.append("estilo", estilo);
   for (const [key, value] of entries) {
-    if (!TAREAS_OLD_PARAMS.has(key)) query.append(key, value);
+    if (!TAREAS_OLD_PARAMS.has(key)) query.append(key === LEGACY_TRAMO_PARAM ? ETAPA_PARAM : key, value);
   }
   const serialized = query.toString();
   return serialized ? `/tareas?${serialized}` : "/tareas";
@@ -133,7 +136,7 @@ function targetFor(path: string): string | null {
   switch (root) {
     case "actividades":
       if (second) return null;
-      return `/tareas?${new URLSearchParams({ estilo: "analitico", tramo: first }).toString()}`;
+      return `/tareas?${new URLSearchParams({ estilo: "analitico", etapa: first }).toString()}`;
     case "proveedores":
       return second ? null : "/personas/proveedores";
     case "recursos":
@@ -167,7 +170,8 @@ export function legacyRedirectTarget(pathname: string, searchParams?: LegacySear
   const toTareas = targetPath === "/tareas";
   for (const [key, value] of toEntries(searchParams)) {
     if (fixedKeys.has(key) || (toTareas && TAREAS_OLD_PARAMS.has(key))) continue;
-    query.append(key, value);
+    // Compatibility: the old `?tramo=` parameter is `?etapa=` now.
+    query.append(key === LEGACY_TRAMO_PARAM ? ETAPA_PARAM : key, value);
   }
 
   const isTramoStart = path.startsWith("/actividades/") && path !== "/actividades/general";

@@ -62,7 +62,7 @@ describe("ProjectsEsencialLayout", () => {
     const { container } = renderLayout();
     // Two active projects; the paused and the archived ones are not listed in Esencial.
     expect(cardLinks(container).map((a) => a.getAttribute("href"))).toEqual(["/proyectos/p-lomas", "/proyectos/p-andares"]);
-    expect(screen.getByText("2 activos · en qué tramo va cada obra y qué sigue.")).toBeTruthy();
+    expect(screen.getByText("2 activos · en qué etapa va cada obra y qué sigue.")).toBeTruthy();
     // Casa Lomas: 4 open, 2 overdue; Depto Andares: al día.
     expect(screen.getByText("vencidas", { exact: false })).toBeTruthy();
     expect(screen.getByText("Al día")).toBeTruthy();
@@ -74,7 +74,7 @@ describe("ProjectsEsencialLayout", () => {
 
   it("pill selection filters and Todos clears", () => {
     const { container } = renderLayout();
-    const group = screen.getByRole("radiogroup", { name: "Filtrar por tramo" });
+    const group = screen.getByRole("radiogroup", { name: "Filtrar por etapa" });
     const radios = within(group).getAllByRole("radio");
     expect(radios.map((r) => r.textContent)).toEqual(["Todos2", "Presale1", "Diseño1"]);
     expect(radios[0].getAttribute("aria-checked")).toBe("true");
@@ -89,7 +89,7 @@ describe("ProjectsEsencialLayout", () => {
 
   it("moves the focus with the arrows and selects with Space", () => {
     const { container } = renderLayout();
-    const radios = within(screen.getByRole("radiogroup", { name: "Filtrar por tramo" })).getAllByRole("radio");
+    const radios = within(screen.getByRole("radiogroup", { name: "Filtrar por etapa" })).getAllByRole("radio");
     // Focusing a pill sets its roving focus index, a state update.
     act(() => radios[0].focus());
     fireEvent.keyDown(radios[0], { key: "ArrowRight" });
@@ -130,7 +130,7 @@ describe("ProjectsEsencialLayout", () => {
     expect(cardLinks(container).map((a) => a.getAttribute("href"))).toEqual(["/proyectos/p-andares"]);
   });
 
-  it("no-results copy with and without a tramo", () => {
+  it("no-results copy with and without a etapa", () => {
     renderLayout();
     const input = screen.getByLabelText("Buscar proyectos");
     fireEvent.change(input, { target: { value: "zzz" } });
@@ -140,20 +140,20 @@ describe("ProjectsEsencialLayout", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Diseño/ }));
     fireEvent.change(input, { target: { value: "Andares" } });
     expect(screen.getByText("Ningún proyecto de «Diseño» coincide con «Andares».")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Ver todos los tramos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver todas las etapas" }));
     expect(screen.getByRole("radio", { name: /Todos/ }).getAttribute("aria-checked")).toBe("true");
     expect(screen.queryByText("Sin resultados")).toBeNull();
   });
 
-  it("project without tramo shows Sin tramo", () => {
+  it("project without etapa shows Sin etapa", () => {
     const sinTramo = { ...PROJECTS[2], id: "p-sin", name: "Bodega Norte", status: "activo" as const };
     const { container } = renderLayout({ projects: [PROJECTS[0], sinTramo] });
-    expect(screen.getByRole("radio", { name: /Sin tramo/ })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Sin etapa/ })).toBeTruthy();
     const card = cardLinks(container).find((a) => a.getAttribute("href") === "/proyectos/p-sin");
     expect(card).toBeTruthy();
-    const line = container.querySelector('[aria-label="Tramo actual: Sin tramo"]');
+    const line = container.querySelector('[aria-label="Etapa actual: Sin etapa"]');
     expect(line).not.toBeNull();
-    expect(within(line as HTMLElement).getByText("Sin tramo")).toBeTruthy();
+    expect(within(line as HTMLElement).getByText("Sin etapa")).toBeTruthy();
     expect(line!.querySelectorAll('[data-state="next"]')).toHaveLength(3);
   });
 

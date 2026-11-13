@@ -74,8 +74,8 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
     const [a, b] = await db
       .insert(schema.workflows)
       .values([
-        { key: `test-a-${run}`, name: `Tramo A ${run}`, active: true, sortOrder: 900 },
-        { key: `test-b-${run}`, name: `Tramo B ${run}`, active: true, sortOrder: 901 },
+        { key: `test-a-${run}`, name: `Etapa A ${run}`, active: true, sortOrder: 900 },
+        { key: `test-b-${run}`, name: `Etapa B ${run}`, active: true, sortOrder: 901 },
       ])
       .returning({ id: schema.workflows.id });
     tramoA = a.id;
@@ -102,7 +102,7 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
     if (actorId) await db.delete(schema.staff).where(eq(schema.staff.id, actorId));
   });
 
-  it("creates a template in a fase of its tramo and returns the fase name", async () => {
+  it("creates a template in a fase of its etapa and returns the fase name", async () => {
     const row = await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Levantamiento" }, actorId);
     expect(row).toMatchObject({ workflowId: tramoA, phaseId: faseA1, phaseName: "Fase 1", title: "Levantamiento" });
     expect(row).not.toHaveProperty("phase");
@@ -114,7 +114,7 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
     ).rejects.toThrow("INVALID: phaseId");
   });
 
-  it("rejects a fase of another tramo with PHASE_MISMATCH", async () => {
+  it("rejects a fase of another etapa with PHASE_MISMATCH", async () => {
     await expect(
       repo.createTemplate(tramoA, { phaseId: faseB1, title: "Ajena" }, actorId)
     ).rejects.toThrow(/^PHASE_MISMATCH/);
@@ -129,7 +129,7 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
     ).rejects.toThrow(/^NAME_TAKEN/);
   });
 
-  it("allows the same title in another fase of the same tramo", async () => {
+  it("allows the same title in another fase of the same etapa", async () => {
     await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Garantías" }, actorId);
     const other = await repo.createTemplate(tramoA, { phaseId: faseA2, title: "Garantías" }, actorId);
     expect(other.phaseId).toBe(faseA2);
@@ -143,7 +143,7 @@ describe.skipIf(!url)("workflow templates (test DB)", async () => {
     await expect(repo.updateTemplate(renaming.id, { title: "FACHADAS" }, actorId)).rejects.toThrow(/^NAME_TAKEN/);
   });
 
-  it("keeps the fase on a partial update and moves it within the tramo", async () => {
+  it("keeps the fase on a partial update and moves it within the etapa", async () => {
     const row = await repo.createTemplate(tramoA, { phaseId: faseA1, title: "Volumetría" }, actorId);
     const deactivated = await repo.deactivateTemplate(row.id, actorId);
     expect(deactivated).toMatchObject({ active: false, phaseId: faseA1 });

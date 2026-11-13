@@ -260,7 +260,7 @@ describe("Personas · Analítico accessibility", () => {
 
   it("names every group and person toggle", () => {
     const { getByRole, getAllByRole } = renderAnalitico();
-    const table = getByRole("table", { name: "Personas por tramo" });
+    const table = getByRole("table", { name: "Personas por etapa" });
     const toggles = Array.from(table.querySelectorAll("button[aria-expanded]"));
     expect(toggles.length).toBeGreaterThan(0);
     for (const toggle of toggles) {
@@ -273,13 +273,13 @@ describe("Personas · Analítico accessibility", () => {
       expect(getByRole("button", { name: `Expandir ${person.name}` })).toBeTruthy();
     }
     const filters = getByRole("region", { name: "Filtros" });
-    for (const name of ["Estado", "Tramo", "Alcance"]) expect(within(filters).getByRole("radiogroup", { name })).toBeTruthy();
+    for (const name of ["Estado", "Etapa", "Alcance"]) expect(within(filters).getByRole("radiogroup", { name })).toBeTruthy();
     expect(getAllByRole("radiogroup").length).toBeGreaterThanOrEqual(3);
   });
 
   it("table headers are column headers and the person cell is a row header", () => {
     const { getByRole } = renderAnalitico();
-    const table = getByRole("table", { name: "Personas por tramo" });
+    const table = getByRole("table", { name: "Personas por etapa" });
     const headers = Array.from(table.querySelectorAll("thead th"));
     expect(headers).toHaveLength(10);
     expect(headers.every((th) => th.getAttribute("scope") === "col")).toBe(true);
@@ -293,7 +293,7 @@ describe("Personas · Analítico accessibility", () => {
   it("at 390 px the table scrolls inside its card, not the page", () => {
     window.innerWidth = 390;
     const { getByRole, container } = renderAnalitico();
-    const table = getByRole("table", { name: "Personas por tramo" });
+    const table = getByRole("table", { name: "Personas por etapa" });
     expect(table.parentElement?.className).toContain("overflow-x-auto");
     expect(table.closest('[data-slot="card"]')?.className).toContain("overflow-hidden");
     // Only the table carries a minimum width; nothing outside the scroller does.

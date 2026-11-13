@@ -356,12 +356,12 @@ function PaceCard({ weeks }: { weeks: InicioData["weeklyPace"] }) {
 function TramoCard({ segments }: { segments: InicioData["tasksByTramo"] }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
   if (segments.length === 0 || total === 0) {
-    return <EmptyWidgetCard widget="tramoDonut" title="Tareas por tramo" text="No hay tareas abiertas." />;
+    return <EmptyWidgetCard widget="tramoDonut" title="Tareas por etapa" text="No hay tareas abiertas." />;
   }
   return (
     <div data-slot="inicio-tramos" className="min-w-0">
-      <DistributionWidget title="Tareas por tramo" segments={segments} totalLabel="Abiertas" />
-      <SrTable caption="Tareas por tramo" head={["Tramo", "Abiertas"]} rows={segments.map((s) => [s.label, s.value])} />
+      <DistributionWidget title="Tareas por etapa" segments={segments} totalLabel="Abiertas" />
+      <SrTable caption="Tareas por etapa" head={["Etapa", "Abiertas"]} rows={segments.map((s) => [s.label, s.value])} />
     </div>
   );
 }

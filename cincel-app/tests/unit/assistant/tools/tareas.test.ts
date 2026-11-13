@@ -403,7 +403,7 @@ describe("create_tasks_from_notes", () => {
     actions.createUserTaskAction.mockImplementation(async (input: { title: string }) => ({ id: `t${++n}`, title: input.title }));
   });
 
-  it("creates one task per line in the current tramo and audits each", async () => {
+  it("creates one task per line in the current etapa and audits each", async () => {
     const result = (await run("create_tasks_from_notes", SAMPLE_INPUT.create_tasks_from_notes)) as { count: number };
     expect(actions.createUserTaskAction).toHaveBeenCalledTimes(2);
     expect(actions.createUserTaskAction).toHaveBeenCalledWith(

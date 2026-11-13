@@ -94,7 +94,7 @@ describe("canManageAppearance", () => {
 });
 
 describe("canSeeAdminData re-export", () => {
-  it("is the same function from lib/tramos/compat", () => {
+  it("is the same function from lib/etapas/compat", () => {
     expect(compatCanSeeAdminData).toBe(canSeeAdminData);
   });
 

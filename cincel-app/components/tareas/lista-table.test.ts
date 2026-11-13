@@ -86,7 +86,7 @@ describe("projectSummaries", () => {
 });
 
 describe("listaTasks", () => {
-  it("narrows by tramo key(s) and proyecto", () => {
+  it("narrows by etapa key(s) and proyecto", () => {
     expect(listaTasks(LISTA_TASKS, { tramo: null, proyecto: null })).toHaveLength(5);
     expect(listaTasks(LISTA_TASKS, { tramo: "diseno", proyecto: null }).map((t) => t.id).sort()).toEqual(["t1", "t2"]);
     expect(listaTasks(LISTA_TASKS, { tramo: "presale,diseno", proyecto: null })).toHaveLength(5);

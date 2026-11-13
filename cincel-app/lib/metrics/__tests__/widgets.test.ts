@@ -231,7 +231,7 @@ describe("toProgressItems", () => {
   it("falls back to projects.progress and nulls", () => {
     const [item] = toProgressItems([makeProject({ currentWorkflow: null, progress: 140 })]);
     expect(item).toMatchObject({
-      sublabel: "Sin tramo",
+      sublabel: "Sin etapa",
       real: 100,
       plan: null,
       budgetPct: null,
@@ -298,7 +298,7 @@ describe("toAttentionItems", () => {
     });
   });
 
-  it("puts the most days late first and uses null tramo for admin tasks", () => {
+  it("puts the most days late first and uses null etapa for admin tasks", () => {
     const items = toAttentionItems(
       [
         makeTask({ id: "a", commitmentDate: "2026-11-04" }),
@@ -485,7 +485,7 @@ describe("toEntityCards", () => {
 
 describe("toRecordTable", () => {
   const columns = [
-    { key: "name", label: "Tramo" },
+    { key: "name", label: "Etapa" },
     { key: "open", label: "Abiertas", format: "count" as const, align: "right" as const },
     { key: "overdue", label: "Vencidas", format: "count" as const, align: "right" as const },
     { key: "note", label: "Nota" },

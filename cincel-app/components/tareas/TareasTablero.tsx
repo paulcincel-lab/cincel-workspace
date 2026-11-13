@@ -30,7 +30,7 @@ import { tableroTable } from "./tablero-table";
 import { useTareasFilters, useTareasPageReady } from "./use-tareas-page";
 
 /** Header description of the Tablero view (FE §3.4). */
-export const TABLERO_DESCRIPTION = "Todas los tramos en un solo lugar. Arrastra una tarjeta para cambiar su estatus.";
+export const TABLERO_DESCRIPTION = "Todas las etapas en un solo lugar. Arrastra una tarjeta para cambiar su estatus.";
 
 /**
  * Empty state when the filters leave no task (FE §3.4). Visual keeps every

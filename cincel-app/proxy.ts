@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { isPortalPath, isPublicPath, isPublicPortalPath, LOGIN_ROUTE, PORTAL_LOGIN_ROUTE } from "@/lib/auth/public-routes";
 import { PORTAL_SESSION_COOKIE, PORTAL_SESSION_MAX_AGE_S, SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { rewriteLegacyEtapaUrl } from "@/lib/ui/etapa-param";
 import { legacyRedirectTarget } from "@/lib/ui/legacy-redirects";
 
 /**
@@ -28,7 +29,8 @@ import { legacyRedirectTarget } from "@/lib/ui/legacy-redirects";
  *
  * Old staff routes (FE §2.2: `/dashboard`, `/tablero`, `/equipo`, `/configuracion/...` and the rest of
  * `legacyRedirectTarget`'s table) redirect here, query string preserved, so a hit never renders the
- * `(staff)` layout first. `/` keeps its own page.
+ * `(staff)` layout first. `/` keeps its own page. A staff page URL with the old `?tramo=` parameter redirects
+ * to the same URL with `?etapa=`.
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -71,6 +73,12 @@ export function proxy(request: NextRequest) {
 
   const legacyTarget = pathname === "/" ? null : legacyRedirectTarget(pathname, request.nextUrl.searchParams);
   if (legacyTarget) return NextResponse.redirect(new URL(legacyTarget, request.nextUrl.origin));
+
+  // Compatibility: old links carry `?tramo=`; the stage filter is `?etapa=` now.
+  if (request.method === "GET") {
+    const etapaUrl = rewriteLegacyEtapaUrl(new URL(request.nextUrl.href));
+    if (etapaUrl) return NextResponse.redirect(etapaUrl, 308);
+  }
 
   return NextResponse.next();
 }

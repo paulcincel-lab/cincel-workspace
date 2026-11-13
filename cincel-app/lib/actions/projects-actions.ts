@@ -89,7 +89,7 @@ async function createProjectActionImpl(input: ProjectCreateInput | ProjectInput)
   const { startWorkflowId, phaseIds } = (input ?? {}) as ProjectCreateInput;
   const picksTramo = startWorkflowId !== undefined || phaseIds !== undefined;
   if (picksTramo && !resolveActivitiesCapabilities(user).canCreateActivity) {
-    throw new Error("FORBIDDEN: start tramo");
+    throw new Error("FORBIDDEN: start etapa");
   }
   const row = await projectsRepository.createProject(
     picksTramo ? { name: input?.name, startWorkflowId, phaseIds } : { name: input?.name },

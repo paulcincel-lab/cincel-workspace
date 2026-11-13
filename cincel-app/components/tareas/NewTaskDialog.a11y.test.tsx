@@ -114,7 +114,7 @@ describe("NewTaskDialog accessibility", () => {
 
   it("names every field and groups the priority radios", async () => {
     await renderReady();
-    for (const name of ["Proyecto", "Tramo", "Fase", "Responsable"]) {
+    for (const name of ["Proyecto", "Etapa", "Fase", "Responsable"]) {
       expect(screen.getByRole("combobox", { name })).toBeTruthy();
     }
     expect(screen.getByRole("textbox", { name: "Título" })).toBeTruthy();

@@ -169,7 +169,7 @@ export function BoardEquivalences({
     { value: "new", label: "Nuevo contacto" },
   ];
   const tramoChoices: Choice[] = [
-    { value: NONE, label: "Sin tramo" },
+    { value: NONE, label: "Sin etapa" },
     ...choices.workflows.map((workflow) => ({ value: workflow.id, label: workflow.name })),
   ];
   const tramoMissing = !board.workflowId && boardTramoRequired(board, source, choices);
@@ -298,13 +298,13 @@ export function BoardEquivalences({
           {show("grupos") ? (
           <Section
             id={`groups-${board.mondayBoardId}`}
-            title="Grupos y tramo"
+            title="Grupos y etapa"
             description="Cada grupo de monday y la fase que tendrá en Cincel."
           >
             <div className="space-y-2 sm:max-w-sm">
-              <Label>Tramo del tablero</Label>
+              <Label>Etapa del tablero</Label>
               <ChoiceSelect
-                label="Tramo del tablero"
+                label="Etapa del tablero"
                 value={board.workflowId ?? NONE}
                 choices={tramoChoices}
                 onChange={(value) =>
@@ -314,11 +314,11 @@ export function BoardEquivalences({
                 }
               />
               <p className="text-sm text-muted-foreground">
-                El tramo de los grupos y elementos que no resuelven uno.
+                La etapa de los grupos y elementos que no resuelven uno.
               </p>
               {tramoMissing ? (
                 <p role="alert" className="text-sm text-destructive">
-                  Elige un tramo.
+                  Elige una etapa.
                 </p>
               ) : null}
             </div>
@@ -552,12 +552,12 @@ export function BoardEquivalences({
           <Section
             id={`templates-${board.mondayBoardId}`}
             title="Tareas de plantilla"
-            description="Cada elemento con su tarea de plantilla del tramo y la fase que tendrá en Cincel."
+            description="Cada elemento con su tarea de plantilla de la etapa y la fase que tendrá en Cincel."
           >
             {templateItems.length === 0 ? (
               <p className="text-sm text-muted-foreground">Este tablero no tiene elementos.</p>
             ) : (
-              <EquivalenceTable monday="Elemento de monday" cincel="Tarea de plantilla · Tramo · Fase">
+              <EquivalenceTable monday="Elemento de monday" cincel="Tarea de plantilla · Etapa · Fase">
                 {templateItems.map((item) => {
                   const placement = templateItemPlacement(board, source, item, choices);
                   const hasTramo = !placement.admin && !placement.ignored && placement.workflowId;
@@ -685,7 +685,7 @@ export function EquivalenciasStep({
               {toReview > 0 ? <Badge variant="warning">{toReview} por revisar</Badge> : null}
             </TabsTrigger>
             <TabsTrigger value="grupos">
-              Grupos y tramo <span className="font-mono text-xs tabular-nums">{boardSource?.groups.length ?? 0}</span>
+              Grupos y etapa <span className="font-mono text-xs tabular-nums">{boardSource?.groups.length ?? 0}</span>
             </TabsTrigger>
             <TabsTrigger value="nombres">Nombres y códigos de proyecto</TabsTrigger>
           </TabsList>

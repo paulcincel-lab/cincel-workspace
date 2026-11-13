@@ -6,6 +6,7 @@ import { defaultCalVista } from "@/lib/calendario/labels";
 import { rangeOf } from "@/lib/calendario/range";
 import type { CalMostrar, CalView, CalendarioFilters, CalendarioQuery, CalendarioRangeInput } from "@/lib/types/calendario";
 import type { PresentationStyle } from "@/lib/types/redesign";
+import { readEtapaParam } from "@/lib/ui/etapa-param";
 
 export const CALENDARIO_PATH = "/calendario";
 
@@ -89,7 +90,7 @@ export function parseCalendarioQuery(search: SearchInput, defaults: CalendarioQu
         mostrar: mostrar && MOSTRAR.includes(mostrar) ? mostrar : "todo",
         quien,
         proyectos,
-        tramo: p.get("tramo"),
+        tramo: readEtapaParam(p),
         responsable: p.get("responsable"),
         apoyo: p.get("apoyo") !== "0",
         ocultarCompletadas: ocultar === "1" ? true : ocultar === "0" ? false : (defaults.ocultarCompletadas ?? false),
@@ -117,7 +118,7 @@ export function toCalendarioSearch(q: CalendarioQuery, defaults: CalendarioQuery
   if (f.mostrar !== "todo") p.set("mostrar", f.mostrar);
   if (f.quien !== "yo") p.set("quien", f.quien);
   if (f.proyectos.length) p.set("proyectos", f.proyectos.join(","));
-  if (f.tramo) p.set("tramo", f.tramo);
+  if (f.tramo) p.set("etapa", f.tramo);
   if (f.responsable) p.set("responsable", f.responsable);
   if (!f.apoyo) p.set("apoyo", "0");
   if (f.ocultarCompletadas !== (defaults.ocultarCompletadas ?? false)) p.set("ocultar", f.ocultarCompletadas ? "1" : "0");

@@ -85,7 +85,7 @@ const summary = resumenSummaryOfRows(ROWS, TODAY, { includeAdmin: true });
 const strip = <T extends { rows?: unknown }>(groups: T[]) => groups.map(({ rows: _rows, ...g }) => (void _rows, g));
 
 describe("Resumen numbers from the summary match the ones derived from the task rows (#1051)", () => {
-  it("Visual: tramo progress, status donut, hero chips, team cards", () => {
+  it("Visual: etapa progress, status donut, hero chips, team cards", () => {
     expect(resumenTramoProgress(summary, data.tramoCatalog, data.project)).toEqual(tramoProgress(ROWS, data.tramoCatalog, data.project, TODAY));
     expect(resumenStatusCounts(summary)).toEqual(statusCounts(ROWS));
     const open = nextTasks(ROWS, TODAY, Number.POSITIVE_INFINITY);
@@ -107,7 +107,7 @@ describe("Resumen numbers from the summary match the ones derived from the task 
     expect(resumenNextCards(resumenSummaryOfRows(rows, TODAY), ["t-new"], 4)).toEqual(expected);
   });
 
-  it("Esencial: tramo line and avatar tint", () => {
+  it("Esencial: etapa line and avatar tint", () => {
     expect(esencialTramoLine(data, resumenTramoProgress(summary, data.tramoCatalog, data.project))).toEqual(
       esencialTramoLine(data, tramoProgress(ROWS, data.tramoCatalog, data.project, TODAY)),
     );
@@ -116,7 +116,7 @@ describe("Resumen numbers from the summary match the ones derived from the task 
     }
   });
 
-  it("Analítico: KPIs, tramos y fases, carga del equipo", () => {
+  it("Analítico: KPIs, etapas y fases, carga del equipo", () => {
     expect(resumenKpisOf(data, summary)).toEqual(resumenKpis(data, ROWS));
     const noPortfolio = { ...data, portfolio: null };
     expect(resumenKpisOf(noPortfolio, summary)).toEqual(resumenKpis(noPortfolio, ROWS));
@@ -126,7 +126,7 @@ describe("Resumen numbers from the summary match the ones derived from the task 
     expect(resumenTeamLoadRows(data, summary)).toEqual(teamLoadRows(data, ROWS));
   });
 
-  it("Analítico: «Tareas por tramo» groups, with and without «Ocultar completadas»", () => {
+  it("Analítico: «Tareas por etapa» groups, with and without «Ocultar completadas»", () => {
     for (const hide of [false, true]) {
       const shownRows = hide ? ROWS.filter((t) => !isTaskClosed(t)) : ROWS;
       const old = taskGroupsByTramo(shownRows, data.tramoCatalog, data.project, TODAY);
@@ -146,7 +146,7 @@ describe("Resumen numbers from the summary match the ones derived from the task 
     }
   });
 
-  it("group lists: the tramo key, «Sin tramo» with the admin tasks, closed ones left out on the server", () => {
+  it("group lists: the etapa key, «Sin etapa» with the admin tasks, closed ones left out on the server", () => {
     expect(resumenGroupListFilters("p1", "construccion", { hideCompleted: false, includeAdmin: true })).toEqual({
       tramo: "construccion",
       proyecto: "p1",

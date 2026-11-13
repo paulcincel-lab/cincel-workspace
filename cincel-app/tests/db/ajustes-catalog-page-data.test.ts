@@ -126,7 +126,7 @@ describe.skipIf(!url)("ajustes catalog page data (test DB)", async () => {
     }
   });
 
-  it("Puestos lists the same tramos and fases as the full workflows read", async () => {
+  it("Puestos lists the same etapas and fases as the full workflows read", async () => {
     const { listWorkflows, listWorkflowPhaseTree } = await import("@/lib/repositories/workflows-repository");
     const [full, tree] = await Promise.all([listWorkflows({}), listWorkflowPhaseTree()]);
     const shape = (rows: typeof full) =>
@@ -134,7 +134,7 @@ describe.skipIf(!url)("ajustes catalog page data (test DB)", async () => {
     expect(shape(tree)).toEqual(shape(full));
   });
 
-  it("Tramos page data includes inactive tramos for an Administrador", async () => {
+  it("Etapas page data includes inactive etapas for an Administrador", async () => {
     const data = await asViewer(asAdmin, () => actions.getAjustesTramosPageData({}));
     const ids = data.workflows.map((workflow) => workflow.id);
     const rows = await db.select({ id: schema.workflows.id }).from(schema.workflows).where(eq(schema.workflows.active, false));

@@ -83,7 +83,7 @@ describe("tableroTable", () => {
     expect(table.columns.map((c) => c.label)).toEqual([
       "Tarea",
       "Proyecto",
-      "Tramo",
+      "Etapa",
       "Fase",
       "Responsable",
       "Estatus",

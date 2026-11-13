@@ -88,10 +88,10 @@ function project() {
     clientId: null,
     client: null,
     currentWorkflowId: state.current,
-    currentWorkflow: state.current ? { id: state.current, key: "x", name: "Tramo" } : null,
+    currentWorkflow: state.current ? { id: state.current, key: "x", name: "Etapa" } : null,
     needsTramo: state.current === null,
     tramos: state.stages.map((s) => ({
-      workflow: { id: s.workflowId, key: "x", name: "Tramo" },
+      workflow: { id: s.workflowId, key: "x", name: "Etapa" },
       current: s.workflowId === state.current,
     })),
   };
@@ -158,7 +158,7 @@ beforeEach(() => {
 });
 
 describe("setProjectCurrentTramoAction", () => {
-  it("moves the current tramo to a started one", async () => {
+  it("moves the current etapa to a started one", async () => {
     state.stages.push({ workflowId: DISENO });
     const row = await setProjectCurrentTramoAction(PROJECT, DISENO);
     expect(row.currentWorkflow?.id).toBe(DISENO);
@@ -166,19 +166,19 @@ describe("setProjectCurrentTramoAction", () => {
     expect(flow.startTramo).not.toHaveBeenCalled();
   });
 
-  it("throws NOT_STARTED for a tramo the project hasn't started", async () => {
+  it("throws NOT_STARTED for a etapa the project hasn't started", async () => {
     await expect(setProjectCurrentTramoAction(PROJECT, DISENO)).rejects.toThrow(/^NOT_STARTED/);
     expect(flow.startTramo).not.toHaveBeenCalled();
     expect(state.current).toBe(PRESALE);
   });
 
-  it("throws NOT_STARTED for an admin when the project already has a current tramo", async () => {
+  it("throws NOT_STARTED for an admin when the project already has a current etapa", async () => {
     session.access = "Administrador";
     await expect(setProjectCurrentTramoAction(PROJECT, DISENO)).rejects.toThrow(/^NOT_STARTED/);
     expect(flow.startTramo).not.toHaveBeenCalled();
   });
 
-  it("lets an admin assign a tramo to a project without one, through startTramo stageOnly", async () => {
+  it("lets an admin assign a etapa to a project without one, through startTramo stageOnly", async () => {
     session.access = "Administrador";
     state.stages = [];
     state.current = null;

@@ -9,6 +9,7 @@
 import type { TaskStatus } from "@/lib/types/core";
 
 import { TAREAS_ORDEN_PARAM, formatSortParam, parseSortParam, type TaskSort } from "./sort";
+import { readEtapaParam } from "@/lib/ui/etapa-param";
 
 /** "Mostrar" filter (`?mostrar=`): every task, the open ones, or the open ones past their due date. */
 export type TareasMostrar = "todas" | "abiertas" | "en_retraso";
@@ -145,7 +146,7 @@ export function parseTareasQuery(sp: URLSearchParams, defaults: TareasQueryDefau
   const responsable = sp.get("responsable");
   const estado = sp.get("estado");
   return {
-    tramo: key(sp.get("tramo")),
+    tramo: key(readEtapaParam(sp)),
     responsable: responsable === "yo" || responsable === TAREAS_RESPONSABLE_TODOS ? responsable : id(responsable),
     ...proyectosPatch(parseProyectosParam(sp.get("proyecto"))),
     estado: estado !== null && (TAREAS_ESTADOS as readonly string[]).includes(estado) ? estado : null,
@@ -162,7 +163,7 @@ export function parseTareasQuery(sp: URLSearchParams, defaults: TareasQueryDefau
 /** `?…` for a partial query (round trip with `parseTareasQuery`). Defaults are left out; "" when nothing is set. */
 export function toTareasSearch(q: Partial<TareasQuery>): string {
   const sp = new URLSearchParams();
-  if (q.tramo) sp.set("tramo", q.tramo);
+  if (q.tramo) sp.set("etapa", q.tramo);
   if (q.responsable) sp.set("responsable", q.responsable);
   const proyectos = selectedProyectos(q);
   if (proyectos.length > 0) sp.set("proyecto", proyectos.join(","));

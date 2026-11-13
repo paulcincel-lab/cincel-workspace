@@ -39,7 +39,7 @@ async function seedProjectInPresale(name: string): Promise<string> {
   return withDb(async (sql) => {
     const [presale] = await sql<{ id: string }[]>`
       select id from core.workflows where key = 'presale' and deleted_at is null limit 1`;
-    if (!presale) throw new Error("seeded Presale tramo not found");
+    if (!presale) throw new Error("seeded Presale etapa not found");
     const [project] = await sql<{ id: string }[]>`
       insert into core.projects (name, current_workflow_id, status)
       values (${name}, ${presale.id}, 'activo') returning id`;
@@ -66,7 +66,7 @@ async function openNewProjectWithTramo(page: Page, name: string, tramo: string) 
   await page.getByRole("button", { name: "Nuevo proyecto" }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Nombre del proyecto").fill(name);
-  const select = dialog.getByRole("combobox", { name: "Tramo inicial" });
+  const select = dialog.getByRole("combobox", { name: "Etapa inicial" });
   // Defaults to Presale, the first tramo, while its auto-start is on.
   await expect(select).toHaveText(/Presale/, { timeout: 15_000 });
   await select.click();
@@ -109,13 +109,13 @@ test.beforeAll(async () => {
   await restoreAutoStartDefaults();
 });
 
-test.describe("Proyectos · tramos", () => {
+test.describe("Proyectos · etapas", () => {
   test.beforeEach(async ({ page }) => {
     await seedAuth(page);
     await loginAsAdmin(page, BASE_URL);
   });
 
-  test("a name-only create starts Presale with 10 unassigned tasks and lists it under Tramo", async ({ page }) => {
+  test("a name-only create starts Presale with 10 unassigned tasks and lists it under Etapa", async ({ page }) => {
     const name = `Proyecto E2E ${RUN_ID}`;
 
     await page.goto(`${BASE_URL}/proyectos?estilo=analitico`, { waitUntil: "domcontentloaded" });
@@ -161,7 +161,7 @@ test.describe("Proyectos · tramos", () => {
     // Esencial: the card's tramo line names Presale.
     await page.goto(`${BASE_URL}/proyectos?estilo=esencial`, { waitUntil: "domcontentloaded" });
     await page.getByRole("searchbox", { name: "Buscar proyectos" }).fill(name);
-    await expect(page.getByRole("group", { name: "Tramo actual: Presale" }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("group", { name: "Etapa actual: Presale" }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(ETAPA)).toHaveCount(0);
 
     // Visual: the project grid has its card with the Presale chip.
@@ -174,14 +174,14 @@ test.describe("Proyectos · tramos", () => {
 
     // Ficha: a "Tramos" card (never "Etapas") with Presale started and current.
     await page.goto(`${BASE_URL}/proyectos/${projectId}/ficha`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Tramos", exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Etapas", exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("heading", { name: ETAPA })).toHaveCount(0);
-    const started = page.getByRole("list", { name: "Tramos iniciados" });
-    await expect(started.locator("li").filter({ hasText: "Presale" }).getByText("Tramo actual")).toBeVisible();
+    const started = page.getByRole("list", { name: "Etapas iniciadas" });
+    await expect(started.locator("li").filter({ hasText: "Presale" }).getByText("Etapa actual")).toBeVisible();
     await expect(started.getByText(/Iniciado el/).first()).toBeVisible();
   });
 
-  test("picking Diseño as the starting tramo starts only Diseño with the checked fases, unassigned", async ({ page }) => {
+  test("picking Diseño as the starting etapa starts only Diseño with the checked fases, unassigned", async ({ page }) => {
     const name = `Proyecto Diseño E2E ${RUN_ID}`;
     const dialog = await openNewProjectWithTramo(page, name, "Diseño");
 
@@ -210,8 +210,8 @@ test.describe("Proyectos · tramos", () => {
     expect(rows.tasks.some((t) => t.phase_id === lastPhase.id)).toBe(false);
   });
 
-  test("«Ninguno» creates the project with no tramo; it shows as Sin tramo", async ({ page }) => {
-    const name = `Proyecto sin tramo E2E ${RUN_ID}`;
+  test("«Ninguno» creates the project with no etapa; it shows as Sin etapa", async ({ page }) => {
+    const name = `Proyecto sin etapa E2E ${RUN_ID}`;
     const dialog = await openNewProjectWithTramo(page, name, "Ninguno");
     await expect(dialog.getByRole("group", { name: "Fases" })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Crear proyecto" }).click();
@@ -226,18 +226,18 @@ test.describe("Proyectos · tramos", () => {
     await page.goto(`${BASE_URL}/proyectos?estilo=analitico&q=${encodeURIComponent(name)}`, { waitUntil: "domcontentloaded" });
     const row = page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
     await expect(row).toBeVisible({ timeout: 30_000 });
-    await expect(row.getByText("Sin tramo", { exact: true })).toBeVisible();
+    await expect(row.getByText("Sin etapa", { exact: true })).toBeVisible();
 
     // Visual: the project grid has its card with the "Sin tramo" chip.
     await page.goto(`${BASE_URL}/proyectos?estilo=visual`, { waitUntil: "domcontentloaded" });
     const visualCard = page.locator(`[data-slot="project-card"][data-project="${projectId}"]`);
     await expect(visualCard).toBeVisible({ timeout: 30_000 });
-    await expect(visualCard.getByText("Sin tramo", { exact: true })).toBeVisible();
+    await expect(visualCard.getByText("Sin etapa", { exact: true })).toBeVisible();
 
     // Resumen (#1043), every style: the empty state with "Iniciar un tramo", never Presale's default fases.
     const tramoSection = {
       visual: page.getByRole("region", { name: "Avance del proyecto" }),
-      esencial: page.getByRole("region", { name: "Tramos" }),
+      esencial: page.getByRole("region", { name: "Etapas" }),
       analitico: page.locator("#s-tramos"),
     };
     for (const estilo of ["visual", "esencial", "analitico"] as const) {
@@ -245,16 +245,16 @@ test.describe("Proyectos · tramos", () => {
       const section = tramoSection[estilo];
       const empty = section.getByTestId("resumen-no-tramo");
       await expect(empty).toBeVisible({ timeout: 30_000 });
-      await expect(empty.getByText("Este proyecto aún no tiene tramo.")).toBeVisible();
-      await expect(empty.getByRole("button", { name: "Iniciar un tramo" })).toBeVisible();
+      await expect(empty.getByText("Este proyecto aún no tiene etapa.")).toBeVisible();
+      await expect(empty.getByRole("button", { name: "Iniciar una etapa" })).toBeVisible();
       await expect(section.getByText(/Presale/)).toHaveCount(0);
     }
 
     // The button opens the Iniciar tramo sheet with a tramo picker and nothing preselected.
-    await page.getByTestId("resumen-no-tramo").getByRole("button", { name: "Iniciar un tramo" }).click();
-    const sheet = page.getByRole("dialog", { name: "Iniciar tramo" });
+    await page.getByTestId("resumen-no-tramo").getByRole("button", { name: "Iniciar una etapa" }).click();
+    const sheet = page.getByRole("dialog", { name: "Iniciar etapa" });
     await expect(sheet).toBeVisible();
-    await expect(sheet.getByRole("combobox", { name: "Tramo" })).toContainText("Elige un tramo");
+    await expect(sheet.getByRole("combobox", { name: "Etapa" })).toContainText("Elige una etapa");
   });
 
   test("a duplicate project name, in any casing, is refused with the NAME_TAKEN copy", async ({ page }) => {
@@ -271,7 +271,7 @@ test.describe("Proyectos · tramos", () => {
     const projectId = await createProjectFromUi(page, name);
 
     // `/actividades/diseno` redirects here: Tareas · Analítico filtered to Diseño, with the start slot.
-    const disenoUrl = `${BASE_URL}/tareas?estilo=analitico&tramo=diseno`;
+    const disenoUrl = `${BASE_URL}/tareas?estilo=analitico&etapa=diseno`;
     const readyRow = page.getByRole("listitem").filter({ hasText: name }).filter({ hasText: /Listo desde/ });
     const startButton = page.getByRole("button", { name: `Iniciar Diseño en ${name}` });
 

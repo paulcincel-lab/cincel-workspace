@@ -123,7 +123,7 @@ describe("EquipoView styles", () => {
     seedSessionUser({ member: { id: "s-admin", name: "Ana" }, access: "Administrador" });
     renderWithQueryClient(<EquipoView people={PEOPLE} emails={{}} counts={PERSONAS_COUNTS} canCreate canAssign canCreateTask />);
     expect(screen.getByTestId("load-board")).toBeTruthy();
-    expect(screen.getByText("El equipo de un vistazo: carga, tramos y quién sale de vacaciones.")).toBeTruthy();
+    expect(screen.getByText("El equipo de un vistazo: carga, etapas y quién sale de vacaciones.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Tabla" })).toBeNull();
   });
 

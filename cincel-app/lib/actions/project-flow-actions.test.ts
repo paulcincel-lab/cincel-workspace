@@ -175,7 +175,7 @@ describe("workflows-actions (§7.1)", () => {
     expect(workflowsRepo.listWorkflows).toHaveBeenLastCalledWith({});
   });
 
-  it("lists the tramos nav for any staff session", async () => {
+  it("lists the etapas nav for any staff session", async () => {
     caps.canManageWorkflows = false;
     workflowsRepo.listTramosNav.mockResolvedValue([{ id: W, key: "diseno", name: "Diseño", sortOrder: 1 }]);
     await expect(fetchTramosNavAction()).resolves.toHaveLength(1);

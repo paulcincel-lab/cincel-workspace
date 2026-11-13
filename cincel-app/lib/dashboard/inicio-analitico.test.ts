@@ -20,7 +20,7 @@ describe("averageDaysLateOn", () => {
 });
 
 describe("tramoAssigneeRows", () => {
-  it("counts open, overdue and age per tramo and responsable, in tramo order", () => {
+  it("counts open, overdue and age per etapa and responsable, in etapa order", () => {
     const base = { kind: "usuario" as const, createdAt: "2026-11-04T18:00:00Z" };
     const rows = tramoAssigneeRows(
       [

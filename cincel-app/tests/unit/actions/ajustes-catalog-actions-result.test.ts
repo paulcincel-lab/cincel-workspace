@@ -140,7 +140,7 @@ describe("puesto mutations", () => {
   });
 });
 
-describe("tramos mutations", () => {
+describe("etapas mutations", () => {
   it("return FORBIDDEN as a result without canManageWorkflows", async () => {
     viewer.access = "Colaborador";
     for (const run of [

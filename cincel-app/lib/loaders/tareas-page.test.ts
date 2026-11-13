@@ -25,7 +25,7 @@ vi.mock("@/lib/db/client", () => {
 const summary = vi.hoisted(() => {
   const c = { total: 1, open: 1, overdue: 0, blocked: 0, daysLateSum: 0 };
   const diseno = { id: "w1", key: "diseno", name: "Diseño", sortOrder: 1 };
-  const none = { id: null, key: null, name: "Sin tramo", sortOrder: 2147483647 };
+  const none = { id: null, key: null, name: "Sin etapa", sortOrder: 2147483647 };
   const project = (id: string, tramos: (typeof diseno | typeof none)[]) => ({
     project: { id, name: id },
     ...c,
@@ -102,7 +102,7 @@ describe("loadTareasPage", () => {
     for (const s of data.staff) expect(Object.keys(s).sort()).toEqual(["id", "name"]);
   });
 
-  it("keeps the tramos with a key", async () => {
+  it("keeps the etapas with a key", async () => {
     const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS });
     expect(data.tramos.map((t) => t.key)).toEqual(["diseno"]);
   });
@@ -148,7 +148,7 @@ describe("loadTareasPage", () => {
     expect(data.list).toBeUndefined();
   });
 
-  it("maps the filters: tramo key → workflow id, Yo → the viewer (admin kinds for an admin only)", async () => {
+  it("maps the filters: etapa key → workflow id, Yo → the viewer (admin kinds for an admin only)", async () => {
     await loadTareasPage(user("Administrador"), {
       estilo: "analitico",
       tramo: "diseno",
@@ -181,7 +181,7 @@ describe("loadTareasPage", () => {
     expect(repo.taskSummary.mock.calls[0][0]).toEqual({ topLevelOnly: true, involvesStaffId: "me", mostrar: "en_retraso" });
   });
 
-  it("an unknown tramo loads no rows", async () => {
+  it("an unknown etapa loads no rows", async () => {
     const data = await loadTareasPage(user("Colaborador"), { estilo: "analitico", ...NO_FILTERS, tramo: "otro" });
     expect(repo.listTasksPage).not.toHaveBeenCalled();
     expect(repo.taskSummary).not.toHaveBeenCalled();

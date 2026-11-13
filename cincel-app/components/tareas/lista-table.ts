@@ -36,7 +36,7 @@ const VISUAL_AND_ESENCIAL: RecordColumn["hideOn"] = ["visual", "esencial"];
 export const LISTA_COLUMNS: RecordColumn[] = [
   { key: "tarea", label: "Tarea" },
   { key: "proyecto", label: "Proyecto" },
-  { key: "tramo", label: "Tramo" },
+  { key: "tramo", label: "Etapa" },
   { key: "fase", label: "Fase", hideOn: VISUAL_AND_ESENCIAL },
   { key: "responsable", label: "Responsable" },
   { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL, hideOn: ["esencial"] },

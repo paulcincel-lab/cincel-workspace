@@ -116,7 +116,7 @@ function ProgressRing({ value, tone }: { value: number; tone: TramoTone }) {
 
 function TramoStepper({ steps, current, toneOf }: { steps: TramoStep[]; current: string; toneOf(key: string): TramoTone }) {
   return (
-    <div role="img" aria-label={`Tramo actual: ${current}`} className="flex items-center" data-slot="tramo-stepper">
+    <div role="img" aria-label={`Etapa actual: ${current}`} className="flex items-center" data-slot="tramo-stepper">
       {steps.map((step, index) => {
         const tone = toneOf(step.key);
         const filled = step.state !== "next";

@@ -38,7 +38,7 @@ export type EquipoViewProps = {
 
 export const PERSONAS_TITLE = "Personas";
 export const PERSONAS_DESCRIPTION = "Quién está libre, quién va cargado y quién sale de vacaciones.";
-export const PERSONAS_VISUAL_DESCRIPTION = "El equipo de un vistazo: carga, tramos y quién sale de vacaciones.";
+export const PERSONAS_VISUAL_DESCRIPTION = "El equipo de un vistazo: carga, etapas y quién sale de vacaciones.";
 
 /**
  * `/personas` on the client (Query Migration 6): `personas.equipo()` and

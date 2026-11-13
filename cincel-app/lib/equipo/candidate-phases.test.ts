@@ -48,7 +48,7 @@ describe("candidatePhasesFor", () => {
 describe("formatting", () => {
   const phases = candidatePhasesFor(catalog, ["arq", "res"]);
 
-  it("labels each fase as tramo · fase", () => {
+  it("labels each fase as etapa · fase", () => {
     expect(formatCandidatePhases(phases)).toBe(
       "Diseño · Ejecutivo, Diseño · Proyecto Estructural, Construcción · Obra"
     );

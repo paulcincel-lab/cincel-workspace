@@ -53,7 +53,7 @@ describe.skipIf(!url)("convertChecklistToSubtasks (test DB)", async () => {
 
     const [workflow] = await db
       .insert(schema.workflows)
-      .values({ key: `checklist-${run}`, name: `Tramo checklist ${run}`, sortOrder: 900 })
+      .values({ key: `checklist-${run}`, name: `Etapa checklist ${run}`, sortOrder: 900 })
       .returning({ id: schema.workflows.id });
     workflowId = workflow.id;
     const [phase] = await db
@@ -175,7 +175,7 @@ describe.skipIf(!url)("convertChecklistToSubtasks (test DB)", async () => {
     expect((await children(t.orphan)).map((c) => c.title)).toEqual(["Limpiar"]);
   });
 
-  it("gives an admin task admin subtasks without tramo or fase", async () => {
+  it("gives an admin task admin subtasks without etapa or fase", async () => {
     const [sub] = await children(t.admin);
     expect(sub).toMatchObject({ title: "Facturar", kind: "admin", workflowId: null, phaseId: null, spaceId: null });
   });

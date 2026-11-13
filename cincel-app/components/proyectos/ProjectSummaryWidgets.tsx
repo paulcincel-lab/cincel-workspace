@@ -49,7 +49,7 @@ export function ProjectSummaryWidgets({ data: input }: { data: ProjectSummaryInp
 
   return (
     <div className="flex flex-col gap-4">
-      <TramoStepperWidget title="Tramos" steps={data.tramos} />
+      <TramoStepperWidget title="Etapas" steps={data.tramos} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <ProgressListWidget title="Avance" items={data.avance} variant="rings" />

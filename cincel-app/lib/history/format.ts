@@ -34,7 +34,7 @@ const FIELD_LABELS: Record<string, string> = {
   created: "creación",
   clientId: "cliente",
   projectId: "proyecto",
-  currentWorkflowId: "tramo actual",
+  currentWorkflowId: "etapa actual",
   email: "correo",
   phone: "teléfono",
   role: "rol",

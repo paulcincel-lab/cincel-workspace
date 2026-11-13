@@ -54,7 +54,7 @@ function buildKpis(prep: MeetingPrep): KpiStripItem[] {
       secondary: delta === null ? undefined : "vs plan",
       tone: delta !== null && delta < 0 ? "destructive" : "default",
     },
-    { key: "tramo", label: "Tramo", value: kpis.tramo?.name ?? "Sin tramo", secondary: kpis.tramo?.phase ?? undefined },
+    { key: "tramo", label: "Etapa", value: kpis.tramo?.name ?? "Sin etapa", secondary: kpis.tramo?.phase ?? undefined },
     {
       key: "vencidas",
       label: "Vencidas",

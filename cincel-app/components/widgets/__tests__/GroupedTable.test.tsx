@@ -52,12 +52,12 @@ function cell(rowTitle: string, column: string): HTMLElement {
 }
 
 describe("GroupedTable", () => {
-  it("renders project and tramo groups with captions and metrics", () => {
+  it("renders project and etapa groups with captions and metrics", () => {
     renderTable();
     const lomas = screen.getByRole("region", { name: "Casa Lomas" });
     const top = within(lomas).getByRole("button", { name: /^Casa Lomas/ });
     expect(top.getAttribute("aria-expanded")).toBe("true");
-    expect(top.textContent).toContain("8 tareas · 2 tramos");
+    expect(top.textContent).toContain("8 tareas · 2 etapas");
     expect(top.textContent).toContain("57 % vencidas");
     expect(top.querySelector("b")?.className).not.toContain("font-bold");
     const diseno = within(lomas).getByRole("button", { name: /^Diseño/ });
@@ -257,7 +257,7 @@ describe("GroupedTable", () => {
         children: [
           {
             id: "p/t",
-            label: "Tramo",
+            label: "Etapa",
             metrics: [],
             rows: [groupedTaskGroups[0].children![0].rows![0]],
             quickAdd: (

@@ -159,7 +159,7 @@ describe("toPortalScheduleDTO", () => {
     expect(closed!.sections[0]).toMatchObject({ actualStart: "2026-02-03", actualEnd: "2026-02-12" });
   });
 
-  it("tramoKey is the first linked task's tramo", () => {
+  it("tramoKey is the first linked task's etapa", () => {
     const dto = toPortalScheduleDTO([
       task({ sortOrder: 1, tramoKey: null }),
       task({ sortOrder: 2, tramoKey: "construccion" }),

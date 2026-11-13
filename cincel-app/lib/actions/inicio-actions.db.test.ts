@@ -284,7 +284,7 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
     }
   });
 
-  it("returns 12 ascending weeks of pace and tramo groups with diasProm", async () => {
+  it("returns 12 ascending weeks of pace and etapa groups with diasProm", async () => {
     const { weeklyPace, tasksByTramo } = await fetchInicio();
     expect(weeklyPace).toHaveLength(12);
     for (let i = 1; i < weeklyPace.length; i++) expect(weeklyPace[i].weekStart > weeklyPace[i - 1].weekStart).toBe(true);
@@ -292,7 +292,7 @@ describe.skipIf(!url)("Inicio page data (test DB)", async () => {
     expect(weeklyPace.slice(0, 11).every((w) => w.created === 0 && w.completed === 0)).toBe(true);
 
     expect(tasksByTramo).toEqual([
-      expect.objectContaining({ key: "sin-tramo", label: "Sin tramo", value: 4, secondary: 1, extra: { diasProm: 0 } }),
+      expect.objectContaining({ key: "sin-tramo", label: "Sin etapa", value: 4, secondary: 1, extra: { diasProm: 0 } }),
     ]);
   });
 

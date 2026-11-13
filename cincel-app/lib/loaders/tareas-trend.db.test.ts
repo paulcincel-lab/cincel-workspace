@@ -116,8 +116,8 @@ describe.skipIf(!url)("loadTareasTrend · Tareas Visual (test DB)", async () => 
     const tramos = await db
       .insert(schema.workflows)
       .values([
-        { key: tramoA, name: `Tramo A ${run}`, sortOrder: 90 },
-        { key: tramoB, name: `Tramo B ${run}`, sortOrder: 91 },
+        { key: tramoA, name: `Etapa A ${run}`, sortOrder: 90 },
+        { key: tramoB, name: `Etapa B ${run}`, sortOrder: 91 },
       ])
       .returning({ id: schema.workflows.id });
     tramoAId = tramos[0].id;
@@ -187,7 +187,7 @@ describe.skipIf(!url)("loadTareasTrend · Tareas Visual (test DB)", async () => 
     expect(kpi.completadas.delta).toMatchObject({ value: 1, good: true, label: "+1 vs. semana pasada" });
   });
 
-  it("week days with dominant tramo", async () => {
+  it("week days with dominant etapa", async () => {
     const trend = await loadTareasTrend(userOf(admin), { filters: { ...NO_FILTERS, q: `Trend ${run} week` } });
     expect(trend.week.from).toBe(monday);
     expect(trend.week.to).toBe(shiftIsoDate(monday, 6));

@@ -112,7 +112,7 @@ describe.skipIf(!url)("puestos (test DB)", async () => {
     adminId = await makeStaff("Admin");
     const [workflow] = await db
       .insert(schema.workflows)
-      .values({ key: `test-${run}`, name: `Tramo ${run}`, sortOrder: 999 })
+      .values({ key: `test-${run}`, name: `Etapa ${run}`, sortOrder: 999 })
       .returning({ id: schema.workflows.id });
     workflowId = workflow!.id;
     const phases = await db
@@ -214,7 +214,7 @@ describe.skipIf(!url)("puestos (test DB)", async () => {
       const id = await makePosition("Fases");
       const first = await actions.setPositionPhasesAction(id, [phaseId, otherPhaseId]);
       expect(first.phases.map((p) => p.id)).toEqual([phaseId, otherPhaseId]);
-      expect(first.phases[0]).toMatchObject({ workflowId, workflowName: `Tramo ${run}` });
+      expect(first.phases[0]).toMatchObject({ workflowId, workflowName: `Etapa ${run}` });
 
       const second = await actions.setPositionPhasesAction(id, [otherPhaseId]);
       expect(second.phases.map((p) => p.id)).toEqual([otherPhaseId]);
@@ -293,7 +293,7 @@ describe.skipIf(!url)("puestos (test DB)", async () => {
   });
 
   describe("assignable staff and candidates", () => {
-    it("listAssignableStaff flags staff whose puestos list a fase of the tramo, suggested first", async () => {
+    it("listAssignableStaff flags staff whose puestos list a fase of the etapa, suggested first", async () => {
       const matching = await makePosition("Candidato");
       const unrelated = await makePosition("Otro");
       await db.insert(schema.positionPhases).values({ positionId: matching, phaseId });

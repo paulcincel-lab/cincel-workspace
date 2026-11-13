@@ -166,7 +166,7 @@ export const find_overloads = defineTool({
 export const meeting_prep = defineTool({
   name: "meeting_prep",
   description:
-    "Prepara una reunión: avance contra el plan, tramo y fase, tareas vencidas del proyecto, última junta y un orden del día propuesto. Con phrasing redacta de nuevo el resumen.",
+    "Prepara una reunión: avance contra el plan, etapa y fase, tareas vencidas del proyecto, última junta y un orden del día propuesto. Con phrasing redacta de nuevo el resumen.",
   schema: MeetingPrepToolSchema,
   capability: canViewCalendar,
   available: () => implemented(IMPLEMENTED, "getMeetingPrep"),

@@ -40,15 +40,15 @@ const CASES: LegacyCase[] = [
   { name: "/actividades/general", on: "/tareas?estilo=analitico" },
   {
     name: "/actividades/presale",
-    on: "/tareas?estilo=analitico&tramo=presale",
+    on: "/tareas?estilo=analitico&etapa=presale",
   },
   {
     name: "/actividades/presale?project=X",
     query: { project: "X" },
-    on: "/tareas?estilo=analitico&tramo=presale&project=X&iniciar=1",
+    on: "/tareas?estilo=analitico&etapa=presale&project=X&iniciar=1",
   },
   // The old Tareas view switch: Tablero is Visual, Lista Analítico, Calendario the page without the param.
-  { name: "/tareas?vista=tablero", query: { vista: "tablero", tramo: "diseno" }, on: "/tareas?estilo=visual&tramo=diseno" },
+  { name: "/tareas?vista=tablero", query: { vista: "tablero", tramo: "diseno" }, on: "/tareas?estilo=visual&etapa=diseno" },
   { name: "/tareas?vista=lista", query: { vista: "lista", responsable: "yo" }, on: "/tareas?estilo=analitico&responsable=yo" },
   { name: "/tareas?vista=calendario", query: { vista: "calendario", cal: "semana", fecha: "2026-11-07" }, on: "/calendario?fecha=2026-11-07&vista=semana" },
   { name: "/tareas?vista=calendario (month)", query: { vista: "calendario", cal: "month" }, on: "/calendario?vista=mes" },
@@ -101,10 +101,10 @@ const CASES: LegacyCase[] = [
   { name: "/configuracion/importar-monday", on: "/ajustes/monday" },
   { name: "/configuracion/permisos", on: "/ajustes/permisos" },
   { name: "/configuracion/puestos", on: "/ajustes/puestos" },
-  { name: "/configuracion/tramos", on: "/ajustes/tramos" },
+  { name: "/configuracion/tramos", on: "/ajustes/etapas" },
   {
     name: "/configuracion/workflows",
-    on: "/ajustes/tramos",
+    on: "/ajustes/etapas",
   },
 ];
 

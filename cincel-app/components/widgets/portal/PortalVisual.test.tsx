@@ -98,8 +98,8 @@ describe("PortalVisual", () => {
     expect(screen.getByText("En Diseño")).toBeTruthy();
     expect(screen.getByText(/Próxima entrega/).textContent?.replace(/\s+/g, " ")).toBe("Próxima entrega · 14 nov");
     expect(screen.getByRole("img", { name: "Avance general 41 %" })).toBeTruthy();
-    expect(screen.getByText(/tramos en marcha/).textContent).toBe(
-      "2 de 4 tramos en marcha · entrega final estimada abr 2027",
+    expect(screen.getByText(/etapas en marcha/).textContent).toBe(
+      "2 de 4 etapas en marcha · entrega final estimada abr 2027",
     );
     expect(document.body.textContent).not.toContain("FOTO DEL PROYECTO");
 
@@ -165,7 +165,7 @@ describe("PortalVisual", () => {
     expect(portalMailto("a@b.mx", "Casa & Jardín")).toBe("mailto:a@b.mx?subject=Casa%20%26%20Jard%C3%ADn");
   });
 
-  it("without tramos hides Fases and the chip; the caption keeps only the date", () => {
+  it("without etapas hides Fases and the chip; the caption keeps only the date", () => {
     render(<PortalVisual project={project} data={overview({ tramos: [] })} />);
     expect(screen.queryByRole("region", { name: "Fases" })).toBeNull();
     expect(screen.queryByText(/^En /)).toBeNull();
@@ -174,7 +174,7 @@ describe("PortalVisual", () => {
 
   it("drops the date from the caption without an end date", () => {
     render(<PortalVisual project={{ ...project, endDate: null }} data={overview()} />);
-    expect(screen.getByText(/tramos en marcha/).textContent).toBe("2 de 4 tramos en marcha");
+    expect(screen.getByText(/etapas en marcha/).textContent).toBe("2 de 4 etapas en marcha");
   });
 
   it("shows No hay entregas próximas without a schedule, and hides an empty team", () => {
@@ -184,7 +184,7 @@ describe("PortalVisual", () => {
     expect(screen.queryByRole("region", { name: "Tu equipo Cincel" })).toBeNull();
   });
 
-  it("shows a por iniciar tramo's start month when it has one", () => {
+  it("shows a por iniciar etapa's start month when it has one", () => {
     const withMonth = tramos.map((t) => (t.key === "construccion" ? { ...t, startMonth: "2026-12" } : t));
     render(<PortalVisual project={project} data={overview({ tramos: withMonth })} />);
     expect(screen.getByText("Por iniciar · dic 2026")).toBeTruthy();

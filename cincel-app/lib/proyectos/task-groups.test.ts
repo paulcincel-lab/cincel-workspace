@@ -22,12 +22,12 @@ describe("groupFichaTasks", () => {
     task("t6", { kind: "admin" }),
   ];
 
-  it("groups by tramo order, then fase order with «Sin fase · revisar» last", () => {
+  it("groups by etapa order, then fase order with «Sin fase · revisar» last", () => {
     const groups = groupFichaTasks(tasks);
     expect(groups.map((g) => [g.name, g.count])).toEqual([
       ["Presale", 1],
       ["Diseño", 3],
-      ["Sin tramo", 1],
+      ["Sin etapa", 1],
     ]);
     expect(groups[1].phases.map((p) => [p.name, p.tasks.map((t) => t.id)])).toEqual([
       ["Anteproyecto", ["t3"]],
@@ -44,7 +44,7 @@ describe("groupFichaTasks", () => {
     expect(admin?.phases[0].tasks.map((t) => t.id)).toEqual(["t6"]);
   });
 
-  it("detects non-admin tasks without a tramo", () => {
+  it("detects non-admin tasks without a etapa", () => {
     expect(hasTasksWithoutTramo(tasks)).toBe(true);
     expect(hasTasksWithoutTramo([task("a", { kind: "admin" }), task("b", { workflow: PRESALE })])).toBe(false);
   });

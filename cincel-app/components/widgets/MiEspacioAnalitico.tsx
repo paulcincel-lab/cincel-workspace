@@ -539,7 +539,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
           projectId: group.id,
           tramoId: fallbackTramo(group),
           assigneeId: viewerId,
-          placeholder: `Escribe para agregar una tarea en ${group.label}…  #tramo  fecha  !prioridad`,
+          placeholder: `Escribe para agregar una tarea en ${group.label}…  #etapa  fecha  !prioridad`,
         }}
         onCreate={async (draft): Promise<QuickAddCreated> => {
           const task = await createTask.mutateAsync({ draft, projectId: group.id, tramoId: fallbackTramo(group) });
@@ -650,7 +650,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
     },
     {
       id: TRAMO_PARAM,
-      label: "Tramo",
+      label: "Etapa",
       value: tramo ?? "todos",
       options: [
         { value: "todos", label: "Todos" },

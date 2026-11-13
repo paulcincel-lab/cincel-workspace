@@ -69,7 +69,7 @@ describe("taskCellLock", () => {
     for (const field of fields) expect(taskCellLock(task, field, ADMIN)).toBe(true);
   });
 
-  it("locks the Tramo move and Responsable for a colaborador, with the reason", () => {
+  it("locks the Etapa move and Responsable for a colaborador, with the reason", () => {
     expect(taskCellLock(task, "tramo", COLABORADOR)).toBe(LOCK_REASON.tramo);
     expect(taskCellLock(task, "responsable", COLABORADOR)).toBe(LOCK_REASON.responsible);
     for (const field of ["tarea", "fase", "estatus", "prioridad", "vence"] as const) {
@@ -85,7 +85,7 @@ describe("taskCellLock", () => {
     expect(taskCellLock(task, "responsable", READER)).toBe(LOCK_REASON.responsible);
   });
 
-  it("locks a subtask's fase and an admin task's tramo, fase and espacio", () => {
+  it("locks a subtask's fase and an admin task's etapa, fase and espacio", () => {
     expect(taskCellLock({ ...task, parentTaskId: "t0" }, "fase", ADMIN)).toBe(LOCK_REASON.subtaskPhase);
     const admin = { ...task, kind: "admin" as const };
     for (const field of ["tramo", "fase", "espacio"] as const) expect(taskCellLock(admin, field, ADMIN)).toBe(LOCK_REASON.adminTask);
@@ -95,7 +95,7 @@ describe("taskCellLock", () => {
 describe("taskCellOptions", () => {
   const labels = (field: TaskCellField) => taskCellOptions(task, field, CATALOGS).map((o) => o.label);
 
-  it("lists the tramos in order with their colour, and the fases of the row's tramo", () => {
+  it("lists the etapas in order with their colour, and the fases of the row's etapa", () => {
     const tramos = taskCellOptions(task, "tramo", CATALOGS);
     expect(tramos.map((o) => o.label)).toEqual(["Presale", "Diseño"]);
     expect(tramos.every((o) => typeof o.color === "string" && o.color.startsWith("var("))).toBe(true);
@@ -135,7 +135,7 @@ describe("taskCellValue / taskCellAction", () => {
 });
 
 describe("taskWithChange", () => {
-  it("moves the task to another tramo and clears its fase", () => {
+  it("moves the task to another etapa and clears its fase", () => {
     const moved = taskWithChange(task, "tramo", PRESALE.id, CATALOGS);
     expect(moved).toMatchObject({ workflowId: PRESALE.id, workflow: PRESALE, phaseId: null, phase: null });
     expect(taskWithChange(task, "tramo", DISENO.id, CATALOGS)).toBe(task);
@@ -165,7 +165,7 @@ describe("patchTaskListPages", () => {
   const toPresale = <R extends TaskCellTask>(row: R): R => taskWithChange(row, "tramo", PRESALE.id, CATALOGS);
   const moved = toPresale(task);
 
-  it("matches the tramo filter forms", () => {
+  it("matches the etapa filter forms", () => {
     expect(matchesTramoFilter(null, null)).toBe(true);
     expect(matchesTramoFilter("diseno", "diseno")).toBe(true);
     expect(matchesTramoFilter("presale, diseno", "diseno")).toBe(true);
@@ -173,7 +173,7 @@ describe("patchTaskListPages", () => {
     expect(matchesTramoFilter(SIN_TRAMO_KEY, null)).toBe(true);
   });
 
-  it("takes the row and its subtasks out of the old tramo group and puts the row first in the new one", () => {
+  it("takes the row and its subtasks out of the old etapa group and puts the row first in the new one", () => {
     const diseno = pages([task, other, sub]);
     const out = patchTaskListPages(diseno, { tramo: "diseno", proyecto: "p1" } as never, "t1", toPresale, { subtasks: true, moved });
     expect(out.pages[0].rows.map((r) => r.id)).toEqual(["t2"]);

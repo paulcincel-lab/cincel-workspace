@@ -5,6 +5,7 @@
  * Router mirrors into `useSearchParams`, so no server render runs.
  */
 import type { TeamAnaliticoFilters } from "@/lib/personas/team";
+import { readEtapaParam } from "@/lib/ui/etapa-param";
 
 export const CONTACT_PARAM = "contacto";
 export const SEARCH_PARAM = "q";
@@ -62,8 +63,8 @@ export function contactIdFromHref(href: string, pathname: string): string | null
 
 /** `?estado=sobrecargadas|con-capacidad` (Analítico). */
 export const ANALITICO_ESTADO_PARAM = "estado";
-/** `?tramo=<key>`. */
-export const TRAMO_PARAM = "tramo";
+/** `?etapa=<key>` (old links: `?tramo=`). */
+export const TRAMO_PARAM = "etapa";
 /** `?alcance=mi-equipo`. */
 export const ALCANCE_PARAM = "alcance";
 /** `?abiertos=<tramoKey>,<tramoKey>`: the expanded tramo groups (absent = all). */
@@ -84,7 +85,7 @@ export function parseAnaliticoTeamParams(params: ParamsLike): AnaliticoTeamUrlSt
   const estadoRaw = params?.get(ANALITICO_ESTADO_PARAM) ?? null;
   const estado: TeamAnaliticoFilters["estado"] =
     estadoRaw === "sobrecargadas" || estadoRaw === "con-capacidad" ? estadoRaw : "todas";
-  const tramo = params?.get(TRAMO_PARAM)?.trim() || null;
+  const tramo = readEtapaParam(params)?.trim() || null;
   const alcance: TeamAnaliticoFilters["alcance"] = params?.get(ALCANCE_PARAM) === "mi-equipo" ? "mi-equipo" : "todo";
   const q = params?.get(SEARCH_PARAM) ?? "";
   const abiertosRaw = params?.get(ABIERTOS_PARAM);

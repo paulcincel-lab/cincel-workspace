@@ -118,7 +118,7 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
     // Tramo progress: one tramo under way on the granted project, with tasks on it and on another project.
     const [wf] = await db
       .insert(schema.workflows)
-      .values({ key: `portal-${run}`, name: `Tramo ${run}`, sortOrder: 900 })
+      .values({ key: `portal-${run}`, name: `Etapa ${run}`, sortOrder: 900 })
       .returning({ id: schema.workflows.id });
     ids.workflows.push(wf.id);
     await db.update(schema.scheduleTasks).set({ workflowId: wf.id })
@@ -164,11 +164,11 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
     if (ids.staff.length) await db.delete(schema.staff).where(inArray(schema.staff.id, ids.staff));
   });
 
-  it("tramo progress counts closed tasks of the project only", async () => {
+  it("etapa progress counts closed tasks of the project only", async () => {
     const tramos = await getPortalProjectTramos(await access(clientUserId, p.granted));
     const mine = tramos.find((x) => x.key === `portal-${run}`);
     // 2 closed of 4 live tasks; deleted, archived and the other project's tasks are left out.
-    expect(mine).toEqual({ key: `portal-${run}`, name: `Tramo ${run}`, state: "en_curso", progressPct: 50,
+    expect(mine).toEqual({ key: `portal-${run}`, name: `Etapa ${run}`, state: "en_curso", progressPct: 50,
       startMonth: "2026-06" });
     expect(JSON.stringify(tramos)).not.toContain("Tarea secreta");
   });
@@ -218,7 +218,7 @@ describe.skipIf(!url)("portal queries (test DB)", async () => {
     expect(await getPortalSchedule(await access(otherUserId, p.other))).toBeNull();
   });
 
-  it("sections carry real dates once every task finished, and the linked tramo's key", async () => {
+  it("sections carry real dates once every task finished, and the linked etapa's key", async () => {
     const schedule = await getPortalSchedule(await access(clientUserId, p.granted));
     expect(schedule?.sections.map((s) => [s.seccion, s.actualStart, s.actualEnd, s.tramoKey])).toEqual([
       ["Preliminares", "2026-02-01", null, `portal-${run}`],

@@ -80,7 +80,7 @@ export function PhaseListEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      {shown.length === 0 ? <p className="text-[13px] text-muted-foreground">Este tramo aún no tiene fases.</p> : null}
+      {shown.length === 0 ? <p className="text-[13px] text-muted-foreground">Esta etapa aún no tiene fases.</p> : null}
       <ol aria-label={`Fases de ${workflowName}`} className="flex flex-col gap-1.5">
         {shown.map((phase, index) => {
           const name = names[phase.id] ?? phase.name;

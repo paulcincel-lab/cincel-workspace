@@ -205,7 +205,7 @@ describe("Proyectos list accessibility · Esencial (#993)", () => {
 
   it("pill group is a labelled radiogroup", () => {
     renderEsencial();
-    const group = screen.getByRole("radiogroup", { name: "Filtrar por tramo" });
+    const group = screen.getByRole("radiogroup", { name: "Filtrar por etapa" });
     const radios = within(group).getAllByRole("radio");
     expect(radios.length).toBeGreaterThan(1);
     // One tab stop: the checked pill ("Todos" with no selection).
@@ -242,7 +242,7 @@ describe("Proyectos list accessibility · Analítico (#994)", () => {
       admin.unmount();
 
       // Filters with a pressed tramo, then the no-match state.
-      nav.params = new URLSearchParams("tramo=diseno&mostrar=vencidas&pausados=1");
+      nav.params = new URLSearchParams("etapa=diseno&mostrar=vencidas&pausados=1");
       const filtered = renderAnalitico();
       expect(await seriousViolations(filtered.container)).toEqual([]);
       fireEvent.change(screen.getByLabelText("Buscar proyectos"), { target: { value: "zzz" } });
@@ -269,11 +269,11 @@ describe("Proyectos list accessibility · Analítico (#994)", () => {
       for (const th of headers) expect(th.getAttribute("scope")).toBe("col");
     }
     // No "Ir a tramo" anchors (#1042): each project row has a named expand toggle instead.
-    expect(screen.queryByRole("navigation", { name: "Ir a tramo" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Ir a etapa" })).toBeNull();
     const toggle = screen.getByRole("button", { name: "Tareas de «Casa Lomas»" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     // The tramo bar's segments are pressed toggles.
-    const legend = screen.getByRole("list", { name: "Filtrar por tramo" });
+    const legend = screen.getByRole("list", { name: "Filtrar por etapa" });
     expect(within(legend).getAllByRole("button").every((b) => b.getAttribute("aria-pressed") === "false")).toBe(true);
   });
 
@@ -343,7 +343,7 @@ describe("Proyectos list accessibility · Visual (#992)", () => {
     expect(screen.getAllByRole("img", { name: "Avance 62 %" })).toHaveLength(2);
     expect(screen.getAllByRole("img", { name: "Avance medio 39 %" })).toHaveLength(1);
     // The stepper only on the attention card.
-    expect(screen.getAllByRole("img", { name: "Tramo actual: Diseño" })).toHaveLength(1);
+    expect(screen.getAllByRole("img", { name: "Etapa actual: Diseño" })).toHaveLength(1);
     expect(screen.getAllByRole("img", { name: /^Equipo: Ana López, Luis Paz/ }).length).toBeGreaterThan(0);
     for (const img of container.querySelectorAll('[role="img"]')) expect(img.getAttribute("aria-label")).toBeTruthy();
   });

@@ -84,7 +84,7 @@ describe.skipIf(!url)("task sheet page data (test DB)", async () => {
 
     const [workflow] = await db
       .insert(schema.workflows)
-      .values({ key: `hoja-${run}`, name: `Tramo hoja ${run}`, sortOrder: 900 })
+      .values({ key: `hoja-${run}`, name: `Etapa hoja ${run}`, sortOrder: 900 })
       .returning({ id: schema.workflows.id });
     workflowId = workflow.id;
     ids.workflows.push(workflow.id);

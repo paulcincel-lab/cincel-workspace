@@ -346,7 +346,7 @@ export function ProjectTasksByFase({
 
       <section aria-labelledby={summaryHeadingId} className="flex flex-col gap-3">
         <h2 id={summaryHeadingId} className="text-base font-semibold text-foreground">
-          {mode === "fase" ? "Avance por fase" : "Avance por tramo"}
+          {mode === "fase" ? "Avance por fase" : "Avance por etapa"}
         </h2>
         <RecordTable
           data={groupsTable}

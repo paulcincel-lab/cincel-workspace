@@ -290,7 +290,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
   });
 
   describe("createProjectAction (name only)", () => {
-    it("opens the first tramo with every template task, unassigned, plus one assign_client admin task", async () => {
+    it("opens the first etapa with every template task, unassigned, plus one assign_client admin task", async () => {
       const project = await createAs(admin, "nuevo");
 
       const [row] = await db.select().from(schema.projects).where(eq(schema.projects.id, project.id));
@@ -329,7 +329,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
       expect(tasks.filter((t) => t.kind === "usuario")).toHaveLength(0);
     });
 
-    it("with auto-start off leaves the tramo unstarted but still adds the admin task", async () => {
+    it("with auto-start off leaves the etapa unstarted but still adds the admin task", async () => {
       await setFirstTramoAutoStart("manual");
       try {
         const project = await createAs(admin, "sin-inicio");
@@ -573,7 +573,7 @@ describe.skipIf(!url)("project create and admin tasks (test DB)", async () => {
     });
 
     describe("createSubtaskAction under an admin task", () => {
-      it("makes an admin child with no tramo or fase", async () => {
+      it("makes an admin child with no etapa or fase", async () => {
         const parentId = await insertAdminTask(projectId);
         const child = await createSubtaskAction(parentId, { title: `Hija ${run}`, managerId: admin2.id });
         const [row] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, child.id));

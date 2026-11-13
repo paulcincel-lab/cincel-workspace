@@ -265,7 +265,7 @@ export type TaskRow = {
   retraso: number;
 };
 
-export const SIN_TRAMO = "Sin tramo";
+export const SIN_TRAMO = "Sin etapa";
 
 const PRIORITY_LABEL: Record<TaskListItem["priority"], string> = { alta: "Alta", media: "Media", baja: "Baja" };
 
@@ -347,7 +347,7 @@ export function checklistMetrics(checklists: readonly Pick<Checklist, "items">[]
 
 export const MI_ESPACIO_CSV_HEADER = [
   "Proyecto",
-  "Tramo",
+  "Etapa",
   "Tarea",
   "Estatus",
   "Vence",

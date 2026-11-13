@@ -114,7 +114,7 @@ describe("Analítico: Mis tareas tables", () => {
     const csv = miEspacioCsv(rows);
     expect(csv.startsWith("\uFEFF")).toBe(true);
     const lines = csv.slice(1).split("\r\n");
-    expect(lines[0]).toBe("Proyecto;Tramo;Tarea;Estatus;Vence;Prioridad;Subtareas;Días de retraso");
+    expect(lines[0]).toBe("Proyecto;Etapa;Tarea;Estatus;Vence;Prioridad;Subtareas;Días de retraso");
     expect(lines[1]).toBe('Casa Lomas;Diseño;"Planos; fase 1";Pendiente;2026-11-04;Media;1/2;5');
     expect(lines[2]).toBe(`Torre Sur;Diseño;"'=SUMA ""x""";Pendiente;;Media;;0`);
     expect(lines[3]).toBe("");

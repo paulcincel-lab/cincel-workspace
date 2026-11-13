@@ -128,7 +128,7 @@ describe("biblioteca catalog", () => {
     expect(groups[1].cards.map((c) => c.id)).toEqual(["formatos-obra", "mis-favoritos"]);
   });
 
-  it("filters a section by tipo, tramo and text", () => {
+  it("filters a section by tipo, etapa and text", () => {
     const links = bibliotecaFixture();
     expect(filterSectionLinks(links, "formatos-obra", {}).map((l) => l.id)).toHaveLength(3);
     expect(filterSectionLinks(links, "formatos-obra", { tipo: "drive_folder" }).map((l) => l.id)).toEqual(["acta"]);
@@ -152,7 +152,7 @@ describe("biblioteca catalog", () => {
 
   it("has no views / downloads columns in the section table (RD-7)", () => {
     const labels = SECTION_TABLE_COLUMNS.map((c) => c.label.toLowerCase());
-    expect(labels).toEqual(["favorito", "nombre", "tipo", "tramo", "actualizado", "acciones"]);
+    expect(labels).toEqual(["favorito", "nombre", "tipo", "etapa", "actualizado", "acciones"]);
     expect(labels.some((l) => /vistas|descargas/.test(l))).toBe(false);
     const table = sectionTable([bibliotecaFixture()[3]], new Set(["bitacora"]));
     expect(table.rows[0]).toMatchObject({ id: "bitacora", favorito: true, tipo: "Archivo", tramo: "Construcción" });

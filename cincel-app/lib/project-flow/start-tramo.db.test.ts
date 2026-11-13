@@ -159,7 +159,7 @@ describe.skipIf(!url)("startTramo / undoStartTramo / onTaskClosingChanged (test 
     expect(after.phases[1].templates.map((t) => t.title)).toEqual(["B1"]);
   });
 
-  it("creates the tasks with stage, batch, current tramo and dates", async () => {
+  it("creates the tasks with stage, batch, current etapa and dates", async () => {
     const projectId = await newProject();
     const result = await start({ projectId });
     expect(result).toMatchObject({ createdCount: 3, skippedCount: 0, stageCreated: true });
@@ -221,7 +221,7 @@ describe.skipIf(!url)("startTramo / undoStartTramo / onTaskClosingChanged (test 
     await expect(start({ projectId: randomUUID() })).rejects.toThrow("NOT_FOUND");
   });
 
-  it("moves the current tramo forward only", async () => {
+  it("moves the current etapa forward only", async () => {
     const projectId = await newProject();
     await start({ projectId, workflowId: wf.second, phaseIds: [phases.c] });
     await start({ projectId });
@@ -229,7 +229,7 @@ describe.skipIf(!url)("startTramo / undoStartTramo / onTaskClosingChanged (test 
     expect(project.currentWorkflowId).toBe(wf.second);
   });
 
-  it("undoes an untouched batch: tasks, stage and current tramo", async () => {
+  it("undoes an untouched batch: tasks, stage and current etapa", async () => {
     const projectId = await newProject();
     const result = await start({ projectId });
     expect(await flow.isBatchTouched(db, result.batchId!)).toBe(false);
@@ -302,7 +302,7 @@ describe.skipIf(!url)("startTramo / undoStartTramo / onTaskClosingChanged (test 
         .from(projectStages)
         .where(and(eq(projectStages.projectId, projectId), eq(projectStages.workflowId, workflowId)));
 
-    it("does not start the next tramo while it is manual", async () => {
+    it("does not start the next etapa while it is manual", async () => {
       await db.update(workflows).set({ autoStart: "manual" }).where(eq(workflows.id, wf.second));
       const projectId = await newProject();
       await start({ projectId });

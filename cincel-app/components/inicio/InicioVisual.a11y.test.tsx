@@ -96,7 +96,7 @@ describe("InicioVisual accessibility", () => {
   it("charts have sr-only tables", () => {
     renderVisual();
     const tables = [...document.querySelectorAll<HTMLTableElement>('table[data-slot="chart-sr-table"]')];
-    expect(tables.map((t) => t.caption?.textContent)).toEqual(["Ritmo semanal", "Tareas por tramo"]);
+    expect(tables.map((t) => t.caption?.textContent)).toEqual(["Ritmo semanal", "Tareas por etapa"]);
     for (const table of tables) expect(table.classList.contains("sr-only")).toBe(true);
     // Ritmo semanal: the default 8 weeks; Tareas por tramo: one row per tramo.
     expect(tables[0].querySelectorAll("tbody tr")).toHaveLength(8);

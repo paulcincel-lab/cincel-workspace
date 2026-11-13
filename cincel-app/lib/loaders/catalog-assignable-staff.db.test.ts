@@ -97,7 +97,7 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
     await addTask("ana completada", { managerId: ana, status: "completado", closedAt: new Date(), commitmentDate: "2026-11-01" });
     await addTask("ana archivada", { managerId: ana, archived: true });
     await addTask("ana borrada", { managerId: ana, deletedAt: new Date() });
-    await addTask("ana otro tramo", { managerId: ana, workflowId: otherTramo });
+    await addTask("ana otra etapa", { managerId: ana, workflowId: otherTramo });
     await addTask("ana proyecto borrado", { managerId: ana, projectId: deletedProject });
     await db.update(schema.projects).set({ deletedAt: new Date() }).where(inArray(schema.projects.id, [deletedProject]));
     // Luis: 1 open, due today (not overdue).
@@ -118,7 +118,7 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
     }
   });
 
-  it("counts open and overdue tasks per person in the tramo", async () => {
+  it("counts open and overdue tasks per person in the etapa", async () => {
     const rows = await loadCatalogAssignableStaff(user, { workflowId: tramo }, { now: NOW });
     const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get(ana)).toMatchObject({ openCount: 3, overdueCount: 2 });
@@ -126,12 +126,12 @@ describe.skipIf(!url)("loadCatalogAssignableStaff · per-person load (test DB)",
     expect(byId.get(sofia)).toMatchObject({ openCount: 0, overdueCount: 0 });
   });
 
-  it("counts only the tramo asked for", async () => {
+  it("counts only the etapa asked for", async () => {
     const rows = await loadCatalogAssignableStaff(user, { workflowId: otherTramo }, { now: NOW });
     expect(rows.find((r) => r.id === ana)).toMatchObject({ openCount: 1, overdueCount: 0 });
   });
 
-  it("has no counts without a tramo", async () => {
+  it("has no counts without a etapa", async () => {
     const rows = await loadCatalogAssignableStaff(user, { workflowId: null }, { now: NOW });
     const row = rows.find((r) => r.id === ana);
     expect(row).toBeDefined();

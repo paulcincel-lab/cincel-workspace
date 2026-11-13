@@ -47,13 +47,13 @@ describe("useProyectosDashboard", () => {
     expect("PROYECTOS_VIEW_FALLBACK" in storeModule).toBe(false);
   });
 
-  it("starts with no tramo selected and nothing collapsed", () => {
+  it("starts with no etapa selected and nothing collapsed", () => {
     expect(PROYECTOS_DASHBOARD_INITIAL).toMatchObject({ selectedKpi: null, collapsed: {} });
     expect(selectSelectedTramo(state())).toBeNull();
     expect(selectTramoStripCollapsed(state())).toBe(false);
   });
 
-  it("toggles the tramo; the same key again clears it, Sin tramo included", () => {
+  it("toggles the etapa; the same key again clears it, Sin etapa included", () => {
     state().toggleKpi("diseno");
     expect(selectSelectedTramo(state())).toBe("diseno");
     state().toggleKpi(NO_TRAMO_KEY);
@@ -62,7 +62,7 @@ describe("useProyectosDashboard", () => {
     expect(selectSelectedTramo(state())).toBeNull();
   });
 
-  it("persists collapsed but never the tramo", () => {
+  it("persists collapsed but never the etapa", () => {
     state().toggleKpi("presale");
     state().toggleCollapsed("tramoStrip");
     const stored = persisted();
@@ -84,7 +84,7 @@ describe("useProyectosDashboard", () => {
     expect(state().views).toEqual({});
   });
 
-  it("rehydrates collapsed from v2 (dropping unknown widgets) but never a tramo", async () => {
+  it("rehydrates collapsed from v2 (dropping unknown widgets) but never a etapa", async () => {
     localStorage.setItem(
       KEY,
       JSON.stringify({

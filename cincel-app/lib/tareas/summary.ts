@@ -59,7 +59,7 @@ export function tareasGroupFilters(
 }
 
 /** Name of the tramo group of the tasks without a tramo. */
-export const SIN_TRAMO_LABEL = "Sin tramo";
+export const SIN_TRAMO_LABEL = "Sin etapa";
 
 /**
  * The tramo filter value of the "Sin tramo" group (`TareasListFilters.tramo`):

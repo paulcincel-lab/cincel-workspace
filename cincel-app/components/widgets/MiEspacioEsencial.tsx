@@ -555,7 +555,7 @@ function ProjectTasksSection({
           {quickAdd(rows)}
           {first ? (
             <p className="pt-1 font-mono text-[11.5px] text-muted-foreground" aria-hidden="true">
-              @persona&nbsp;&nbsp;#tramo&nbsp;&nbsp;viernes
+              @persona&nbsp;&nbsp;#etapa&nbsp;&nbsp;viernes
             </p>
           ) : null}
         </div>

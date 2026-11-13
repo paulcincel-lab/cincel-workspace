@@ -137,7 +137,7 @@ describe("occupancy and counts", () => {
     expect(openCounts(["2026-11-01", "2026-11-04", null, "2026-11-10"], "2026-11-04")).toEqual({ open: 4, overdue: 1 });
   });
 
-  it("derives initials and the dominant tramo", () => {
+  it("derives initials and the dominant etapa", () => {
     expect(initialsOf("Ana María", "López")).toBe("AL");
     expect(initialsOf("Ana")).toBe("A");
     expect(dominantTramo(["diseno", null, "presale", "diseno"])).toBe("diseno");

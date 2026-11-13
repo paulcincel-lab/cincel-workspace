@@ -1,7 +1,7 @@
 import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 
 export const NO_PHASE_LABEL = "Sin fase · revisar";
-export const NO_TRAMO_LABEL = "Sin tramo";
+export const NO_TRAMO_LABEL = "Sin etapa";
 export const ADMIN_GROUP_LABEL = "Administración";
 
 /** What grouping reads of a task: `TaskListItem` or the slim `TaskListRow`. */

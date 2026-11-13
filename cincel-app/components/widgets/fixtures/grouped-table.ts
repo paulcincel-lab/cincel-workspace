@@ -42,7 +42,7 @@ export const groupedTaskGroups: Group<GroupedTaskRow>[] = [
   {
     id: "casa-lomas",
     label: "Casa Lomas",
-    caption: "8 tareas · 2 tramos",
+    caption: "8 tareas · 2 etapas",
     metrics: [
       { key: "abiertas", label: "abiertas", value: "7" },
       { key: "vencidas", label: "vencidas", value: "4", tone: "destructive" },
@@ -86,7 +86,7 @@ export const groupedTaskGroups: Group<GroupedTaskRow>[] = [
   {
     id: "depto-roma",
     label: "Depto Roma",
-    caption: "2 tareas · 1 tramo",
+    caption: "2 tareas · 1 etapa",
     metrics: [{ key: "abiertas", label: "abiertas", value: "2" }],
     footer: "auto",
     children: [
@@ -133,7 +133,7 @@ export const filterCardFixture: FilterGroup[] = [
   },
   {
     id: "tramo",
-    label: "Tramo",
+    label: "Etapa",
     value: "todos",
     options: [
       { value: "todos", label: "Todos" },

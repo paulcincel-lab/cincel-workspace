@@ -23,7 +23,7 @@ describe("tasksByBaseStatus", () => {
 });
 
 describe("projectsByTramo", () => {
-  it("groups by current tramo in tramo order and puts projects without one in Sin tramo", () => {
+  it("groups by current etapa in etapa order and puts projects without one in Sin etapa", () => {
     const presale = { id: "w1", key: "presale", name: "Presale", sortOrder: 1 };
     const diseno = { id: "w2", key: "diseno", name: "Diseño", sortOrder: 2 };
     const slices = projectsByTramo([
@@ -35,14 +35,14 @@ describe("projectsByTramo", () => {
     expect(slices.map(({ key, label, count }) => ({ key, label, count }))).toEqual([
       { key: "w1", label: "Presale", count: 1 },
       { key: "w2", label: "Diseño", count: 2 },
-      { key: "sin-tramo", label: "Sin tramo", count: 1 },
+      { key: "sin-tramo", label: "Sin etapa", count: 1 },
     ]);
     expect(slices[0].color).toBe("var(--chart-1)");
     expect(slices[1].color).toBe("var(--chart-2)");
     expect(slices[2].color).toBe("var(--muted-foreground)");
   });
 
-  it("has no Sin tramo slice when every project has a tramo", () => {
+  it("has no Sin etapa slice when every project has a etapa", () => {
     const slices = projectsByTramo([{ currentWorkflow: { id: "w3", key: "construccion", name: "Construcción", sortOrder: 3 } }]);
     expect(slices).toHaveLength(1);
     expect(slices[0]).toMatchObject({ key: "w3", count: 1 });

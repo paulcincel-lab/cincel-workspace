@@ -169,7 +169,7 @@ async function searchProjects(q: SearchTerms, limit: number): Promise<RankedResu
     type: "proyecto" as const,
     id: r.id,
     title: r.name,
-    subtitle: joinSubtitle(r.tramo ?? "Sin tramo", PROJECT_STATUS_LABEL[r.status] ?? r.status),
+    subtitle: joinSubtitle(r.tramo ?? "Sin etapa", PROJECT_STATUS_LABEL[r.status] ?? r.status),
     url: `/proyectos/${r.id}`,
     score: Number(r.score),
     recency: time(r.updatedAt),

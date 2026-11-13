@@ -140,7 +140,7 @@ export function StartTramoSheet({
   const loadError = !loading && previewQuery.isError;
 
   const projectName = preview?.project.name ?? "";
-  const tramoName = workflow?.name ?? "tramo";
+  const tramoName = workflow?.name ?? "etapa";
   const title = projectName ? `Iniciar ${tramoName} · ${projectName}` : `Iniciar ${tramoName}`;
   const picker = tramoPicker ? <TramoPicker {...tramoPicker} value={workflow?.id ?? null} /> : null;
 
@@ -240,10 +240,10 @@ function TramoPicker({
   const items = Object.fromEntries(ordered.map((t) => [t.id, t.name]));
   return (
     <div className="space-y-1 px-4">
-      <Label htmlFor="start-tramo-picker">Tramo</Label>
+      <Label htmlFor="start-tramo-picker">Etapa</Label>
       <Select items={items} value={value} onValueChange={(next) => (next ? onPick(next as string) : undefined)}>
-        <SelectTrigger id="start-tramo-picker" aria-label="Tramo" className="w-full">
-          <SelectValue placeholder="Elige un tramo" />
+        <SelectTrigger id="start-tramo-picker" aria-label="Etapa" className="w-full">
+          <SelectValue placeholder="Elige una etapa" />
         </SelectTrigger>
         <SelectContent>
           {ordered.map((t) => (
@@ -406,7 +406,7 @@ function StartTramoForm({
         <fieldset className="space-y-3">
           <legend className="mb-2 text-sm font-medium text-foreground">Fases</legend>
           {phases.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Este tramo no tiene tareas de plantilla.</p>
+            <p className="text-sm text-muted-foreground">Esta etapa no tiene tareas de plantilla.</p>
           ) : null}
           <PhaseChecklist
             idPrefix="start-tramo-phase-"

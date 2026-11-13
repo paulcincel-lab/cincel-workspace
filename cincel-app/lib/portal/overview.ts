@@ -298,7 +298,7 @@ export function buildPortalStatusSentence(
 
 export const PORTAL_ANALITICO_COPY = {
   avanceGeneral: "Avance general",
-  tramoActual: "Tramo actual",
+  tramoActual: "Etapa actual",
   entregables: "Entregables",
   desvio: "Desvío",
   documentos: "Documentos",
@@ -306,7 +306,7 @@ export const PORTAL_ANALITICO_COPY = {
   archivosPendientes: "Los archivos aún no están listos.",
   sinDocumentos: "Aún no hay documentos compartidos.",
   carpetaRaiz: "General",
-  sinTramo: "Sin tramo",
+  sinTramo: "Sin etapa",
 } as const;
 
 export const PORTAL_PHASE_ESTADO = { done: "Completado", open: "En curso", pending: "Por iniciar" } as const;

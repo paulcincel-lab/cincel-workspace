@@ -93,7 +93,7 @@ describe("PageHeader", () => {
   });
 
   it("estilo={false} without actions renders no actions row", () => {
-    const { container } = renderStaff(<PageHeader estilo={false} title="Tramos y fases" />);
+    const { container } = renderStaff(<PageHeader estilo={false} title="Etapas y fases" />);
     const header = container.querySelector('[data-slot="page-header"]')!;
     expect(header.children).toHaveLength(1);
   });

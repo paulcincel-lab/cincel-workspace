@@ -57,7 +57,7 @@ export function GroupTargetsTable({
           <AlertDescription className="space-y-2">
             <p>
               Varios grupos se llaman como clientes del Directorio. Con «Grupo como proyecto» cada grupo será un
-              proyecto con su cliente, en lugar de un tramo o una fase.
+              proyecto con su cliente, en lugar de una etapa o una fase.
             </p>
             <Button
               size="sm"

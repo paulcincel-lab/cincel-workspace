@@ -118,16 +118,16 @@ describe("BibliotecaSection", () => {
     expect(screen.getByRole("heading", { name: "Formatos de obra" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Ruta" }).textContent).toBe("Biblioteca / Recursos / Formatos de obra");
     const headers = screen.getAllByRole("columnheader").map((th) => th.textContent);
-    expect(headers).toEqual(["Favorito", "Nombre", "Tipo", "Tramo", "Actualizado", "Acciones"]);
+    expect(headers).toEqual(["Favorito", "Nombre", "Tipo", "Etapa", "Actualizado", "Acciones"]);
     expect(screen.getAllByRole("row")).toHaveLength(4);
   });
 
-  it("builds tipo and tramo filter chips as links keeping the other filter", () => {
+  it("builds tipo and etapa filter chips as links keeping the other filter", () => {
     renderSection({ tipo: "drive_file", tramo: null });
     const carpeta = screen.getByRole("button", { name: "Carpeta" });
     expect(carpeta.getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_folder");
     expect(screen.getByRole("button", { name: "Archivo" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Construcción" }).getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_file&tramo=construccion");
+    expect(screen.getByRole("button", { name: "Construcción" }).getAttribute("href")).toBe("/biblioteca/formatos-obra?tipo=drive_file&etapa=construccion");
     expect(screen.queryByRole("button", { name: "Acta de entrega-recepción" })).toBeNull();
   });
 

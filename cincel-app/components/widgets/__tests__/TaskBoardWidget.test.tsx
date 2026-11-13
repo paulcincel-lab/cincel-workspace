@@ -326,10 +326,10 @@ describe("TaskBoardWidget · Visual moves", () => {
 
 describe("TaskBoardWidget · card link", () => {
   it("keeps the view and every filter and adds tarea", () => {
-    nav.search = "estilo=visual&tramo=diseno&responsable=yo&q=planos";
+    nav.search = "estilo=visual&etapa=diseno&responsable=yo&q=planos";
     renderBoard("visual");
     expect(screen.getByRole("link", { name: "Planos ejecutivos" }).getAttribute("href")).toBe(
-      "/tareas?estilo=visual&tramo=diseno&responsable=yo&q=planos&tarea=t2",
+      "/tareas?estilo=visual&etapa=diseno&responsable=yo&q=planos&tarea=t2",
     );
   });
 
@@ -341,10 +341,10 @@ describe("TaskBoardWidget · card link", () => {
 
   it("opens the sheet shallowly (history.pushState, no navigation)", () => {
     const pushState = vi.spyOn(window.history, "pushState");
-    nav.search = "estilo=visual&tramo=diseno";
+    nav.search = "estilo=visual&etapa=diseno";
     renderBoard("visual");
     fireEvent.click(screen.getByRole("link", { name: "Planos ejecutivos" }));
-    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?estilo=visual&tramo=diseno&tarea=t2");
+    expect(pushState).toHaveBeenCalledWith(null, "", "/tareas?estilo=visual&etapa=diseno&tarea=t2");
     pushState.mockRestore();
   });
 });
@@ -573,7 +573,7 @@ describe("TaskBoardWidget · Visual motion and drag state (frame Tareas-Visual)"
     expect(live.textContent).toBe("Movida a En proceso");
   });
 
-  it("columns are labelled sections with a share bar, cards a tramo strip and a drag handle", () => {
+  it("columns are labelled sections with a share bar, cards a etapa strip and a drag handle", () => {
     const { container } = renderBoard("visual");
     const pendiente = screen.getByRole("region", { name: boardColumnLabel("Pendiente", 3) });
     expect(pendiente.tagName).toBe("SECTION");

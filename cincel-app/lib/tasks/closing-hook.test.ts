@@ -80,7 +80,7 @@ describe("scheduleTaskClosingHook", () => {
     expect(onTaskClosingChanged).toHaveBeenCalledWith({ tag: "db" }, PROJECT, PRESALE, ACTOR);
   });
 
-  it("schedules each distinct (project, tramo) pair once", async () => {
+  it("schedules each distinct (project, etapa) pair once", async () => {
     await scheduleTaskClosingHook(
       [
         { projectId: PROJECT, workflowId: PRESALE },
@@ -94,7 +94,7 @@ describe("scheduleTaskClosingHook", () => {
     expect(onTaskClosingChanged.mock.calls.map((call) => call[2])).toEqual([PRESALE, DISENO]);
   });
 
-  it("skips tasks without a tramo", async () => {
+  it("skips tasks without a etapa", async () => {
     await scheduleTaskClosingHook({ projectId: PROJECT, workflowId: null }, ACTOR);
     expect(after).not.toHaveBeenCalled();
   });

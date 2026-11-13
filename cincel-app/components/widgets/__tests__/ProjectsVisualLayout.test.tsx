@@ -82,7 +82,7 @@ describe("ProjectsVisualLayout", () => {
     );
     expect(screen.getByRole("heading", { name: "Todos los proyectos" })).toBeTruthy();
     // No tramo board, no drag.
-    expect(screen.queryByText("Arrastra un proyecto para moverlo de tramo")).toBeNull();
+    expect(screen.queryByText("Arrastra un proyecto para moverlo de etapa")).toBeNull();
     expect(container.querySelector('[data-slot="board-column"]')).toBeNull();
     expect(screen.getByRole("heading", { name: "Próximas entregas" })).toBeTruthy();
     expect(screen.getByText("10 – 20 NOV")).toBeTruthy();
@@ -136,7 +136,7 @@ describe("ProjectsVisualLayout", () => {
     expect(within(lomas).getByRole("img", { name: "Avance 62 %" })).toBeTruthy();
     expect(within(lomas).getByText("Casa Lomas")).toBeTruthy();
     expect(within(lomas).getByText("Diseño")).toBeTruthy();
-    expect(within(lomas).queryByRole("img", { name: /^Tramo actual/ })).toBeNull();
+    expect(within(lomas).queryByRole("img", { name: /^Etapa actual/ })).toBeNull();
     expect(lomas.textContent).toContain("4 abiertas");
     expect(lomas.textContent).toContain("2 vencidas");
     expect(lomas.textContent).toContain("Plano de acabados");
@@ -158,13 +158,13 @@ describe("ProjectsVisualLayout", () => {
     expect(onNew).toHaveBeenCalledTimes(2);
   });
 
-  it("a project without tramo is a card like the rest, with the Sin tramo chip", () => {
+  it("a project without etapa is a card like the rest, with the Sin etapa chip", () => {
     const { container } = renderLayout({
       projects: [...PROJECTS, { ...PROJECTS[2], id: "p-sin", name: "Bodega Norte", status: "activo" }],
     });
     const cards = [...container.querySelectorAll<HTMLElement>('[data-slot="project-card"]')].map((c) => c.dataset.project);
     expect(cards).toEqual(["p-sin", "p-lomas", "p-andares"]);
-    expect(within(projectCard(container, "p-sin")).getByText("Sin tramo")).toBeTruthy();
+    expect(within(projectCard(container, "p-sin")).getByText("Sin etapa")).toBeTruthy();
   });
 
   it("collapses a day with more than three deliveries to +n más", () => {

@@ -227,7 +227,7 @@ export function TareasAnalitico({
     },
     [onQuery, sort],
   );
-  const description = sort ? `Por proyecto y tramo, ${describeSort(sort.orderBy, sort.orderDir)}.` : ANALITICO_DESCRIPTION;
+  const description = sort ? `Por proyecto y etapa, ${describeSort(sort.orderBy, sort.orderDir)}.` : ANALITICO_DESCRIPTION;
   const ready = useTareasPageReady(query);
   const summaryQuery = useQuery({ ...tareasSummaryOptions(f), enabled: ready });
   const summary: TareasSummary = summaryQuery.data ?? EMPTY_TAREAS_SUMMARY;
@@ -484,7 +484,7 @@ export function TareasAnalitico({
       },
       {
         id: "tramo",
-        label: "Tramo",
+        label: "Etapa",
         value: query.tramo ?? TRAMO_TODOS,
         options: [
           { value: TRAMO_TODOS, label: "Todos" },

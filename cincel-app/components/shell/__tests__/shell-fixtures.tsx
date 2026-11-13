@@ -50,9 +50,9 @@ export const FULL_NAV: NavModel = {
     navItem("asistente"),
   ],
   tramos: [
-    { key: "presale", name: "Presale", colorVar: "var(--chart-1)", href: "/tareas?tramo=presale" },
-    { key: "diseno", name: "Diseño", colorVar: "var(--chart-2)", href: "/tareas?tramo=diseno" },
-    { key: "construccion", name: "Construcción", colorVar: "var(--chart-3)", href: "/tareas?tramo=construccion" },
+    { key: "presale", name: "Presale", colorVar: "var(--chart-1)", href: "/tareas?etapa=presale" },
+    { key: "diseno", name: "Diseño", colorVar: "var(--chart-2)", href: "/tareas?etapa=diseno" },
+    { key: "construccion", name: "Construcción", colorVar: "var(--chart-3)", href: "/tareas?etapa=construccion" },
   ],
   footer: [navItem("ajustes")],
 };

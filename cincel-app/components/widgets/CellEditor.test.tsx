@@ -248,8 +248,8 @@ describe("CellEditor: text", () => {
 
 describe("CellEditor: locked and focus", () => {
   it("a locked cell shows only the reason", async () => {
-    setup(statusEdit, { canEdit: "Solo un admin puede mover la tarea de tramo." });
-    expect(await screen.findByText("Solo un admin puede mover la tarea de tramo.")).toBeTruthy();
+    setup(statusEdit, { canEdit: "Solo un admin puede mover la tarea de etapa." });
+    expect(await screen.findByText("Solo un admin puede mover la tarea de etapa.")).toBeTruthy();
     expect(screen.queryByRole("option")).toBeNull();
     expect(screen.queryByRole("listbox")).toBeNull();
   });

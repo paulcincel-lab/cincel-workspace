@@ -217,10 +217,10 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
     }
 
     it.each([
-      ["no tramo, no project", null, null],
-      ["a tramo", 0, null],
+      ["no etapa, no project", null, null],
+      ["a etapa", 0, null],
       ["a project", null, 0],
-      ["a tramo and a project", 1, 3],
+      ["a etapa and a project", 1, 3],
     ] as const)("matches the client counts with %s", async (_label, tramoIndex, projectIndex) => {
       const tramo = tramoIndex === null ? null : v().workflows[tramoIndex].key;
       const proyecto = projectIndex === null ? null : v().projects[projectIndex].id;
@@ -234,7 +234,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
       expect(facets.projects.map((p) => p.id)).toEqual(expected.projectIds);
     });
 
-    it("ignores the tramo and proyecto of the filters themselves", async () => {
+    it("ignores the etapa and proyecto of the filters themselves", async () => {
       const facets = await repo.taskFacets(
         mine({ workflowId: v().workflows[0].id, projectId: v().projects[0].id }),
         ADMIN,
@@ -317,7 +317,7 @@ describe.skipIf(!url)("Tareas list and board (test DB)", async () => {
       expect(all.some((r) => r.kind === "admin")).toBe(true);
     });
 
-    it("an unknown tramo loads no rows but keeps the board's columns", async () => {
+    it("an unknown etapa loads no rows but keeps the board's columns", async () => {
       const data = await asViewer(admin(), () =>
         actions.getTareasPageData({ estilo: "visual", ...NO_FILTERS, tramo: `no-${run}` }),
       );

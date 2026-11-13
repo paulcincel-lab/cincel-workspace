@@ -119,7 +119,7 @@ beforeEach(() => {
 });
 
 describe("fetchWorkflowsAction", () => {
-  it("returns active tramos to any staff session, even without the view capability", async () => {
+  it("returns active etapas to any staff session, even without the view capability", async () => {
     await expect(fetchWorkflowsAction()).resolves.toEqual(activeRows);
     expect(workflowsRepo.listWorkflows).toHaveBeenCalledTimes(1);
     const [opts] = workflowsRepo.listWorkflows.mock.calls[0] ?? [{}];
@@ -158,7 +158,7 @@ describe("fetchWorkflowsAction", () => {
 });
 
 describe("fetchTramosNavAction", () => {
-  it("returns the active tramos to any staff session", async () => {
+  it("returns the active etapas to any staff session", async () => {
     await expect(fetchTramosNavAction()).resolves.toEqual([
       { id: WORKFLOW, key: "presale", name: "Presale" },
     ]);
@@ -172,7 +172,7 @@ describe("createTemplateAction", () => {
     session.access = "Administrador";
   });
 
-  it("creates a template in a fase of its tramo", async () => {
+  it("creates a template in a fase of its etapa", async () => {
     const row = await createTemplateAction(WORKFLOW, { phaseId: PHASE, title: "Levantamiento" });
     expect(row).toMatchObject({ id: TEMPLATE, phaseId: PHASE });
     expect(workflowsRepo.createTemplate).toHaveBeenCalledWith(
@@ -188,7 +188,7 @@ describe("createTemplateAction", () => {
     );
   });
 
-  it("throws PHASE_MISMATCH for a fase of another tramo", async () => {
+  it("throws PHASE_MISMATCH for a fase of another etapa", async () => {
     await expect(
       createTemplateAction(WORKFLOW, { phaseId: OTHER_PHASE, title: "Levantamiento" })
     ).rejects.toThrow(/^PHASE_MISMATCH/);
@@ -217,14 +217,14 @@ describe("updateTemplateAction", () => {
     session.access = "Administrador";
   });
 
-  it("moves a template to another fase of the same tramo", async () => {
+  it("moves a template to another fase of the same etapa", async () => {
     await expect(updateTemplateAction(TEMPLATE, { phaseId: PHASE })).resolves.toMatchObject({
       id: TEMPLATE,
       phaseId: PHASE,
     });
   });
 
-  it("throws PHASE_MISMATCH for a fase of another tramo", async () => {
+  it("throws PHASE_MISMATCH for a fase of another etapa", async () => {
     await expect(updateTemplateAction(TEMPLATE, { phaseId: OTHER_PHASE })).rejects.toThrow(
       /^PHASE_MISMATCH/
     );
@@ -261,12 +261,12 @@ describe("fase actions", () => {
     await expect(updateWorkflowPhaseAction(PHASE, { name: "" })).rejects.toThrow(/^EMPTY$/);
   });
 
-  it("throws NAME_TAKEN for a name already in the tramo", async () => {
+  it("throws NAME_TAKEN for a name already in the etapa", async () => {
     await expect(createWorkflowPhaseAction(WORKFLOW, { name: "Cobro" })).rejects.toThrow(/^NAME_TAKEN/);
     await expect(updateWorkflowPhaseAction(PHASE, { name: "cobro" })).rejects.toThrow(/^NAME_TAKEN/);
   });
 
-  it("throws NOT_FOUND for an unknown tramo", async () => {
+  it("throws NOT_FOUND for an unknown etapa", async () => {
     await expect(createWorkflowPhaseAction(OTHER_WORKFLOW, { name: "Revisión" })).rejects.toThrow(
       /^NOT_FOUND/
     );

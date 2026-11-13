@@ -57,7 +57,7 @@ function invalidate(qc: QueryClient, keys: QueryKey[]): void {
 /** Keys the portfolio's `CellCommitProvider` invalidates on settle. */
 export const PORTFOLIO_COMMIT_KEYS: QueryKey[] = [qk.proyectos.list()];
 
-export const PORTFOLIO_TRAMO_LABEL = "Tramo actual";
+export const PORTFOLIO_TRAMO_LABEL = "Etapa actual";
 export const PORTFOLIO_MANAGER_LABEL = "Responsable";
 
 export type PortfolioEditDeps = {

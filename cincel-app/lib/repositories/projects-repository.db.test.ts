@@ -70,7 +70,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
 
     const [other] = await db
       .insert(schema.workflows)
-      .values({ key: `tramo-${run}`, name: `Tramo ${run}`, sortOrder: 900 })
+      .values({ key: `tramo-${run}`, name: `Etapa ${run}`, sortOrder: 900 })
       .returning({ id: schema.workflows.id });
     otherTramoId = other.id;
     ids.workflows.push(other.id);
@@ -100,7 +100,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
   };
 
   describe("createProject", () => {
-    it("starts the first tramo with every active fase and no assignee when it auto-starts on create", async () => {
+    it("starts the first etapa with every active fase and no assignee when it auto-starts on create", async () => {
       if (!first || firstPhaseIds.length === 0) return;
       await db.update(schema.workflows).set({ autoStart: "on_create" }).where(eq(schema.workflows.id, first.id));
 
@@ -121,7 +121,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
       });
     });
 
-    it("starts nothing when the first tramo doesn't auto-start on create", async () => {
+    it("starts nothing when the first etapa doesn't auto-start on create", async () => {
       if (!first) return;
       await db.update(schema.workflows).set({ autoStart: "manual" }).where(eq(schema.workflows.id, first.id));
 
@@ -155,14 +155,14 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
   });
 
   describe("setProjectCurrentTramo", () => {
-    it("is NOT_STARTED for a tramo without a stage row, and NOT_FOUND for a missing project", async () => {
+    it("is NOT_STARTED for a etapa without a stage row, and NOT_FOUND for a missing project", async () => {
       if (first) await db.update(schema.workflows).set({ autoStart: "manual" }).where(eq(schema.workflows.id, first.id));
       const row = await create(`Casa ${run} E`);
       await expect(repo.setProjectCurrentTramo(row.id, otherTramoId, actorId)).rejects.toThrow("NOT_STARTED");
       await expect(repo.setProjectCurrentTramo(randomUUID(), otherTramoId, actorId)).rejects.toThrow("NOT_FOUND");
     });
 
-    it("moves the current tramo to a started one and records the change", async () => {
+    it("moves the current etapa to a started one and records the change", async () => {
       if (first) await db.update(schema.workflows).set({ autoStart: "manual" }).where(eq(schema.workflows.id, first.id));
       const row = await create(`Casa ${run} F`);
       await db.insert(schema.projectStages).values({ projectId: row.id, workflowId: otherTramoId });
@@ -180,7 +180,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
   });
 
   describe("assignProjectTramo", () => {
-    it("opens the stage through startTramo with stageOnly on a project without a current tramo", async () => {
+    it("opens the stage through startTramo with stageOnly on a project without a current etapa", async () => {
       if (first) await db.update(schema.workflows).set({ autoStart: "manual" }).where(eq(schema.workflows.id, first.id));
       const row = await create(`Casa ${run} G`);
 
@@ -196,7 +196,7 @@ describe.skipIf(!url)("projects repository (test DB)", async () => {
       });
     });
 
-    it("is NOT_STARTED once the project has a current tramo", async () => {
+    it("is NOT_STARTED once the project has a current etapa", async () => {
       if (first) await db.update(schema.workflows).set({ autoStart: "manual" }).where(eq(schema.workflows.id, first.id));
       const row = await create(`Casa ${run} H`);
       await db.insert(schema.projectStages).values({ projectId: row.id, workflowId: otherTramoId });

@@ -391,7 +391,7 @@ export function buildGroupsTable(groups: ProjectTaskGroupSummary[], mode: Projec
   const completed = sum((g) => g.completed);
   return {
     columns: [
-      { key: "nombre", label: mode === "fase" ? "Fase" : "Tramo" },
+      { key: "nombre", label: mode === "fase" ? "Fase" : "Etapa" },
       { key: "total", label: "Tareas", format: "count" },
       { key: "completadas", label: "Completadas", format: "count", hideOn: ["visual", "esencial"] },
       { key: "enProceso", label: "En proceso", format: "count", hideOn: ["visual", "esencial"] },

@@ -20,7 +20,7 @@ const ORGANIZATION = [
   "General",
   "Tema y estilo",
   "Control de horario",
-  "Tramos y fases",
+  "Etapas y fases",
   "Puestos",
   "Estatus",
   "Permisos",
@@ -117,12 +117,12 @@ describe("AjustesNav", () => {
     expect(screen.getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page")).toHaveLength(1);
   });
 
-  it("shows Tramos y fases and Puestos only when Project Flow's pages exist", () => {
+  it("shows Etapas y fases and Puestos only when Project Flow's pages exist", () => {
     projectFlow.pages.tramos = false;
     projectFlow.pages.puestos = false;
     render(<AjustesNav active="general" isAdmin segments={{ ...NONE, general: true, tramos: true, puestos: true }} />);
 
-    expect(screen.queryByRole("link", { name: /^Tramos y fases/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Etapas y fases/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Puestos/ })).toBeNull();
     expect(screen.getByRole("link", { name: /^General/ })).toBeTruthy();
   });

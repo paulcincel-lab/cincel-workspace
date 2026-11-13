@@ -245,7 +245,7 @@ export async function projectIdFor(
 export const get_project = defineTool({
   name: "get_project",
   description:
-    "Consulta un proyecto: estatus, avance, tramo actual, responsables, equipo, fechas, enlaces, tareas abiertas y vencidas, y el resumen del cronograma (partidas hechas, atrasadas y próximas). Sin nombre usa el proyecto de la página actual.",
+    "Consulta un proyecto: estatus, avance, etapa actual, responsables, equipo, fechas, enlaces, tareas abiertas y vencidas, y el resumen del cronograma (partidas hechas, atrasadas y próximas). Sin nombre usa el proyecto de la página actual.",
   schema: getProjectSchema,
   capability: always,
   available: always,

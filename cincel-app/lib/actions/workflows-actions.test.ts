@@ -131,7 +131,7 @@ describe("updateTemplateAction", () => {
 });
 
 describe("deactivateTemplateAction", () => {
-  it("revalidates nothing: Ajustes › Tramos reads through TanStack Query", async () => {
+  it("revalidates nothing: Ajustes › Etapas reads through TanStack Query", async () => {
     caps.canManage = true;
     await deactivateTemplateAction(TEMPLATE);
     expect(revalidatePath).not.toHaveBeenCalled();

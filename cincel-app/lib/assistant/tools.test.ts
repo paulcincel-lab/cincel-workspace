@@ -546,7 +546,7 @@ describe("Analítico data panel fields", () => {
     fetchStaffActionMock.mockReset();
   });
 
-  it("list_activities_due rows carry id and tramo identity", async () => {
+  it("list_activities_due rows carry id and etapa identity", async () => {
     listViewerTasksMock.mockResolvedValue([
       task({}),
       task({ id: "t2", status: "bloqueado", workflow: null }),

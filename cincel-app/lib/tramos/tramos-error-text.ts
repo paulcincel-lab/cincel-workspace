@@ -25,7 +25,7 @@ export function tramosErrorText(err: unknown, context: TramosErrorContext = { ki
       if (context.kind === "template") return `Ya existe una tarea de plantilla con ese nombre en ${context.phaseName}.`;
       return "Ya existe un registro con ese nombre.";
     case "PHASE_MISMATCH":
-      return "Esa fase no pertenece al tramo de la tarea.";
+      return "Esa fase no pertenece a la etapa de la tarea.";
     case "INVALID":
       return "Faltan datos o no son válidos. Revisa el formulario e intenta de nuevo.";
     default:

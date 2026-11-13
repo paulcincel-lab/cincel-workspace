@@ -137,13 +137,13 @@ function TramoCard({ data, summary }: { data: ProjectSummaryInput; summary: Resu
   // No started tramo (#1043): the empty state instead of a line of suggested tramos.
   if (line.steps.length === 0) {
     return (
-      <section aria-label="Tramos" className={cn(CARD, "anim-in")}>
+      <section aria-label="Etapas" className={cn(CARD, "anim-in")}>
         <ProjectNoTramo projectId={data.project.id} tramos={data.tramoCatalog} />
       </section>
     );
   }
   return (
-    <section aria-label="Tramos" className={cn(CARD, "anim-in flex flex-col gap-3.5 px-6 py-[22px]")}>
+    <section aria-label="Etapas" className={cn(CARD, "anim-in flex flex-col gap-3.5 px-6 py-[22px]")}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[15px] font-semibold text-foreground">{line.title}</h2>
         <p className="text-[13px] text-muted-foreground">
@@ -488,7 +488,7 @@ export function ResumenEsencialLayout({ data }: ResumenEsencialLayoutProps): Rea
   return (
     <div data-style="esencial" className="flex flex-col gap-5">
       {tareas.isError ? (
-        <SectionError label="Tramos" onRetry={retry} />
+        <SectionError label="Etapas" onRetry={retry} />
       ) : (
         <TramoCard data={data} summary={summary} />
       )}

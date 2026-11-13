@@ -108,7 +108,7 @@ describe("buildNavModel", () => {
     expect(nav.items[0].badge).toBe(1);
   });
 
-  it("lists the tramos from listTramos in order, linking /tareas?tramo=key", async () => {
+  it("lists the etapas from listTramos in order, linking /tareas?etapa=key", async () => {
     mocks.listTramos.mockResolvedValue(TRAMOS);
     mocks.tramoColorVar.mockImplementation((key: string) =>
       ({ presale: "var(--chart-1)", diseno: "var(--chart-2)", construccion: "var(--chart-3)" })[key],
@@ -117,13 +117,13 @@ describe("buildNavModel", () => {
     const nav = await buildNavModel(ADMIN_SESSION, [source("tareas", 30)]);
 
     expect(nav.tramos).toEqual([
-      { key: "presale", name: "Presale", colorVar: "var(--chart-1)", href: "/tareas?tramo=presale" },
-      { key: "diseno", name: "Diseño", colorVar: "var(--chart-2)", href: "/tareas?tramo=diseno" },
-      { key: "construccion", name: "Construcción", colorVar: "var(--chart-3)", href: "/tareas?tramo=construccion" },
+      { key: "presale", name: "Presale", colorVar: "var(--chart-1)", href: "/tareas?etapa=presale" },
+      { key: "diseno", name: "Diseño", colorVar: "var(--chart-2)", href: "/tareas?etapa=diseno" },
+      { key: "construccion", name: "Construcción", colorVar: "var(--chart-3)", href: "/tareas?etapa=construccion" },
     ]);
   });
 
-  it("passes each tramo's sortOrder so Decoración takes its chart slot (frame `Sidebar`)", async () => {
+  it("passes each etapa's sortOrder so Decoración takes its chart slot (frame `Sidebar`)", async () => {
     mocks.listTramos.mockResolvedValue([{ id: "w4", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
     mocks.tramoColorVar.mockImplementation((_key: string, sortOrder?: number) => `var(--chart-${sortOrder})`);
     const nav = await buildNavModel(ADMIN_SESSION, [source("tareas", 30)]);
@@ -131,7 +131,7 @@ describe("buildNavModel", () => {
     expect(nav.tramos[0].colorVar).toBe("var(--chart-4)");
   });
 
-  it("uses the neutral color when a tramo has no chart slot", async () => {
+  it("uses the neutral color when a etapa has no chart slot", async () => {
     mocks.listTramos.mockResolvedValue([{ id: "w9", key: "decoracion", name: "Decoración", sortOrder: 4 }]);
     mocks.tramoColorVar.mockImplementation(() => {
       throw new Error("unknown");
@@ -140,7 +140,7 @@ describe("buildNavModel", () => {
     expect(nav.tramos[0].colorVar).toBe(NEUTRAL_TRAMO_COLOR);
   });
 
-  it("shows no tramos while listTramos fails or Tareas is hidden", async () => {
+  it("shows no etapas while listTramos fails or Tareas is hidden", async () => {
     mocks.listTramos.mockRejectedValue(new Error("not available"));
     expect((await buildNavModel(ADMIN_SESSION, [source("tareas", 30)])).tramos).toEqual([]);
 

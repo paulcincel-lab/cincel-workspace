@@ -140,7 +140,7 @@ describe("fetchCatalogStaff", () => {
 });
 
 describe("fetchCatalogAssignableStaff", () => {
-  it("returns exactly {id,name,suggested} plus the tramo load, never the full Staff", async () => {
+  it("returns exactly {id,name,suggested} plus the etapa load, never the full Staff", async () => {
     repos.listAssignableStaff.mockResolvedValue([
       fullStaff(STAFF_A, "Ana", "Ruiz", true),
       fullStaff(STAFF_B, "Luis", null, false),
@@ -156,14 +156,14 @@ describe("fetchCatalogAssignableStaff", () => {
     for (const row of rows) expect(Object.keys(row).sort()).toEqual(["id", "name", "openCount", "overdueCount", "suggested"]);
   });
 
-  it("without a tramo the rows are exactly {id,name,suggested}", async () => {
+  it("without a etapa the rows are exactly {id,name,suggested}", async () => {
     repos.listAssignableStaff.mockResolvedValue([fullStaff(STAFF_A, "Ana", "Ruiz", true)]);
     const rows = await fetchCatalogAssignableStaff({ workflowId: null });
     expect(rows).toEqual([{ id: STAFF_A, name: "Ana Ruiz", suggested: true }]);
     expect(repos.countOpenTasksInTramo).not.toHaveBeenCalled();
   });
 
-  it("accepts a null tramo and refuses a malformed id", async () => {
+  it("accepts a null etapa and refuses a malformed id", async () => {
     repos.listAssignableStaff.mockResolvedValue([]);
     await fetchCatalogAssignableStaff({ workflowId: null });
     expect(repos.listAssignableStaff).toHaveBeenCalledWith({ workflowId: null });
@@ -223,7 +223,7 @@ describe("fetchCatalogProjectSpaces", () => {
 });
 
 describe("fetchCatalogWorkflows / fetchCatalogTaskStatuses", () => {
-  it("workflows are the active tramo refs", async () => {
+  it("workflows are the active etapa refs", async () => {
     const refs = [{ id: WORKFLOW, key: "presale", name: "Presale", sortOrder: 0 }];
     repos.listTramosNav.mockResolvedValue(refs);
     expect(await fetchCatalogWorkflows({})).toEqual(refs);

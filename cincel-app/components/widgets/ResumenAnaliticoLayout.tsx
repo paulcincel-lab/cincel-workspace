@@ -556,7 +556,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       <nav aria-label="Ir a sección" className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted-foreground">Ir a</span>
         <a href="#s-tramos" onClick={(e) => goToSection(e, "s-tramos")} className={buttonVariants({ variant: "outline", size: "sm" })}>
-          Tramos y fases
+          Etapas y fases
         </a>
         <a href="#s-avance" onClick={(e) => goToSection(e, "s-avance")} className={buttonVariants({ variant: "outline", size: "sm" })}>
           Avance vs plan
@@ -584,10 +584,10 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       <section id="s-tramos" aria-labelledby="s-tramos-title" className={SECTION}>
         <header className={SECTION_HEADER}>
           <h2 id="s-tramos-title" tabIndex={-1} className={SECTION_TITLE}>
-            Tramos y fases
+            Etapas y fases
           </h2>
           <span className={MONO_META}>
-            {tramoCount} {tramoCount === 1 ? "tramo" : "tramos"} · {phaseCount} {phaseCount === 1 ? "fase" : "fases"}
+            {tramoCount} {tramoCount === 1 ? "etapa" : "etapas"} · {phaseCount} {phaseCount === 1 ? "fase" : "fases"}
           </span>
         </header>
         {noTramo ? (
@@ -595,7 +595,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
           <ProjectNoTramo projectId={projectId} tramos={data.tramoCatalog} />
         ) : (
           <GroupedTable<PhaseRow>
-            label="Tramos y fases"
+            label="Etapas y fases"
             columns={PHASE_COLUMNS}
             groups={phaseGroups}
             totals={{
@@ -647,7 +647,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       <section id="s-tareas" aria-labelledby="s-tareas-title" className={SECTION}>
         <header className={SECTION_HEADER}>
           <h2 id="s-tareas-title" tabIndex={-1} className={SECTION_TITLE}>
-            Tareas por tramo
+            Tareas por etapa
           </h2>
           <span className={MONO_META}>
             {shownCount} {shownCount === 1 ? "tarea" : "tareas"} · {openCount} {openCount === 1 ? "abierta" : "abiertas"} ·{" "}
@@ -658,7 +658,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
         <CellCommitProvider queryKeys={[...TAREAS_CELL_KEYS, qk.proyectos.resumenSummary(projectId), qk.proyectos.resumen(projectId)]}>
           <div className="contents" {...cells.primeProps}>
             <GroupedTable<ResumenTaskRow>
-              label="Tareas por tramo"
+              label="Tareas por etapa"
               columns={taskColumns}
               groups={taskGroups}
               totals={{ label: taskTable.totals.title ?? "Total", summary: `${taskTable.totals.daysLate} días de retraso` }}

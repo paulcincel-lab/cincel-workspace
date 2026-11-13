@@ -71,7 +71,7 @@ async function resolveWorkflowByKey(key: string): Promise<Resolved<WorkflowDetai
 }
 
 export const list_projects = tool({
-  description: `Lista proyectos de Cincel (hasta 50) con su estado, tramo, avance y ${RISK_NOTE}. Filtra por estado, tramo o si están activos.`,
+  description: `Lista proyectos de Cincel (hasta 50) con su estado, etapa, avance y ${RISK_NOTE}. Filtra por estado, etapa o si están activos.`,
   inputSchema: z.object({
     activeOnly: z.boolean().default(true),
     stage: z.string().optional().describe("p. ej. Presale, Diseño, Construcción"),
@@ -203,7 +203,7 @@ function mainWorkflowOf(tramos: Map<string, number> | undefined): string | null 
 
 export const team_workload_summary = tool({
   description:
-    "Resumen de carga del equipo: por colaborador activo, su rol, capacidad, número de tareas activas asignadas, porcentaje de ocupación estimado y su tramo principal (el de más tareas abiertas). Útil para ver quién está saturado.",
+    "Resumen de carga del equipo: por colaborador activo, su rol, capacidad, número de tareas activas asignadas, porcentaje de ocupación estimado y su etapa principal (el de más tareas abiertas). Útil para ver quién está saturado.",
   inputSchema: z.object({}),
   execute: async () => {
     const members = await fetchStaffAction();
@@ -448,7 +448,7 @@ export const create_client = tool({
 
 export const onboard_client = tool({
   description:
-    "Arranca un cliente con un proyecto nuevo: da de alta el cliente (o reutiliza el que ya existe con ese nombre), crea el proyecto ligado a él e inicia el tramo elegido (Presale por defecto) con sus tareas de plantilla. Úsalo cuando el usuario quiera 'arrancar' un cliente o proyecto.",
+    "Arranca un cliente con un proyecto nuevo: da de alta el cliente (o reutiliza el que ya existe con ese nombre), crea el proyecto ligado a él e inicia la etapa elegida (Presale por defecto) con sus tareas de plantilla. Úsalo cuando el usuario quiera 'arrancar' un cliente o proyecto.",
   inputSchema: z.object({
     name: z.string().min(2).describe("Nombre del cliente"),
     kind: CLIENT_KIND_ENUM.default("Particular"),

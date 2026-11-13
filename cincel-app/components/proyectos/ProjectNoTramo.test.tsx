@@ -47,16 +47,16 @@ describe("ProjectNoTramo", () => {
     caps.canCreateActivity = false;
     renderEmpty();
     expect(screen.getByText(RESUMEN_NO_TRAMO)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Iniciar un tramo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Iniciar una etapa" })).toBeNull();
   });
 
-  it("opens the Iniciar tramo sheet with a tramo picker and nothing preselected", async () => {
+  it("opens the Iniciar etapa sheet with a etapa picker and nothing preselected", async () => {
     renderEmpty();
-    fireEvent.click(screen.getByRole("button", { name: "Iniciar un tramo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar una etapa" }));
 
-    expect(await screen.findByText("Iniciar tramo")).toBeTruthy();
-    const picker = screen.getByRole("combobox", { name: "Tramo" });
-    expect(picker.textContent).toContain("Elige un tramo");
+    expect(await screen.findByText("Iniciar etapa")).toBeTruthy();
+    const picker = screen.getByRole("combobox", { name: "Etapa" });
+    expect(picker.textContent).toContain("Elige una etapa");
     expect(actions.previewStartTramoAction).not.toHaveBeenCalled();
 
     fireEvent.click(picker);

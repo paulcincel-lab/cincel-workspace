@@ -84,7 +84,7 @@ describe("formatters", () => {
 });
 
 describe("AttentionListWidget", () => {
-  it("Visual: rows with tramo bar, reason pill, avatar and due date", () => {
+  it("Visual: rows with etapa bar, reason pill, avatar and due date", () => {
     const { container } = renderWidget("visual");
     expect(region().getAttribute("data-style")).toBe("visual");
     const rows = container.querySelectorAll<HTMLElement>('[data-slot="attention-row"]');
@@ -139,13 +139,13 @@ describe("AttentionListWidget", () => {
     expect(dueTexts(container)).toEqual(EXPECTED_DUES);
   });
 
-  it("Analítico: RecordTable with tarea, proyecto, tramo, resp., motivo, vence, retraso", () => {
+  it("Analítico: RecordTable with tarea, proyecto, etapa, resp., motivo, vence, retraso", () => {
     const { container } = renderWidget("analitico");
     expect(region().getAttribute("data-style")).toBe("analitico");
     const headers = within(region())
       .getAllByRole("columnheader")
       .map((h) => (h.textContent ?? "").replace(/[▲▼]/g, ""));
-    expect(headers).toEqual(["Tarea", "Proyecto", "Tramo", "Resp.", "Motivo", "Vence", "Retraso"]);
+    expect(headers).toEqual(["Tarea", "Proyecto", "Etapa", "Resp.", "Motivo", "Vence", "Retraso"]);
 
     const bodyRows = within(region()).getAllByRole("row").slice(1);
     expect(bodyRows).toHaveLength(5);

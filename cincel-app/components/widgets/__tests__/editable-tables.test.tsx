@@ -88,7 +88,7 @@ function editOf(key: "tarea" | "tramo" | "estatus", commit = vi.fn(async () => o
 function columns(commit = vi.fn(async () => ok)): RecordColumn<Task>[] {
   return [
     { key: "tarea", label: "Tarea", edit: editOf("tarea", commit) },
-    { key: "tramo", label: "Tramo", edit: editOf("tramo", commit), canEdit: (row) => (row.bloqueada ? LOCK_REASON.tramo : true) },
+    { key: "tramo", label: "Etapa", edit: editOf("tramo", commit), canEdit: (row) => (row.bloqueada ? LOCK_REASON.tramo : true) },
     { key: "dias", label: "Días de retraso", format: "days" },
     { key: "estatus", label: "Estatus", edit: editOf("estatus", commit) },
   ];

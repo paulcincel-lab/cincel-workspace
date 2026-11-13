@@ -49,7 +49,7 @@ const ORGANIZATION_ITEMS: ReadonlyArray<{ key: AjustesAdminSegment; label: strin
   { key: "general", label: "General" },
   { key: "tema", label: "Tema y estilo" },
   { key: "horario", label: "Control de horario" },
-  { key: "tramos", label: "Tramos y fases" },
+  { key: "tramos", label: "Etapas y fases" },
   { key: "puestos", label: "Puestos" },
   { key: "estatus", label: "Estatus" },
   { key: "permisos", label: "Permisos" },
@@ -63,9 +63,17 @@ const AJUSTES_NAV_KEYS: ReadonlySet<string> = new Set<string>([
   ...ORGANIZATION_ITEMS.map((item) => item.key),
 ]);
 
+/** Route segment of the nav keys whose URL differs from the key (the key keeps its old name until the identifiers rename). */
+const ROUTE_SEGMENT: Readonly<Partial<Record<AjustesNavKey, string>>> = { tramos: "etapas" };
+
+/** `/ajustes/<segment>` of a nav key. */
+const ajustesHref = (key: AjustesNavKey): string => `/ajustes/${ROUTE_SEGMENT[key] ?? key}`;
+
 /** The `AjustesNav` key of an `/ajustes/<segment>/…` path (Apariencia for `/ajustes`). */
 export function ajustesNavKeyFromPath(pathname: string | null | undefined): AjustesNavKey {
-  const segment = (pathname ?? "").split("?")[0].split("/").filter(Boolean)[1];
+  const raw = (pathname ?? "").split("?")[0].split("/").filter(Boolean)[1];
+  // `etapas` is the route of the `tramos` key; `/ajustes/tramos` still resolves (it redirects permanently).
+  const segment = raw === "etapas" ? "tramos" : raw;
   return segment && AJUSTES_NAV_KEYS.has(segment) ? (segment as AjustesNavKey) : "apariencia";
 }
 
@@ -123,7 +131,7 @@ function AjustesNavSelect({
         items={items}
         value={active}
         onValueChange={(value) => {
-          if (typeof value === "string" && value !== active) router.push(`/ajustes/${value}`);
+          if (typeof value === "string" && value !== active) router.push(ajustesHref(value as AjustesNavKey));
         }}
       >
         <SelectTrigger id={id} className="w-full">
@@ -177,7 +185,7 @@ export function AjustesNav({ active, isAdmin, segments }: AjustesNavProps) {
           </h2>
           <ul aria-labelledby={personalId} className="flex flex-col gap-0.5">
             {PERSONAL_ITEMS.map((item) => (
-              <NavItem key={item.key} href={`/ajustes/${item.key}`} label={item.label} active={active === item.key} />
+              <NavItem key={item.key} href={ajustesHref(item.key)} label={item.label} active={active === item.key} />
             ))}
           </ul>
         </div>
@@ -188,7 +196,7 @@ export function AjustesNav({ active, isAdmin, segments }: AjustesNavProps) {
             </h2>
             <ul aria-labelledby={organizationId} className="flex flex-col gap-0.5">
               {organization.map((item) => (
-                <NavItem key={item.key} href={`/ajustes/${item.key}`} label={item.label} active={active === item.key} />
+                <NavItem key={item.key} href={ajustesHref(item.key)} label={item.label} active={active === item.key} />
               ))}
             </ul>
           </div>

@@ -166,7 +166,7 @@ describe("AgendaWidget · Analítico", () => {
     expect(widget.getAttribute("data-style")).toBe("analitico");
     const table = within(widget).getByRole("table");
     const headers = within(table).getAllByRole("columnheader").map((h) => (h.textContent ?? "").replace(/[▲▼]/g, ""));
-    expect(headers).toEqual(["Día", "Hora", "Duración", "Evento", "Proyecto", "Tramo", "Asistentes"]);
+    expect(headers).toEqual(["Día", "Hora", "Duración", "Evento", "Proyecto", "Etapa", "Asistentes"]);
 
     expect(dayCounts(container, '[data-slot="agenda-subtotal"]')).toEqual(agendaFixtureDayCounts);
     const subtotalMonday = container.querySelector('[data-slot="agenda-subtotal"][data-day="2026-11-09"]') as HTMLElement;

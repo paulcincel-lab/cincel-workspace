@@ -222,7 +222,7 @@ describe("esencial-tokens", () => {
     expect(statusTone(STATUS_FIXTURE.bloqueado)).toEqual({ dot: "var(--destructive)", ink: "var(--destructive)" });
   });
 
-  it("tramoDot uses the tramo color and a neutral color without tramo", () => {
+  it("tramoDot uses the etapa color and a neutral color without etapa", () => {
     expect(tramoDot(TRAMO_FIXTURE.presale)).toBe("var(--chart-1)");
     expect(tramoDot(TRAMO_FIXTURE.diseno)).toBe("var(--chart-2)");
     expect(tramoDot(null)).toBe("var(--muted-foreground)");

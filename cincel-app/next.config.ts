@@ -13,6 +13,13 @@ const nextConfig: NextConfig = {
     // Server Actions that revalidate and router.refresh() still drop it right away.
     staleTimes: { dynamic: 30 },
   },
+  async redirects() {
+    // Compatibility: Ajustes › Tramos y fases is now Etapas y fases.
+    return [
+      { source: "/ajustes/tramos", destination: "/ajustes/etapas", permanent: true },
+      { source: "/ajustes/tramos/:path*", destination: "/ajustes/etapas/:path*", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

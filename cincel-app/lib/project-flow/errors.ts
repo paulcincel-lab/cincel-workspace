@@ -21,7 +21,7 @@ export const FLOW_ERROR = {
 export type FlowErrorCode = (typeof FLOW_ERROR)[keyof typeof FLOW_ERROR];
 
 /** `updateTaskAction` changing a task's existing tramo without being admin (#1022). */
-export const TASK_TRAMO_CHANGE_FORBIDDEN = "FORBIDDEN: task tramo change";
+export const TASK_TRAMO_CHANGE_FORBIDDEN = "FORBIDDEN: task etapa change";
 
 /** `{ ok: false, error }` codes of the new monday actions (FE §7.8). */
 export const MONDAY_FLOW_ERROR = {

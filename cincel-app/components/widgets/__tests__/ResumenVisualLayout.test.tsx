@@ -81,7 +81,7 @@ describe("ResumenVisualLayout", () => {
     expect(
       within(status).getByRole("img", { name: "8 tareas: 1 en proceso, 3 pendientes, 1 bloqueada, 3 completadas" }),
     ).toBeTruthy();
-    const tramos = screen.getByRole("region", { name: "Avance por tramo" });
+    const tramos = screen.getByRole("region", { name: "Avance por etapa" });
     expect(within(tramos).getByRole("img", { name: /Presale 100 %, Diseño 50 %, Construcción 25 %$/ })).toBeTruthy();
     const team = screen.getByRole("region", { name: "Equipo y carga" });
     expect(within(team).getByRole("img", { name: "Carga 92 %" })).toBeTruthy();
@@ -132,7 +132,7 @@ describe("ResumenVisualLayout", () => {
     expect(screen.queryByText(/PLAN/)).toBeNull();
   });
 
-  it("no started tramo: the empty state, no suggested tramos (#1043)", () => {
+  it("no started etapa: the empty state, no suggested etapas (#1043)", () => {
     const project = fixtureProject({ needsTramo: true, currentWorkflowId: null, currentWorkflow: null, tramos: [], stages: [] });
     renderWithQueryClient(
       <ResumenVisualLayout
@@ -148,7 +148,7 @@ describe("ResumenVisualLayout", () => {
     const hero = screen.getByRole("region", { name: "Avance del proyecto" });
     expect(hero.textContent).toContain(RESUMEN_NO_TRAMO);
     expect(hero.textContent).not.toContain("Presale");
-    expect(screen.getByRole("region", { name: "Avance por tramo" }).textContent).toContain(RESUMEN_NO_TRAMO);
+    expect(screen.getByRole("region", { name: "Avance por etapa" }).textContent).toContain(RESUMEN_NO_TRAMO);
   });
 
   it("started in Diseño: only Diseño, plus Siguiente: Construcción (#1043)", () => {

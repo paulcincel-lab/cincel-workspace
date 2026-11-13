@@ -611,7 +611,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
             </Link>
           </dd>
 
-          <dt className="text-muted-foreground">Tramo</dt>
+          <dt className="text-muted-foreground">Etapa</dt>
           <dd>
             {task.workflow ? (
               <TramoBadge tramo={task.workflow} variant="chip" />
@@ -623,7 +623,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
                 onChange={(id) => void patch({ workflowId: id })}
               />
             ) : (
-              <span className="text-muted-foreground">{isAdminTask ? "Administración" : "Sin tramo"}</span>
+              <span className="text-muted-foreground">{isAdminTask ? "Administración" : "Sin etapa"}</span>
             )}
           </dd>
 
