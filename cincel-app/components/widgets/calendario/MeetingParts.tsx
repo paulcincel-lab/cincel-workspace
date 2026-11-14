@@ -199,7 +199,7 @@ function MeetingDetailBody({
           <Field label="ETAPA">{item.etapa?.name ?? "—"}</Field>
           <Field label="ASISTENTES">
             <span className="flex flex-wrap items-center gap-2">
-              <PeopleStack people={item.attendees.map((p, i) => ({ id: `${i}:${p.name}`, name: p.name }))} label="Asistentes" />
+              <PeopleStack people={item.attendees.map((p, i) => ({ id: p.staffId ?? `${i}:${p.name}`, name: p.name }))} label="Asistentes" />
               <span className="text-muted-foreground">{attendeesText}</span>
             </span>
           </Field>
@@ -268,7 +268,7 @@ function MeetingDetailBody({
           </p>
         ) : null}
         <p className="flex items-center gap-2 text-sm">
-          <PeopleStack people={item.attendees.map((p, i) => ({ id: `${i}:${p.name}`, name: p.name }))} label="Asistentes" />
+          <PeopleStack people={item.attendees.map((p, i) => ({ id: p.staffId ?? `${i}:${p.name}`, name: p.name }))} label="Asistentes" />
           <span className="text-muted-foreground">{attendeesText}</span>
         </p>
         {noteParts.length > 0 ? <p className="text-sm text-muted-foreground">{noteParts.join(" ")}</p> : null}

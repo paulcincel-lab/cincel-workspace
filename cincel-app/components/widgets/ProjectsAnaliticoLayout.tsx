@@ -363,7 +363,7 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
     switch (key) {
       case "name":
         return (
-          <div className="flex max-w-[280px] flex-col">
+          <div className="flex max-w-full min-w-0 flex-col">
             <Link href={`/proyectos/${row.id}`} title={row.name} className="truncate font-medium underline-offset-3 hover:underline">
               {row.name}
             </Link>
@@ -572,6 +572,7 @@ function AnaliticoContent({ data, onNewProject }: { data: ProyectosPageData; onN
                 <GroupedTable<PortfolioTableRow>
                   toggleAll={false}
                   label={PORTFOLIO_TABLE_LABEL}
+                  tableId="proyectos-portafolio"
                   columns={columns}
                   groups={groups}
                   layout="table"

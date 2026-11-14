@@ -180,6 +180,27 @@ describe("TareasAnalitico subtasks (#1048)", () => {
     expect(nestedRows(container)).toHaveLength(0);
   });
 
+  it("a task without subtasks offers + Subtarea and the row menu entry; both open the quick-add under it, expanded (#1107)", async () => {
+    const { container } = renderAnalitico();
+    const lomas = screen.getByRole("region", { name: "Casa Lomas" });
+    // Contrato has subtasks: no affordance. The other rows have none.
+    expect(within(lomas).queryByRole("button", { name: "Agregar subtarea a «Contrato»" })).toBeNull();
+    const second = LOMAS_PRESALE_ROWS[1];
+    const button = within(lomas).getByRole("button", { name: `Agregar subtarea a «${second.title}»` });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    const add = container.querySelector<HTMLElement>(`[data-slot="quick-add"][data-parent="${second.id}"]`);
+    expect(add?.textContent).toBe(`Nueva subtarea de «${second.title}»`);
+    // The toggle is there now and the block is expanded.
+    expect(within(lomas).getByRole("button", { name: `Subtareas de «${second.title}»` }).getAttribute("aria-expanded")).toBe("true");
+    // A subtask row never offers it.
+    await act(async () => {
+      fireEvent.click(within(lomas).getByRole("button", { name: "Subtareas de «Contrato»" }));
+    });
+    expect(screen.queryByRole("button", { name: "Agregar subtarea a «Cláusulas»" })).toBeNull();
+  });
+
   it("a parent shown for its matching subtasks starts open with just those", async () => {
     const { container } = renderAnaliticoWithContext();
     await act(async () => {});

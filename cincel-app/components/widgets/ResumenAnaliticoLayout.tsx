@@ -14,13 +14,13 @@ import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
 import { HiddenCompletedLine, HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
 import { useHideCompletedTasks } from "@/components/tareas/use-hide-completed";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
-import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { PeopleStack, ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { TASK_SUPPORT_COLUMN } from "@/components/tareas/task-cell-edits";
 import { SUPPORT_COLUMN_LABEL } from "@/components/tareas/task-table-copy";
 import { TAREAS_CELL_KEYS, useTaskCellEdits } from "@/components/tareas/use-task-cell-edits";
 import { useQuickAddCreate } from "@/components/tareas/quick-add-create";
-import { SUBTASKS_COLLAPSE_ALL, SUBTASKS_EXPAND_ALL, subtaskQuickAddCopy, useSubtaskRows } from "@/components/tareas/use-subtask-rows";
+import { AddSubtaskButton, SUBTASKS_COLLAPSE_ALL, SUBTASKS_EXPAND_ALL, subtaskQuickAddCopy, useSubtaskRows } from "@/components/tareas/use-subtask-rows";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { StatusChip } from "@/components/widgets/StatusChip";
 import { TeamLoadTable } from "@/components/widgets/TeamLoadTable";
@@ -99,7 +99,7 @@ const SECTION_TITLE = "text-[15px] font-semibold text-foreground outline-none";
 const MONO_META = "font-mono text-xs text-muted-foreground";
 
 const PHASE_COLUMNS: RecordColumn[] = [
-  { key: "name", label: "Fase", width: 220 },
+  { key: "name", label: "Fase", fill: true, minWidth: 220 },
   { key: "tasks", label: "Tareas", align: "right", mono: true, format: "count", width: 80 },
   { key: "open", label: "Abiertas", align: "right", mono: true, format: "count", width: 90 },
   { key: "overdue", label: "Vencidas", align: "right", mono: true, format: "count", width: 90 },
@@ -332,7 +332,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       ...cells.cell(field),
     });
     return [
-      column("title", "Tarea", "tarea", { width: 360 }),
+      column("title", "Tarea", "tarea", { fill: true }),
       column("phase", "Fase", "fase", { width: 160 }),
       column("responsable", "Responsable", "responsable", { width: 170 }),
       { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL, width: 110, edit: support.edit, canEdit: support.canEdit },
@@ -389,7 +389,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       ) : null,
     [canCreate, span, onCreateSubtask],
   );
-  const subtasks = useSubtaskRows<ResumenTaskRow>({ parents: loadedParents, toRow, taskOf: taskOfRow, isHidden, after: subtaskAdd });
+  const subtasks = useSubtaskRows<ResumenTaskRow>({ parents: loadedParents, toRow, taskOf: taskOfRow, isHidden, after: subtaskAdd, canAdd: canCreate });
 
   const phaseGroups = useMemo(
     () => phaseTable.groups.map((group) => ({ ...group, id: `fase-${group.id}`, color: etapaColor(etapaById, group.id) })),
@@ -515,14 +515,17 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
       case "title":
         // The table links it (`rowHref`): a click edits the title, the open icon and ⌘/Ctrl-click open the task.
         return (
-          <span title={row.title} className="block max-w-[360px] truncate">
-            {row.title}
+          <span className="inline-flex max-w-full min-w-0 items-center gap-1.5">
+            <span title={row.title} className="truncate">
+              {row.title}
+            </span>
+            {subtasks.canAddTo(row.task) ? <AddSubtaskButton title={row.title} onAdd={() => subtasks.addSubtask(row.task)} /> : null}
           </span>
         );
       case "phase":
         return <span className={cn(row.phase === null && "text-muted-foreground")}>{row.phase ?? RESUMEN_SIN_FASE}</span>;
       case "responsable":
-        return <span className="block max-w-[170px] truncate">{row.responsable ?? "Sin asignar"}</span>;
+        return <ResponsableAvatar person={row.task.manager} showUnassignedText className="max-w-[170px]" />;
       case TASK_SUPPORT_COLUMN:
         return <PeopleStack people={row.task.support} label={SUPPORT_COLUMN_LABEL} />;
       case "status":
@@ -596,6 +599,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
         ) : (
           <GroupedTable<PhaseRow>
             label="Etapas y fases"
+            tableId="resumen-fases"
             columns={PHASE_COLUMNS}
             groups={phaseGroups}
             totals={{
@@ -659,6 +663,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
           <div className="contents" {...cells.primeProps}>
             <GroupedTable<ResumenTaskRow>
               label="Tareas por etapa"
+              tableId="resumen-tareas"
               columns={taskColumns}
               groups={taskGroups}
               totals={{ label: taskTable.totals.title ?? "Total", summary: `${taskTable.totals.daysLate} días de retraso` }}
@@ -681,7 +686,7 @@ export function ResumenAnaliticoLayout({ data }: ResumenAnaliticoLayoutProps): R
               selectable
               selectedIds={selection.selectedIds}
               onSelectionChange={selection.onSelectionChange}
-              rowActions={(row) => deletes.rowActions(deleteTargetOf(row.task), () => router.push(`/tareas?tarea=${encodeURIComponent(row.id)}`))}
+              rowActions={(row) => subtasks.withAddAction(row.task, deletes.rowActions(deleteTargetOf(row.task), () => router.push(`/tareas?tarea=${encodeURIComponent(row.id)}`)))}
               onRowDelete={deletes.canDelete ? (row) => deletes.request([deleteTargetOf(row.task)]) : undefined}
               onLoadMore={(groupId) => rowActions.current.get(groupId.replace(/^tareas-/, ""))?.more()}
               loading={tasksLoading}

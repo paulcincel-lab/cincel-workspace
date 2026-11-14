@@ -260,5 +260,6 @@ export function projectDeleteInvalidations(): QueryKey[] {
     qk.me.tasks(),
     qk.me.today(),
     qk.shell.badges(),
+    qk.shell.projects(),
   ];
 }

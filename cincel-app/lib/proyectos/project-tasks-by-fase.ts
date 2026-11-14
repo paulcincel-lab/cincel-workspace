@@ -349,9 +349,10 @@ export function buildTasksTable(groups: ProjectTaskGroup[], today: string): Reco
     })),
   );
   return {
+    tableId: "proyecto-tareas-tab",
     columns: [
       { key: "estatus", label: "Estatus", hideOn: ["esencial"] },
-      { key: "tarea", label: "Tarea" },
+      { key: "tarea", label: "Tarea", fill: true },
       { key: "estatusTexto", label: "Estatus", hideOn: ["visual", "analitico"] },
       { key: "responsable", label: "Responsable" },
       { key: "apoyo", label: "Apoyo", hideOn: ["esencial"] },

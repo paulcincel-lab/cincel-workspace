@@ -117,6 +117,7 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "deleteWorkflowAction",
   ],
   "preferences-actions": ["updateMyPreferencesAction"],
+  "table-widths-actions": ["setTableColumnWidthsAction"],
   "etapa-start-actions": ["startEtapaAction", "undoStartEtapaAction"],
   "vacations-actions": [
     "requestVacationAction",

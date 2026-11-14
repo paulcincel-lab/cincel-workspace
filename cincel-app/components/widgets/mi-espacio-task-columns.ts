@@ -196,7 +196,7 @@ export function miEspacioTaskColumns({
     taskSupportLock({ caps: { canChangeResponsible: capabilities.canChangeResponsible === true } });
 
   return [
-    { key: "title", label: "Tarea", width: 320, edit: title, canEdit: writer },
+    { key: "title", label: "Tarea", fill: true, edit: title, canEdit: writer },
     { key: TASK_SUPPORT_COLUMN, label: SUPPORT_COLUMN_LABEL, width: 110, edit: apoyo, canEdit: supportWriter },
     { key: "estatus", label: "Estatus", width: 140, edit: estatus, canEdit: statusWriter },
     { key: "vence", label: "Vence", mono: true, width: 90, edit: vence, canEdit: writer },

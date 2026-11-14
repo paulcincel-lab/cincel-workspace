@@ -28,7 +28,7 @@ import {
 import TaskSubtasks from "@/components/tareas/TaskSubtasks";
 import { WaitingBadge } from "@/components/tareas/TaskRowMeta";
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
-import { PEOPLE_EMPTY } from "@/components/widgets/editable-cell";
+import { PeopleStack, ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
@@ -595,13 +595,13 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
                 </SelectContent>
               </Select>
             ) : (
-              <span className="text-foreground">{task.manager?.name ?? "Sin responsable"}</span>
+              <ResponsableAvatar person={task.manager} showUnassignedText className="text-foreground" />
             )}
           </dd>
 
           <dt className="text-muted-foreground">{SUPPORT_COLUMN_LABEL}</dt>
           <dd data-slot="task-support" className="text-foreground">
-            {task.support.length > 0 ? task.support.map((s) => s.name).join(", ") : <span className="text-muted-foreground">{PEOPLE_EMPTY}</span>}
+            <PeopleStack people={task.support} label={SUPPORT_COLUMN_LABEL} />
           </dd>
 
           <dt className="text-muted-foreground">Proyecto</dt>

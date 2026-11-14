@@ -281,6 +281,13 @@
       "when": 1794626866618,
       "tag": "0039_soporte_attachment_blobs",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794633158243,
+      "tag": "0040_table_column_widths",
+      "breakpoints": true
     }
   ]
 }

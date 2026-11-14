@@ -635,7 +635,7 @@ export type PortfolioTableRow = {
 /** Columns of the Analítico table; the budget column only with `canSeeAdminData`. */
 export function portfolioColumns(opts: { canSeeAdminData: boolean }): RecordColumn[] {
   const columns: RecordColumn[] = [
-    { key: "name", label: "Proyecto", width: 280 },
+    { key: "name", label: "Proyecto", fill: true },
     { key: "real", label: "Avance", format: "percent", width: 140 },
     { key: "deviation", label: "Desv. plan", format: "delta", width: 100 },
     { key: "open", label: "Abiertas", format: "count", width: 90 },

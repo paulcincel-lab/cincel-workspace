@@ -2,12 +2,12 @@
 
 import { HistoryEventList } from "@/components/ui/HistoryEventList";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/shadcn/sheet";
-import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import type { TaskDetail } from "@/lib/types/core";
 import type { CalItem, CalTaskItem, DetailAction, MeetingDetail } from "@/lib/types/calendario";
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction, projectEtapaLine, taskNote, taskWhen } from "./event-detail-model";
-import { DetailActionButton, KindChip, EtapaBand } from "./EventDetailParts";
+import { DetailActionButton, KindChip, EtapaBand, TaskSubtasksValue } from "./EventDetailParts";
 import { MeetingDetailDrawer } from "./MeetingParts";
 
 export type EventDetailDrawerProps = {
@@ -39,24 +39,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function TaskFields({ item, task }: { item: CalTaskItem; task?: TaskDetail | null }) {
-  const subtasks = task ? (task.subtaskCount > 0 ? `${task.subtaskDoneCount} de ${task.subtaskCount}` : DETAIL_COPY.noSubtasks) : "—";
   return (
     <dl className="divide-y divide-border">
       <Field label="Código">{taskCode(item.taskId)}</Field>
       <Field label="Estatus">{item.statusLabel}</Field>
       <Field label="Responsable">
         {item.manager ? (
-          <span className="flex items-center gap-2">
-            <PeopleStack people={[item.manager]} label="Responsable" />
-            {item.manager.name}
-          </span>
+          <ResponsableAvatar person={item.manager} />
         ) : (
           DETAIL_COPY.unassigned
         )}
       </Field>
       <Field label="Fase">{item.phase?.name ?? "—"}</Field>
       <Field label="Prioridad">{PRIORITY_LABEL[item.priority]}</Field>
-      <Field label="Subtareas">{subtasks}</Field>
+      <Field label="Subtareas">
+        <TaskSubtasksValue item={item} task={task} />
+      </Field>
     </dl>
   );
 }

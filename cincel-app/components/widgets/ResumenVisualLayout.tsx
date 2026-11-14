@@ -38,6 +38,7 @@ import {
 import type { HistoryEvent } from "@/lib/types/core";
 import type { StaffFileItem } from "@/lib/types/workspace-access";
 import { initialsOf } from "@/lib/people/aggregates";
+import { ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { staggerStyle } from "@/lib/ui/motion";
 import { cn } from "@/lib/utils";
 
@@ -328,22 +329,7 @@ function NextTaskCard({ task, tone, isNew }: { task: NextTask; tone: EtapaTone; 
       >
         <span className="line-clamp-2 text-sm font-semibold text-foreground">{task.title}</span>
         <span className="flex items-center justify-between gap-2 text-xs">
-          <span className="inline-flex min-w-0 items-center gap-1.5 text-foreground">
-            {task.responsable ? (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="inline-flex size-[22px] flex-none items-center justify-center rounded-full text-[10px] font-semibold"
-                  style={{ background: tone.soft, color: tone.ink }}
-                >
-                  {initialsOf(task.responsable.name)}
-                </span>
-                <span className="truncate">{task.responsable.name}</span>
-              </>
-            ) : (
-              <span className="text-muted-foreground">Sin responsable</span>
-            )}
-          </span>
+          <ResponsableAvatar person={task.responsable} size="xs" className="min-w-0 text-foreground" />
           {task.blocked ? (
             <span className="flex-none rounded-full bg-tint-destructive px-2 py-0.5 text-[11.5px] font-semibold text-destructive-ink">
               Bloqueado

@@ -257,7 +257,7 @@ function TableView({
         id: column.key,
         accessorFn: (row) => row[column.key],
         header: () => (
-          <span style={column.width ? { display: "inline-block", minWidth: column.width } : undefined}>
+          <span style={column.width && !data.tableId ? { display: "inline-block", minWidth: column.width } : undefined}>
             {column.label}
             {column.badge ? (
               <Badge variant="secondary" className="ml-1.5 px-1.5 py-px align-middle">
@@ -316,6 +316,8 @@ function TableView({
       {selectable ? <SelectionBar columns={columns} selection={selection} /> : null}
       <DataTable<Row>
         columns={defs}
+        tableId={data.tableId}
+        resizeColumns={columns}
         data={data.rows}
         getRowId={(row, index) => rowId(row, index)}
         rowClassName={(row) =>

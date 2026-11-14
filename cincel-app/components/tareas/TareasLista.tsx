@@ -10,7 +10,7 @@ import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import type { PageHeaderProps } from "@/components/shell/PageHeader";
 import { ListPage, type ListSpec } from "@/components/patterns/ListPage";
 import { OPEN_TASK_LABEL } from "@/components/widgets/editable-cell";
-import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { PeopleStack, ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { tareasListInfiniteOptions } from "@/lib/query/options/tareas";
@@ -24,7 +24,8 @@ import { SubtaskProgressChip } from "@/components/widgets/analitico-task-cell";
 import { NESTED_ROW_PARENT } from "@/components/widgets/record-table-format";
 
 import { LISTA_COLUMNS, listaTable, listaTasks, withSubtaskRows } from "./lista-table";
-import { SubtaskToggle, subtaskOfLabel, useSubtaskRows } from "./use-subtask-rows";
+import { AddSubtaskInline, useCanCreateSubtask } from "./AddSubtaskInline";
+import { AddSubtaskButton, SubtaskToggle, subtaskOfLabel, useSubtaskRows } from "./use-subtask-rows";
 import { TASK_SUPPORT_COLUMN } from "./task-cell-edits";
 import { SUPPORT_COLUMN_LABEL } from "./task-table-copy";
 import { TareasStartSlot, startSlotEtapa } from "./TareasStartSlot";
@@ -110,7 +111,8 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
     () => tasks.map((t) => rowsById.get(t.id)).filter((r): r is TaskListRow => r !== undefined),
     [tasks, rowsById],
   );
-  const subtasks = useSubtaskRows<TaskListRow>({ parents, toRow: sameRow, taskOf: sameRow, isHidden });
+  const canCreate = useCanCreateSubtask();
+  const subtasks = useSubtaskRows<TaskListRow>({ parents, toRow: sameRow, taskOf: sameRow, isHidden, canAdd: canCreate });
   const { rowDetail } = subtasks;
   const childrenOf = useCallback(
     (parentId: string): TaskListItem[] | undefined => {
@@ -177,6 +179,20 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
               {task.title}
             </Link>
             {parentId && parent ? <span className="sr-only">{`, ${subtaskOfLabel(parent.title)}`}</span> : null}
+            {!parentId && parent && subtasks.canAddTo(parent) && !subtasks.isAdding(parent) ? (
+              <AddSubtaskButton title={parent.title} onAdd={() => subtasks.addSubtask(parent)} />
+            ) : null}
+            {!parentId && parent && subtasks.canAddTo(parent) && subtasks.isAdding(parent) ? (
+              // The grid and the title link must not see the keys and clicks of the field.
+              <span
+                className="mt-1 block max-w-[420px]"
+                onKeyDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <AddSubtaskInline parentId={parent.id} projectId={parent.projectId} autoFocus />
+              </span>
+            ) : null}
             {!parentId && parent ? (
               <span className="ml-1.5 inline-flex align-middle">
                 <SubtaskProgressChip task={parent} />
@@ -198,13 +214,15 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
         );
       }
       if (columnKey === "etapa" && task.workflow) return <EtapaBadge etapa={task.workflow} />;
+      if (columnKey === "responsable") return <ResponsableAvatar person={task.manager} />;
       if (columnKey === TASK_SUPPORT_COLUMN) return <PeopleStack people={task.support} label={SUPPORT_COLUMN_LABEL} />;
       return undefined;
     },
-    [tasksById, taskHref, rowsById, rowDetail],
+    [tasksById, taskHref, rowsById, rowDetail, subtasks],
   );
 
   const { rowActions: deleteActions, request: requestDelete, canDelete } = deletes;
+  const { withAddAction } = subtasks;
   const rowMenu = useMemo(() => {
     const targetOf = (row: Record<string, unknown>) => {
       const task = tasksById.get(String(row.id));
@@ -214,7 +232,10 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
       getRowLabel: (row: Record<string, unknown>) => tasksById.get(String(row.id))?.title ?? String(row.id),
       rowActions: (row: Record<string, unknown>) => {
         const target = targetOf(row);
-        return target ? deleteActions(target, () => window.history.pushState(null, "", taskHref(target.id))) : [];
+        if (!target) return [];
+        const actions = deleteActions(target, () => window.history.pushState(null, "", taskHref(target.id)));
+        const parent = rowsById.get(target.id);
+        return parent ? withAddAction(parent, actions) : actions;
       },
       onRowDelete: canDelete
         ? (row: Record<string, unknown>) => {
@@ -223,7 +244,7 @@ export function TareasLista({ query, header, filters, tabs, empty = LISTA_EMPTY 
           }
         : undefined,
     };
-  }, [tasksById, deleteActions, requestDelete, canDelete, taskHref]);
+  }, [tasksById, rowsById, withAddAction, deleteActions, requestDelete, canDelete, taskHref]);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = list;
   const onEndReached = useCallback(() => void fetchNextPage(), [fetchNextPage]);

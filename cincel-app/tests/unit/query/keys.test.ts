@@ -14,6 +14,7 @@ const F: TareasListFilters = { etapa: "diseno", proyecto: null, responsable: "yo
 function shapes() {
   return {
     "shell.badges": qk.shell.badges(),
+    "shell.projects": qk.shell.projects(),
     "org.general": qk.org.general(),
     "me.today": qk.me.today(),
     "me.weekHours": qk.me.weekHours(),

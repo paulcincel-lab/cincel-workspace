@@ -13,6 +13,9 @@ import {
 } from "@tanstack/react-table";
 
 import { GripVertical } from "lucide-react";
+import type { RecordColumn } from "@/lib/types/widgets";
+import { SELECT_COLUMN_WIDTH, columnWidthVar } from "@/lib/ui/table-widths";
+import { mergeRootRefs, useColumnResize } from "@/components/widgets/table-column-resize";
 
 import { Input } from "@/components/ui/shadcn/input";
 import { useKeyboardReorder } from "@/components/ui/use-keyboard-reorder";
@@ -118,6 +121,13 @@ type DataTableProps<T> = {
    */
   groupBy?: (row: T) => string;
   renderGroupHeader?: (group: string, rows: T[]) => ReactNode;
+  /**
+   * Resizable columns (#1125): the id the user's widths are remembered under,
+   * with `resizeColumns` (the data columns by id = `key`, with their bounds).
+   * Columns outside `resizeColumns` (checkbox, actions) keep their `size`.
+   */
+  tableId?: string;
+  resizeColumns?: RecordColumn[];
 } & TableSelectionProps<T> &
   TableRowActionsProps<T>;
 
@@ -127,6 +137,8 @@ export type DataTableManualSort = {
   sort: { key: string; direction: "asc" | "desc" } | null;
   onSortChange(key: string): void;
 };
+
+const NO_RESIZE_COLUMNS: RecordColumn[] = [];
 
 function groupRows<R>(rows: R[], keyOf: (row: R) => string): { key: string; rows: R[] }[] {
   const groups = new Map<string, R[]>();
@@ -175,6 +187,8 @@ export function DataTable<T>({
   renderGroupHeader,
   rowActions,
   onRowDelete,
+  tableId,
+  resizeColumns,
 }: DataTableProps<T>): ReactNode {
   const [localSorting, setSorting] = useState<SortingState>(initialSorting);
   const sorting: SortingState = manualSort
@@ -223,12 +237,27 @@ export function DataTable<T>({
     : shownRows;
   const rowOrder = rows.map((row) => row.id);
   const selection = useTableSelection<T>({ selectable, selectedIds, onSelectionChange }, rowOrder);
+  // Resizable columns (#1125): the widths are CSS variables on the wrapper, read by the `<colgroup>`.
+  const resizing = Boolean(tableId && resizeColumns && resizeColumns.length > 0);
+  const resizeByKey = new Map((resizeColumns ?? []).map((column) => [column.key, column]));
+  const fixedWidth = (id: string, size: number) => (resizeByKey.has(id) ? 0 : size);
+  const resize = useColumnResize({
+    tableId: resizing ? tableId : undefined,
+    columns: resizeColumns ?? NO_RESIZE_COLUMNS,
+    extraWidth:
+      (selection.enabled ? SELECT_COLUMN_WIDTH : 0) +
+      (reorderEnabled ? SELECT_COLUMN_WIDTH : 0) +
+      (rowActions ? ROW_ACTIONS_WIDTH : 0) +
+      table.getVisibleLeafColumns().reduce((sum, column) => sum + fixedWidth(column.id, column.getSize()), 0),
+  });
+  const setRoot = mergeRootRefs(resize.attachRoot, editable ? grid.rootRef : null);
   const colSpan = (selection.enabled ? 1 : 0) + columns.length + (reorderEnabled ? 1 : 0) + (rowActions ? 1 : 0);
   const groupStarts = new Map((groups ?? []).map((g) => [g.rows[0].id, g] as const));
 
   const view = (
     <div
       className={`overflow-hidden rounded-2xl border border-border bg-card shadow-sm ${wrapperClassName}`}
+      style={resizing ? resize.rootStyle : undefined}
       {...(editable ? grid.rootProps : {})}
       {...(selection.enabled
         ? {
@@ -238,7 +267,9 @@ export function DataTable<T>({
             },
           }
         : {})}
+      ref={setRoot}
     >
+      {resizing ? <div className="flex justify-end empty:hidden">{resize.resetButton()}</div> : null}
       {searchPlaceholder ? (
         <div className="border-b border-border p-3">
           <Input
@@ -251,7 +282,24 @@ export function DataTable<T>({
         </div>
       ) : null}
 
-      <Table className={tableClassName} role={editable ? "grid" : undefined}>
+      <Table
+        className={resizing ? `table-fixed ${tableClassName}` : tableClassName}
+        style={resizing ? resize.tableStyle : undefined}
+        role={editable ? "grid" : undefined}
+      >
+        {resizing ? (
+          <colgroup>
+            {selection.enabled ? <col style={{ width: SELECT_COLUMN_WIDTH }} /> : null}
+            {reorderEnabled ? <col style={{ width: SELECT_COLUMN_WIDTH }} /> : null}
+            {table.getVisibleLeafColumns().map((column) => (
+              <col
+                key={column.id}
+                style={{ width: resizeByKey.has(column.id) ? `var(${columnWidthVar(column.id)})` : column.getSize() }}
+              />
+            ))}
+            {rowActions ? <col style={{ width: ROW_ACTIONS_WIDTH }} /> : null}
+          </colgroup>
+        ) : null}
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
@@ -277,7 +325,8 @@ export function DataTable<T>({
                 return (
                   <TableHead
                     key={header.id}
-                    className={`${sortable ? "cursor-pointer select-none" : ""} ${headerClassName?.(header.column.id) ?? ""}`}
+                    data-column-key={header.column.id}
+                    className={`${resizing ? "relative " : ""}${sortable ? "cursor-pointer select-none" : ""} ${headerClassName?.(header.column.id) ?? ""}`}
                     onClick={sortable ? onSortClick : undefined}
                     aria-sort={
                       header.column.getIsSorted() === "asc"
@@ -293,6 +342,7 @@ export function DataTable<T>({
                         {sortable ? <SortIcon direction={header.column.getIsSorted()} /> : null}
                       </span>
                     )}
+                    {resizing && resizeByKey.has(header.column.id) ? resize.handle(resizeByKey.get(header.column.id)!) : null}
                   </TableHead>
                 );
               })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -25,7 +25,10 @@ import { localIsoDate } from "@/components/tareas/tablero-table";
 import { deleteTargetOf, useDeleteTasks } from "@/components/tareas/use-delete-tasks";
 import { TAREAS_CELL_KEYS, useTaskCellEdits } from "@/components/tareas/use-task-cell-edits";
 import { useTaskSelection } from "@/components/tareas/use-task-selection";
-import { useSubtaskRows } from "@/components/tareas/use-subtask-rows";
+import { useQuickAddCreate } from "@/components/tareas/quick-add-create";
+import { subtaskQuickAddCopy, useSubtaskRows } from "@/components/tareas/use-subtask-rows";
+import { useCanCreateSubtask } from "@/components/tareas/AddSubtaskInline";
+import { QuickAddRow, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { GroupedTable, type Group } from "@/components/widgets/GroupedTable";
 import { renderAnaliticoTaskCell } from "@/components/widgets/analitico-task-cell";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
@@ -108,7 +111,26 @@ export function ProjectAnaliticoTasks({ project, etapas, staff, overdue: overdue
   // Subtasks (#1048): a collapsible block of nested rows under each parent row.
   const parents = useMemo(() => (rows ?? []).map((row) => row.task), [rows]);
   const toRow = useCallback((task: TaskListRow) => analiticoRow(task, today), [today]);
-  const subtasks = useSubtaskRows<AnaliticoRow>({ parents, toRow, taskOf: taskOfRow, isHidden });
+  const canCreate = useCanCreateSubtask();
+  const quickAdd = useQuickAddCreate();
+  const createRef = useRef(quickAdd.create);
+  useEffect(() => {
+    createRef.current = quickAdd.create;
+  });
+  const onCreateSubtask = useCallback((draft: QuickAddDraft) => createRef.current(draft), []);
+  const subtaskAdd = useCallback(
+    (parent: TaskListRow) =>
+      canCreate ? (
+        <QuickAddRow
+          variant="row"
+          colSpan={PROJECT_TASK_COLUMNS.length + 2}
+          context={{ ...subtaskQuickAddCopy(parent.title), projectId: parent.projectId, etapaId: parent.workflowId, parentTaskId: parent.id }}
+          onCreate={onCreateSubtask}
+        />
+      ) : null,
+    [canCreate, onCreateSubtask],
+  );
+  const subtasks = useSubtaskRows<AnaliticoRow>({ parents, toRow, taskOf: taskOfRow, isHidden, after: subtaskAdd, canAdd: canCreate });
   const shown = useMemo(() => [...(rows ?? []), ...subtasks.shownRows], [rows, subtasks.shownRows]);
   const tasksById = useMemo(() => new Map(shown.map((row) => [row.id, row.task])), [shown]);
   const taskOf = useCallback((id: string) => tasksById.get(id), [tasksById]);
@@ -147,6 +169,7 @@ export function ProjectAnaliticoTasks({ project, etapas, staff, overdue: overdue
       <CellCommitProvider queryKeys={COMMIT_KEYS}>
         <GroupedTable<AnaliticoRow>
           label={`Tareas abiertas de ${project.name}`}
+          tableId="proyectos-tareas"
           layout="table"
           toggleAll={false}
           columns={columns}
@@ -157,14 +180,16 @@ export function ProjectAnaliticoTasks({ project, etapas, staff, overdue: overdue
           sort={tableSort}
           onSortChange={onSortChange}
           rowDetail={subtasks.rowDetail}
-          renderCell={renderAnaliticoTaskCell}
+          renderCell={(key, row) =>
+            renderAnaliticoTaskCell(key, row, subtasks.canAddTo(row.task) ? () => subtasks.addSubtask(row.task) : undefined)
+          }
           rowHref={(row) => `/tareas?tarea=${encodeURIComponent(row.id)}`}
           isRowMuted={(row) => row.closed}
           getRowLabel={(row) => row.tarea}
           selectable
           selectedIds={selection.selectedIds}
           onSelectionChange={selection.onSelectionChange}
-          rowActions={(row) => deletes.rowActions(deleteTargetOf(row.task), () => openTask(row.id))}
+          rowActions={(row) => subtasks.withAddAction(row.task, deletes.rowActions(deleteTargetOf(row.task), () => openTask(row.id)))}
           onRowDelete={deletes.canDelete ? (row) => deletes.request([deleteTargetOf(row.task)]) : undefined}
           onLoadMore={() => void list.fetchNextPage()}
         />

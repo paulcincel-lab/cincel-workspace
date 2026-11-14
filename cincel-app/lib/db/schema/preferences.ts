@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, numeric, text, time, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, jsonb, numeric, text, time, uuid } from "drizzle-orm/pg-core";
 import { bytea, colorMode, core, density, presentationStyle, stamps, themeId } from "./_schema";
 import { staff } from "./people";
 
@@ -27,6 +27,8 @@ export const userPreferences = core.table(
     quietTo: time("quiet_to"),
     /** "Ocultar completadas" in the task tables (#1039). */
     hideCompletedTasks: boolean("hide_completed_tasks").notNull().default(false),
+    /** Column widths in px per table id and column key (#1125): `{ [tableId]: { [columnKey]: px } }`. */
+    tableColumnWidths: jsonb("table_column_widths").$type<Record<string, Record<string, number>>>().notNull().default({}),
     ...stamps,
   },
   (t) => [

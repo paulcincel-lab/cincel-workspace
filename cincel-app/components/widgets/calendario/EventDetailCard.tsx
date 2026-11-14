@@ -6,15 +6,18 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/shadcn/button";
 import { Popover, PopoverContent } from "@/components/ui/shadcn/popover";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/shadcn/sheet";
+import type { TaskDetail } from "@/lib/types/core";
 import type { CalItem, DetailAction, MeetingDetail } from "@/lib/types/calendario";
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction } from "./event-detail-model";
-import { DetailActionButton, KindChip, TaskFacts, EtapaBand } from "./EventDetailParts";
+import { DetailActionButton, KindChip, TaskFacts, EtapaBand, TaskSubtasksValue } from "./EventDetailParts";
 import { MeetingDetailCard } from "./MeetingParts";
 
 export type EventDetailCardProps = {
   item: CalItem;
   detail?: MeetingDetail;
+  /** The task sheet: the Subtareas line comes from it. */
+  task?: TaskDetail | null;
   actions: DetailAction[];
   onClose(): void;
   /** The item the card floats next to; found by `data-calendario-item` when omitted. */
@@ -41,7 +44,7 @@ function useNarrow(): boolean {
   );
 }
 
-function CardBody({ item, actions, onClose, headingId, showClose }: Pick<EventDetailCardProps, "item" | "actions" | "onClose"> & { headingId: string; showClose: boolean }) {
+function CardBody({ item, task, actions, onClose, headingId, showClose }: Pick<EventDetailCardProps, "item" | "task" | "actions" | "onClose"> & { headingId: string; showClose: boolean }) {
   const shown = actionsFor(item, actions, CARD_ORDER);
   const done = findAction(shown, TASK_ACTION.complete, TASK_ACTION.reopen);
   return (
@@ -61,6 +64,14 @@ function CardBody({ item, actions, onClose, headingId, showClose }: Pick<EventDe
         ) : null}
       </div>
       {item.kind === "task" ? <TaskFacts item={item} /> : null}
+      {item.kind === "task" && task ? (
+        <p className="flex flex-col gap-1 text-sm text-muted-foreground">
+          <span>Subtareas</span>
+          <span className="text-foreground">
+            <TaskSubtasksValue item={item} task={task} />
+          </span>
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {shown.map((action) => (
           <DetailActionButton
@@ -79,7 +90,7 @@ function CardBody({ item, actions, onClose, headingId, showClose }: Pick<EventDe
  * item (`role="dialog"`, named by the title) that traps nothing; Escape closes.
  * Under 640 px it is a bottom sheet.
  */
-function TaskDetailCard({ item, actions, onClose, anchor }: EventDetailCardProps) {
+function TaskDetailCard({ item, task, actions, onClose, anchor }: EventDetailCardProps) {
   const narrow = useNarrow();
   const found = useMemo(
     () =>
@@ -108,7 +119,7 @@ function TaskDetailCard({ item, actions, onClose, anchor }: EventDetailCardProps
         <SheetContent side="bottom" showCloseButton={false} className="max-h-[85dvh] overflow-y-auto motion-reduce:transition-none">
           <SheetTitle className="sr-only">{item.title}</SheetTitle>
           <SheetDescription className="sr-only">{DETAIL_COPY.close}</SheetDescription>
-          <CardBody item={item} actions={actions} onClose={onClose} headingId={headingId} showClose />
+          <CardBody item={item} task={task} actions={actions} onClose={onClose} headingId={headingId} showClose />
         </SheetContent>
       </Sheet>
     );
@@ -122,7 +133,7 @@ function TaskDetailCard({ item, actions, onClose, anchor }: EventDetailCardProps
         data-slot="event-detail-card"
         className="fixed right-4 bottom-4 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-border bg-popover text-popover-foreground shadow-lg"
       >
-        <CardBody item={item} actions={actions} onClose={onClose} headingId={headingId} showClose />
+        <CardBody item={item} task={task} actions={actions} onClose={onClose} headingId={headingId} showClose />
       </div>
     );
   }
@@ -130,7 +141,7 @@ function TaskDetailCard({ item, actions, onClose, anchor }: EventDetailCardProps
   return (
     <Popover open onOpenChange={(open) => !open && onClose()}>
       <PopoverContent anchor={target} side="right" align="start" aria-label={item.title} data-slot="event-detail-card" className="w-[22rem] max-w-[calc(100vw-2rem)] motion-reduce:transition-none">
-        <CardBody item={item} actions={actions} onClose={onClose} headingId={headingId} showClose />
+        <CardBody item={item} task={task} actions={actions} onClose={onClose} headingId={headingId} showClose />
       </PopoverContent>
     </Popover>
   );

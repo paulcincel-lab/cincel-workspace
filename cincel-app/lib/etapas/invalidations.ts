@@ -41,4 +41,6 @@ export const ETAPA_INVALIDATIONS = [
   qk.ajustes.page("puestos"),
   qk.tareas.all,
   qk.proyectos.all,
+  // The sidebar project dots use the etapa colors.
+  qk.shell.projects(),
 ] as const;

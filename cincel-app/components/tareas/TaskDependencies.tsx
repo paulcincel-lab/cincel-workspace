@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import AppAvatar from "@/components/ui/AppAvatar";
+import { ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -111,11 +111,10 @@ function TaskRefRow({
         token={BASE_STATUS_COLOR[task.status]}
       />
       <span className="flex-1 truncate text-foreground">{task.title}</span>
-      {task.managerName ? (
-        <AppAvatar name={task.managerName} showName={false} />
-      ) : (
-        <span className="text-xs text-muted-foreground">Sin responsable</span>
-      )}
+      <ResponsableAvatar
+        person={task.managerName ? { id: task.managerId ?? task.managerName, name: task.managerName } : null}
+        showName={false}
+      />
       <span className="w-20 text-right text-xs text-muted-foreground">
         {formatDateDMY(task.commitmentDate ?? "")}
       </span>

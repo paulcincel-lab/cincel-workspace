@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import type { EmptyStateProps } from "@/components/shell/EmptyState";
 import { useStyle } from "@/components/shell/StyleProvider";
 import { Badge } from "@/components/ui/shadcn/badge";
-import { PersonAvatar } from "@/components/v2/status/PersonAvatar";
+import { PersonAvatar, UnassignedAvatar } from "@/components/v2/status/PersonAvatar";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { StyleView } from "@/components/widgets/StyleView";
 import { EtapaBadge } from "@/components/widgets/EtapaBadge";
@@ -141,9 +141,9 @@ function VisualRows({ items }: { items: AttentionItem[] }) {
           </div>
           <ReasonPill reason={item.reason} tone={item.tone} />
           {item.assignee ? (
-            <PersonAvatar name={item.assignee.name} initials={item.assignee.initials} hideName />
+            <PersonAvatar id={item.assignee.id} name={item.assignee.name} initials={item.assignee.initials} hideName />
           ) : (
-            <span className="sr-only">{ATTENTION_NO_ASSIGNEE}</span>
+            <UnassignedAvatar label={ATTENTION_NO_ASSIGNEE} />
           )}
           <DueDate item={item} className="w-14 shrink-0 text-right font-mono text-xs" />
         </li>

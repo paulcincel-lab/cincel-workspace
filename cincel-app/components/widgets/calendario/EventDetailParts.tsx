@@ -4,8 +4,10 @@ import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
-import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { AddSubtaskInline, useCanCreateSubtask } from "@/components/tareas/AddSubtaskInline";
+import { ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { etapaColorClass } from "@/lib/etapas/etapa-color";
+import type { TaskDetail } from "@/lib/types/core";
 import type { CalItem, CalEtapaRef, DetailAction } from "@/lib/types/calendario";
 import { cn } from "@/lib/utils";
 
@@ -31,12 +33,25 @@ export function TaskFacts({ item, showNote = true }: { item: Extract<CalItem, { 
       <p className={cn("font-medium", item.overdue ? "text-destructive" : "text-foreground")}>{taskWhen(item)}</p>
       <p className="text-muted-foreground">{projectEtapaLine(item)}</p>
       <p className="flex items-center gap-2 text-muted-foreground">
-        <PeopleStack people={item.manager ? [item.manager] : []} label="Responsable" />
+        <ResponsableAvatar person={item.manager} showName={false} />
         <span>{responsableLine(item)}</span>
       </p>
       {showNote ? <p className="text-muted-foreground">{taskNote(item)}</p> : null}
     </div>
   );
+}
+
+/**
+ * The Subtareas value of a task detail (#1107): "2 de 5", or, when the task
+ * has none, an inline "Agregar subtarea…" field for viewers who can create
+ * tasks (plain "Sin subtareas" for the rest). "—" while the task loads.
+ */
+export function TaskSubtasksValue({ item, task }: { item: Extract<CalItem, { kind: "task" }>; task?: TaskDetail | null }) {
+  const canCreate = useCanCreateSubtask();
+  if (!task) return <>—</>;
+  if (task.subtaskCount > 0) return <>{`${task.subtaskDoneCount} de ${task.subtaskCount}`}</>;
+  if (!canCreate || item.parentTaskId || !item.project?.id) return <>{DETAIL_COPY.noSubtasks}</>;
+  return <AddSubtaskInline parentId={item.taskId} projectId={item.project.id} />;
 }
 
 /** One action as a button; a `href` renders a link. */

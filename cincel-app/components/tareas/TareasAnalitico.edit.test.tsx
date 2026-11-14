@@ -285,7 +285,7 @@ describe("TareasAnalitico editable cells", () => {
 
     await choose("responsable", "Luis Pérez");
     expect(actions.assignTaskAction).toHaveBeenCalledWith("t4", "s2");
-    expect(cell("t4", "responsable").textContent).toBe("Luis Pérez");
+    expect(cell("t4", "responsable").textContent).toContain("Luis Pérez");
 
     await choose("prioridad", "Alta");
     expect(actions.updateTaskAction).toHaveBeenLastCalledWith("t4", { priority: "alta" });

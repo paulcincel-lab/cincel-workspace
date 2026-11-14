@@ -775,6 +775,7 @@ export function MiEspacioAnalitico({ notice, reader }: MiEspacioAnaliticoProps) 
             <CellCommitProvider<TaskRow> queryKeys={MI_ESPACIO_COMMIT_KEYS}>
               <GroupedTable<TaskRow>
                 label="Mis tareas"
+                tableId="mi-espacio-tareas"
                 columns={taskColumns}
                 groups={shownGroups}
                 isRowMuted={(row) => isTaskClosed(row)}
@@ -1023,7 +1024,7 @@ function renderTaskCell(key: string, row: TaskRow): ReactNode | undefined {
   if (key === TASK_SUPPORT_COLUMN) return <PeopleStack people={row.support} label={SUPPORT_COLUMN_LABEL} />;
   if (key === "title") {
     return (
-      <span title={row.title} className="inline-block max-w-[320px] truncate align-bottom">
+      <span title={row.title} className="block max-w-full truncate">
         {row.title}
       </span>
     );

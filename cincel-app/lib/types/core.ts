@@ -527,6 +527,7 @@ export type TaskRef = {
   id: string;
   title: string;
   status: TaskStatus;
+  managerId?: string | null;
   managerName: string | null;
   commitmentDate: string | null;
 };

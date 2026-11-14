@@ -34,7 +34,7 @@ export type ListaPlazo = "Vencida" | "Esta semana" | "Más adelante" | "Completa
 const VISUAL_AND_ESENCIAL: RecordColumn["hideOn"] = ["visual", "esencial"];
 
 export const LISTA_COLUMNS: RecordColumn[] = [
-  { key: "tarea", label: "Tarea" },
+  { key: "tarea", label: "Tarea", fill: true },
   { key: "proyecto", label: "Proyecto" },
   { key: "etapa", label: "Etapa" },
   { key: "fase", label: "Fase", hideOn: VISUAL_AND_ESENCIAL },
@@ -180,6 +180,7 @@ export function listaTable(
   const rows = sorted.map((t) => listaRow(t, today, summaries.get(t.project.id) ?? summarize([t], today)));
   const overall = summarize(tasks, today);
   return {
+    tableId: "tareas-lista",
     columns: LISTA_COLUMNS,
     rows,
     groupBy: "estatus",

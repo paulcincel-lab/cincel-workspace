@@ -5,7 +5,7 @@ import axe from "axe-core";
 
 import { CellEditor, type CellEditorProps } from "@/components/widgets/CellEditor";
 import { PeopleStack } from "@/components/widgets/PeopleStack";
-import { type PeopleCellEdit, PEOPLE_EMPTY, sameCellValue } from "@/components/widgets/editable-cell";
+import { type PeopleCellEdit, sameCellValue } from "@/components/widgets/editable-cell";
 
 type Row = { id: string; managerId: string | null; support: string[] };
 
@@ -180,9 +180,10 @@ describe("PeopleStack", () => {
     expect(screen.getByText("Apoyo: Ana López, Bruno Díaz, Carla Ruiz, Diego Mora, Elena Paz")).toBeTruthy();
   });
 
-  it("nobody shows —", () => {
+  it("nobody shows the dashed Sin asignar placeholder", () => {
     const { container } = render(<PeopleStack people={[]} />);
-    expect(container.textContent).toBe(PEOPLE_EMPTY);
+    expect(container.querySelector("[data-slot=unassigned]")?.getAttribute("title")).toBe("Sin asignar");
+    expect(container.textContent).toBe("Sin asignar");
   });
 });
 

@@ -38,7 +38,7 @@ const NOTIFICATION_PREFS: readonly QueryKey[] = [qk.me.notificationPrefs(), qk.m
 /** The Personas contact lists and every contact's detail and history. */
 const CONTACTS: readonly QueryKey[] = [qk.personas.contacts("clientes", null).slice(0, 2), ["contacts"]];
 /** What a project delete changes (same as `projectDeleteInvalidations`, #1050). */
-const PROJECT_DELETE: readonly QueryKey[] = [qk.catalog.projectOptions(), qk.me.today()];
+const PROJECT_DELETE: readonly QueryKey[] = [qk.catalog.projectOptions(), qk.me.today(), qk.shell.projects()];
 
 /** The write tools and the families of keys each one makes stale. */
 export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly QueryKey[])[]>> = {

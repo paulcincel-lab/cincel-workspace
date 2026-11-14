@@ -24,6 +24,9 @@ export type PresentationStyle = "visual" | "esencial" | "analitico";
 export type Density = "comoda" | "compacta";
 export type TextSize = 13 | 13.5 | 14 | 14.5 | 15 | 15.5 | 16;
 
+/** Remembered column widths in px: `{ [tableId]: { [columnKey]: px } }` (#1125). */
+export type TableColumnWidths = Record<string, Record<string, number>>;
+
 export type UserPreferences = {
   /** null = organization theme. */
   theme: ThemeId | null;
@@ -39,6 +42,11 @@ export type UserPreferences = {
    * user. Missing means `DEFAULT_HIDE_COMPLETED_TASKS`.
    */
   hideCompletedTasks?: boolean;
+  /**
+   * Column widths the user set per table (#1125), server-persisted by
+   * `setTableColumnWidthsAction`. Missing means no table has custom widths.
+   */
+  tableColumnWidths?: TableColumnWidths;
 };
 
 export type TokenName =

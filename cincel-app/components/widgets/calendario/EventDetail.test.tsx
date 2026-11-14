@@ -1,8 +1,22 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { settle } from "@/tests/helpers/settle";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+const render = (ui: ReactElement) => renderWithQueryClient(ui, { client: createTestQueryClient() });
+
+import { seedSessionUser } from "../../../tests/helpers/session-user";
+import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
 import type { CalTaskItem, DetailAction } from "@/lib/types/calendario";
+
+const caps = vi.hoisted(() => ({ canCreateActivity: true }));
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
+  resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: caps.canCreateActivity }),
+}));
+const tasksActions = vi.hoisted(() => ({ createSubtaskAction: vi.fn(async () => ({ ok: true, data: {} })) }));
+vi.mock("@/lib/actions/tasks-actions", () => tasksActions);
 
 import { EventDetailCard } from "./EventDetailCard";
 import { EventDetailDrawer } from "./EventDetailDrawer";
@@ -123,5 +137,58 @@ describe("EventDetailDrawer", () => {
     expect(screen.getByText(/Cambió fecha/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Abrir ficha" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Marcar completada" })).toBeTruthy();
+  });
+});
+
+describe("Subtareas of a task without subtasks (#1107)", () => {
+  const empty = { subtaskCount: 0, subtaskDoneCount: 0, history: [] } as never;
+
+  function mount(view: "drawer" | "card" | "sheet") {
+    const a = actionsOf(base);
+    if (view === "drawer") return render(<EventDetailDrawer item={base} task={empty} actions={a.list} onClose={() => {}} />);
+    if (view === "card") return render(<EventDetailCard item={base} task={empty} actions={a.list} onClose={() => {}} />);
+    return render(<EventDetailSheet item={base} task={empty} actions={a.list} onClose={() => {}} />);
+  }
+
+  it.each(["drawer", "card", "sheet"] as const)("%s: Sin subtareas becomes an input; Enter creates, Escape cancels", async (view) => {
+    seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
+    caps.canCreateActivity = true;
+    tasksActions.createSubtaskAction.mockClear();
+    mount(view);
+    expect(screen.queryByText("Sin subtareas")).toBeNull();
+    const input = screen.getByLabelText("Título de la nueva subtarea") as HTMLInputElement;
+    expect(input.placeholder).toBe("Agregar subtarea…");
+    fireEvent.change(input, { target: { value: "Pedir planos" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("");
+    fireEvent.change(input, { target: { value: "Pedir planos" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(tasksActions.createSubtaskAction).toHaveBeenCalledWith(base.taskId, { title: "Pedir planos" }));
+    // The field empties once the create settles.
+    await waitFor(() => expect((screen.getByLabelText("Título de la nueva subtarea") as HTMLInputElement).value).toBe(""));
+    await settle();
+  });
+
+  it("keeps the plain text for a viewer who can't create tasks", () => {
+    seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
+    caps.canCreateActivity = false;
+    mount("drawer");
+    expect(screen.getByText("Sin subtareas")).toBeTruthy();
+    expect(screen.queryByLabelText("Título de la nueva subtarea")).toBeNull();
+  });
+
+  it("a subtask's detail never offers it", () => {
+    seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
+    caps.canCreateActivity = true;
+    const a = actionsOf(base);
+    render(<EventDetailDrawer item={{ ...base, parentTaskId: "p" }} task={empty} actions={a.list} onClose={() => {}} />);
+    expect(screen.getByText("Sin subtareas")).toBeTruthy();
+  });
+
+  it("after the first subtask the field shows the count", () => {
+    seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
+    const a = actionsOf(base);
+    render(<EventDetailDrawer item={base} task={{ subtaskCount: 1, subtaskDoneCount: 0, history: [] } as never} actions={a.list} onClose={() => {}} />);
+    expect(screen.getByText("0 de 1")).toBeTruthy();
   });
 });

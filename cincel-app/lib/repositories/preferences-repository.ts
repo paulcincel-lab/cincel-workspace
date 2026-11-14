@@ -2,7 +2,7 @@
  * `user_preferences` and `staff_photos` (redesign BE §3.3, §3.4, §7.1, §7.2).
  * Rows are keyed by the session staff id.
  */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { cache } from "react";
 
 import { staffPhotos, userPreferences } from "@/lib/db/schema";
@@ -34,6 +34,29 @@ export async function upsertUserPreferences(
     .insert(userPreferences)
     .values({ ...values, staffId })
     .onConflictDoUpdate({ target: userPreferences.staffId, set: { ...values, updatedAt: new Date() } })
+    .returning();
+  return row;
+}
+
+/**
+ * Sets (`widths`) or forgets (`null`) one table's remembered column widths in
+ * the caller's row, creating the row when missing. One atomic statement on the
+ * jsonb column, so two tables saved at once never overwrite each other.
+ */
+export async function setTableColumnWidths(
+  db: OwnerDb,
+  staffId: string,
+  tableId: string,
+  widths: Record<string, number> | null,
+): Promise<UserPreferencesRow> {
+  const column = userPreferences.tableColumnWidths;
+  const next = widths
+    ? sql`jsonb_set(coalesce(${column}, '{}'::jsonb), array[${tableId}::text], ${JSON.stringify(widths)}::jsonb, true)`
+    : sql`coalesce(${column}, '{}'::jsonb) - ${tableId}::text`;
+  const [row] = await db
+    .insert(userPreferences)
+    .values({ staffId, tableColumnWidths: widths ? { [tableId]: widths } : {} })
+    .onConflictDoUpdate({ target: userPreferences.staffId, set: { tableColumnWidths: next, updatedAt: new Date() } })
     .returning();
   return row;
 }

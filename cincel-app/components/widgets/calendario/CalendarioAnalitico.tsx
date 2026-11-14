@@ -62,7 +62,7 @@ const COLUMNS: RecordColumn<AnaliticoRow>[] = [
   { key: "fecha", label: "FECHA", mono: true, width: 100 },
   { key: "hora", label: "HORA", mono: true, width: 90 },
   { key: "tipo", label: "TIPO", width: 90 },
-  { key: "titulo", label: "TÍTULO", width: 280 },
+  { key: "titulo", label: "TÍTULO", fill: true },
   { key: "proyecto", label: "PROYECTO", width: 170 },
   { key: "etapa", label: "ETAPA", width: 130 },
   { key: "responsable", label: "RESPONSABLE / ASISTENTES", width: 200 },
@@ -234,7 +234,7 @@ export function CalendarioAnalitico({ range, query, list, onOpen }: CalendarioAn
           return item.kind === "task" ? "Tarea" : "Reunión";
         case "titulo":
           return (
-            <Button type="button" variant="link" size="sm" className="h-auto max-w-[280px] justify-start truncate p-0" onClick={() => open(item.id)}>
+            <Button type="button" variant="link" size="sm" className="h-auto max-w-full justify-start truncate p-0" onClick={() => open(item.id)}>
               {item.title}
             </Button>
           );
@@ -286,6 +286,7 @@ export function CalendarioAnalitico({ range, query, list, onOpen }: CalendarioAn
         <CellCommitProvider queryKeys={[qk.calendario.all, ...TAREAS_CELL_KEYS]}>
           <GroupedTable<AnaliticoRow>
             label={TABLE_LABEL}
+            tableId="calendario-agenda"
             columns={columns}
             groups={groups}
             toggleAll={false}

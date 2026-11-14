@@ -10,9 +10,10 @@ import { getStaffPhotoUrl } from "@/lib/profile-photo/photo-url";
 import { makeQueryClient } from "@/lib/query/client";
 import { Hydrate } from "@/lib/query/hydrate";
 import { qk } from "@/lib/query/keys";
-import { shellBadgesOptions } from "@/lib/query/options/shell";
+import { shellBadgesOptions, shellProjectsOptions } from "@/lib/query/options/shell";
 import { prefetch } from "@/lib/query/server";
 import { capabilityUserOf, loadShellBadges } from "@/lib/shell/badges";
+import { loadShellProjects } from "@/lib/shell/projects";
 import type { TodayStatus } from "@/lib/types/redesign";
 import type { MyProfile } from "@/lib/types/shell";
 import { buildNavModel, type NavModel, type NavSession } from "@/lib/ui/nav";
@@ -52,6 +53,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     loadNav({ ...base, photoUrl: null }),
     loadToday(),
     prefetch(qc, shellBadgesOptions(), () => loadShellBadges(capabilityUserOf(user))),
+    prefetch(qc, shellProjectsOptions(), () => loadShellProjects(capabilityUserOf(user))),
   ]);
 
   const session: NavSession = { ...base, photoUrl };
