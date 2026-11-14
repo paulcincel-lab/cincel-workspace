@@ -9,6 +9,7 @@ import {
   GlobeIcon,
   LogOutIcon,
   MailIcon,
+  LifeBuoyIcon,
   PaletteIcon,
   Trash2Icon,
   UserIcon,
@@ -31,7 +32,9 @@ import { IMPLEMENTED as PHOTO_IMPLEMENTED } from "@/lib/actions/profile-photo-ac
 import { actionErrorText } from "@/lib/errors";
 import type { GeneralCompanySettings } from "@/lib/settings/general-settings";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
+import { SOPORTE_ENABLED } from "@/lib/soporte/flags";
 import { useSessionStore } from "@/lib/stores/session-store";
+import { useSoporteDraft } from "@/lib/stores/soporte-draft";
 
 import type { AppShellProps } from "./AppShell";
 import { PHOTO_ACCEPT, useMyProfile, usePhotoUploadMutation, useRemovePhotoMutation } from "./photo-upload";
@@ -162,6 +165,12 @@ export function AvatarMenu({ session, onPhotoChange }: AvatarMenuProps) {
               <PaletteIcon aria-hidden="true" />
               Apariencia
             </DropdownMenuItem>
+            {SOPORTE_ENABLED ? (
+              <DropdownMenuItem onClick={() => useSoporteDraft.getState().openReportar()}>
+                <LifeBuoyIcon aria-hidden="true" />
+                Reportar o sugerir
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuGroup>
           {links.length > 0 ? (
             <>

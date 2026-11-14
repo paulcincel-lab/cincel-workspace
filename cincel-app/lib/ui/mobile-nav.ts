@@ -42,6 +42,7 @@ const PAGE_TITLES: readonly { path: string; title: string }[] = [
   { path: "/personas", title: "Personas" },
   { path: "/biblioteca", title: "Biblioteca" },
   { path: "/asistente", title: "Asistente" },
+  { path: "/mejoras", title: "Mejoras" },
   { path: "/ajustes", title: "Ajustes" },
 ];
 

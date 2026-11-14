@@ -25,6 +25,10 @@ import { fetchContactsAction, createContactAction, mergeContactsAction } from "@
 import { fetchStaffAction } from "@/lib/actions/staff-actions";
 import { fetchWorkflowsAction } from "@/lib/actions/workflows-actions";
 import { createGithubIssue, isGithubConfigured } from "@/lib/github/client";
+import { createTicketAction } from "@/lib/actions/soporte-actions";
+import { SOPORTE_GITHUB_ENABLED } from "@/lib/soporte/flags";
+import { canManageSupport } from "@/lib/auth/permissions";
+import { TICKET_AREAS, TICKET_KINDS, type TicketArea } from "@/lib/types/soporte";
 import { loadOwnerMail } from "@/lib/assistant/owner-mail";
 import { buildDefinedTools } from "@/lib/assistant/tools/index";
 import type { AssistantContext } from "@/lib/types/redesign";
@@ -584,6 +588,38 @@ export const create_rfc = tool({
       .describe("Etiquetas adicionales de GitHub, además de 'rfc'"),
   }),
   execute: async ({ title, problem, proposal, alternatives, labels }) => {
+    if (SOPORTE_GITHUB_ENABLED) {
+      // Admin-only and never straight to GitHub: file the solicitud and hand
+      // it to the same redaction + review dialog as "Publicar en GitHub".
+      if (!canManageSupport(await requireCapabilityUser())) {
+        return { ok: false as const, error: "FORBIDDEN", message: "Solo quien administra el soporte puede registrar una RFC." };
+      }
+      const description = [
+        "Problema",
+        problem,
+        "",
+        "Propuesta",
+        proposal,
+        alternatives ? `\nAlternativas consideradas\n${alternatives}` : "",
+      ]
+        .filter((line) => line !== "")
+        .join("\n");
+      const created = await createTicketAction({
+        kind: "mejora",
+        title,
+        description,
+        steps: null,
+        context: assistantTicketContext("/asistente"),
+      });
+      if (!created.ok) return { ok: false as const, error: created.error, message: "No se pudo crear la solicitud." };
+      return {
+        ok: true as const,
+        id: created.data.id,
+        code: created.data.code,
+        publishTicketId: created.data.id,
+        note: "La solicitud quedó creada; revisa y publica en GitHub desde el diálogo de revisión.",
+      };
+    }
     if (!isGithubConfigured()) {
       return {
         ok: false as const,
@@ -614,6 +650,45 @@ export const create_rfc = tool({
     return { ok: true as const, number: issue.number, url: issue.url };
   },
 });
+
+/** Client context a solicitud filed from the asistente carries. */
+function assistantTicketContext(path: string) {
+  return { path, estilo: "asistente", theme: "asistente", viewport: "asistente", userAgent: "asistente" };
+}
+
+/** `create_ticket` for one request; `route` is the page the asistente is open on. */
+export function makeCreateTicket(route: string) {
+  return tool({
+    description:
+      "Registra una solicitud de soporte (error, mejora o pregunta) para el equipo de desarrollo. Úsalo cuando el usuario reporte un fallo, pida una mejora o tenga una duda sobre la app. Muestra el borrador y se crea al aplicar. No inventes el problema: si falta qué ocurrió (o los pasos, en un error), pregúntalo antes. Responde con el código y un enlace a Mis solicitudes.",
+    inputSchema: z.object({
+      kind: z.enum(TICKET_KINDS).describe("error = algo falla; mejora = una idea o cambio; pregunta = una duda"),
+      title: z.string().min(4).max(120).describe("Título corto"),
+      description: z.string().min(10).max(4000).describe("Qué ocurre o qué se pide, con las palabras del usuario"),
+      steps: z.string().max(4000).optional().describe("Pasos para reproducir; solo para errores"),
+      area: z.enum(TICKET_AREAS).optional().describe("Sección de la app donde ocurre (tareas, calendario, proyectos…)"),
+    }),
+    execute: async ({ kind, title, description, steps, area }) => {
+      const path = area ? `/${area satisfies TicketArea}` : route;
+      const created = await createTicketAction({
+        kind,
+        title,
+        description,
+        steps: kind === "error" ? (steps ?? null) : null,
+        context: assistantTicketContext(path),
+      });
+      if (!created.ok) {
+        return { ok: false as const, error: created.error, message: "No se pudo crear la solicitud." };
+      }
+      return {
+        ok: true as const,
+        id: created.data.id,
+        code: created.data.code,
+        url: "/ajustes/solicitudes",
+      };
+    },
+  });
+}
 
 export const find_duplicates = tool({
   description:
@@ -812,8 +887,9 @@ export const ASSISTANT_TOOLS = {
  * - assign_task              → canChangeResponsible
  * - create_client            → canCreateClient
  * - onboard_client           → canCreateClient AND canCreateActivity
- * - create_rfc               → canCreateActivity (same tier as create_task —
- *   RFCs are proposals, not destructive; gate is about "can write", not rank)
+ * - create_ticket            → every signed-in staff member (Soporte Phase 3)
+ * - create_rfc               → canManageSupport when Phase 3 is on (creates the
+ *   solicitud and opens the publish dialog); canCreateActivity before that
  * - find_duplicates          → canViewClients OR canViewActivities
  * - merge_duplicate_clients  → canDeleteClient
  * - merge_duplicate_activities → canDeleteActivity
@@ -836,7 +912,12 @@ export function buildAssistantTools(
     render_list,
   };
   if (activitiesCaps.canCreateActivity) tools.create_task = create_task;
-  if (activitiesCaps.canCreateActivity) tools.create_rfc = create_rfc;
+  if (SOPORTE_GITHUB_ENABLED) {
+    if (user) tools.create_ticket = makeCreateTicket(run?.context.route ?? "/asistente");
+    if (canManageSupport(user)) tools.create_rfc = create_rfc;
+  } else if (activitiesCaps.canCreateActivity) {
+    tools.create_rfc = create_rfc;
+  }
   if (activitiesCaps.canChangeResponsible) tools.assign_task = assign_task;
   if (clientsCaps.canCreateClient) tools.create_client = create_client;
   if (clientsCaps.canCreateClient && activitiesCaps.canCreateActivity) {

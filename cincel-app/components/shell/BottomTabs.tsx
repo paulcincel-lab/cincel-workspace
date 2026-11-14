@@ -81,7 +81,7 @@ function TabLink({ item, active }: { item: NavItem; active: boolean }) {
 export function BottomTabs({ activeKey, items: navItems, more: navMore }: BottomTabsProps) {
   const mobile = useMobileShell();
   const [moreOpen, setMoreOpen] = useState(false);
-  const badges = useNavBadges();
+  const badges = useNavBadges([...navItems, ...navMore]);
   const items = withNavBadges(navItems, badges);
   const more = withNavBadges(navMore, badges);
 

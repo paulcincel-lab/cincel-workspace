@@ -899,7 +899,12 @@ export function summarizeOnboardClient(input: unknown): string {
 
 export function summarizeCreateRfc(input: unknown): string {
   const title = text(input, "title");
-  return title ? `Registrar la RFC ${quoted(title)} en GitHub` : "Registrar una RFC en GitHub";
+  return title ? `Registrar la RFC ${quoted(title)}` : "Registrar una RFC";
+}
+
+export function summarizeCreateTicket(input: unknown): string {
+  const title = text(input, "title");
+  return title ? `Registrar la solicitud ${quoted(title)}` : "Registrar una solicitud de soporte";
 }
 
 export function summarizeMergeDuplicateClients(input: unknown): string {
@@ -927,6 +932,7 @@ Object.assign(toolSummaries, {
   create_client: summarizeCreateClient,
   onboard_client: summarizeOnboardClient,
   create_rfc: summarizeCreateRfc,
+  create_ticket: summarizeCreateTicket,
   merge_duplicate_clients: summarizeMergeDuplicateClients,
   merge_duplicate_activities: summarizeMergeDuplicateActivities,
   discard_project: summarizeDiscardProject,

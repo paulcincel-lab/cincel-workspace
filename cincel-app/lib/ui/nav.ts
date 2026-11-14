@@ -20,6 +20,7 @@ export type NavItemKey =
   | "personas"
   | "biblioteca"
   | "asistente"
+  | "mejoras"
   | "ajustes";
 
 export type NavItem = { key: NavItemKey; label: string; href: string; icon: LucideIcon; badge?: number };

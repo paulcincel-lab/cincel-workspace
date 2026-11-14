@@ -238,7 +238,13 @@ describe("CommandPalette actions group", () => {
   it("filters the actions by the query, accents ignored", async () => {
     renderPalette(true);
     const labels = () => within(actionsGroup()).getAllByRole("option").map((o) => o.textContent);
-    expect(labels()).toEqual(["Crear tarea", "Nuevo proyecto", "Nueva nota"]);
+    expect(labels()).toEqual([
+      "Crear tarea",
+      "Nuevo proyecto",
+      "Nueva nota",
+      "Reportar un problema",
+      "Sugerir una mejora",
+    ]);
 
     type("nota");
     await waitFor(() => expect(labels()).toEqual(["Nueva nota"]));
@@ -362,6 +368,8 @@ describe("CommandPalette helpers", () => {
       "crear-tarea",
       "nuevo-proyecto",
       "nueva-nota",
+      "reportar-problema",
+      "sugerir-mejora",
     ]);
     expect(visibleActionIds("entrada", { canAskAssistant: true, canClockIn: true })).toEqual(["registrar-entrada"]);
     expect(visibleActionIds("entrada", { canAskAssistant: true, canClockIn: false })).toEqual([]);

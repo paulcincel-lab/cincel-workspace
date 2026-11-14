@@ -196,6 +196,7 @@ export const LEGACY_CONFIRM_TOOLS: ReadonlySet<string> = new Set([
   "create_client",
   "onboard_client",
   "create_rfc",
+  "create_ticket",
   "merge_duplicate_clients",
   "merge_duplicate_activities",
   "discard_project",

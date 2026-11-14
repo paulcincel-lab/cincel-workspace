@@ -57,7 +57,11 @@ const TOOL_RULES: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     "create_rfc",
-    "create_rfc: pide al usuario el problema y la propuesta si no los dio, no los inventes; avisa que quedará visible para el equipo de desarrollo en GitHub.",
+    "create_rfc: pide al usuario el problema y la propuesta si no los dio, no los inventes; crea la solicitud y se abre la revisión para publicarla en GitHub, donde quedará visible para el equipo de desarrollo.",
+  ],
+  [
+    "create_ticket",
+    "create_ticket: si el usuario no dijo qué ocurre (o los pasos para reproducir un error), pregúntalo antes; nunca inventes el problema. Elige el tipo (error, mejora o pregunta) y la sección (area) según lo que cuente. Al terminar da el código y el enlace a Mis solicitudes.",
   ],
   [
     "merge_duplicate_clients",

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { type AnyPgColumn, check, index, integer, jsonb, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { TicketContext, TicketEventPayload } from "../../types/soporte";
 import {
+  bytea,
   core,
   stamps,
   supportEventType,
@@ -88,4 +89,21 @@ export const supportTicketAttachments = core.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("idx_support_ticket_attachments_ticket").on(t.ticketId)]
+);
+
+/**
+ * Bytes of a solicitud attachment (#1112), one row per attachment. The app has
+ * no object storage service, so private images live in Postgres like staff
+ * photos; the 5 MB cap keeps that acceptable. Only the authenticated route
+ * reads them.
+ */
+export const supportTicketAttachmentBlobs = core.table(
+  "support_ticket_attachment_blobs",
+  {
+    attachmentId: uuid("attachment_id")
+      .primaryKey()
+      .references(() => supportTicketAttachments.id, { onDelete: "cascade" }),
+    bytes: bytea("bytes").notNull(),
+  },
+  (t) => [check("support_ticket_attachment_blobs_size_check", sql`octet_length(${t.bytes}) <= 5242880`)]
 );

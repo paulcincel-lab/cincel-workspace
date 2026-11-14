@@ -30,6 +30,8 @@ describe("keysForToolParts", () => {
     ["mark_notifications_read", [["me", "notifications"], qk.me.notificationsSummary(), qk.shell.badges()]],
     ["schedule_digest", [qk.me.notificationPrefs(), qk.me.preferences()]],
     ["site_photo_log", [qk.proyectos.all]],
+    ["create_ticket", [qk.soporte.all, qk.mejoras.all]],
+    ["create_rfc", [qk.soporte.all, qk.mejoras.all]],
     [
       "discard_project",
       [qk.proyectos.all, qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks(), qk.catalog.projectOptions(), qk.me.today()],

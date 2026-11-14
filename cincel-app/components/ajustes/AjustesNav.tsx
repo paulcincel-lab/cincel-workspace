@@ -18,10 +18,11 @@ import {
   type AjustesAdminSegment,
   type AjustesVisibleSegments,
 } from "@/lib/auth/ajustes-segments";
+import { SOPORTE_ENABLED } from "@/lib/soporte/flags";
 import { cn } from "@/lib/utils";
 
 export type AjustesNavKey =
-  | "perfil" | "apariencia" | "notificaciones" | "integraciones"
+  | "perfil" | "apariencia" | "notificaciones" | "integraciones" | "solicitudes"
   | "general" | "tema" | "horario" | "etapas" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
 
 export type AjustesNavProps = {
@@ -43,6 +44,7 @@ const PERSONAL_ITEMS: ReadonlyArray<{ key: PersonalKey; label: string }> = [
   { key: "apariencia", label: "Apariencia" },
   { key: "notificaciones", label: "Notificaciones" },
   { key: "integraciones", label: "Gmail, calendario y Cutto" },
+  ...(SOPORTE_ENABLED ? [{ key: "solicitudes" as const, label: "Mis solicitudes" }] : []),
 ];
 
 const ORGANIZATION_ITEMS: ReadonlyArray<{ key: AjustesAdminSegment; label: string }> = [
