@@ -21,6 +21,8 @@ import {
   resolveWorkflowsCapabilitiesFromDefaults,
   type WorkflowsCapabilities,
   resolvePortalCapabilitiesFromDefaults,
+  resolveSupportCapabilitiesFromDefaults,
+  type SupportCapabilities,
   type PortalCapabilities,
 } from "@/lib/auth/permissions";
 
@@ -516,5 +518,20 @@ export const PERMISSIONS_MODULES_REGISTRY = ([
       },
     ],
     isEnabled: (values) => values.manageAccess === true || values.disableUsers === true,
+  },
+  {
+    id: "support",
+    name: "Soporte",
+    order: 12,
+    resolver: resolveSupportCapabilitiesFromDefaults,
+    actions: [
+      {
+        id: "canManageSupport",
+        label: "Gestionar solicitudes en Mejoras",
+        type: "boolean",
+        getValue: (capabilities) => (capabilities as SupportCapabilities).canManageSupport,
+      },
+    ],
+    isEnabled: (values) => values.canManageSupport === true,
   },
 ] satisfies PermissionsModuleDefinition[]).sort((a, b) => a.order - b.order);

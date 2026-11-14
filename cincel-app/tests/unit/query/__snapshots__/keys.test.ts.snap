@@ -325,6 +325,21 @@ exports[`qk > builds every key shape 1`] = `
     "week-hours",
     "2026-11-02",
   ],
+  "mejoras.all": [
+    "mejoras",
+  ],
+  "mejoras.counts": [
+    "mejoras",
+    "counts",
+  ],
+  "mejoras.list": [
+    "mejoras",
+    "list",
+    {
+      "kind": "error",
+      "unassigned": true,
+    },
+  ],
   "monday.choices": [
     "monday",
     "choices",
@@ -522,6 +537,21 @@ exports[`qk > builds every key shape 1`] = `
   "shell.badges": [
     "shell",
     "badges",
+  ],
+  "soporte.all": [
+    "soporte",
+  ],
+  "soporte.mine": [
+    "soporte",
+    "mine",
+    {
+      "status": "abiertas",
+    },
+  ],
+  "soporte.ticket": [
+    "soporte",
+    "ticket",
+    "t1",
   ],
   "tareas.all": [
     "tareas",
@@ -774,6 +804,12 @@ exports[`qk > covers every key of the factory 1`] = `
   "calendario.proposal",
   "calendario.workday",
   "calendario.dayRange",
+  "soporte.all",
+  "soporte.mine",
+  "soporte.ticket",
+  "mejoras.all",
+  "mejoras.list",
+  "mejoras.counts",
   "portal.projects",
   "portal.project",
   "portal.files",

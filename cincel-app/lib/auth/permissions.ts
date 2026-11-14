@@ -137,6 +137,15 @@ export type WorkflowsCapabilities = {
 };
 
 /**
+ * Soporte: the Mejoras view and the triage of solicitudes. Stored under module
+ * id "support" (`support.canManageSupport`). Administrador by default; a puesto
+ * can be granted it in Ajustes › Permisos.
+ */
+export type SupportCapabilities = {
+  canManageSupport: boolean;
+};
+
+/**
  * Client portal access (BE §B.5). Stored under module id "portal", so the keys
  * read as `portal.manageAccess` / `portal.disableUsers`. Defaults per BE §0.3,
  * still pending client confirmation.
@@ -798,6 +807,10 @@ const WORKFLOWS_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, WorkflowsCapabili
   ])
 ) as Record<SystemAccessRole, WorkflowsCapabilities>;
 
+const SUPPORT_CAPABILITIES_BY_ROLE: Record<SystemAccessRole, SupportCapabilities> = Object.fromEntries(
+  SYSTEM_ACCESS_ROLES.map((role) => [role, { canManageSupport: role === "Administrador" }])
+) as Record<SystemAccessRole, SupportCapabilities>;
+
 const PORTAL_MANAGE_ACCESS_ROLES: readonly SystemAccessRole[] = [
   "Administrador",
   "Dirección",
@@ -1013,6 +1026,19 @@ export function resolvePositionsCapabilities(user: AuthenticatedUser | null): Po
 
 export function resolveWorkflowsCapabilities(user: AuthenticatedUser | null): WorkflowsCapabilities {
   return withOverrides(resolveWorkflowsCapabilitiesFromDefaults(user), user, ["workflows"]);
+}
+
+export function resolveSupportCapabilitiesFromDefaults(user: AuthenticatedUser | null): SupportCapabilities {
+  return SUPPORT_CAPABILITIES_BY_ROLE[resolveAccess(user)];
+}
+
+export function resolveSupportCapabilities(user: AuthenticatedUser | null): SupportCapabilities {
+  return withOverrides(resolveSupportCapabilitiesFromDefaults(user), user, ["support"]);
+}
+
+/** Whether the user can triage solicitudes in Mejoras (Administrador by default, grantable to a puesto). */
+export function canManageSupport(user: AuthenticatedUser | null): boolean {
+  return resolveSupportCapabilities(user).canManageSupport;
 }
 
 export function resolvePortalCapabilitiesFromDefaults(user: AuthenticatedUser | null): PortalCapabilities {

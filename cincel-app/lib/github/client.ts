@@ -55,3 +55,19 @@ export async function createGithubIssue(
   const data = (await res.json()) as { number: number; html_url: string };
   return { number: data.number, url: data.html_url };
 }
+
+export type GithubIssueState = {
+  number: number;
+  state: "open" | "closed";
+  stateReason: "completed" | "not_planned" | "reopened" | null;
+  labels: string[];
+  /** A linked pull request is open. */
+  hasOpenPullRequest: boolean;
+  /** A linked pull request was merged. */
+  hasMergedPullRequest: boolean;
+};
+
+/** Reads one issue for the Soporte status sync (stub: #1117 implements it). */
+export async function getGithubIssue(_number: number): Promise<GithubIssueState | null> {
+  throw new Error("not implemented: getGithubIssue");
+}
