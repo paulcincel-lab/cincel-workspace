@@ -20,6 +20,7 @@ import type { TareasMostrar } from "@/lib/tareas/query";
 import type { TaskSortColumn, TaskSortDir } from "@/lib/tareas/sort";
 import type { CalView, CalendarioFilters } from "@/lib/types/calendario";
 import type { TaskStatus } from "@/lib/types/core";
+import type { TicketFilters } from "@/lib/types/soporte";
 import type { PresentationStyle } from "@/lib/types/redesign";
 
 /** The filters every Tareas view shares (the URL filters). */
@@ -231,6 +232,18 @@ export const qk = {
     proposal: (id: string) => ["calendario", "proposals", id] as const,
     workday: () => ["calendario", "workday"] as const,
     dayRange: () => ["calendario", "day-range"] as const,
+  },
+  /** Soporte: the user's own solicitudes. `mine(filters)` never carries the cursor (the page param). */
+  soporte: {
+    all: ["soporte"] as const,
+    mine: (filters: TicketFilters) => ["soporte", "mine", filters] as const,
+    ticket: (id: string) => ["soporte", "ticket", id] as const,
+  },
+  /** Mejoras (admin): every solicitud and the counts for the nav badge. */
+  mejoras: {
+    all: ["mejoras"] as const,
+    list: (filters: TicketFilters) => ["mejoras", "list", filters] as const,
+    counts: () => ["mejoras", "counts"] as const,
   },
   portal: {
     projects: () => ["portal", "projects"] as const,

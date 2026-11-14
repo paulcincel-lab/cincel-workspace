@@ -8,3 +8,4 @@ import "./auto-close-jornadas";
 import "./calendar-events-refresh";
 import "./calendar-meetings-resync";
 import "./proposals-expire";
+import "./support-github-sync";

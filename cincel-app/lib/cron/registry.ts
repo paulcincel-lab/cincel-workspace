@@ -15,6 +15,7 @@ export const CRON_JOB_NAMES = [
   "calendar-events-refresh",
   "calendar-meetings-resync",
   "proposals-expire",
+  "support-github-sync",
 ] as const;
 export type CronJobName = (typeof CRON_JOB_NAMES)[number];
 

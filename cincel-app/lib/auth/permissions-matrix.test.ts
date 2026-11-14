@@ -37,6 +37,7 @@ const ENFORCED: Record<string, (user: AuthenticatedUser | null) => unknown> = {
   taskStatuses: permissions.resolveTaskStatusesCapabilities,
   workflows: permissions.resolveWorkflowsCapabilities,
   portal: permissions.resolvePortalCapabilities,
+  support: permissions.resolveSupportCapabilities,
 };
 
 const DEFAULTS = buildDefaultPermissionsState();

@@ -80,6 +80,29 @@ export const notificationKind = core.enum("notification_kind", [
   // Calendario (BE §3.1): an invitation to a meeting or a change to one.
   "reunion",
 ]);
+// Soporte (plan soporte-milestones): solicitudes and their events.
+export const supportTicketKind = core.enum("support_ticket_kind", ["error", "mejora", "pregunta"]);
+export const supportTicketStatus = core.enum("support_ticket_status", [
+  "nuevo",
+  "en_revision",
+  "planeado",
+  "en_progreso",
+  "resuelto",
+  "descartado",
+]);
+export const supportTicketPriority = core.enum("support_ticket_priority", ["baja", "media", "alta"]);
+export const supportEventType = core.enum("support_event_type", [
+  "created",
+  "status",
+  "priority",
+  "assignee",
+  "reply",
+  "note",
+  "published",
+  "synced",
+  "duplicate",
+]);
+export const supportEventVisibility = core.enum("support_event_visibility", ["public", "internal"]);
 export const noteColor = core.enum("note_color", ["neutral", "blue", "amber", "violet", "cyan"]);
 export const reminderRepeat = core.enum("reminder_repeat", ["none", "daily", "weekly", "monthly"]);
 export const timeEntrySource = core.enum("time_entry_source", ["sidebar", "login", "assistant", "auto_close"]);
