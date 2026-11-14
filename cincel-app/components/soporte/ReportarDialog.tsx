@@ -1,10 +1,12 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { AttachmentPicker } from "@/components/soporte/AttachmentPicker";
 import { Button } from "@/components/ui/shadcn/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/shadcn/dialog";
 import { FormField } from "@/components/ui/shadcn/form-field";
@@ -15,6 +17,7 @@ import { Textarea } from "@/components/ui/shadcn/textarea";
 import { createTicketAction } from "@/lib/actions/soporte-actions";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
+import { uploadTicketAttachments } from "@/lib/soporte/attachments-client";
 import { SOPORTE_ENABLED } from "@/lib/soporte/flags";
 import {
   DESCRIPTION_LABEL,
@@ -67,6 +70,7 @@ export function ReportarDialog({ open, onOpenChange, prefill }: ReportarDialogPr
 
 function ReportarForm({ onDone }: { onDone: () => void }) {
   const router = useRouter();
+  const qc = useQueryClient();
   const draft = useSoporteDraft((s) => s.draft);
   const patchDraft = useSoporteDraft((s) => s.patchDraft);
   const clearDraft = useSoporteDraft((s) => s.clearDraft);
@@ -75,6 +79,9 @@ function ReportarForm({ onDone }: { onDone: () => void }) {
   const [touched, setTouched] = useState<{ title: boolean; description: boolean }>({ title: false, description: false });
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Images stay in the form (a `File` is not draft text): they upload once the solicitud exists.
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const create = useActionMutation(createTicketAction, {
     invalidate: [qk.soporte.all],
@@ -99,12 +106,27 @@ function ReportarForm({ onDone }: { onDone: () => void }) {
         context: captureClientContext(),
       },
       {
-        onSuccess: (ticket) => {
+        onSuccess: async (ticket) => {
           clearDraft();
+          // The solicitud exists already: a failed image never undoes it, it is reported.
+          let failed: { name: string; error: string }[] = [];
+          if (files.length > 0) {
+            setUploading(true);
+            try {
+              failed = (await uploadTicketAttachments(ticket.id, files)).failed;
+            } catch {
+              failed = files.map((file) => ({ name: file.name, error: "No se pudo subir la imagen." }));
+            }
+            await qc.invalidateQueries({ queryKey: qk.soporte.all });
+            setUploading(false);
+          }
           onDone();
           toast.success(`Solicitud ${ticket.code} enviada.`, {
             action: { label: "Ver", onClick: () => router.push(MIS_SOLICITUDES_HREF) },
           });
+          if (failed.length > 0) {
+            toast.error(`No se subieron ${failed.length} imagen(es): ${failed.map((f) => `${f.name || "Imagen"} (${f.error})`).join(", ")}`);
+          }
         },
       },
     );
@@ -177,6 +199,8 @@ function ReportarForm({ onDone }: { onDone: () => void }) {
         </FormField>
       ) : null}
 
+      <AttachmentPicker files={files} onChange={setFiles} disabled={create.isPending || uploading} />
+
       <div data-slot="reportar-context" className="text-xs text-muted-foreground">
         <button
           type="button"
@@ -210,8 +234,8 @@ function ReportarForm({ onDone }: { onDone: () => void }) {
         <Button type="button" variant="outline" onClick={onDone}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={create.isPending}>
-          {create.isPending ? "Enviando…" : "Enviar"}
+        <Button type="submit" disabled={create.isPending || uploading}>
+          {create.isPending || uploading ? "Enviando…" : "Enviar"}
         </Button>
       </DialogFooter>
     </form>

@@ -1056,7 +1056,7 @@ function BandejaRow({ item, now, onOpen }: { item: NotificationItem; now: Date; 
     </>
   );
   const className = `lift flex min-w-0 items-center gap-3 rounded-md border px-3 py-2.5 text-left ${
-    unread ? "border-secondary bg-sidebar" : "border-transparent"
+    unread ? "border-secondary bg-muted" : "border-transparent"
   }`;
   if (item.url) {
     return (

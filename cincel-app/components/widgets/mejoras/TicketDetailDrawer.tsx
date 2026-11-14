@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { AttachmentThumbs } from "@/components/soporte/AttachmentThumbs";
 import { TicketTimeline } from "@/components/soporte/TicketTimeline";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { Button } from "@/components/ui/shadcn/button";
@@ -352,20 +353,7 @@ function DrawerBody({ ticket }: { ticket: TicketDetail }) {
             <h3 id="ticket-attachments" className="text-xs font-semibold text-muted-foreground">
               Adjuntos
             </h3>
-            <ul className="flex flex-wrap gap-2">
-              {ticket.attachments.map((a) => (
-                <li key={a.id}>
-                  <a
-                    href={`/api/soporte/adjuntos/${a.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center rounded-md border px-2 py-1 text-xs underline-offset-2 hover:underline"
-                  >
-                    {a.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <AttachmentThumbs attachments={ticket.attachments} />
           </section>
         ) : null}
 

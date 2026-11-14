@@ -260,7 +260,7 @@ function GroupHeaderRow({ group, expanded, onToggle }: GroupHeaderProps) {
   const load = metric("carga");
   return (
     <tr id={`a-${group.id}`} className="scroll-mt-4">
-      <td colSpan={COLUMN_COUNT} className="border-b border-border bg-sidebar p-0">
+      <td colSpan={COLUMN_COUNT} className="border-b border-border bg-muted p-0">
         <button
           type="button"
           aria-expanded={expanded}
@@ -367,8 +367,8 @@ function PersonTableRow({ person, today, expanded, controls, onToggle }: PersonR
 function ProjectTableRow({ id, project, newCount }: { id: string; project: PersonProjectLoad; newCount: number }) {
   const color = project.etapa ? etapaColorVar(project.etapa) : undefined;
   return (
-    <tr id={id} className={cn("bg-sidebar", newCount > 0 && "row-new")}>
-      <td className={cn(TD, "sticky left-0 z-[1] bg-sidebar pl-10")}>
+    <tr id={id} className={cn("bg-muted", newCount > 0 && "row-new")}>
+      <td className={cn(TD, "sticky left-0 z-[1] bg-muted pl-10")}>
         <span className="flex items-center gap-2">
           <Dot color={color} />
           <span title={project.name} className="max-w-[240px] truncate">

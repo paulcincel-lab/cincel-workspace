@@ -90,7 +90,7 @@ function NavItem({ href, label, active }: { href: string; label: string; active:
         className={cn(
           "flex items-center rounded-[10px] px-2.5 py-[7px] text-[13.5px] transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          active ? "bg-secondary font-medium text-secondary-foreground" : "text-sidebar-foreground hover:bg-muted",
+          active ? "bg-secondary font-medium text-secondary-foreground" : "text-foreground hover:bg-muted",
         )}
       >
         <span className="truncate">{label}</span>

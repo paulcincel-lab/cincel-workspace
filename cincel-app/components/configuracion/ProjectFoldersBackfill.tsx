@@ -79,7 +79,7 @@ export function ProjectFoldersBackfill({ sharedDriveConfigured = true, bare = fa
 
       <div className="space-y-2">
         {folderCounts ? (
-          <p className="text-[13px] text-sidebar-foreground">
+          <p className="text-[13px] text-muted-foreground">
             <strong className="font-semibold text-foreground">{folderCounts.withoutFolder}</strong>{" "}
             {projectsWithoutFolderText(folderCounts.withoutFolder)} · {folderCounts.withFolder} con carpeta en la unidad
             compartida

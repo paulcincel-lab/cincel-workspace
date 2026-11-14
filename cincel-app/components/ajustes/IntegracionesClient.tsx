@@ -178,7 +178,7 @@ function ScopeChips({ scopes, label }: { scopes: readonly string[]; label: strin
   return (
     <ul aria-label={label} className="flex flex-wrap gap-1.5">
       {scopes.map((scope) => (
-        <li key={scope} className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11.5px] text-sidebar-foreground">
+        <li key={scope} className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11.5px] text-muted-foreground">
           {scope}
         </li>
       ))}
@@ -312,7 +312,7 @@ export function IntegracionesGmail() {
           </ActionsRow>
         ) : null}
         {gmail.connected ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-sidebar-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-muted-foreground">
             {accountEmail ? <span>{accountEmail}</span> : null}
             <span className="font-mono">{lastSync}</span>
             <ScopeChips scopes={GMAIL_SCOPES} label="Permisos de Gmail" />
@@ -413,7 +413,7 @@ export function IntegracionesGoogleDrive() {
         {!drive.configured ? (
           <p className="text-sm text-muted-foreground">{GOOGLE_UNAVAILABLE_COPY}</p>
         ) : connected ? (
-          accountEmail ? <p className="text-[12.5px] text-sidebar-foreground">{accountEmail}</p> : null
+          accountEmail ? <p className="text-[12.5px] text-muted-foreground">{accountEmail}</p> : null
         ) : (
           <>
             <ActionsRow>
@@ -422,7 +422,7 @@ export function IntegracionesGoogleDrive() {
               </a>
             </ActionsRow>
             <p className="text-[12.5px] text-muted-foreground">{DRIVE_NOT_CONNECTED_COPY}</p>
-            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-sidebar-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted-foreground">
               <span>Permiso que pedirá:</span>
               <ScopeChips scopes={[DRIVE_SCOPE]} label="Permisos de Google Drive" />
             </div>

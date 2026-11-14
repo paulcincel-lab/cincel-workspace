@@ -243,7 +243,7 @@ export function CalendarFeedLinkSection({ open = true }: { open?: boolean }) {
                 readOnly
                 value={feedUrl ?? ""}
                 placeholder="Regenera el enlace para verlo de nuevo"
-                className="min-w-0 flex-1 bg-muted font-mono text-sidebar-foreground"
+                className="min-w-0 flex-1 bg-muted font-mono text-muted-foreground"
                 onFocus={(event) => event.currentTarget.select()}
               />
               <Button disabled={busy || !feedUrl} onClick={() => void copy()}>

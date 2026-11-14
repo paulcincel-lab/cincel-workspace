@@ -665,7 +665,7 @@ function QuickAssign({ person, people, today, canAssign, onCreated }: QuickAssig
 
   return (
     <div className="flex flex-col gap-2" onKeyDownCapture={onKeyDownCapture}>
-      <div className="mx-3.5 mt-2.5 mb-3.5 flex items-center gap-2 rounded-md border border-secondary bg-sidebar px-3 py-2.5">
+      <div className="mx-3.5 mt-2.5 mb-3.5 flex items-center gap-2 rounded-md border border-secondary bg-muted px-3 py-2.5">
         <div className="min-w-0 flex-1">
           <QuickAddRow
             variant="row"

@@ -80,7 +80,7 @@ export function SuggestionCards({ items, onSend, onMore, disabled = false }: Sug
         <button
           type="button"
           onClick={onMore}
-          className="inline-flex min-h-full items-center gap-1.5 rounded-xl border border-dashed border-[color-mix(in_srgb,var(--border-strong)_45%,transparent)] bg-transparent px-3.5 text-[12.5px] font-medium whitespace-nowrap text-sidebar-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="inline-flex min-h-full items-center gap-1.5 rounded-xl border border-dashed border-[color-mix(in_srgb,var(--border-strong)_45%,transparent)] bg-transparent px-3.5 text-[12.5px] font-medium whitespace-nowrap text-muted-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <SparklesIcon aria-hidden className="size-3.5" />
           Más ideas

@@ -161,8 +161,8 @@ function Field({
   );
 }
 
-/** Read-only inputs: `--muted` background, `--sidebar-foreground` text. */
-const READ_ONLY_INPUT_CLASS = "bg-muted text-sidebar-foreground";
+/** Read-only inputs: `--muted` background, `--muted-foreground` text. */
+const READ_ONLY_INPUT_CLASS = "bg-muted text-muted-foreground";
 
 /** Two-column field grid (one column below 640 px), gap 14 × 16 px. */
 const FIELD_GRID_CLASS = "grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2";
@@ -478,7 +478,7 @@ export function PerfilHorasSemana() {
               <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-muted">
                 <span className="grow-x block h-full rounded-full bg-primary" style={{ width: `${ratio * 100}%` }} />
               </span>
-              <span className="font-mono text-[11.5px] text-sidebar-foreground">{formatDayLine(day)}</span>
+              <span className="font-mono text-[11.5px] text-muted-foreground">{formatDayLine(day)}</span>
             </li>
           );
         })}

@@ -17,7 +17,7 @@ export function AdminPageHeading({ title, description, children }: { title: stri
     <div data-slot="admin-page-heading" className="flex flex-col gap-1">
       <h2 className="flex flex-wrap items-center gap-2 text-xl font-semibold text-foreground">
         {title}
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-sidebar-foreground">Admin</span>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">Admin</span>
       </h2>
       <p className="text-[13.5px] text-muted-foreground">{description}</p>
       {children}
@@ -61,11 +61,11 @@ export function errorId(id: string): string {
   return `${id}-error`;
 }
 
-/** Label 13 px / 500 (`--sidebar-foreground`), gap 6 px, the control, hint 12 px and the error under it. */
+/** Label 13 px / 500 (`--muted-foreground`), gap 6 px, the control, hint 12 px and the error under it. */
 export function Field({ htmlFor, label, hint, error, full = false, children }: FieldProps) {
   return (
     <div data-slot="field" className={cn("flex min-w-0 flex-col gap-1.5", full && "sm:col-span-full")}>
-      <Label htmlFor={htmlFor} className="text-[13px] font-medium text-sidebar-foreground">
+      <Label htmlFor={htmlFor} className="text-[13px] font-medium text-foreground">
         {label}
       </Label>
       {children}
@@ -86,11 +86,11 @@ export function Field({ htmlFor, label, hint, error, full = false, children }: F
 export type PillTone = "neutral" | "success" | "warning" | "destructive" | "outline";
 
 const PILL_TONE: Record<PillTone, string> = {
-  neutral: "bg-muted text-sidebar-foreground",
+  neutral: "bg-muted text-muted-foreground",
   success: "bg-tint-success text-success",
   warning: "bg-tint-warning text-warning-ink",
   destructive: "bg-tint-destructive text-destructive",
-  outline: "border border-border text-sidebar-foreground",
+  outline: "border border-border text-muted-foreground",
 };
 
 /** Status pill: 12.5 px / 500, radius 999, tinted by tone. */
@@ -110,12 +110,12 @@ export function TonePill({ tone, children, className }: { tone: PillTone; childr
   );
 }
 
-/** Inset option row (`.row`): padding 12 × 14 px, radius 10 px, `--sidebar` background; wraps on narrow screens. */
+/** Inset option row (`.row`): padding 12 × 14 px, radius 10 px, `--muted` background; wraps on narrow screens. */
 export function InsetRow({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
       data-slot="inset-row"
-      className={cn("flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-sidebar px-3.5 py-3", className)}
+      className={cn("flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-muted px-3.5 py-3", className)}
     >
       {children}
     </div>

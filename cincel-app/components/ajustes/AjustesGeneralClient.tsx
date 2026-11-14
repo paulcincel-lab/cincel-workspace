@@ -96,7 +96,7 @@ function LogoField({
         {src ? <Image src={src} alt="" width={64} height={64} unoptimized className="max-h-12 w-auto object-contain" /> : null}
       </div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <Label htmlFor={id} className="text-[13px] font-medium text-sidebar-foreground">
+        <Label htmlFor={id} className="text-[13px] font-medium text-foreground">
           {title}
         </Label>
         <p id={hintId(id)} className="text-xs text-muted-foreground">
@@ -306,7 +306,7 @@ function AjustesGeneralForm({ children }: { children?: ReactNode }) {
           </Field>
         </FieldGrid>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Label htmlFor="general-showVersion" className="text-[13px] font-medium text-sidebar-foreground">
+          <Label htmlFor="general-showVersion" className="text-[13px] font-medium text-foreground">
             Mostrar versión en la interfaz
           </Label>
           <Switch

@@ -193,7 +193,7 @@ export function AssistantComposer({
               <button
                 type="button"
                 onClick={onCommands}
-                className="inline-flex h-7 items-center rounded-lg border border-border bg-sidebar px-2.5 font-mono text-xs font-medium text-sidebar-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="inline-flex h-7 items-center rounded-lg border border-border bg-muted px-2.5 font-mono text-xs font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 / comandos
               </button>
@@ -203,7 +203,7 @@ export function AssistantComposer({
                 key={`${chip.kind}-${chip.id}`}
                 className={cn(
                   "inline-flex h-7 max-w-56 items-center gap-1.5 rounded-full pr-1.5 pl-2.5 text-xs font-medium",
-                  chip.kind === "project" ? "bg-secondary text-secondary-foreground" : "bg-muted text-sidebar-foreground",
+                  chip.kind === "project" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground",
                 )}
               >
                 {chip.etapa ? (
