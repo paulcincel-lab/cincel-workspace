@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 
+import { useUrlSearch } from "@/components/mejoras/use-url-search";
 import { KpiStrip, type KpiStripItem } from "@/components/widgets/KpiStrip";
 import { MejorasAnalitico } from "@/components/widgets/mejoras/MejorasAnalitico";
 import { MejorasEsencial } from "@/components/widgets/mejoras/MejorasEsencial";
@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/widgets/PageHeader";
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
 import { mejorasCountsOptions } from "@/lib/query/options/soporte";
 import { formatFirstResponse, inProgressCount, mejorasFilterParams, parseMejorasFilters } from "@/lib/soporte/mejoras-triage";
+import { readParam } from "@/lib/soporte/mejoras-url";
 import type { MejorasCounts, TicketFilters } from "@/lib/types/soporte";
 
 export const MEJORAS_TITLE = "Mejoras";
@@ -31,19 +32,6 @@ export function mejorasStats(counts: MejorasCounts | undefined): KpiStripItem[] 
   ];
 }
 
-/**
- * Rewrites the query of the URL with `history.replaceState` (no new history
- * entry, no server render); the App Router mirrors it into `useSearchParams`.
- * `set` keys with a value are written, the others removed.
- */
-function replaceQuery(mutate: (params: URLSearchParams) => void): void {
-  if (typeof window === "undefined") return;
-  const params = new URLSearchParams(window.location.search);
-  mutate(params);
-  const search = params.toString();
-  window.history.replaceState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`);
-}
-
 const FILTER_PARAM_NAMES = ["estado", "tipo", "area", "prioridad", "asignado", "autor", "q"] as const;
 
 /**
@@ -54,20 +42,23 @@ const FILTER_PARAM_NAMES = ["estado", "tipo", "area", "prioridad", "asignado", "
  */
 export function MejorasClient() {
   const { data: counts, isPending } = useQuery(mejorasCountsOptions());
-  const searchParams = useSearchParams();
-  const queryString = searchParams?.toString() ?? "";
-  const filters = useMemo(() => parseMejorasFilters(new URLSearchParams(queryString)), [queryString]);
-  const code = searchParams?.get(SOLICITUD_PARAM) || null;
+  const { search, update, dismiss } = useUrlSearch();
+  const filters = useMemo(() => parseMejorasFilters(new URLSearchParams(search)), [search]);
+  const code = readParam(search, SOLICITUD_PARAM);
 
-  const onFiltersChange = useCallback((next: TicketFilters) => {
-    const written = mejorasFilterParams(next);
-    replaceQuery((params) => {
-      for (const name of FILTER_PARAM_NAMES) params.delete(name);
-      written.forEach((value, key) => params.set(key, value));
-    });
-  }, []);
-  const onOpen = useCallback((next: string) => replaceQuery((params) => params.set(SOLICITUD_PARAM, next)), []);
-  const onClose = useCallback(() => replaceQuery((params) => params.delete(SOLICITUD_PARAM)), []);
+  const onFiltersChange = useCallback(
+    (next: TicketFilters) => {
+      const written = mejorasFilterParams(next);
+      update((params) => {
+        for (const name of FILTER_PARAM_NAMES) params.delete(name);
+        written.forEach((value, key) => params.set(key, value));
+      }, "replace");
+    },
+    [update],
+  );
+  // Opening adds a history entry (Back closes the drawer); the URL stays shareable.
+  const onOpen = useCallback((next: string) => update((params) => params.set(SOLICITUD_PARAM, next), "push"), [update]);
+  const onClose = useCallback(() => dismiss(SOLICITUD_PARAM), [dismiss]);
 
   const view = { filters, onFiltersChange, onOpen };
   const header = (description: string) => <PageHeader title={MEJORAS_TITLE} description={description} />;
