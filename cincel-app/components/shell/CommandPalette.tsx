@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  BugIcon,
   ClockIcon,
+  LightbulbIcon,
   FileTextIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -35,7 +37,9 @@ import { STALE, qk } from "@/lib/query/keys";
 import { mutationErrorText } from "@/lib/query/mutation";
 import { meTodayOptions } from "@/lib/query/options/me";
 import { openAssistant, useAssistantUi } from "@/lib/stores/assistant-ui-store";
+import { SOPORTE_ENABLED } from "@/lib/soporte/flags";
 import { useShellUi } from "@/lib/stores/shell-ui-store";
+import { useSoporteDraft } from "@/lib/stores/soporte-draft";
 import type { SearchResult, SearchResultType } from "@/lib/types/redesign";
 
 import { useClockMutation } from "./use-clock-mutation";
@@ -72,7 +76,14 @@ export const RESULT_GROUPS: readonly { type: SearchResultType; heading: string; 
   { type: "nota", heading: "Notas", icon: StickyNoteIcon },
 ];
 
-export type PaletteActionId = "crear-tarea" | "nuevo-proyecto" | "nueva-nota" | "preguntar-asistente" | "registrar-entrada";
+export type PaletteActionId =
+  | "crear-tarea"
+  | "nuevo-proyecto"
+  | "nueva-nota"
+  | "preguntar-asistente"
+  | "registrar-entrada"
+  | "reportar-problema"
+  | "sugerir-mejora";
 
 type PaletteAction = { id: PaletteActionId; label: string; keywords: string[]; icon: LucideIcon };
 
@@ -82,6 +93,8 @@ const ACTIONS: readonly PaletteAction[] = [
   { id: "nueva-nota", label: "Nueva nota", keywords: ["crear nota", "apunte"], icon: NotebookPenIcon },
   { id: "preguntar-asistente", label: "Preguntar al asistente", keywords: ["cincel", "ayuda", "chat"], icon: SparklesIcon },
   { id: "registrar-entrada", label: "Registrar entrada", keywords: ["jornada", "horario", "checar"], icon: ClockIcon },
+  { id: "reportar-problema", label: "Reportar un problema", keywords: ["error", "falla", "bug", "soporte"], icon: BugIcon },
+  { id: "sugerir-mejora", label: "Sugerir una mejora", keywords: ["idea", "propuesta", "soporte"], icon: LightbulbIcon },
 ];
 
 const ACTION_URLS: Partial<Record<PaletteActionId, string>> = {
@@ -104,6 +117,7 @@ export function visibleActionIds(
   return ACTIONS.filter((action) => {
     if (action.id === "preguntar-asistente" && !opts.canAskAssistant) return false;
     if (action.id === "registrar-entrada" && !opts.canClockIn) return false;
+    if ((action.id === "reportar-problema" || action.id === "sugerir-mejora") && !SOPORTE_ENABLED) return false;
     if (!q) return true;
     return [action.label, ...action.keywords].some((text) => normalizeForMatch(text).includes(q));
   }).map((action) => action.id);
@@ -247,6 +261,11 @@ export function CommandPalette() {
     if (id === "preguntar-asistente") {
       close();
       openAssistant();
+      return;
+    }
+    if (id === "reportar-problema" || id === "sugerir-mejora") {
+      close();
+      useSoporteDraft.getState().openReportar({ kind: id === "reportar-problema" ? "error" : "mejora" });
       return;
     }
     if (id === "registrar-entrada") clockIn();

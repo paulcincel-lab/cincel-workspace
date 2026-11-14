@@ -118,6 +118,7 @@ describe("AvatarMenu", () => {
     expect(itemLabels()).toEqual([
       "Perfil",
       "Apariencia",
+      "Reportar o sugerir",
       "Instagram",
       "Sitio web",
       "Correo",

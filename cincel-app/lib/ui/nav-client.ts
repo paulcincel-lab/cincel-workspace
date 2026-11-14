@@ -10,6 +10,7 @@ import {
   Folder,
   House,
   Inbox,
+  Lightbulb,
   SlidersHorizontal,
   Sparkles,
   SquareCheck,
@@ -30,6 +31,7 @@ export const NAV_ICONS: Record<NavItemKey, LucideIcon> = {
   personas: Users,
   biblioteca: BookOpen,
   asistente: Sparkles,
+  mejoras: Lightbulb,
   ajustes: SlidersHorizontal,
 };
 
@@ -43,6 +45,7 @@ export const NAV_LABELS: Record<NavItemKey, string> = {
   personas: "Personas",
   biblioteca: "Biblioteca",
   asistente: "Asistente",
+  mejoras: "Mejoras",
   ajustes: "Ajustes",
 };
 

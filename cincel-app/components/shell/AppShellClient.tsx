@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 
+import { ReportarDialogHost } from "@/components/soporte/ReportarDialog";
 import { NewTaskDialogHost } from "@/components/tareas/NewTaskDialogHost";
 import { SidebarInset, SidebarProvider } from "@/components/ui/shadcn/sidebar";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
@@ -79,6 +80,7 @@ export function AppShellClient({ children, nav: clientNav, session, today, slots
       <BottomTabs activeKey={activeKey} items={tabs.items} more={tabs.more} />
       {showSearch ? <CommandPalette /> : null}
       <NewTaskDialogHost />
+      <ReportarDialogHost />
       <UiStoresHydrator />
     </SidebarProvider>
   );

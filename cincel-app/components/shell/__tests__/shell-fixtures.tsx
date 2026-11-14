@@ -30,6 +30,7 @@ const HREFS: Record<NavItemKey, string> = {
   personas: "/personas",
   biblioteca: "/biblioteca",
   asistente: "/asistente",
+  mejoras: "/mejoras",
   ajustes: "/ajustes",
 };
 

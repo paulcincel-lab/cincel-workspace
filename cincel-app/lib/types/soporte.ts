@@ -190,6 +190,10 @@ export type MejorasCounts = {
   byStatus: Record<TicketStatus, number>;
   nuevo: number;
   total: number;
+  /** Solicitudes resolved in the current month (header stat of Mejoras). */
+  resolvedThisMonth?: number;
+  /** Mean hours from creation to the first public reply or status change; null while there is none. */
+  firstResponseHours?: number | null;
 };
 
 /** `updateTicketAction` patch; `message` is the public text required to close as `descartado`. */
@@ -202,4 +206,24 @@ export type TicketPatch = {
 
 export type TicketMessageInput = { text: string; visibility: TicketVisibility };
 
-export type PublishTicketInput = { title: string; body: string; labels: string[] };
+export type PublishTicketInput = {
+  title: string;
+  body: string;
+  labels: string[];
+  /** The admin ticked "Sin nombres de clientes, personas, correos ni datos internos"; the action refuses without it. */
+  confirmedRedaction?: boolean;
+};
+
+/** What "Publicar en GitHub…" shows: the redacted template and whether publishing is possible. */
+export type PublishDraftData = {
+  code: string;
+  title: string;
+  body: string;
+  labels: string[];
+  /** The redaction changed something in the draft. */
+  redacted: boolean;
+  /** `GITHUB_PAT` and `GITHUB_REPO` are set. */
+  configured: boolean;
+  /** Set when the solicitud already has an issue. */
+  published: { number: number; url: string } | null;
+};

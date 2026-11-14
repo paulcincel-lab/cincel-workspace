@@ -3,10 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { mejorasCountsOptions } from "@/lib/query/options/soporte";
 import { shellBadgesOptions } from "@/lib/query/options/shell";
 import { useDueReminderCount } from "@/lib/shell/sidebar-slots/bandeja-badge-view";
 import type { ShellBadges } from "@/lib/types/shell";
 import type { NavItem, NavItemKey } from "@/lib/ui/nav";
+
+/** The poll of the Mejoras count, like the shell badges. */
+const MEJORAS_POLL_MS = 60_000;
 
 /** The counter each nav item shows; an item without one shows none. */
 export type NavBadges = Partial<Record<NavItemKey, number>>;
@@ -24,13 +28,21 @@ export function useBandejaCount(badges: ShellBadges | undefined): number {
  * The nav badges (plan §4.3 Shell): Tareas = my open tasks, Mi espacio =
  * unread Bandeja + due reminders, from `useQuery(qk.shell.badges())`, which
  * the `(staff)` layout hydrates and the 60 s poll keeps fresh. Every
- * `useQuery` on the key shares one cache entry and one poll.
+ * `useQuery` on the key shares one cache entry and one poll. Mejoras = the
+ * `nuevo` solicitudes of `qk.mejoras.counts()`, read only while `items` holds
+ * the Mejoras item (a viewer with `canManageSupport`); a triage updates it at once.
  */
-export function useNavBadges(): NavBadges {
+export function useNavBadges(items: readonly NavItem[] = []): NavBadges {
   const { data } = useQuery(shellBadgesOptions());
   const bandeja = useBandejaCount(data);
   const tareas = data?.tareasOpen ?? 0;
-  return useMemo(() => ({ tareas, "mi-espacio": bandeja }), [tareas, bandeja]);
+  const hasMejoras = items.some((item) => item.key === "mejoras");
+  const { data: mejorasCounts } = useQuery({ ...mejorasCountsOptions(), enabled: hasMejoras, refetchInterval: MEJORAS_POLL_MS });
+  const mejoras = hasMejoras ? mejorasCounts?.nuevo : undefined;
+  return useMemo(
+    () => (mejoras === undefined ? { tareas, "mi-espacio": bandeja } : { tareas, "mi-espacio": bandeja, mejoras }),
+    [tareas, bandeja, mejoras],
+  );
 }
 
 /** The items with their live badge (absent at 0, so a badge hides at zero). */

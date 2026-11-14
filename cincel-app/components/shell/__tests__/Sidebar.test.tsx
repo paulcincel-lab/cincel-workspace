@@ -289,7 +289,7 @@ describe("Sidebar", () => {
 });
 
 describe("Sidebar per canvas", () => {
-  const CANVAS_ITEMS = ["inicio", "tareas", "calendario", "proyectos", "personas", "mi-espacio", "biblioteca", "asistente"];
+  const CANVAS_ITEMS = ["inicio", "tareas", "calendario", "proyectos", "personas", "mi-espacio", "biblioteca", "asistente", "mejoras"];
 
   it("orders the items as the canvas", async () => {
     // The registry's item files read the session only inside `resolve`; the order is static.

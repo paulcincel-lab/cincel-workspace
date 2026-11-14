@@ -15,7 +15,7 @@ import { AjustesNav, ajustesNavKeyFromPath } from "../AjustesNav";
 import { AjustesNavFromPath } from "../AjustesNavFromPath";
 import type { AjustesVisibleSegments } from "@/lib/auth/ajustes-segments";
 
-const PERSONAL = ["Perfil", "Apariencia", "Notificaciones", "Gmail, calendario y Cutto"];
+const PERSONAL = ["Perfil", "Apariencia", "Notificaciones", "Gmail, calendario y Cutto", "Mis solicitudes"];
 const ORGANIZATION = [
   "General",
   "Tema y estilo",

@@ -28,6 +28,7 @@ import {
   FolderOpen,
   GitMerge,
   GitPullRequest,
+  LifeBuoy,
   Hash,
   Inbox,
   Link,
@@ -585,6 +586,14 @@ const ENTRIES: Record<string, Entry> = {
     running: "Creando la RFC…",
     short: "RFC nueva",
     label: (input) => (str(input, "title") ? `Crear la RFC ${quoted(str(input, "title"))}` : "Crear una RFC"),
+  },
+  create_ticket: {
+    icon: LifeBuoy,
+    tone: 1,
+    running: "Registrando la solicitud…",
+    short: "Solicitud nueva",
+    label: (input) => (str(input, "title") ? `Registrar la solicitud ${quoted(str(input, "title"))}` : "Registrar una solicitud"),
+    href: (_input, output) => urlOf(output) ?? "/ajustes/solicitudes",
   },
   merge_duplicate_clients: {
     icon: GitMerge,

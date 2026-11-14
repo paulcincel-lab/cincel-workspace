@@ -13,6 +13,7 @@ import { proyectosNavItem } from "./proyectos";
 import { personasNavItem } from "./personas";
 import { bibliotecaNavItem } from "./biblioteca";
 import { asistenteNavItem } from "./asistente";
+import { mejorasNavItem } from "./mejoras";
 import { ajustesNavItem } from "./ajustes";
 
 export const NAV_ITEM_SOURCES: readonly NavItemSource[] = [
@@ -24,5 +25,6 @@ export const NAV_ITEM_SOURCES: readonly NavItemSource[] = [
   personasNavItem,
   bibliotecaNavItem,
   asistenteNavItem,
+  mejorasNavItem,
   ajustesNavItem,
 ];

@@ -26,6 +26,8 @@ const PROPOSALS: readonly QueryKey[] = [qk.calendario.proposals()];
 const EVENTS: readonly QueryKey[] = [qk.inicio()];
 const EMAIL: readonly QueryKey[] = [qk.me.gmail.all];
 const PROJECTS: readonly QueryKey[] = [qk.proyectos.all];
+/** Mis solicitudes and the Mejoras list and counts. */
+const SOPORTE: readonly QueryKey[] = [qk.soporte.all, qk.mejoras.all];
 /** Every `me.notifications(f)` list, the per-kind summary and the bell badge. */
 const NOTIFICATIONS: readonly QueryKey[] = [
   qk.me.notifications({}).slice(0, 2),
@@ -74,6 +76,8 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
   request_quotes: [EMAIL, CONTACTS],
   // Projects and the client portal
   create_client: [CONTACTS],
+  create_ticket: [SOPORTE],
+  create_rfc: [SOPORTE],
   onboard_client: [PROJECTS, TASKS, CONTACTS, PROJECT_DELETE],
   discard_project: [PROJECTS, TASKS, PROJECT_DELETE],
   merge_duplicate_clients: [PROJECTS, CONTACTS],
@@ -88,7 +92,6 @@ export const TOOL_INVALIDATIONS: Readonly<Record<string, readonly (readonly Quer
  * write tool is in `TOOL_INVALIDATIONS` or here (guard test, #1055).
  */
 export const WRITES_WITHOUT_LOCAL_CACHE: Readonly<Record<string, string>> = {
-  create_rfc: "Crea un issue en GitHub.",
   notify_people: "Escribe en la bandeja de otras personas.",
   send_agenda: "Solo envía correo.",
   create_meeting: "Cutto.",

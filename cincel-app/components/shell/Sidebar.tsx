@@ -95,7 +95,7 @@ function NavEntry({
 export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarProps) {
   const generalSettings = useGeneralSettings();
   const openSearch = useShellUi((s) => s.openSearch);
-  const badges = useNavBadges();
+  const badges = useNavBadges([...nav.items, ...nav.footer]);
   const prefetchFor = useNavPrefetch();
   const items = withNavBadges(nav.items, badges);
   const footer = withNavBadges(nav.footer, badges);
