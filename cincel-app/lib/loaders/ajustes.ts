@@ -108,12 +108,17 @@ export async function loadAjustesPerfil(user: AuthenticatedUser): Promise<Ajuste
       .leftJoin(staffProfiles, eq(staffProfiles.staffId, staff.id))
       .where(and(eq(staff.id, staffId), isNull(staff.deletedAt)))
       .limit(1),
+    // The puesto line is read-only and secondary: a failed read leaves it empty instead of failing the page.
     db
       .select({ name: positions.name })
       .from(staffPositions)
       .innerJoin(positions, eq(positions.id, staffPositions.positionId))
       .where(and(eq(staffPositions.staffId, staffId), isNull(positions.deletedAt)))
-      .orderBy(asc(positions.sortOrder), asc(positions.name)),
+      .orderBy(asc(positions.sortOrder), asc(positions.name))
+      .catch((error: unknown) => {
+        console.error("[ajustes/perfil] puestos", error);
+        return [] as { name: string }[];
+      }),
     loadOwnWeekHours(user),
   ]);
   const row = rows[0];

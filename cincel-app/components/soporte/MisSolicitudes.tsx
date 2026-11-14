@@ -1,10 +1,13 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, type InfiniteData, type QueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { InboxIcon } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { EmptyState } from "@/components/shell/EmptyState";
+import { AttachmentPicker } from "@/components/soporte/AttachmentPicker";
+import { AttachmentThumbs } from "@/components/soporte/AttachmentThumbs";
 import { TicketTimeline } from "@/components/soporte/TicketTimeline";
 import {
   AlertDialog,
@@ -22,6 +25,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/shadcn/sheet";
 import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { Textarea } from "@/components/ui/shadcn/textarea";
+import { uploadTicketAttachments } from "@/lib/soporte/attachments-client";
 import { replyTicketAction, withdrawTicketAction } from "@/lib/actions/soporte-actions";
 import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
@@ -90,6 +94,8 @@ function TicketDrawerBody({ id, onClose }: { id: string; onClose: () => void }) 
   const { data: ticket, isPending, isError } = useQuery(ticketOptions(id));
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const queryClient = useQueryClient();
 
   const reply = useActionMutation<{ id: string; text: string }, null, ListSnapshot>(
     ({ id: ticketId, text: body }) => replyTicketAction(ticketId, body),
@@ -167,7 +173,27 @@ function TicketDrawerBody({ id, onClose }: { id: string; onClose: () => void }) 
     setError(null);
     const body = parsed.data;
     setText("");
-    reply.mutate({ id: ticket.id, text: body }, { onError: () => setText(body) });
+    const images = replyFiles;
+    setReplyFiles([]);
+    reply.mutate(
+      { id: ticket.id, text: body },
+      {
+        onError: () => {
+          setText(body);
+          setReplyFiles(images);
+        },
+        onSuccess: async () => {
+          if (images.length === 0) return;
+          const { failed } = await uploadTicketAttachments(ticket.id, images).catch(() => ({
+            failed: images.map((file) => ({ name: file.name, error: "No se pudo subir la imagen." })),
+          }));
+          await queryClient.invalidateQueries({ queryKey: qk.soporte.all });
+          if (failed.length > 0) {
+            toast.error(`No se subieron ${failed.length} imagen(es): ${failed.map((f) => `${f.name || "Imagen"} (${f.error})`).join(", ")}`);
+          }
+        },
+      },
+    );
   };
 
   const canReply = ticket.status !== "descartado";
@@ -201,6 +227,13 @@ function TicketDrawerBody({ id, onClose }: { id: string; onClose: () => void }) 
         ) : null}
       </section>
 
+      {ticket.attachments.length > 0 ? (
+        <section className="flex flex-col gap-1.5">
+          <h3 className="text-sm font-semibold text-foreground">Imágenes</h3>
+          <AttachmentThumbs attachments={ticket.attachments} />
+        </section>
+      ) : null}
+
       <section className="flex flex-col gap-1.5">
         <h3 className="text-sm font-semibold text-foreground">Contexto</h3>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
@@ -231,6 +264,7 @@ function TicketDrawerBody({ id, onClose }: { id: string; onClose: () => void }) 
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? `reply-${ticket.id}-error` : undefined}
           />
+          <AttachmentPicker files={replyFiles} onChange={setReplyFiles} disabled={reply.isPending} />
           {error ? (
             <p id={`reply-${ticket.id}-error`} role="alert" className="text-sm text-destructive">
               {error}
