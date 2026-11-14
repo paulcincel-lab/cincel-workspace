@@ -1,10 +1,11 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { AttachmentPicker } from "@/components/soporte/AttachmentPicker";
 import { AttachmentThumbs } from "@/components/soporte/AttachmentThumbs";
 import { TicketTimeline } from "@/components/soporte/TicketTimeline";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -26,6 +27,7 @@ import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
 import { catalogStaffOptions } from "@/lib/query/options/catalog";
 import { mejorasListInfiniteOptions, ticketOptions } from "@/lib/query/options/soporte";
+import { uploadTicketAttachments } from "@/lib/soporte/attachments-client";
 import { SOPORTE_GITHUB_ENABLED } from "@/lib/soporte/flags";
 import {
   AREA_LABEL,
@@ -379,6 +381,10 @@ function DrawerBody({ ticket }: { ticket: TicketDetail }) {
 function Composer({ ticketId }: { ticketId: string }) {
   const [mode, setMode] = useState<TicketVisibility>("internal");
   const [text, setText] = useState("");
+  // Images belong to the solicitud, not to one message, so its author sees them: only a public reply can attach.
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const queryClient = useQueryClient();
 
   const send = useActionMutation(
     (vars: { text: string; visibility: TicketVisibility }) => addTicketMessageAction(ticketId, vars),
@@ -387,15 +393,27 @@ function Composer({ ticketId }: { ticketId: string }) {
 
   const trimmed = text.trim();
   const isNote = mode === "internal";
+  const busy = send.isPending || uploading;
 
   function submit() {
-    if (!trimmed || send.isPending) return;
+    if (!trimmed || busy) return;
+    const toUpload = isNote ? [] : files;
     send.mutate(
       { text: trimmed, visibility: mode },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           setText("");
           setMode("internal");
+          setFiles([]);
+          if (toUpload.length === 0) return;
+          setUploading(true);
+          try {
+            const { failed } = await uploadTicketAttachments(ticketId, toUpload);
+            for (const f of failed) toast.error(`${f.name}: ${f.error}`);
+          } finally {
+            setUploading(false);
+            for (const queryKey of invalidateAfterWrite(ticketId)) void queryClient.invalidateQueries({ queryKey });
+          }
         },
       },
     );
@@ -441,11 +459,12 @@ function Composer({ ticketId }: { ticketId: string }) {
           }
         }}
       />
+      {!isNote ? <AttachmentPicker files={files} onChange={setFiles} disabled={busy} /> : null}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
           {isNote ? "No llega a quien la envió. " : "Llega a quien la envió. "}⌘ Enter para enviar
         </span>
-        <Button size="sm" disabled={trimmed === "" || send.isPending} onClick={submit}>
+        <Button size="sm" disabled={trimmed === "" || busy} onClick={submit}>
           {isNote ? "Guardar nota" : "Enviar respuesta"}
         </Button>
       </div>

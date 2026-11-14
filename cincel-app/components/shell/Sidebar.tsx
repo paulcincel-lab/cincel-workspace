@@ -121,7 +121,13 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
           </span>
         </div>
         {showSearch ? (
-          <Button type="button" variant="outline" className="h-9 w-full justify-start gap-2" onClick={openSearch}>
+          <Button
+            type="button"
+            variant="outline"
+            // The outline button paints the page background, so its text must not inherit the sidebar's (light in Grafito).
+            className="h-9 w-full justify-start gap-2 text-foreground"
+            onClick={openSearch}
+          >
             <Search aria-hidden="true" />
             <span className="flex-1 text-left">Buscar</span>
             <kbd className="font-mono text-[11px]">⌘K</kbd>
