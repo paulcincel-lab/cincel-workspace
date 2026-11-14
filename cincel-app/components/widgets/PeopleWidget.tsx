@@ -441,6 +441,7 @@ function VisualCards({ people, show, actions }: ViewProps) {
               className="flex h-full flex-col gap-3 rounded-xl border bg-card p-5 text-card-foreground shadow-sm"
             >
               <PersonAvatar
+                id={p.id}
                 name={p.name}
                 initials={p.initials}
                 imageSrc={p.photoUrl ?? undefined}
@@ -475,6 +476,7 @@ function VisualRows({ people, show, actions }: ViewProps) {
       {people.map((p) => (
         <li key={p.id} className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4">
           <PersonAvatar
+            id={p.id}
             name={p.name}
             initials={p.initials}
             imageSrc={p.photoUrl ?? undefined}

@@ -1701,6 +1701,7 @@ export async function listSubtasks(parentId: string, viewer: ViewerScope): Promi
       id: tasks.id,
       title: tasks.title,
       status: tasks.status,
+      managerId: tasks.managerId,
       managerName: staff.name,
       commitmentDate: tasks.commitmentDate,
     })
@@ -1719,6 +1720,7 @@ export async function listSubtasks(parentId: string, viewer: ViewerScope): Promi
     id: r.id,
     title: r.title,
     status: r.status,
+    managerId: r.managerId ?? null,
     managerName: r.managerName ?? null,
     commitmentDate: r.commitmentDate ?? null,
   }));

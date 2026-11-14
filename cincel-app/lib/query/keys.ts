@@ -68,7 +68,11 @@ export type TareasPageKeyInput = TareasListFilters & {
 export type AjustesSegment = "apariencia" | "integraciones" | "notificaciones" | "perfil" | AjustesAdminSegment;
 
 export const qk = {
-  shell: { badges: () => ["shell", "badges"] as const },
+  shell: {
+    badges: () => ["shell", "badges"] as const,
+    /** The sidebar "Proyectos" submenu: every project the viewer can see (id, name, status, etapa color). */
+    projects: () => ["shell", "projects"] as const,
+  },
   org: { general: () => ["org", "general"] as const },
   me: {
     today: () => ["me", "today"] as const,
@@ -260,6 +264,7 @@ export const STALE = {
   screen: 30_000,
   meToday: 60_000,
   shellBadges: 30_000,
+  shellProjects: 30_000,
   meNotifications: 30_000,
   meProfile: 5 * 60_000,
   meNotes: 5 * 60_000,

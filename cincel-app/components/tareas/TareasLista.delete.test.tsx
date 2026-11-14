@@ -122,7 +122,7 @@ describe("TareasLista row delete (#1041)", () => {
 
     const menu = await openMenu("Levantamiento");
     const items = within(menu).getAllByRole("menuitem").map((el) => el.textContent);
-    expect(items).toEqual(["Abrir", "Eliminar"]);
+    expect(items).toEqual(["Abrir", "Agregar subtarea", "Eliminar"]);
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Eliminar" }));
 
     const dialog = await screen.findByRole("alertdialog");
@@ -180,7 +180,7 @@ describe("TareasLista row delete (#1041)", () => {
     seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
     renderLista();
     const menu = await openMenu("Planos");
-    expect(within(menu).getAllByRole("menuitem").map((el) => el.textContent)).toEqual(["Abrir"]);
+    expect(within(menu).getAllByRole("menuitem").map((el) => el.textContent)).toEqual(["Abrir", "Agregar subtarea"]);
     fireEvent.keyDown(document.body, { key: "Escape" });
     const cell = cellOf("t3", "prioridad");
     fireEvent.keyDown(cell, { key: "Delete" });

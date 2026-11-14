@@ -5,6 +5,8 @@ import { withSubtaskRows, listaTable } from "./lista-table";
 import { NESTED_ROW_PARENT } from "@/components/widgets/record-table-format";
 import { listItemOfRow } from "@/lib/tareas/page-data";
 import {
+  ADD_SUBTASK_ACTION,
+  canAddFirstSubtask,
   hasSubtasks,
   openByDefault,
   shownChildren,
@@ -68,5 +70,18 @@ describe("withSubtaskRows (Lista, #1048)", () => {
   it("leaves closed parents alone", () => {
     const table = listaTable([listItemOfRow(parent)], "2026-11-09");
     expect(withSubtaskRows(table.rows, () => undefined)).toEqual(table.rows);
+  });
+});
+
+describe("first subtask inline (#1107)", () => {
+  it("only a top-level task without subtasks can get its first one", () => {
+    expect(canAddFirstSubtask({ ...parent, subtaskCount: 0 })).toBe(true);
+    expect(canAddFirstSubtask(parent)).toBe(false);
+    expect(canAddFirstSubtask({ ...childA, subtaskCount: 0 })).toBe(false);
+    expect(canAddFirstSubtask({ ...parent, subtaskCount: 0, matchedSubtaskIds: ["a"] })).toBe(false);
+  });
+
+  it("names the row menu entry", () => {
+    expect(ADD_SUBTASK_ACTION).toBe("Agregar subtarea");
   });
 });

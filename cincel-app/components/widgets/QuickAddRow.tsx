@@ -493,6 +493,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
     <input
       ref={inputRef}
       type="text"
+      data-quick-add-parent={context.parentTaskId}
       value={text}
       aria-label={label}
       aria-describedby={showPreview ? `${chipsId} ${hintId}` : hintId}

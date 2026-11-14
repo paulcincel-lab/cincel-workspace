@@ -32,6 +32,7 @@ import {
   visibleColumns,
   type HeatLevel,
 } from "@/components/widgets/record-table-format";
+import { mergeRootRefs, useColumnResize, type ColumnResize } from "@/components/widgets/table-column-resize";
 import {
   CellGridContext,
   GRID_CELL_CLASS,
@@ -41,6 +42,7 @@ import {
   type UseCellGrid,
 } from "@/components/widgets/use-cell-grid";
 import type { RecordColumn } from "@/lib/types/widgets";
+import { SELECT_COLUMN_WIDTH } from "@/lib/ui/table-widths";
 import { cn } from "@/lib/utils";
 
 /**
@@ -119,6 +121,12 @@ export type RowDetail<Row> = {
 export type GroupAnchor = { groupId: string; label: string; count: number; tone?: "destructive" | "muted" };
 export type GroupedTableProps<Row extends Record<string, unknown>> = {
   label: string;
+  /**
+   * Resizable columns (#1125): the table's id for the remembered widths
+   * (`tareas-analitico`, `mi-espacio-analitico`, …). Without it the columns
+   * keep their widths and no handle shows.
+   */
+  tableId?: string;
   columns: RecordColumn<Row>[];
   groups: Group<Row>[];
   totals?: { label: string; summary: string };
@@ -178,8 +186,6 @@ export const LOAD_MORE_LABEL = "Cargar más";
 export const NEW_ROW_LABEL = "Nueva";
 export const ANCHORS_LABEL = "Ir a";
 
-/** Width of a column without `width` (7 columns ≈ 860 px, frame `Main`). */
-const DEFAULT_COLUMN_WIDTH = 123;
 const SKELETON_ROWS = 3;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
@@ -281,6 +287,16 @@ function trailingColumns<Row extends Record<string, unknown>>(props: GroupedTabl
   return props.rowActions ? 1 : 0;
 }
 
+/** The checkbox and row-actions columns outside the data columns (not resizable), for the `<colgroup>`. */
+function colgroupOptions<Row extends Record<string, unknown>>(props: GroupedTableProps<Row>) {
+  return {
+    select: leadingColumns(props) > 0,
+    actions: trailingColumns(props) > 0,
+    actionsWidth: ROW_ACTIONS_WIDTH,
+    selectWidth: SELECT_COLUMN_WIDTH,
+  };
+}
+
 function hasChildren<Row>(group: Group<Row>): boolean {
   return (group.children?.length ?? 0) > 0;
 }
@@ -359,6 +375,8 @@ type Ctx<Row extends Record<string, unknown>> = {
   idOf(row: Row, index: number): string;
   isOpen(id: string): boolean;
   toggle(id: string): void;
+  /** Column widths in CSS variables and the drag handles (#1125). */
+  resize: ColumnResize;
 };
 
 /** Enter / Space toggle (handled here so the key never also fires a click). */
@@ -408,13 +426,15 @@ function HeaderRow<Row extends Record<string, unknown>>({ ctx, rowIds = [] }: { 
           <th
             key={column.key}
             scope="col"
-            style={column.width ? { width: column.width } : undefined}
+            data-column-key={column.key}
             className={cn(
-              "border-b bg-muted px-3 py-2 font-mono text-[11px] font-medium tracking-[.08em] whitespace-nowrap text-muted-foreground uppercase",
+              "relative border-b bg-muted px-3 py-2 font-mono text-[11px] font-medium tracking-[.08em] whitespace-nowrap text-muted-foreground uppercase",
               index === 0 && "pl-10",
               columnAlign(column) === "right" ? "text-right" : "text-left",
             )}
             aria-sort={sortable ? ariaSortOf(column.key, ctx.props.sort) : undefined}
+            // The handle's own label must not become part of the header's name.
+            aria-label={ctx.resize.resizable ? [column.label, column.badge].filter(Boolean).join(" ") : undefined}
           >
             {sortable ? (
               <button
@@ -434,6 +454,7 @@ function HeaderRow<Row extends Record<string, unknown>>({ ctx, rowIds = [] }: { 
             ) : (
               label
             )}
+            {ctx.resize.handle(column)}
           </th>
         );
       })}
@@ -610,7 +631,6 @@ function LeafRow<Row extends Record<string, unknown>>({
                   : undefined
             }
             className={cn(cellClass(column, first, heat), grid && GRID_CELL_CLASS, nested && "bg-muted/30", nested && first && "pl-16")}
-            style={column.width && columnAlign(column) !== "right" ? { maxWidth: column.width } : undefined}
           >
             {content}
           </td>
@@ -768,9 +788,6 @@ function TopGroup<Row extends Record<string, unknown>>({
   const open = ctx.isOpen(group.id);
   const toggle = () => ctx.toggle(group.id);
   const bodyId = domId("grupo-cuerpo", group.id);
-  const minWidth =
-    ctx.columns.reduce((sum, column) => sum + (column.width ?? DEFAULT_COLUMN_WIDTH), 0) +
-    trailingColumns(ctx.props) * ROW_ACTIONS_WIDTH;
   const children = group.children ?? [];
   const ownRows = group.rows !== undefined || !hasChildren(group) || group.loading === true;
   return (
@@ -804,9 +821,10 @@ function TopGroup<Row extends Record<string, unknown>>({
             <table
               aria-label={`${ctx.props.label} · ${group.label}`}
               role={ctx.grid ? "grid" : undefined}
-              className="w-full border-collapse text-[12.5px]"
-              style={{ minWidth }}
+              className="table-fixed border-collapse text-[12.5px]"
+              style={ctx.resize.tableStyle}
             >
+              {ctx.resize.colgroup(colgroupOptions(ctx.props))}
               <thead className="sticky top-0">
                 <HeaderRow ctx={ctx} rowIds={orderedRowIds([group], ctx.idOf, ctx.props.rowDetail, ctx.props.isRowSelectable)} />
               </thead>
@@ -840,6 +858,11 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
   );
   const rowOrder = useMemo(() => orderedRowIds(groups, idOf, p.rowDetail, p.isRowSelectable), [groups, idOf, p.rowDetail, p.isRowSelectable]);
   const selection = useTableSelection(p, rowOrder);
+  const resize = useColumnResize({
+    tableId: p.tableId,
+    columns,
+    extraWidth: leadingColumns(p) * SELECT_COLUMN_WIDTH + trailingColumns(p) * ROW_ACTIONS_WIDTH,
+  });
 
   // Uncontrolled: the ids whose state differs from `defaultExpanded`.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(() => new Set());
@@ -921,14 +944,16 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
 
   const topIds = new Set(groups.map((group) => group.id));
   const anchors = (p.anchors ?? []).filter((anchor) => topIds.has(anchor.groupId));
-  const ctx: Ctx<Row> = { props: p, columns, grid: editable ? grid : null, selection, idOf, isOpen, toggle };
+  const ctx: Ctx<Row> = { props: p, columns, grid: editable ? grid : null, selection, idOf, isOpen, toggle, resize };
   const setHeaderRef = (id: string, el: HTMLButtonElement | null) => {
     if (el) headers.current.set(id, el);
     else headers.current.delete(id);
   };
 
+  // One wrapper for two owners: the keyboard grid and the column widths.
+  const setRoot = mergeRootRefs(resize.attachRoot, editable ? grid.rootRef : null);
   const body = (
-    <div data-slot="grouped-table" className="flex min-w-0 flex-col gap-3" {...(editable ? grid.rootProps : {})}
+    <div data-slot="grouped-table" style={resize.rootStyle} className="flex min-w-0 flex-col gap-3" {...(editable ? grid.rootProps : {})}
       {...(selection.enabled
         ? {
             onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
@@ -937,8 +962,9 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
             },
           }
         : {})}
+      ref={setRoot}
     >
-      {anchors.length > 0 || p.toggleAll !== false || p.toolbar ? (
+      {anchors.length > 0 || p.toggleAll !== false || p.toolbar || resize.canReset ? (
       <div className="flex flex-wrap items-center gap-2">
         {anchors.length > 0 ? (
           <nav aria-label={ANCHORS_LABEL} className="flex flex-wrap items-center gap-2">
@@ -971,6 +997,7 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
         ) : null}
         <span className="flex-1" />
         {p.toolbar ?? null}
+        {resize.resetButton()}
         {p.toggleAll !== false ? (
           <Button type="button" variant="link" size="sm" onClick={toggleAll}>
             {allOpen ? COLLAPSE_ALL_LABEL : EXPAND_ALL_LABEL}
@@ -983,10 +1010,11 @@ export function GroupedTable<Row extends Record<string, unknown>>(p: GroupedTabl
           <div className="overflow-x-auto">
             <table
               role={editable ? "grid" : undefined}
-              className="w-full border-collapse text-[12.5px]"
-              style={{ minWidth: columns.reduce((sum, column) => sum + (column.width ?? DEFAULT_COLUMN_WIDTH), 0) }}
+              className="table-fixed border-collapse text-[12.5px]"
+              style={resize.tableStyle}
             >
               <caption className="sr-only">{p.label}</caption>
+              {resize.colgroup(colgroupOptions(p))}
               <thead className="sticky top-0 z-10">
                 <HeaderRow ctx={ctx} rowIds={rowOrder} />
               </thead>

@@ -401,7 +401,7 @@ export function TareasAnalitico({
       ) : null,
     [canCreate, late, onCreate],
   );
-  const subtasks = useSubtaskRows<AnaliticoRow>({ parents: loadedParents, toRow: toAnaliticoRow, taskOf: taskOfRow, isHidden, after: subtaskAdd });
+  const subtasks = useSubtaskRows<AnaliticoRow>({ parents: loadedParents, toRow: toAnaliticoRow, taskOf: taskOfRow, isHidden, after: subtaskAdd, canAdd: canCreate && !late });
   const { toggleAll: toggleAllSubtasks, allOpen: allSubtasksOpen } = subtasks;
   const onToggleAllSubtasks = useCallback(async () => {
     const opening = !allSubtasksOpen;
@@ -583,6 +583,7 @@ export function TareasAnalitico({
       <CellCommitProvider queryKeys={TAREAS_CELL_KEYS}>
         <GroupedTable<AnaliticoRow>
           label={ANALITICO_TABLE_LABEL}
+          tableId="tareas-analitico"
           columns={columns}
           groups={groups}
           anchors={anchors}
@@ -594,7 +595,9 @@ export function TareasAnalitico({
           sort={tableSort}
           onSortChange={onSortChange}
           getRowId={(row) => row.id}
-          renderCell={renderAnaliticoTaskCell}
+          renderCell={(key, row) =>
+            renderAnaliticoTaskCell(key, row, subtasks.canAddTo(row.task) ? () => subtasks.addSubtask(row.task) : undefined)
+          }
           rowHref={rowHref}
           rowDetail={subtasks.rowDetail}
           toolbar={
@@ -610,7 +613,7 @@ export function TareasAnalitico({
           selectable
           selectedIds={selection.selectedIds}
           onSelectionChange={selection.onSelectionChange}
-          rowActions={(row) => deletes.rowActions(deleteTargetOf(row.task), () => openTask(row.id))}
+          rowActions={(row) => subtasks.withAddAction(row.task, deletes.rowActions(deleteTargetOf(row.task), () => openTask(row.id)))}
           onRowDelete={deletes.canDelete ? (row) => deletes.request([deleteTargetOf(row.task)]) : undefined}
           onLoadMore={(id) => rowActions.current.get(id)?.more()}
           loading={summaryLoading}

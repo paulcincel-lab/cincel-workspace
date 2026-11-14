@@ -1,0 +1,1 @@
+ALTER TABLE "core"."user_preferences" ADD COLUMN "table_column_widths" jsonb DEFAULT '{}'::jsonb NOT NULL;

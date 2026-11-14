@@ -21,7 +21,7 @@ import { qk } from "@/lib/query/keys";
 import { actionErrorCode } from "@/lib/errors";
 import { mutationErrorText, runAction } from "@/lib/query/mutation";
 import { getBrowserQueryClient, registerUiStoreReset } from "@/lib/query/reset-client-state";
-import type { ColorMode, PresentationStyle, ResolvedAppearance, UserPreferences } from "@/lib/types/redesign";
+import type { ColorMode, PresentationStyle, ResolvedAppearance, TableColumnWidths, UserPreferences } from "@/lib/types/redesign";
 import { appearanceStyleBlock } from "@/lib/ui/appearance-css";
 import { DEFAULT_HIDE_COMPLETED_TASKS } from "@/lib/ui/preferences";
 import { TEXT_SIZES, textSizeClass } from "@/lib/ui/text-size";
@@ -104,6 +104,12 @@ export type AppearanceState = {
   setPreference(patch: Partial<UserPreferences>, options?: SetPreferenceOptions): Promise<void>;
   /** Sets or clears (`null`) one section's inline error. */
   setError(section: AparienciaSectionKey, message: string | null): void;
+  /**
+   * The remembered table column widths (#1125) shown from now on, for every
+   * table that mounts later. Local only: `useTableColumnWidths` saves them
+   * with `setTableColumnWidthsAction`.
+   */
+  setTableColumnWidths(all: TableColumnWidths): void;
   /** A new server-resolved appearance (a layout re-render, e.g. after an org theme save). */
   applyServer(appearance: ResolvedAppearance): void;
   /**
@@ -317,6 +323,10 @@ export function createAppearanceStore(
           void flush();
         }
       });
+    },
+    setTableColumnWidths(all) {
+      committedPrefs = { ...committedPrefs, tableColumnWidths: all };
+      show(shown, false, { ...shownPrefs, tableColumnWidths: all });
     },
     setError(section, message) {
       const next = { ...store.getState().errors };

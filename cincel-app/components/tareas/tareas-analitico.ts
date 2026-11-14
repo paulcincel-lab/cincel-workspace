@@ -38,7 +38,7 @@ export const ANALITICO_ANCHORS_CAPTION = "tareas vencidas por proyecto";
 export const ANALITICO_TABLE_LABEL = "Tareas por proyecto y etapa";
 
 export const ANALITICO_COLUMNS: RecordColumn[] = [
-  { key: "tarea", label: "Tarea" },
+  { key: "tarea", label: "Tarea", fill: true },
   { key: "etapa", label: "Etapa" },
   { key: "fase", label: "Fase" },
   { key: "responsable", label: "Responsable" },

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   clockInAction: vi.fn(),
   getStaffPhotoUrl: vi.fn(),
   loadShellBadges: vi.fn(),
+  loadShellProjects: vi.fn(),
   hydrated: vi.fn(),
   appShellProps: vi.fn(),
 }));
@@ -32,6 +33,7 @@ vi.mock("@/lib/actions/time-tracking-actions", () => ({
   clockInAction: mocks.clockInAction,
 }));
 vi.mock("@/lib/profile-photo/photo-url", () => ({ getStaffPhotoUrl: mocks.getStaffPhotoUrl }));
+vi.mock("@/lib/shell/projects", () => ({ loadShellProjects: mocks.loadShellProjects }));
 vi.mock("@/lib/shell/badges", () => ({
   loadShellBadges: mocks.loadShellBadges,
   capabilityUserOf: (user: { id: string; name: string; access: string }) => ({
@@ -102,6 +104,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSessionAccess.mockResolvedValue({ status: "active", user: ACTIVE_USER });
   mocks.loadShellBadges.mockResolvedValue(BADGES);
+  mocks.loadShellProjects.mockResolvedValue([]);
   mocks.buildNavModel.mockResolvedValue(NAV);
   mocks.fetchMyTodayAction.mockResolvedValue(DISABLED_TODAY);
   mocks.getStaffPhotoUrl.mockResolvedValue(null);
@@ -154,7 +157,7 @@ describe("app/(staff)/layout", () => {
     expect(screen.getByText("Contenido")).toBeTruthy();
   });
 
-  it("hydrates shell.badges, me.profile and me.today for the client, and nothing else", async () => {
+  it("hydrates shell.badges, shell.projects, me.profile and me.today for the client, and nothing else", async () => {
     mocks.getStaffPhotoUrl.mockResolvedValue("/api/staff/staff-1/photo?v=abcdef01");
     const today = { ...DISABLED_TODAY, enabled: true };
     mocks.fetchMyTodayAction.mockResolvedValue(today);
@@ -169,7 +172,8 @@ describe("app/(staff)/layout", () => {
       photoUrl: "/api/staff/staff-1/photo?v=abcdef01",
     });
     expect(qc.getQueryData(qk.me.today())).toEqual(today);
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey[0]).sort()).toEqual(["me", "me", "shell"]);
+    expect(qc.getQueryData(qk.shell.projects())).toEqual([]);
+    expect(qc.getQueryCache().getAll().map((q) => q.queryKey[0]).sort()).toEqual(["me", "me", "shell", "shell"]);
   });
 
   it("seeds a disabled day too (the palette reads it), while the shell gets no clock", async () => {

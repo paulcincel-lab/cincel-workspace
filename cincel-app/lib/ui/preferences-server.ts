@@ -94,6 +94,8 @@ export function rowToResolverInput(row: UserPreferencesRow | null): UserPreferen
       row.quietFrom && row.quietTo ? { from: hourMinute(row.quietFrom), to: hourMinute(row.quietTo) } : null,
     // Left out at its default (`DEFAULT_HIDE_COMPLETED_TASKS`), like a missing key.
     ...(row.hideCompletedTasks ? { hideCompletedTasks: true } : {}),
+    // Likewise left out while no table has custom widths.
+    ...(Object.keys(row.tableColumnWidths ?? {}).length > 0 ? { tableColumnWidths: row.tableColumnWidths } : {}),
   };
 }
 

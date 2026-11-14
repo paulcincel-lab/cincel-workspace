@@ -45,6 +45,7 @@ import type { InicioData } from "@/lib/types/redesign";
 import type { AgendaItem, AttentionItem, KpiDatum, ProgressItem, EtapaKey } from "@/lib/types/widgets";
 import { cn } from "@/lib/utils";
 
+import { AddSubtaskInline, useCanCreateSubtask } from "@/components/tareas/AddSubtaskInline";
 import { EmptyWidgetCard } from "./EmptyWidgetCard";
 import { weekLabel, weeklyPaceTable } from "./WeeklyPaceChart";
 
@@ -375,13 +376,18 @@ function AttentionCard({ item, index }: { item: AttentionItem; index: number }) 
   const late = lateChip(item.daysLate);
   const stripe = blocked ? "var(--destructive)" : etapaColor(item.etapa);
   const pct = Math.max(0, Math.min(100, item.progressPct ?? 0));
+  // "Sin subtareas" becomes "+ Agregar subtarea" for viewers who can create tasks (#1107); it sits under the card's link.
+  const canCreate = useCanCreateSubtask();
+  const canAddSubtask = canCreate && !item.subtasks && Boolean(item.projectId);
+  const caption = attentionCaption(item);
   return (
-    <li className="min-w-0">
+    <li className="flex min-w-0 flex-col">
       <Link
         href={item.href}
         data-slot="attention-card"
         className={cn(
           "anim-in flex h-full flex-col overflow-hidden rounded-[14px] border bg-card text-card-foreground",
+          canAddSubtask && "rounded-b-none border-b-0",
           LIFT_CLASS,
           FOCUS_RING,
         )}
@@ -418,11 +424,24 @@ function AttentionCard({ item, index }: { item: AttentionItem; index: number }) 
               style={{ width: `${pct}%`, backgroundColor: blocked ? "var(--destructive)" : etapaColor(item.etapa) }}
             />
           </span>
-          <span data-slot="attention-caption" className="font-mono text-xs text-muted-foreground">
-            {attentionCaption(item)}
-          </span>
+          {canAddSubtask ? (
+            late && blocked ? (
+              <span data-slot="attention-caption" className="font-mono text-xs text-muted-foreground">
+                {late.text}
+              </span>
+            ) : null
+          ) : (
+            <span data-slot="attention-caption" className="font-mono text-xs text-muted-foreground">
+              {caption}
+            </span>
+          )}
         </span>
       </Link>
+      {canAddSubtask && item.projectId ? (
+        <div data-slot="attention-add-subtask" className="rounded-b-[14px] border border-t-0 bg-card px-[18px] pb-3">
+          <AddSubtaskInline parentId={item.id} projectId={item.projectId} variant="link" />
+        </div>
+      ) : null}
     </li>
   );
 }

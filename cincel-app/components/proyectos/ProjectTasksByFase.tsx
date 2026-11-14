@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/shadcn/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/shadcn/select";
 import { RecordTable } from "@/components/widgets/RecordTable";
 import { LoadingSkeleton } from "@/components/shell/LoadingSkeleton";
-import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { PeopleStack, ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { CellCommitProvider } from "@/components/widgets/use-cell-commit";
 import { TASK_SUPPORT_COLUMN } from "@/components/tareas/task-cell-edits";
 import { SUPPORT_COLUMN_LABEL } from "@/components/tareas/task-table-copy";
@@ -310,7 +310,7 @@ export function ProjectTasksByFase({
       case "vence":
         return isTaskLate(task, today) ? <span className="text-destructive">{String(row[columnKey])}</span> : undefined;
       case "responsable":
-        return task.manager ? undefined : <span className="text-muted-foreground">{UNASSIGNED_LABEL}</span>;
+        return <ResponsableAvatar person={task.manager} showUnassignedText />;
       case TASK_SUPPORT_COLUMN:
         return <PeopleStack people={task.support} label={SUPPORT_COLUMN_LABEL} />;
       default:

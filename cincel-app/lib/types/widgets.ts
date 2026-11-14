@@ -178,6 +178,14 @@ export type RecordColumn<Row = Record<string, unknown>> = {
   align?: "left" | "right";
   mono?: boolean;
   width?: number;
+  /**
+   * Resizable tables (#1125): the narrowest and widest the user can drag the
+   * column, in px (defaults `MIN_COLUMN_WIDTH` / `MAX_COLUMN_WIDTH`).
+   */
+  minWidth?: number;
+  maxWidth?: number;
+  /** A title column: takes the space left over (`width: auto`, at least `minWidth`) instead of a fixed `width`. */
+  fill?: boolean;
   format?: RecordColumnFormat;
   hideOn?: PresentationStyle[];
   /** Editable cell (#1024); without it the column is calculated and inert. */
@@ -187,6 +195,12 @@ export type RecordColumn<Row = Record<string, unknown>> = {
 };
 
 export type RecordTableData = {
+  /**
+   * Resizable columns (#1125): the id the user's column widths are remembered
+   * under (`tareas-lista`, …) in the Visual and Analítico tables. Without it
+   * the columns keep their widths and no handle shows.
+   */
+  tableId?: string;
   columns: RecordColumn[];
   rows: Record<string, unknown>[];
   groupBy?: string;

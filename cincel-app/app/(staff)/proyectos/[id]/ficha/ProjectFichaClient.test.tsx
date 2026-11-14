@@ -302,6 +302,7 @@ describe("ficha saves", () => {
       expect(invalidated()).toEqual([
         qk.proyectos.detail(P),
         qk.proyectos.list(),
+        qk.shell.projects(),
         qk.catalog.projectOptions(),
         qk.inicio(),
       ]),

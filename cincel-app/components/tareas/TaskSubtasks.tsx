@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import AppAvatar from "@/components/ui/AppAvatar";
+import { ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { StatusBadge } from "@/components/v2/status/StatusBadge";
@@ -99,13 +99,10 @@ export default function TaskSubtasks({ parentId, projectId, onOpenSubtask }: Pro
                   <span className="flex-1 truncate text-foreground">
                     {subtask.title}
                   </span>
-                  {subtask.managerName ? (
-                    <AppAvatar name={subtask.managerName} showName={false} />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      Sin responsable
-                    </span>
-                  )}
+                  <ResponsableAvatar
+                    person={subtask.managerName ? { id: subtask.managerId ?? subtask.managerName, name: subtask.managerName } : null}
+                    showName={false}
+                  />
                   <span className="w-20 text-right text-xs text-muted-foreground">
                     {formatDateDMY(subtask.commitmentDate ?? "")}
                   </span>

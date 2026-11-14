@@ -14,8 +14,8 @@ export function EventDetailHost() {
   const { item, actions, close, meeting, task } = detail;
   return (
     <PageStyleLayout
-      visual={() => <EventDetailCard item={item} detail={meeting} actions={actions} onClose={close} />}
-      esencial={() => <EventDetailSheet item={item} detail={meeting} actions={actions} onClose={close} />}
+      visual={() => <EventDetailCard item={item} detail={meeting} task={task} actions={actions} onClose={close} />}
+      esencial={() => <EventDetailSheet item={item} detail={meeting} task={task} actions={actions} onClose={close} />}
       analitico={() => <EventDetailDrawer item={item} detail={meeting} task={task} actions={actions} onClose={close} />}
     />
   );

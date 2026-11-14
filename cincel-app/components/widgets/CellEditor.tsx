@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MutableRefObject, ReactNode, RefObject } from "react";
 import { CheckIcon, LockIcon } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/shadcn/avatar";
+import { AvatarCircle } from "@/components/v2/status/PersonAvatar";
 import { Button } from "@/components/ui/shadcn/button";
 import {
   Command,
@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/shadcn/command";
 import { Input } from "@/components/ui/shadcn/input";
 import { Popover, PopoverContent } from "@/components/ui/shadcn/popover";
-import { getPersonInitials } from "@/components/ui/TeamMultiSelect";
 import {
   type AnyCellEdit,
   type CellEdit,
@@ -395,12 +394,7 @@ function PeopleBody<Row>({
 function OptionMark({ option }: { option: CellOption }) {
   if (option.avatar) {
     return (
-      <Avatar className="size-5">
-        {option.avatar.photoUrl ? <AvatarImage src={option.avatar.photoUrl} alt="" /> : null}
-        <AvatarFallback className="bg-foreground text-[9px] font-bold text-background">
-          {getPersonInitials(option.avatar.name)}
-        </AvatarFallback>
-      </Avatar>
+      <AvatarCircle id={option.value ?? undefined} name={option.avatar.name} imageSrc={option.avatar.photoUrl ?? undefined} size="xs" decorative />
     );
   }
   if (option.color) {

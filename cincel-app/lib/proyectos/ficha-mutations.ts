@@ -17,6 +17,7 @@ export function updateProjectInvalidations(projectId: string, patch: Partial<Pro
   return [
     qk.proyectos.detail(projectId),
     qk.proyectos.list(),
+    qk.shell.projects(),
     qk.catalog.projectOptions(),
     qk.inicio(),
     ...(patch.clientId !== undefined ? [qk.proyectos.tab(projectId, "clientes")] : []),

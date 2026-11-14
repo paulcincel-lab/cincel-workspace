@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 
+import { AddSubtaskButton } from "@/components/tareas/use-subtask-rows";
 import { daysLateLabel, type AnaliticoRow } from "@/components/tareas/tareas-analitico";
 import { TASK_SUPPORT_COLUMN } from "@/components/tareas/task-cell-edits";
 import { SUPPORT_COLUMN_LABEL } from "@/components/tareas/task-table-copy";
 import { CLEAR_LABEL } from "@/components/widgets/editable-cell";
-import { PeopleStack } from "@/components/widgets/PeopleStack";
+import { PeopleStack, ResponsableAvatar } from "@/components/widgets/PeopleStack";
 import { Badge } from "@/components/ui/shadcn/badge";
 import { statusDotClass } from "@/lib/tasks/status-options";
 import { etapaColorVar } from "@/lib/etapas/compat";
@@ -14,17 +15,19 @@ import { cn } from "@/lib/utils";
  * The cells of a Tareas · Analítico task row (`ANALITICO_COLUMNS` over
  * `AnaliticoRow`), for every table that lists tasks in that shape: the
  * Tareas table and the project rows of Proyectos · Analítico (#1042).
- * Undefined: the table formats the value itself.
+ * Undefined: the table formats the value itself. `onAddSubtask` (#1107)
+ * adds a quiet "+ Subtarea" to the title cell of a task without subtasks.
  */
-export function renderAnaliticoTaskCell(columnKey: string, row: AnaliticoRow): ReactNode | undefined {
+export function renderAnaliticoTaskCell(columnKey: string, row: AnaliticoRow, onAddSubtask?: () => void): ReactNode | undefined {
   switch (columnKey) {
     case "tarea":
       return (
-        <span className="inline-flex max-w-[420px] min-w-0 items-center gap-1.5">
+        <span className="inline-flex max-w-full min-w-0 items-center gap-1.5">
           <span title={row.tarea} className="truncate">
             {row.tarea}
           </span>
           <SubtaskProgressChip task={row.task} />
+          {onAddSubtask ? <AddSubtaskButton title={row.tarea} onAdd={onAddSubtask} /> : null}
         </span>
       );
     case "etapa": {
@@ -46,11 +49,7 @@ export function renderAnaliticoTaskCell(columnKey: string, row: AnaliticoRow): R
         <span className="text-muted-foreground">{CLEAR_LABEL.phase}</span>
       );
     case "responsable":
-      return (
-        <span title={row.responsable} className="block max-w-[180px] truncate">
-          {row.responsable}
-        </span>
-      );
+      return <ResponsableAvatar person={row.task.manager} showUnassignedText className="max-w-[180px]" />;
     case TASK_SUPPORT_COLUMN:
       return <PeopleStack people={row.task.support} label={SUPPORT_COLUMN_LABEL} />;
     case "estatus":

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -12,6 +12,14 @@ vi.mock("@/lib/actions/preferences-actions", () => ({
   updateMyPreferencesAction: vi.fn(async () => ({ preferences: {}, appearance: {} })),
 }));
 
+const caps = vi.hoisted(() => ({ canCreateActivity: true }));
+vi.mock("@/lib/auth/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/permissions")>()),
+  resolveActivitiesCapabilities: () => ({ canViewActivities: true, canCreateActivity: caps.canCreateActivity }),
+}));
+vi.mock("@/lib/actions/tasks-actions", () => ({ createSubtaskAction: vi.fn(async () => ({ ok: true, data: {} })) }));
+
+import { seedSessionUser } from "../../tests/helpers/session-user";
 import { StyleProvider } from "@/components/shell/StyleProvider";
 import { attentionCaption, heroSentence, projectChip } from "@/lib/inicio/visual";
 import { createTestQueryClient, renderWithQueryClient } from "@/lib/query/test-utils";
@@ -169,5 +177,32 @@ describe("InicioVisual", () => {
     expect(screen.getByText("Todo al día")).toBeTruthy();
     expect(screen.getByText("Sin eventos hoy")).toBeTruthy();
     expect(screen.getByText("No hay proyectos activos")).toBeTruthy();
+  });
+});
+
+describe("InicioVisual attention card without subtasks (#1107)", () => {
+  const withProject = (): InicioData => ({
+    ...INICIO_VISUAL,
+    attention: INICIO_VISUAL.attention.map((item) => ({ ...item, projectId: item.projectId ?? "p-1" })),
+  });
+  const noSubtasksCard = () => document.querySelectorAll('[data-slot="attention-card"]')[2] as HTMLElement;
+
+  it("a viewer who can create tasks gets a link-style + Agregar subtarea that opens the inline field", () => {
+    seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
+    caps.canCreateActivity = true;
+    renderVisual(withProject());
+    expect(within(noSubtasksCard()).queryByText("Sin subtareas")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "+ Agregar subtarea" }));
+    expect((screen.getByLabelText("Título de la nueva subtarea") as HTMLInputElement).placeholder).toBe("Agregar subtarea…");
+    // Only the card without subtasks offers it.
+    expect(screen.queryAllByRole("button", { name: "+ Agregar subtarea" })).toHaveLength(0);
+  });
+
+  it("keeps the plain caption for a viewer who can't create tasks", () => {
+    seedSessionUser({ member: { id: "s1", name: "Ana" }, access: "Colaborador" });
+    caps.canCreateActivity = false;
+    renderVisual(withProject());
+    expect(within(noSubtasksCard()).getByText("Sin subtareas")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "+ Agregar subtarea" })).toBeNull();
   });
 });

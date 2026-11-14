@@ -123,6 +123,7 @@ const taskRefColumns = {
   id: tasks.id,
   title: tasks.title,
   status: tasks.status,
+  managerId: tasks.managerId,
   managerName: staff.name,
   commitmentDate: tasks.commitmentDate,
 };

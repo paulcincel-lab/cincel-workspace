@@ -538,6 +538,10 @@ exports[`qk > builds every key shape 1`] = `
     "shell",
     "badges",
   ],
+  "shell.projects": [
+    "shell",
+    "projects",
+  ],
   "soporte.all": [
     "soporte",
   ],
@@ -701,6 +705,7 @@ exports[`qk > builds every key shape 1`] = `
 exports[`qk > covers every key of the factory 1`] = `
 [
   "shell.badges",
+  "shell.projects",
   "org.general",
   "me.today",
   "me.weekHours",

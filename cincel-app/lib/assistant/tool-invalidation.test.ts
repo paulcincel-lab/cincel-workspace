@@ -34,7 +34,7 @@ describe("keysForToolParts", () => {
     ["create_rfc", [qk.soporte.all, qk.mejoras.all]],
     [
       "discard_project",
-      [qk.proyectos.all, qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks(), qk.catalog.projectOptions(), qk.me.today()],
+      [qk.proyectos.all, qk.tareas.all, qk.inicio(), qk.shell.badges(), qk.me.tasks(), qk.catalog.projectOptions(), qk.me.today(), qk.shell.projects()],
     ],
   ])("%s", (tool, expected) => {
     expect(keysForToolParts([done(tool)])).toEqual(expected);

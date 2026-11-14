@@ -5,15 +5,18 @@ import { useState } from "react";
 import { Button } from "@/components/ui/shadcn/button";
 import { Input } from "@/components/ui/shadcn/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/shadcn/sheet";
+import type { TaskDetail } from "@/lib/types/core";
 import type { CalItem, DetailAction, MeetingDetail } from "@/lib/types/calendario";
 
 import { DETAIL_COPY, TASK_ACTION, actionsFor, findAction } from "./event-detail-model";
-import { DetailActionButton, KindChip, TaskFacts, EtapaBand } from "./EventDetailParts";
+import { DetailActionButton, KindChip, TaskFacts, EtapaBand, TaskSubtasksValue } from "./EventDetailParts";
 import { MeetingDetailSheet } from "./MeetingParts";
 
 export type EventDetailSheetProps = {
   item: CalItem;
   detail?: MeetingDetail;
+  /** The task sheet: the Subtareas line comes from it. */
+  task?: TaskDetail | null;
   actions: DetailAction[];
   onClose(): void;
 };
@@ -22,7 +25,7 @@ export type EventDetailSheetProps = {
 const SHEET_ORDER = [TASK_ACTION.complete, TASK_ACTION.reopen, TASK_ACTION.changeDate, TASK_ACTION.propose];
 
 /** Detail of an item in the Esencial Estilo: a modal bottom sheet with a big title and one primary action. */
-function TaskDetailSheet({ item, actions, onClose }: EventDetailSheetProps) {
+function TaskDetailSheet({ item, task, actions, onClose }: EventDetailSheetProps) {
   const [picking, setPicking] = useState(false);
   const shown = actionsFor(item, actions, SHEET_ORDER);
   const primary = findAction(shown, TASK_ACTION.complete, TASK_ACTION.reopen) ?? shown.find((a) => a.primary);
@@ -45,6 +48,14 @@ function TaskDetailSheet({ item, actions, onClose }: EventDetailSheetProps) {
           </SheetTitle>
           <SheetDescription className="sr-only">{DETAIL_COPY.close}</SheetDescription>
           {item.kind === "task" ? <TaskFacts item={item} /> : null}
+          {item.kind === "task" && task ? (
+            <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+              <span>Subtareas</span>
+              <span className="text-foreground">
+                <TaskSubtasksValue item={item} task={task} />
+              </span>
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col gap-2 p-4 pt-0">
           {primary ? <DetailActionButton action={primary} variant="default" size="lg" className="h-[54px] w-full text-base" /> : null}

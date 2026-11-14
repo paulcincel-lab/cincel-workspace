@@ -97,13 +97,14 @@ export function ProjectsPortfolio() {
   // The dialog shows create errors inline (its own copy), so the mutation shows no toast.
   const createProject = useActionMutation(submitProjectCreateAction, {
     // The starting etapa's tasks show in Tareas.
-    invalidate: [qk.proyectos.list(), qk.catalog.projectOptions(), qk.inicio(), qk.tareas.all],
+    invalidate: [qk.proyectos.list(), qk.shell.projects(), qk.catalog.projectOptions(), qk.inicio(), qk.tareas.all],
     onFormError: () => undefined,
   });
   const updateProject = useActionMutation(({ id, patch }: UpdateVars) => updateProjectAction(id, patch), {
     invalidate: ({ id, patch }) => [
       qk.proyectos.detail(id),
       qk.proyectos.list(),
+      qk.shell.projects(),
       qk.catalog.projectOptions(),
       qk.inicio(),
       // A client set on the new project changes its Clientes tab.

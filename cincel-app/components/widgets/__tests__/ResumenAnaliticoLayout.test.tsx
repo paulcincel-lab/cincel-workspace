@@ -379,7 +379,7 @@ describe("ResumenAnaliticoLayout", () => {
       fireEvent.click(taskCell("t-obra-3", "responsable"));
       fireEvent.click(await screen.findByRole("option", { name: /Ana López/ }));
       await waitFor(() => expect(actions.assignTaskAction).toHaveBeenCalledWith("t-obra-3", "s3"));
-      await waitFor(() => expect(taskCell("t-obra-3", "responsable").textContent).toBe("Ana López"));
+      await waitFor(() => expect(taskCell("t-obra-3", "responsable").textContent).toContain("Ana López"));
     });
 
     it("a refused save puts the cell back", async () => {
