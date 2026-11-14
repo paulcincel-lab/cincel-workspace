@@ -263,7 +263,7 @@ export function HorarioReglas() {
   return (
     <SettingsSection title="Reglas de la jornada" level={3}>
       <fieldset className="flex flex-col gap-1.5">
-        <legend className="mb-1.5 text-[13px] font-medium text-sidebar-foreground">Días laborales</legend>
+        <legend className="mb-1.5 text-[13px] font-medium text-foreground">Días laborales</legend>
         <div className="flex flex-wrap gap-1.5">
           {WORK_DAY_PILLS.map((pill) => {
             const on = draft.workDays.includes(pill.day);
@@ -279,7 +279,7 @@ export function HorarioReglas() {
                   "focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
                   on
                     ? "border-primary bg-secondary text-secondary-foreground"
-                    : "border-border bg-card text-sidebar-foreground hover:bg-muted",
+                    : "border-border bg-card text-muted-foreground hover:bg-muted",
                 )}
               >
                 {pill.label}
@@ -351,7 +351,7 @@ export function HorarioReglas() {
       >
         {draft.lunchMinutes > 0 ? (
           <div className="flex flex-col gap-1">
-            <Label htmlFor={ids.lunch} className="text-xs text-sidebar-foreground">
+            <Label htmlFor={ids.lunch} className="text-xs text-muted-foreground">
               Minutos de comida
             </Label>
             <Input
@@ -378,7 +378,7 @@ export function HorarioReglas() {
       >
         {draft.autoCloseAt !== null ? (
           <div className="flex flex-col gap-1">
-            <Label htmlFor={ids.autoClose} className="text-xs text-sidebar-foreground">
+            <Label htmlFor={ids.autoClose} className="text-xs text-muted-foreground">
               Hora de cierre
             </Label>
             <Input

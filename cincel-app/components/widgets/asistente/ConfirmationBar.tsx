@@ -72,7 +72,7 @@ export function ConfirmationBar({ group, index, onApprove, onEditRows }: Confirm
       <span id={labelId} className="text-[13.5px] font-semibold text-foreground">
         Paso {index} · {n > 1 ? `${group.toolName} × ${n}` : group.toolName}
       </span>
-      {diff ? <span className="font-mono text-xs text-sidebar-foreground">{diff}</span> : null}
+      {diff ? <span className="font-mono text-xs text-muted-foreground">{diff}</span> : null}
       <span className="flex-1" />
       <Button type="button" className="h-[30px] rounded-[10px] text-[13px] font-semibold" disabled={answered} onClick={() => answer(true)}>
         {n === 1 ? "Confirmar" : `Confirmar ${n}`}

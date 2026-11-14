@@ -113,7 +113,7 @@ export function AssistantThreadRail({
                     : "font-medium text-foreground"
                   : current
                     ? "font-medium text-foreground"
-                    : "font-normal text-sidebar-foreground",
+                    : "font-normal text-muted-foreground",
               )}
             >
               {title}

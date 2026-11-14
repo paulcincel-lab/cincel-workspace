@@ -99,7 +99,7 @@ export function PhaseListEditor({
               }
               onDrop={canManage && dragId ? (event) => drop(event, phase.id) : undefined}
               className={cn(
-                "flex items-center gap-2 rounded-[10px] bg-sidebar px-2.5 py-2 text-sm",
+                "flex items-center gap-2 rounded-[10px] bg-muted px-2.5 py-2 text-sm",
                 (overId === phase.id || keyboard.liftedId === phase.id) && "ring-2 ring-ring",
                 newIds.has(phase.id) && "row-new",
               )}

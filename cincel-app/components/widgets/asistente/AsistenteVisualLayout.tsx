@@ -413,7 +413,7 @@ function ConversationBody({
 
       <div
         ref={composerZoneRef}
-        className="shrink-0 border-t border-border bg-sidebar px-3 pt-3 pb-4 sm:px-5"
+        className="shrink-0 border-t border-border bg-muted px-3 pt-3 pb-4 sm:px-5"
       >
         <div className="mx-auto flex w-full max-w-[760px] flex-col gap-2.5">
           <SuggestionCards

@@ -952,7 +952,7 @@ function ResumenQuickAdd({ projectId, etapa, data, people, etapas, meId, team, c
 
   return (
     <tr className={cn(active && "anim-in")}>
-      <td colSpan={colSpan} className={cn("border-b border-accent", active ? "bg-sidebar pb-2.5 pl-10 pr-3 pt-2" : "py-1.5 pl-10 pr-3")}>
+      <td colSpan={colSpan} className={cn("border-b border-accent", active ? "bg-muted pb-2.5 pl-10 pr-3 pt-2" : "py-1.5 pl-10 pr-3")}>
         <label htmlFor={inputId} className="sr-only">
           {label}
         </label>
@@ -1007,7 +1007,7 @@ function ResumenQuickAdd({ projectId, etapa, data, people, etapas, meId, team, c
             </div>
 
             {showHint && suggestion && person ? (
-              <div role="status" className="anim-in flex flex-col gap-2 rounded-[10px] border border-border bg-sidebar px-3 py-2 text-[12.5px] text-secondary-foreground">
+              <div role="status" className="anim-in flex flex-col gap-2 rounded-[10px] border border-border bg-muted px-3 py-2 text-[12.5px] text-secondary-foreground">
                 <p>
                   <b className="font-semibold">Asistente:</b> {person.name} está al {person.loadPct} % y tiene {person.overdueHere}{" "}
                   {person.overdueHere === 1 ? "vencida" : "vencidas"} aquí. {suggestion.name} tiene {suggestion.loadPct} % de carga y ya

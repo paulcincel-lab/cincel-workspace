@@ -108,7 +108,7 @@ export function SettingsSaveBar({
         data-slot="settings-save-bar"
         className="sticky bottom-4 z-10 flex w-full flex-wrap items-center justify-between gap-3 rounded-[14px] border border-border bg-card px-4 py-3 shadow-md"
       >
-        <p role="status" aria-live="polite" className="text-[13px] text-sidebar-foreground">
+        <p role="status" aria-live="polite" className="text-[13px] text-muted-foreground">
           {status && dirtyCount > 0 ? status : dirtyText(dirtyCount)}
         </p>
         <div className="flex items-center gap-2">

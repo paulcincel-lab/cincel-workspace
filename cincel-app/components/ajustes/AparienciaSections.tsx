@@ -107,10 +107,10 @@ function SectionError({ section }: { section: AparienciaSectionKey }) {
   );
 }
 
-/** Note box under a card grid: `--muted` background, 12.5 px `--sidebar-foreground`. */
+/** Note box under a card grid: `--muted` background, 12.5 px `--muted-foreground`. */
 function NoteBox({ id, children }: { id: string; children: ReactNode }) {
   return (
-    <p id={id} className="rounded-[10px] bg-muted px-3 py-2.5 text-[12.5px] text-sidebar-foreground">
+    <p id={id} className="rounded-[10px] bg-muted px-3 py-2.5 text-[12.5px] text-muted-foreground">
       {children}
     </p>
   );

@@ -149,7 +149,7 @@ export function SegmentedChoice<T extends string>({ label, value, options, onCha
           value={option.value}
           data-slot="segmented-option"
           className={cn(
-            "inline-flex cursor-pointer items-center rounded-lg px-3.5 py-[7px] text-[13px] font-medium text-sidebar-foreground outline-none transition-colors",
+            "inline-flex cursor-pointer items-center rounded-lg px-3.5 py-[7px] text-[13px] font-medium text-muted-foreground outline-none transition-colors",
             "hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
             "data-[checked]:bg-primary data-[checked]:text-primary-foreground",
             "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60",

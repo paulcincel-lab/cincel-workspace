@@ -127,7 +127,7 @@ function TaskCard({ card }: { card: ToolTaskCard }) {
     <li className="lift relative flex flex-col gap-1.5 overflow-hidden rounded-[10px] border border-border bg-card py-2.5 pr-3 pl-4">
       <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1", etapaColorClass(card.etapa))} />
       <span className="text-[13px] font-semibold text-foreground">{card.title}</span>
-      <span className="flex flex-wrap items-center gap-2 text-xs text-sidebar-foreground">
+      <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         {card.person ? (
           <span
             aria-hidden="true"
@@ -191,7 +191,7 @@ function StepResults({ step }: { step: ToolStep }) {
 function StepPanel({ step, id, results }: { step: ToolStep; id: string; results: boolean }) {
   const rows = rowsLabel(step);
   return (
-    <div id={id} className="anim-in flex flex-col gap-2.5 rounded-xl border border-border bg-sidebar p-3">
+    <div id={id} className="anim-in flex flex-col gap-2.5 rounded-xl border border-border bg-muted p-3">
       {step.params.length > 0 ? (
         <ul aria-label="Parámetros" className="flex flex-wrap gap-1.5">
           {step.params.map((param, index) => (
@@ -277,13 +277,13 @@ function SummaryPill({
       aria-expanded={open}
       aria-controls={open ? controls : undefined}
       onClick={onToggle}
-      className="inline-flex max-w-full items-center gap-2 self-start rounded-full border border-border bg-sidebar px-2.5 py-1.5 text-[12.5px] font-medium text-sidebar-foreground"
+      className="inline-flex max-w-full items-center gap-2 self-start rounded-full border border-border bg-muted px-2.5 py-1.5 text-[12.5px] font-medium text-foreground"
     >
       <span aria-hidden="true" className="flex items-center">
         {steps.slice(0, 4).map((step, index) => (
           <span
             key={step.toolCallId}
-            className={cn("size-[18px] rounded-full ring-2 ring-sidebar", toneClass(step.tone), index > 0 && "-ml-1.5")}
+            className={cn("size-[18px] rounded-full ring-2 ring-muted", toneClass(step.tone), index > 0 && "-ml-1.5")}
           />
         ))}
       </span>
@@ -442,7 +442,7 @@ function StepsTable({ groups }: { groups: readonly ToolStepGroup[] }) {
                 <td className="px-3 py-2 font-mono text-muted-foreground">{index + 1}</td>
                 <td className="px-3 py-2 font-mono text-foreground">{row.tool}</td>
                 <td className="px-3 py-2 text-foreground">{row.step.short}</td>
-                <td className="px-3 py-2 font-mono text-sidebar-foreground">
+                <td className="px-3 py-2 font-mono text-muted-foreground">
                   {row.step.params.map((p) => `${p.key}=${p.value}`).join(" · ") || "—"}
                 </td>
                 <td className={cn("px-3 py-2", state.className)} title={row.step.errorText}>

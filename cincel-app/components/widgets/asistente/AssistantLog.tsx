@@ -91,7 +91,7 @@ function UserMessage({ message }: { message: AssistantUIMessage }) {
       {files.length > 0 ? (
         <ul className="flex flex-wrap justify-end gap-1.5" aria-label="Archivos adjuntos">
           {files.map((part, index) => (
-            <li key={index} className="rounded-lg border border-border bg-card px-2 py-1 text-xs text-sidebar-foreground">
+            <li key={index} className="rounded-lg border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
               {"filename" in part && part.filename ? part.filename : "Archivo"}
             </li>
           ))}
@@ -258,7 +258,7 @@ export const AssistantLog = forwardRef<AssistantLogHandle, AssistantLogProps>(fu
           <button
             type="button"
             onClick={scrollToTop}
-            className="anim-in pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-sidebar-foreground shadow-[0_2px_6px_rgba(15,23,42,.06)] outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="anim-in pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground shadow-[0_2px_6px_rgba(15,23,42,.06)] outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             <ArrowUpIcon aria-hidden className="size-3.5" />
             Mensajes anteriores

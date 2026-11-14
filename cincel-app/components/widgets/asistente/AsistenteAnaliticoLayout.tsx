@@ -152,7 +152,7 @@ function ThreadRail({
                   onClick={() => onSelect(thread.id)}
                   className={cn(
                     "block w-full truncate px-2.5 py-[7px] text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                    current ? "font-semibold text-foreground" : "text-sidebar-foreground",
+                    current ? "font-semibold text-foreground" : "text-muted-foreground",
                   )}
                   title={title}
                 >
@@ -408,7 +408,7 @@ function AnaliticoComposer({ value, onChange, onSubmit, busy, tokensLabel, chip,
           {files.map((file, index) => (
             <li
               key={`${file.name}-${index}`}
-              className="inline-flex items-center gap-1 rounded-lg bg-muted px-2 py-0.5 font-mono text-[11.5px] text-sidebar-foreground"
+              className="inline-flex items-center gap-1 rounded-lg bg-muted px-2 py-0.5 font-mono text-[11.5px] text-muted-foreground"
             >
               <span className="max-w-40 truncate">{file.name}</span>
               <button
@@ -453,7 +453,7 @@ function AnaliticoComposer({ value, onChange, onSubmit, busy, tokensLabel, chip,
             render={
               <button
                 type="button"
-                className="rounded-lg bg-muted px-2 py-[3px] font-mono text-[11.5px] text-sidebar-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded-lg bg-muted px-2 py-[3px] font-mono text-[11.5px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             }
           >

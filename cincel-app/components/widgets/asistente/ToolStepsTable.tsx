@@ -94,7 +94,7 @@ export function ToolStepsTable({ groups }: ToolStepsTableProps): ReactNode {
               <td className={cn(TD, "font-mono text-muted-foreground")}>{row.index}</td>
               <td className={cn(TD, "font-mono whitespace-nowrap")}>{row.tool}</td>
               <td className={TD}>{row.short}</td>
-              <td className={cn(TD, "font-mono text-sidebar-foreground")}>{row.params || "—"}</td>
+              <td className={cn(TD, "font-mono text-muted-foreground")}>{row.params || "—"}</td>
               <td className={TD}>
                 <StepStateCell row={row} />
               </td>

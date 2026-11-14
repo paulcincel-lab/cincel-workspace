@@ -102,7 +102,7 @@ const STATUS_TONE: Record<TeamHoursStatusTone, string> = {
   success: "bg-tint-success text-success",
   warning: "bg-tint-warning text-warning-ink",
   destructive: "bg-tint-destructive text-destructive",
-  neutral: "bg-muted text-sidebar-foreground",
+  neutral: "bg-muted text-muted-foreground",
 };
 
 const DOT_TONE: Record<TeamHoursStatusTone, string> = {
@@ -193,7 +193,7 @@ function FullTable({ model }: { model: TeamHoursModel }) {
       {model.average ? (
         <tfoot>
           <tr data-testid="team-hours-average">
-            <th scope="row" className={cn(TD, "border-b-0 font-medium text-sidebar-foreground")}>
+            <th scope="row" className={cn(TD, "border-b-0 font-medium text-foreground")}>
               {AVERAGE_LABEL}
             </th>
             {model.average.cells.map((cell, i) => (

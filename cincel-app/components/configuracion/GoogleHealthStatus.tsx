@@ -51,7 +51,7 @@ type StatusTone = "configured" | "missing" | "error";
 
 const STATUS_PILL: Record<StatusTone, { label: string; className: string }> = {
   configured: { label: "Configurado", className: "bg-tint-success text-success" },
-  missing: { label: "Falta", className: "border border-border text-sidebar-foreground" },
+  missing: { label: "Falta", className: "border border-border text-muted-foreground" },
   error: { label: "Error", className: "bg-tint-destructive text-destructive" },
 };
 
@@ -75,7 +75,7 @@ function Row({ label, value, tone, valueTitle }: { label: string; value: ReactNo
       data-slot="google-status-row"
       className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-muted py-2.5 text-[13px] last:border-b-0"
     >
-      <dt className="w-52 shrink-0 text-sidebar-foreground">{label}</dt>
+      <dt className="w-52 shrink-0 text-muted-foreground">{label}</dt>
       <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
         <span title={valueTitle} className="min-w-0 break-all font-mono text-[12.5px] text-foreground">
           {value}

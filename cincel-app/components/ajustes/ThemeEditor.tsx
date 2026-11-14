@@ -249,7 +249,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
                   key={id}
                   value={id}
                   data-slot="preset-pill"
-                  className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-full border border-border bg-card px-3 text-[13px] font-medium text-sidebar-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-[checked]:border-primary data-[checked]:bg-secondary data-[checked]:text-secondary-foreground"
+                  className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-full border border-border bg-card px-3 text-[13px] font-medium text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-[checked]:border-primary data-[checked]:bg-secondary data-[checked]:text-secondary-foreground"
                 >
                   <span
                     aria-hidden="true"
@@ -263,7 +263,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-[13px] font-medium text-sidebar-foreground">Modo que editas</span>
+            <span className="text-[13px] font-medium text-foreground">Modo que editas</span>
             <SegmentedChoice<EditMode>
               label="Modo que editas"
               value={mode}
@@ -281,7 +281,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
                 title={section.title}
                 level={3}
                 actions={
-                  <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] tracking-wider text-sidebar-foreground">
+                  <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] tracking-wider text-muted-foreground">
                     {section.tokens.length} COLORES
                   </span>
                 }
@@ -319,7 +319,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
 
           <SettingsSection title="Tipografía" level={3}>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="font-family" className="text-[13px] font-medium text-sidebar-foreground">
+              <Label htmlFor="font-family" className="text-[13px] font-medium text-foreground">
                 Familia
               </Label>
               <Select
@@ -382,7 +382,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
               onChange={(gap) => setShape({ gap })}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-[13px] font-medium text-sidebar-foreground">Sombra de tarjetas</span>
+              <span className="text-[13px] font-medium text-foreground">Sombra de tarjetas</span>
               <SegmentedChoice
                 label="Sombra de tarjetas"
                 value={draft.shape.shadow}
@@ -404,7 +404,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
               onChange={(styleDefault) => update({ styleDefault })}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Label htmlFor="allow-user-override" className="text-[13px] font-medium text-sidebar-foreground">
+              <Label htmlFor="allow-user-override" className="text-[13px] font-medium text-foreground">
                 Permitir que cada persona elija su estilo y tema
               </Label>
               <Switch
@@ -446,7 +446,7 @@ export function ThemeEditor({ presets }: ThemeEditorProps) {
         data-slot="settings-save-bar"
         className="sticky bottom-4 z-10 flex w-full flex-wrap items-center justify-between gap-3 rounded-[14px] border border-border bg-card px-4 py-3 shadow-md"
       >
-        <p role="status" aria-live="polite" className="text-[13px] text-sidebar-foreground">
+        <p role="status" aria-live="polite" className="text-[13px] text-muted-foreground">
           <SaveBarStatus dirty={dirty} failing={failing} />
         </p>
         <div className="flex items-center gap-2">
@@ -567,7 +567,7 @@ function ShapeSlider({
 }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[10rem_minmax(0,1fr)_auto]">
-      <span className="col-span-2 text-[13px] font-medium text-sidebar-foreground sm:col-span-1">{label}</span>
+      <span className="col-span-2 text-[13px] font-medium text-foreground sm:col-span-1">{label}</span>
       <Slider
         min={bounds.min}
         max={bounds.max}
@@ -614,6 +614,7 @@ function ThemePreview({ draft, mode }: { draft: OrgAppearance; mode: EditMode })
       style={{ ...(vars as CSSProperties), fontFamily: "var(--font-sans)" }}
     >
       <div className="flex min-h-80">
+        {/* sidebar-tokens:allow-start (the preview paints a sidebar) */}
         <div className="flex w-24 shrink-0 flex-col gap-1 border-r border-sidebar-border bg-sidebar p-2.5 text-sidebar-foreground">
           <span className="mb-2 text-xs font-semibold tracking-wide">CINCEL</span>
           {PREVIEW_NAV.map((item, i) => (
@@ -629,6 +630,7 @@ function ThemePreview({ draft, mode }: { draft: OrgAppearance; mode: EditMode })
             </span>
           ))}
         </div>
+        {/* sidebar-tokens:allow-end */}
         <div className="flex min-w-0 flex-1 flex-col" style={{ gap: `${draft.shape.gap}px`, padding: `${draft.shape.gap}px` }}>
           <span style={type("pageTitle")}>Buenos días</span>
           <div className="grid grid-cols-2" style={{ gap: `${draft.shape.gap}px` }}>
