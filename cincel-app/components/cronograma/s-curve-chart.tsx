@@ -100,9 +100,9 @@ export function SCurveChart({ tasks, payments, today }: SCurveChartProps) {
               strokeDasharray="3 3"
             />
           ) : null}
-          <path d={plannedPath} fill="none" className="stroke-yellow-400" strokeWidth={2} strokeDasharray="6 4" />
-          <path d={pagosPath} fill="none" className="stroke-orange-500" strokeWidth={2} strokeDasharray="6 4" />
-          {realPath ? <path d={realPath} fill="none" className="stroke-cyan-500" strokeWidth={2.5} /> : null}
+          <path d={plannedPath} fill="none" className="stroke-chart-3" strokeWidth={2} strokeDasharray="6 4" />
+          <path d={pagosPath} fill="none" className="stroke-chart-2" strokeWidth={2} strokeDasharray="6 4" />
+          {realPath ? <path d={realPath} fill="none" className="stroke-chart-1" strokeWidth={2.5} /> : null}
           {monthLabels.map((m, i) => (
             <g key={i}>
               <line x1={m.x} x2={m.x} y1={H - PAD_B} y2={H - PAD_B + 4} className="stroke-border" strokeWidth={1} />
@@ -114,15 +114,15 @@ export function SCurveChart({ tasks, payments, today }: SCurveChartProps) {
         </svg>
         <div className="mt-2 space-y-1 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
-            <span className="inline-block w-4 border-t-2 border-dashed border-yellow-400" /> Proyectado (acumulado, %
+            <span className="inline-block w-4 border-t-2 border-dashed border-chart-3" /> Proyectado (acumulado, %
             de tareas)
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-block w-4 border-t-2 border-dashed border-orange-500" /> Calendario de pagos
+            <span className="inline-block w-4 border-t-2 border-dashed border-chart-2" /> Calendario de pagos
             (acumulado, % avance programado)
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-block h-0.5 w-4 bg-cyan-500" /> Realizado (hasta hoy)
+            <span className="inline-block h-0.5 w-4 bg-chart-1" /> Realizado (hasta hoy)
           </div>
         </div>
       </CardContent>

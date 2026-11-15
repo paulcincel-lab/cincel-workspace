@@ -10,8 +10,8 @@ function gapLabel(gap: GapStatus): string {
 
 function gapClass(gap: GapStatus): string {
   if (gap.kind === "onTime") return "text-muted-foreground";
-  if (gap.kind === "late") return "text-red-600 dark:text-red-400";
-  return "text-cyan-600 dark:text-cyan-400";
+  if (gap.kind === "late") return "text-destructive-ink";
+  return "text-[color:var(--chart-4-ink)]";
 }
 
 interface FormulaCellProps {
@@ -44,15 +44,15 @@ export function ResumenCards({ metrics }: ResumenCardsProps) {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-center gap-4">
-            <FormulaCell value={`${metrics.plannedPct}%`} tag="intención de obra" className="text-yellow-600 dark:text-yellow-400" />
+            <FormulaCell value={`${metrics.plannedPct}%`} tag="intención de obra" className="text-[color:var(--chart-3-ink)]" />
             <span className="text-muted-foreground">vs.</span>
             <FormulaCell
               value={`${metrics.pagosAvancePct}%`}
               tag="según calendario de pagos"
-              className="text-orange-600 dark:text-orange-400"
+              className="text-[color:var(--chart-2-ink)]"
             />
             <span className="text-muted-foreground">vs.</span>
-            <FormulaCell value={`${metrics.realPct}%`} tag="se lleva" className="text-blue-600 dark:text-blue-400" />
+            <FormulaCell value={`${metrics.realPct}%`} tag="se lleva" className="text-[color:var(--chart-1-ink)]" />
           </div>
           <p className={cn("text-sm font-bold", gapClass(metrics.delayVsObra))}>
             {gapLabel(metrics.delayVsObra)} (vs. planeado en obra)
@@ -77,9 +77,9 @@ export function ResumenCards({ metrics }: ResumenCardsProps) {
           <div className="flex items-center justify-center gap-4">
             <FormulaCell value={`${metrics.onTimePct}%`} tag="en tiempo" />
             <span className="text-muted-foreground">+</span>
-            <FormulaCell value={`${metrics.aheadPct}%`} tag="adelantos" className="text-cyan-600 dark:text-cyan-400" />
+            <FormulaCell value={`${metrics.aheadPct}%`} tag="adelantos" className="text-[color:var(--chart-4-ink)]" />
             <span className="text-muted-foreground">=</span>
-            <FormulaCell value={`${metrics.realPct}%`} tag="total" className="text-blue-600 dark:text-blue-400" />
+            <FormulaCell value={`${metrics.realPct}%`} tag="total" className="text-[color:var(--chart-1-ink)]" />
           </div>
           <p className="text-xs text-muted-foreground">
             &quot;En tiempo&quot;: avance en tareas ya agendadas para esta semana o antes. &quot;Adelantos&quot;: avance
