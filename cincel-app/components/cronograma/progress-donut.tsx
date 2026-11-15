@@ -40,7 +40,7 @@ export function ProgressDonut({ metrics }: ProgressDonutProps) {
               <circle
                 r={R_OUTER}
                 fill="none"
-                className="stroke-yellow-400"
+                className="stroke-chart-3"
                 strokeWidth={STROKE}
                 strokeDasharray={outer.dash}
                 strokeLinecap="round"
@@ -49,7 +49,7 @@ export function ProgressDonut({ metrics }: ProgressDonutProps) {
               <circle
                 r={R_MID}
                 fill="none"
-                className="stroke-orange-500"
+                className="stroke-chart-2"
                 strokeWidth={STROKE}
                 strokeDasharray={mid.dash}
                 strokeLinecap="round"
@@ -58,7 +58,7 @@ export function ProgressDonut({ metrics }: ProgressDonutProps) {
               <circle
                 r={R_INNER}
                 fill="none"
-                className="stroke-cyan-500"
+                className="stroke-chart-1"
                 strokeWidth={STROKE}
                 strokeDasharray={inner.dash}
                 strokeLinecap="round"
@@ -74,18 +74,18 @@ export function ProgressDonut({ metrics }: ProgressDonutProps) {
 
           <div className="flex-1 space-y-2 text-sm">
             <div className="flex items-start gap-2">
-              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-400" />
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-chart-3" />
               <span>
                 Avance planeado en obra — {metrics.plannedPct}% ({metrics.plannedCount}/{metrics.total}, a la semana
                 en curso)
               </span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500" />
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-chart-2" />
               <span>Avance programado — {metrics.pagosAvancePct}% (de acuerdo a calendario de pagos)</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-500" />
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-chart-1" />
               <span>
                 Avance real — {metrics.realPct}% ({metrics.doneCount} realizadas + {metrics.progressCount} en
                 proceso, de {metrics.total})

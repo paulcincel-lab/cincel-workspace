@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 
 import { AssistantCardMessage } from "@/components/asistente/AssistantCardMessage";
 import { AssistantChartMessage } from "@/components/asistente/AssistantChartMessage";
+import { AssistantPublishRfc } from "@/components/asistente/AssistantPublishRfc";
 import { AssistantListMessage } from "@/components/asistente/AssistantListMessage";
 import { AssistantStatGridMessage } from "@/components/asistente/AssistantStatGridMessage";
 import { AssistantTableMessage, type RenderTableArgs } from "@/components/asistente/AssistantTableMessage";
@@ -122,6 +123,13 @@ export function AssistantMessageParts({
           renderPart(segment.part, segment.index)
         ),
       )}
+      {message.parts.map((part, i) => {
+        if (part.type !== "tool-create_rfc" || part.state !== "output-available") return null;
+        const out = part.output as { publishTicketId?: string; code?: string } | undefined;
+        return out?.publishTicketId ? (
+          <AssistantPublishRfc key={`rfc-${i}`} ticketId={out.publishTicketId} code={out.code} />
+        ) : null;
+      })}
     </>
   );
 
