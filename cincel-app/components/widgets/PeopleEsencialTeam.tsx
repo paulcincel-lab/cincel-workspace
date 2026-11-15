@@ -109,10 +109,10 @@ const PCT_TEXT: Record<LoadBucket, string> = {
 };
 
 const CHIP_CLASS: Record<LoadBucket | "vacaciones", string> = {
-  libre: "bg-success/14 text-success dark:bg-success/22",
+  libre: "bg-success/10 text-success dark:bg-success/22",
   ocupado: "bg-secondary text-secondary-foreground",
-  cargado: "bg-warning/14 text-warning-ink dark:bg-warning/22",
-  saturado: "bg-destructive/14 text-destructive dark:bg-destructive/22",
+  cargado: "bg-warning/7 text-warning-ink dark:bg-warning/22",
+  saturado: "bg-destructive/14 text-destructive-ink dark:bg-destructive/22",
   vacaciones: "bg-chart-4/14 text-[color:var(--chart-4-ink)] dark:bg-chart-4/22",
 };
 

@@ -11,6 +11,7 @@ import { proyectoCronogramaOptions } from "@/lib/query/options/proyectos";
 import type { ScheduleStatus, ScheduleTask } from "@/lib/types/schedule";
 
 import { CronogramaHeader } from "./cronograma-header";
+import { ImportDialog } from "./import-dialog";
 import { GanttChart } from "./gantt-chart";
 import { ProgressDonut } from "./progress-donut";
 import { SCurveChart } from "./s-curve-chart";
@@ -133,6 +134,8 @@ export default function CronogramaView({ projectId, contractEnd = null }: Cronog
     projectId,
     table: view ? scheduleTable : EMPTY_TABLE,
     panels,
+    // Same rule as CronogramaHeader: the staff view is editable, so the first import is offered here.
+    emptyAction: <ImportDialog projectId={projectId} scheduleId={view?.data.schedule.id ?? null} />,
     loading: false,
   };
   return <CronogramaWidget {...widgetProps} />;

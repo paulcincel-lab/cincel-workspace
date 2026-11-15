@@ -95,7 +95,7 @@ function ReasonPill({ reason, tone }: { reason: string; tone: Tone }) {
   }
   if (tone === "ok") {
     return (
-      <Badge variant="outline" className="border-transparent bg-success/15 text-success">
+      <Badge variant="outline" className="border-transparent bg-success/10 text-success dark:bg-success/15">
         {reason}
       </Badge>
     );

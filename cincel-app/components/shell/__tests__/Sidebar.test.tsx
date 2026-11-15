@@ -182,13 +182,13 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Proyectos" }).textContent).not.toContain("pendientes");
   });
 
-  it("draws the count badges mono on the primary tint and hides them at 0", () => {
+  it("draws the count badges mono on the sidebar tint and hides them at 0", () => {
     renderSidebar({ nav: { ...FULL_NAV, items: [navItem("mi-espacio", 5), navItem("tareas", 31), navItem("proyectos", 0)] } });
     const badge = screen.getByText("31");
     expect(badge.getAttribute("data-slot")).toBe("badge");
     expect(badge.className).toContain("font-mono");
-    expect(badge.className).toContain("bg-primary/15");
-    expect(badge.className).toContain("text-primary");
+    expect(badge.className).toContain("in-data-[sidebar=menu-badge]:bg-sidebar-foreground/15");
+    expect(badge.className).toContain("in-data-[sidebar=menu-badge]:text-sidebar-foreground");
     const proyectos = screen.getByRole("link", { name: "Proyectos" }).closest("li")!;
     expect(proyectos.querySelector("[data-slot=badge]")).toBeNull();
   });

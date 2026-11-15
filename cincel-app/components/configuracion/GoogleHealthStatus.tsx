@@ -52,7 +52,7 @@ type StatusTone = "configured" | "missing" | "error";
 const STATUS_PILL: Record<StatusTone, { label: string; className: string }> = {
   configured: { label: "Configurado", className: "bg-tint-success text-success" },
   missing: { label: "Falta", className: "border border-border text-muted-foreground" },
-  error: { label: "Error", className: "bg-tint-destructive text-destructive" },
+  error: { label: "Error", className: "bg-tint-destructive text-destructive-ink" },
 };
 
 function StatusPill({ tone }: { tone: StatusTone }) {

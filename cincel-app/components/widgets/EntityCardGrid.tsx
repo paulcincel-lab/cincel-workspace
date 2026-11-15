@@ -113,7 +113,7 @@ function ToneBadge({ label, tone }: { label: string; tone: Tone }) {
   }
   if (tone === "ok") {
     return (
-      <Badge variant="outline" className="border-transparent bg-success/15 text-success">
+      <Badge variant="outline" className="border-transparent bg-success/10 text-success dark:bg-success/15">
         {label}
       </Badge>
     );

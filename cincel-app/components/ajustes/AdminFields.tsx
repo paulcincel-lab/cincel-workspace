@@ -89,7 +89,7 @@ const PILL_TONE: Record<PillTone, string> = {
   neutral: "bg-muted text-muted-foreground",
   success: "bg-tint-success text-success",
   warning: "bg-tint-warning text-warning-ink",
-  destructive: "bg-tint-destructive text-destructive",
+  destructive: "bg-tint-destructive text-destructive-ink",
   outline: "border border-border text-muted-foreground",
 };
 

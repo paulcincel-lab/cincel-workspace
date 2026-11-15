@@ -140,9 +140,9 @@ function ProjectsSubmenu({ currentId }: { currentId: string | null }) {
       ) : null}
       <SidebarMenuSub className="max-h-72 overflow-y-auto" aria-label="Proyectos">
         {isPending ? (
-          <li className="px-2 py-1 text-xs text-muted-foreground">Cargando proyectos…</li>
+          <li className="px-2 py-1 text-xs text-sidebar-foreground/80">Cargando proyectos…</li>
         ) : active.length === 0 && inactive.length === 0 ? (
-          <li className="px-2 py-1 text-xs text-muted-foreground">
+          <li className="px-2 py-1 text-xs text-sidebar-foreground/80">
             {filtering ? "Ningún proyecto coincide." : "Aún no hay proyectos."}
           </li>
         ) : null}
@@ -157,7 +157,7 @@ function ProjectsSubmenu({ currentId }: { currentId: string | null }) {
               aria-controls={inactiveId}
               disabled={filtering}
               onClick={() => setInactiveOpen(!inactiveOpen)}
-              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2"
+              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-foreground/80 ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2"
             >
               <ChevronRight
                 aria-hidden="true"

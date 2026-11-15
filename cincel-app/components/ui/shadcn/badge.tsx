@@ -13,18 +13,21 @@ const badgeVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
         destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+          "bg-destructive/10 text-destructive-ink focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
         success:
-          "bg-success/15 text-success dark:bg-success/20 [a]:hover:bg-success/25",
+          "bg-success/10 text-success dark:bg-success/20 [a]:hover:bg-success/25",
         warning:
-          "bg-warning/15 text-warning-ink [a]:hover:bg-warning/25",
+          "bg-warning/7 text-warning-ink dark:bg-warning/15 [a]:hover:bg-warning/15 dark:[a]:hover:bg-warning/25",
         outline:
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Inside the sidebar the count takes the sidebar tokens (Grafito's sidebar is dark on a light page).
+        // sidebar-tokens:allow-start
         count:
-          "h-auto rounded-full px-[7px] py-px font-mono text-[11px] font-normal tabular-nums bg-primary/15 text-primary dark:bg-primary/20 group-has-[[data-active]]/menu-item:bg-primary-foreground/20 group-has-[[data-active]]/menu-item:text-primary-foreground",
+          "h-auto rounded-full bg-secondary px-[7px] py-px font-mono text-[11px] font-normal text-secondary-foreground tabular-nums in-data-[sidebar=menu-badge]:bg-sidebar-foreground/15 in-data-[sidebar=menu-badge]:text-sidebar-foreground in-data-[sidebar=menu-badge]:group-has-[[data-active]]/menu-item:bg-sidebar-primary-foreground/5 in-data-[sidebar=menu-badge]:group-has-[[data-active]]/menu-item:text-sidebar-primary-foreground",
+        // sidebar-tokens:allow-end
       },
     },
     defaultVariants: {
