@@ -55,7 +55,7 @@ function renderNeto(columnKey: string, row: Record<string, unknown>) {
   if (columnKey !== "neto" || typeof row.neto !== "number") return undefined;
   const value = row.neto;
   const text = value > 0 ? `+${value}` : String(value);
-  return <span className={value < 0 ? "text-destructive" : undefined}>{text}</span>;
+  return <span className={value < 0 ? "text-destructive-ink" : undefined}>{text}</span>;
 }
 
 /**

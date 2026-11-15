@@ -341,7 +341,7 @@ function TableView({
             padding,
             alignClass(column),
             heat ? HEAT_CELL_CLASS[heat] : "",
-            isNegativeDelta(column, row) ? "text-destructive" : "",
+            isNegativeDelta(column, row) ? "text-destructive-ink" : "",
           ]
             .filter(Boolean)
             .join(" ");

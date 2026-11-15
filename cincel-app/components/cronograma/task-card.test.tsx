@@ -43,6 +43,13 @@ describe("TaskCard", () => {
     expect(onCycleStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }), "pending");
   });
 
+  it("keeps the unflagged flag toggle at a legible full-opacity muted color", () => {
+    render(<TaskCard task={makeTask({ flagged: false })} onToggleFlag={vi.fn()} />);
+    const cls = screen.getByRole("button", { name: "Marcar atención especial" }).className;
+    expect(cls).toContain("text-muted-foreground");
+    expect(cls).not.toContain("text-muted-foreground/");
+  });
+
   it("clicking the flag button toggles it", () => {
     const onToggleFlag = vi.fn();
     render(<TaskCard task={makeTask({ flagged: false })} onToggleFlag={onToggleFlag} />);

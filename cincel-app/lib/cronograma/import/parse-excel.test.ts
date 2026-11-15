@@ -115,4 +115,48 @@ describe("parseScheduleExcel", () => {
     const result = parseScheduleExcel(buffer as ArrayBuffer);
     expect(result.ok).toBe(false);
   });
+
+  describe("CSV encodings", () => {
+    const csv = [
+      HEADERS.join(","),
+      "PB-1,PB,Preliminares,Chava,2026-06-22,2026-06-27,Instalación de cimentación",
+    ].join("\n");
+    const toBuffer = (bytes: Uint8Array): ArrayBuffer =>
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+    it("parses a UTF-8 CSV without a BOM keeping accents", () => {
+      const result = parseScheduleExcel(toBuffer(new TextEncoder().encode(csv)));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.tasks[0].seccion).toBe("Preliminares");
+      expect(result.tasks[0].tarea).toBe("Instalación de cimentación");
+    });
+
+    it("parses a UTF-8 CSV with a BOM without polluting the first header", () => {
+      const body = new TextEncoder().encode(csv);
+      const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...body]);
+      const result = parseScheduleExcel(toBuffer(bytes));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.tasks[0].legacyId).toBe("PB-1");
+      expect(result.tasks[0].tarea).toBe("Instalación de cimentación");
+    });
+
+    it("still parses a Latin-1 encoded CSV", () => {
+      const bytes = Uint8Array.from(Array.from(csv, (c) => c.charCodeAt(0)));
+      const result = parseScheduleExcel(toBuffer(bytes));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.tasks[0].tarea).toBe("Instalación de cimentación");
+    });
+
+    it("keeps parsing an xlsx workbook", () => {
+      const result = parseScheduleExcel(
+        buildWorkbookBuffer([["PB-1", "PB", "Preliminares", "Chava", "2026-06-22", "2026-06-27", "Acción"]]),
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.tasks[0].tarea).toBe("Acción");
+    });
+  });
 });

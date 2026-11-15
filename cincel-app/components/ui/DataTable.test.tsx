@@ -27,6 +27,16 @@ describe("DataTable", () => {
     expect(screen.getByText("Cris")).toBeTruthy();
   });
 
+  it("draws inactive sort arrows at full muted-foreground, not a faded alpha", () => {
+    const { container } = render(
+      <DataTable columns={columns} data={data} manualSort={{ sortable: ["name"], sort: { key: "name", direction: "asc" }, onSortChange: vi.fn() }} />
+    );
+    const arrows = Array.from(container.querySelectorAll("span")).filter((el) => el.textContent === "▲" || el.textContent === "▼");
+    expect(arrows.length).toBeGreaterThan(0);
+    for (const arrow of arrows) expect(arrow.className).not.toMatch(/muted-foreground\//);
+    expect(arrows.find((el) => el.textContent === "▼")?.className).toContain("text-muted-foreground");
+  });
+
   it("shows the empty message when data is empty", () => {
     render(<DataTable columns={columns} data={[]} emptyMessage="Nada por aquí" />);
     expect(screen.getByText("Nada por aquí")).toBeTruthy();
