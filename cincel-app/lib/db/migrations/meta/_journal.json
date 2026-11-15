@@ -288,6 +288,13 @@
       "when": 1794633158243,
       "tag": "0040_table_column_widths",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794636758243,
+      "tag": "0041_reapply_email_signature",
+      "breakpoints": true
     }
   ]
 }
