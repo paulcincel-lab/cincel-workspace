@@ -51,8 +51,8 @@ function namesFor(access: SystemAccessRole): Set<string> {
   return new Set(Object.keys(buildAssistantTools(userWith(access), RUN)));
 }
 
-// create_ticket is only built while SOPORTE_GITHUB_ENABLED is on, but the fixed prompt text names it.
-const REGISTRY = new Set(["create_ticket", ...DEFINED_TOOLS.map((entry) => entry.name), ...Object.keys(buildAssistantTools(userWith("Administrador")))]);
+// create_rfc is only built while SOPORTE_GITHUB_ENABLED is on, but the fixed prompt text names it.
+const REGISTRY = new Set(["create_rfc", ...DEFINED_TOOLS.map((entry) => entry.name), ...Object.keys(buildAssistantTools(userWith("Administrador")))]);
 
 const WRITE_TOOLS = [
   ...DEFINED_TOOLS.filter((entry) => entry.definition.write).map((entry) => entry.name),
