@@ -120,7 +120,7 @@ describe("buildAssistantTools", () => {
         ...READ_TOOLS,
         "assign_task",
         "create_task",
-        "create_rfc",
+        "create_ticket",
         "create_client",
         "onboard_client",
         "find_duplicates",
@@ -131,14 +131,14 @@ describe("buildAssistantTools", () => {
     );
   });
 
-  it("gives Colaborador create_task + create_rfc + find_duplicates but no merge/client tools", () => {
+  it("gives Colaborador create_task + create_ticket + find_duplicates but no merge/client tools", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Colaborador"))).sort();
-    expect(keys).toEqual([...READ_TOOLS, "create_task", "create_rfc", "find_duplicates"].sort());
+    expect(keys).toEqual([...READ_TOOLS, "create_task", "create_ticket", "find_duplicates"].sort());
   });
 
-  it("gives Arquitecto Junior create_task + create_rfc + find_duplicates but not the rest", () => {
+  it("gives Arquitecto Junior create_task + create_ticket + find_duplicates but not the rest", () => {
     const keys = Object.keys(buildAssistantTools(userWithAccess("Arquitecto Junior")));
-    expect(keys).toEqual(expect.arrayContaining(["create_task", "create_rfc", "find_duplicates"]));
+    expect(keys).toEqual(expect.arrayContaining(["create_task", "create_ticket", "find_duplicates"]));
     expect(keys).not.toContain("assign_task");
     expect(keys).not.toContain("create_client");
     expect(keys).not.toContain("merge_duplicate_clients");
@@ -253,28 +253,6 @@ describe("create_rfc", () => {
   it("caps extra labels at 5", () => {
     const labels = Array.from({ length: 6 }, (_, i) => `l${i}`);
     expect(parse(create_rfc.inputSchema, { ...validInput, labels }).success).toBe(false);
-  });
-
-  it("returns ok:false without calling GitHub when unconfigured", async () => {
-    isGithubConfiguredMock.mockReturnValue(false);
-    const out = await create_rfc.execute!(validInput, { toolCallId: "t", messages: [] } as never);
-    expect(out).toEqual({ ok: false, error: expect.stringContaining("GitHub no está configurado") });
-    expect(createGithubIssueMock).not.toHaveBeenCalled();
-  });
-
-  it("creates a labeled issue and returns its number/url when configured", async () => {
-    isGithubConfiguredMock.mockReturnValue(true);
-    createGithubIssueMock.mockResolvedValue({ number: 42, url: "https://github.com/o/r/issues/42" });
-
-    const out = await create_rfc.execute!(validInput, { toolCallId: "t", messages: [] } as never);
-
-    expect(createGithubIssueMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: `[RFC] ${validInput.title}`,
-        labels: ["rfc"],
-      })
-    );
-    expect(out).toEqual({ ok: true, number: 42, url: "https://github.com/o/r/issues/42" });
   });
 });
 

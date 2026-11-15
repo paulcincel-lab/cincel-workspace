@@ -7,10 +7,13 @@ vi.mock("@/lib/repositories/browser-state-repository", () => ({
   readJsonStorage: vi.fn().mockReturnValue(null),
 }));
 
+const flags = vi.hoisted(() => ({ github: true }));
 vi.mock("@/lib/soporte/flags", () => ({
   SOPORTE_ENABLED: true,
   MEJORAS_ENABLED: true,
-  SOPORTE_GITHUB_ENABLED: true,
+  get SOPORTE_GITHUB_ENABLED() {
+    return flags.github;
+  },
 }));
 
 const createTicketActionMock = vi.fn();
@@ -65,6 +68,7 @@ const callOpts = { toolCallId: "t", messages: [] } as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  flags.github = true;
 });
 
 describe("tool guard", () => {
@@ -82,6 +86,49 @@ describe("tool guard", () => {
   it("asks for confirmation before filing", () => {
     expect(LEGACY_CONFIRM_TOOLS.has("create_ticket")).toBe(true);
     expect(LEGACY_CONFIRM_TOOLS.has("create_rfc")).toBe(true);
+  });
+});
+
+describe("tool gating by flag and role", () => {
+  const roles: SystemAccessRole[] = ["Administrador", "Colaborador", "Arquitecto Junior"];
+
+  it("with the flag off: create_ticket for every signed-in user, create_rfc for nobody", () => {
+    flags.github = false;
+    for (const role of roles) {
+      const keys = Object.keys(buildAssistantTools(userWithAccess(role)));
+      expect(keys).toContain("create_ticket");
+      expect(keys).not.toContain("create_rfc");
+    }
+    const anon = Object.keys(buildAssistantTools(null));
+    expect(anon).not.toContain("create_ticket");
+    expect(anon).not.toContain("create_rfc");
+  });
+
+  it("with the flag on: create_ticket for every signed-in user, create_rfc only for the admin", () => {
+    flags.github = true;
+    const admin = Object.keys(buildAssistantTools(userWithAccess("Administrador")));
+    expect(admin).toContain("create_ticket");
+    expect(admin).toContain("create_rfc");
+    for (const role of ["Colaborador", "Arquitecto Junior"] as const) {
+      const keys = Object.keys(buildAssistantTools(userWithAccess(role)));
+      expect(keys).toContain("create_ticket");
+      expect(keys).not.toContain("create_rfc");
+    }
+    const anon = Object.keys(buildAssistantTools(null));
+    expect(anon).not.toContain("create_ticket");
+    expect(anon).not.toContain("create_rfc");
+  });
+
+  it("create_rfc refuses to run while the flag is off", async () => {
+    flags.github = false;
+    requireCapabilityUserMock.mockResolvedValue(userWithAccess("Administrador"));
+    const out = await create_rfc.execute!(
+      { title: "Mover el ELB", problem: "El balanceador actual no soporta el tráfico.", proposal: "Migrar a un ALB multi-región." },
+      callOpts,
+    );
+    expect(out).toMatchObject({ ok: false, error: "DISABLED" });
+    expect(createTicketActionMock).not.toHaveBeenCalled();
+    expect(createGithubIssueMock).not.toHaveBeenCalled();
   });
 });
 
@@ -167,6 +214,18 @@ describe("prompt rules and eval", () => {
     });
     expect(prompt).toContain("create_ticket:");
     expect(prompt).toContain("nunca inventes el problema");
+  });
+
+  it("with the flag off the prompt has the create_ticket rule and no create_rfc rule", () => {
+    flags.github = false;
+    const tools = Object.entries(buildAssistantTools(userWithAccess("Administrador"))).map(([name, t]) => ({
+      name,
+      description: (t as { description?: string }).description ?? "",
+      write: true,
+    }));
+    const prompt = buildSystemPrompt({ tools });
+    expect(prompt).toContain("create_ticket:");
+    expect(prompt).not.toContain("create_rfc");
   });
 
   it("maps 'el botón de guardar no hace nada en Tareas' to kind error and area tareas", async () => {
