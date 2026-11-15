@@ -807,7 +807,7 @@ function AnaliticoEvents({ entries, groupBy }: { entries: AgendaEntry[]; groupBy
 const HEAT_CLASS: Record<AgendaHeat, string> = {
   none: "",
   warn: "bg-[color-mix(in_oklab,var(--warning)_22%,var(--card))] text-(--warning-ink)",
-  crit: "bg-destructive/10 text-destructive",
+  crit: "bg-destructive/10 text-destructive-ink",
 };
 
 function AnaliticoLoad({ month, entries, today }: { month: Date; entries: AgendaEntry[]; today: Date }) {

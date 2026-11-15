@@ -68,7 +68,7 @@ const DELTA_BADGE: Record<KpiDeltaTone, "success" | "destructive" | "outline"> =
 /** Text color of a tone (sparkline stroke, Analítico Δ cell). */
 export const DELTA_TEXT: Record<KpiDeltaTone, string> = {
   good: "text-success",
-  bad: "text-destructive",
+  bad: "text-destructive-ink",
   neutral: "text-muted-foreground",
 };
 

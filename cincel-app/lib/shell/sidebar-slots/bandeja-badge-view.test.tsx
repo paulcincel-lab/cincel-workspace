@@ -49,12 +49,12 @@ describe("BandejaBadge", () => {
     await waitFor(() => expect(container.innerHTML).toBe(""));
   });
 
-  it("uses the mono primary-tint count badge of frame `Sidebar`", () => {
+  it("uses the mono sidebar-tint count badge of frame `Sidebar`", () => {
     const { container } = renderBadge({ unreadCount: 5 });
     const badge = container.querySelector("[data-slot=bandeja-badge]")!;
     expect(badge.className).toContain("font-mono");
-    expect(badge.className).toContain("bg-primary/15");
-    expect(badge.className).toContain("text-primary");
+    expect(badge.className).toContain("in-data-[sidebar=menu-badge]:bg-sidebar-foreground/15");
+    expect(badge.className).toContain("in-data-[sidebar=menu-badge]:text-sidebar-foreground");
   });
 
   it("adds the reminders still due today", () => {

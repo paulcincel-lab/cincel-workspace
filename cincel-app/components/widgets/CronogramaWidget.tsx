@@ -37,6 +37,8 @@ export type CronogramaWidgetProps = {
   /** The existing cronograma panels (Gantt, avance, curva S, semanas…) composed by the page; Visual only. */
   panels?: ReactNode;
   emptyState?: EmptyStateProps;
+  /** Rendered under the empty state when there is no cronograma yet (the import dialog); omitted for read-only viewers. */
+  emptyAction?: ReactNode;
   loading?: boolean;
 };
 
@@ -334,7 +336,7 @@ function ReportLink({ projectId }: { projectId: string }) {
   );
 }
 
-export function CronogramaWidget({ projectId, table, panels, emptyState, loading }: CronogramaWidgetProps) {
+export function CronogramaWidget({ projectId, table, panels, emptyState, emptyAction, loading }: CronogramaWidgetProps) {
   if (loading) {
     return (
       <StyleView
@@ -350,6 +352,7 @@ export function CronogramaWidget({ projectId, table, panels, emptyState, loading
     return (
       <WidgetCard title="Cronograma de obra" icon={CalendarRange}>
         <EmptyState {...(emptyState ?? DEFAULT_EMPTY)} />
+        {emptyAction ? <div className="flex justify-center pb-6">{emptyAction}</div> : null}
       </WidgetCard>
     );
   }

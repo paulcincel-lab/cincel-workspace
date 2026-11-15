@@ -73,7 +73,7 @@ export function TokenContrastBadge({ contrast, id }: { contrast: TokenContrast; 
       className={
         contrast.ok
           ? "inline-flex shrink-0 items-center rounded-full bg-tint-success px-2 py-0.5 font-mono text-[11px] text-success"
-          : "inline-flex shrink-0 items-center rounded-full bg-tint-destructive px-2 py-0.5 font-mono text-[11px] text-destructive"
+          : "inline-flex shrink-0 items-center rounded-full bg-tint-destructive px-2 py-0.5 font-mono text-[11px] text-destructive-ink"
       }
     >
       {contrast.ok ? ratio : `${ratio} · no cumple ${contrast.min}:1`}

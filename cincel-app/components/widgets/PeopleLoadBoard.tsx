@@ -223,7 +223,7 @@ const HEAT_CELL: Record<LoadBucket, string> = {
   libre: "bg-secondary text-secondary-foreground",
   ocupado: "bg-chart-3/14 dark:bg-chart-3/22 text-[color:var(--chart-3-ink,var(--foreground))]",
   cargado: "bg-chart-3/14 dark:bg-chart-3/22 text-[color:var(--chart-3-ink,var(--foreground))]",
-  saturado: "bg-destructive/14 dark:bg-destructive/22 text-destructive",
+  saturado: "bg-destructive/14 dark:bg-destructive/22 text-destructive-ink",
 };
 
 const VACATION_STRIPES =

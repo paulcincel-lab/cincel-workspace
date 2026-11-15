@@ -73,9 +73,9 @@ function CollapseToggle({ collapsed, onToggle, bodyId }: NonNullable<WidgetCardP
 /** Icon chip tint and ink per tone (FE §14.2, §14.5). */
 const TONE_CHIP: Record<Tone, string> = {
   default: "bg-muted text-foreground",
-  ok: "bg-success/15 text-success",
+  ok: "bg-success/10 text-success dark:bg-success/15",
   warn: "bg-[color-mix(in_oklab,var(--warning)_22%,var(--card))] text-(--warning-ink)",
-  critical: "bg-destructive/10 text-destructive",
+  critical: "bg-destructive/10 text-destructive-ink",
 };
 
 function hasContent(children: ReactNode): boolean {

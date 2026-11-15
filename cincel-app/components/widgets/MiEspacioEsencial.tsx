@@ -98,7 +98,7 @@ const CAN_OPEN_THREAD: boolean = GMAIL_ON && GMAIL_IMPLEMENTED.fetchGmailThreadA
 
 const PILL = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[12.5px] font-medium";
 const MUTED_PILL = cn(PILL, "bg-muted text-foreground");
-const DESTRUCTIVE_PILL = cn(PILL, "bg-destructive/14 text-destructive dark:bg-destructive/22");
+const DESTRUCTIVE_PILL = cn(PILL, "bg-destructive/14 text-destructive-ink dark:bg-destructive/22");
 const SECONDARY_PILL = cn(PILL, "bg-secondary text-secondary-foreground");
 
 export function MiEspacioEsencial({ notice, reader }: MiEspacioEsencialProps): ReactNode {

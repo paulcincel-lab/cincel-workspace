@@ -19,7 +19,7 @@ export function SidebarUserBlock({ session }: SidebarUserBlockProps) {
         <Link href="/ajustes/perfil" className="truncate text-sm font-medium text-sidebar-foreground hover:underline">
           {session.name}
         </Link>
-        {session.role ? <span className="truncate text-xs text-muted-foreground">{session.role}</span> : null}
+        {session.role ? <span className="truncate text-xs text-sidebar-foreground/80">{session.role}</span> : null}
       </div>
     </div>
   );

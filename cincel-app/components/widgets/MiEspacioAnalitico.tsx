@@ -150,7 +150,7 @@ const TD = "border-b border-accent px-3 py-[7px] text-[12.5px] whitespace-nowrap
 const TF = "bg-muted px-3 py-2 text-[12.5px] font-semibold whitespace-nowrap";
 const STICKY = "sticky left-0 z-[1] bg-card";
 const STICKY_MUTED = "sticky left-0 z-[1] bg-muted";
-const WARN = "bg-warning/15 text-warning-ink";
+const WARN = "bg-warning/7 text-warning-ink dark:bg-warning/15";
 
 const NUMBER = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 const WEEKDAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];

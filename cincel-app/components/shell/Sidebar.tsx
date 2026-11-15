@@ -167,7 +167,7 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
 
           {nav.etapas.length > 0 ? (
             <SidebarGroup>
-              <SidebarGroupLabel id="sidebar-etapas" className="h-auto px-2.5 pb-1 text-muted-foreground">
+              <SidebarGroupLabel id="sidebar-etapas" className="h-auto px-2.5 pb-1 text-sidebar-foreground/80">
                 Etapas
               </SidebarGroupLabel>
               <SidebarGroupContent>
@@ -211,7 +211,7 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
             ) : (
               <span className="truncate text-[13px] font-medium">{session.name}</span>
             )}
-            {session.role ? <span className="truncate text-xs text-muted-foreground">{session.role}</span> : null}
+            {session.role ? <span className="truncate text-xs text-sidebar-foreground/80">{session.role}</span> : null}
           </span>
         </div>
       </SidebarFooter>

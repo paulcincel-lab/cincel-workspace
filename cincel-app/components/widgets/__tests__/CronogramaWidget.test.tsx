@@ -177,6 +177,22 @@ describe("CronogramaWidget", () => {
     expect(getByTestId("empty-state").textContent).toContain("Sin partidas");
   });
 
+  it("renders the empty action under the empty state, and nothing extra without it", () => {
+    const withAction = renderIn(
+      "visual",
+      <CronogramaWidget
+        projectId={CRONOGRAMA_PROJECT_ID}
+        table={cronogramaEmptyTable}
+        emptyAction={<button type="button">Importar</button>}
+      />,
+    );
+    expect(withAction.getByText("Importar")).toBeTruthy();
+    withAction.unmount();
+
+    const plain = renderIn("visual", <CronogramaWidget projectId={CRONOGRAMA_PROJECT_ID} table={cronogramaEmptyTable} />);
+    expect(plain.queryByText("Importar")).toBeNull();
+  });
+
   it("renders its LoadingSkeleton variant per style while loading", () => {
     const expected: Record<PresentationStyle, string> = { visual: "list", esencial: "list", analitico: "table" };
     for (const style of STYLES) {
