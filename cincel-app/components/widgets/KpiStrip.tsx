@@ -41,7 +41,7 @@ export function KpiStrip({ items, loading = false }: KpiStripProps): ReactNode {
             data-slot="kpi-value"
             className={cn(
               "text-[26px] leading-tight font-semibold tabular-nums",
-              item.tone === "destructive" ? "text-destructive" : "text-foreground",
+              item.tone === "destructive" ? "text-destructive-ink" : "text-foreground",
             )}
           >
             {formatValue(item.value)}
