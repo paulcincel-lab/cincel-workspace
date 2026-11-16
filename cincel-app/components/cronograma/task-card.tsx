@@ -113,7 +113,7 @@ export function TaskCard({ task, className, readOnly = false, onCycleStatus, onT
           title={task.flagged ? "Quitar atención especial" : "Marcar atención especial"}
           className={cn(
             "shrink-0 rounded p-0.5 transition-colors hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            task.flagged ? "text-warning-ink" : "text-muted-foreground/40"
+            task.flagged ? "text-warning-ink" : "text-muted-foreground"
           )}
           onClick={() => onToggleFlag?.(task)}
         >

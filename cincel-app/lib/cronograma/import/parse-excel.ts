@@ -62,6 +62,27 @@ function parseDateCell(v: unknown): string | null {
   return null;
 }
 
+function isBinaryWorkbook(bytes: Uint8Array): boolean {
+  const zip = bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+  const ole =
+    bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+  return zip || ole;
+}
+
+/** Reads xlsx/xls as binary; text input that is valid UTF-8 (with or without BOM) is decoded first so accents survive, otherwise SheetJS falls back to its legacy decoding (Latin-1 CSVs). */
+function readWorkbook(buffer: ArrayBuffer): XLSX.WorkBook {
+  const bytes = new Uint8Array(buffer);
+  if (!isBinaryWorkbook(bytes)) {
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, "");
+      return XLSX.read(text, { type: "string", cellDates: true });
+    } catch (e) {
+      if (!(e instanceof TypeError)) throw e;
+    }
+  }
+  return XLSX.read(buffer, { type: "array", cellDates: true });
+}
+
 export type ParseExcelResult = { ok: true; tasks: NormalizedScheduleTask[] } | { ok: false; error: string };
 
 /** Parses the schedule Excel/CSV per docs/specs/backend.md §8.1. Rejects on missing columns, missing required fields per row, or a (planta, tarea) collision (identical stableKey within the same planta). */
@@ -78,7 +99,7 @@ export function parseScheduleExcel(buffer: ArrayBuffer): ParseExcelResult {
 
   let workbook: XLSX.WorkBook;
   try {
-    workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+    workbook = readWorkbook(buffer);
   } catch {
     return { ok: false, error: "No se pudo leer el archivo. Verifica que sea un Excel o CSV válido." };
   }

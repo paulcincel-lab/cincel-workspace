@@ -154,8 +154,8 @@ function groupRows<R>(rows: R[], keyOf: (row: R) => string): { key: string; rows
 function SortIcon({ direction }: { direction: "asc" | "desc" | false }) {
   return (
     <span className="inline-flex flex-col leading-none text-[10px]" aria-hidden>
-      <span className={direction === "asc" ? "text-foreground" : "text-muted-foreground/40"}>▲</span>
-      <span className={direction === "desc" ? "text-foreground" : "text-muted-foreground/40"}>▼</span>
+      <span className={direction === "asc" ? "text-foreground" : "text-muted-foreground"}>▲</span>
+      <span className={direction === "desc" ? "text-foreground" : "text-muted-foreground"}>▼</span>
     </span>
   );
 }
