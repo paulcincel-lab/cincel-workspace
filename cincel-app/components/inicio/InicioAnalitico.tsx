@@ -455,7 +455,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
           </span>
         );
       case "vence":
-        return row.vence ? <span className="text-destructive">{formatValue(row.vence, "date")}</span> : "";
+        return row.vence ? <span className="text-destructive-ink">{formatValue(row.vence, "date")}</span> : "";
       case "vencidas":
         return row.kind === "etapa" ? String(row.vencidas ?? 0) : "";
       case "dias":
@@ -479,7 +479,7 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
   function renderPaceCell(key: string, row: PaceRow): ReactNode | undefined {
     if (key !== "neto") return undefined;
     const text = signed(row.neto);
-    return row.neto < 0 ? <span className="text-destructive">{text}</span> : text;
+    return row.neto < 0 ? <span className="text-destructive-ink">{text}</span> : text;
   }
 
   // ── Carga por persona ──
@@ -612,12 +612,12 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
   // ── "Ir a" ──
   const netLast = lastWeekNet(weeks);
   const anchors: { section: keyof typeof ANALITICO_SECTION; label: string; count: string; tone: string }[] = [
-    { section: "atencion", label: "Atención", count: String(attention.overdue), tone: "text-destructive" },
+    { section: "atencion", label: "Atención", count: String(attention.overdue), tone: "text-destructive-ink" },
     {
       section: "ritmo",
       label: "Ritmo semanal",
       count: signed(netLast),
-      tone: netLast < 0 ? "text-destructive" : "text-success",
+      tone: netLast < 0 ? "text-destructive-ink" : "text-success",
     },
     ...(showWorkload
       ? [{ section: "carga" as const, label: "Carga por persona", count: String(people.length), tone: "text-muted-foreground" }]

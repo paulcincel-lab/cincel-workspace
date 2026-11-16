@@ -144,7 +144,7 @@ describe("InicioAnalitico", () => {
     renderAnalitico();
     // The −5 week reads as a negative, destructive net.
     const cell = within(section("s-ritmo")).getByText("−5");
-    expect(cell.closest(".text-destructive")).toBeTruthy();
+    expect(cell.closest(".text-destructive-ink")).toBeTruthy();
   });
 
   it("Ir a focuses section", async () => {
