@@ -1,6 +1,6 @@
 name: cincel-app CI
 
-# Checks for pull requests: lint + build (with a clean build log) and unit tests. Playwright e2e runs
+# Checks for pull requests: lint + build (with a clean build log), typecheck and unit tests. Playwright e2e runs
 # locally (npm run test:e2e), not on the runners.
 # Images are built and published by cincel-app-docker.yml on push to main.
 on:
@@ -46,6 +46,26 @@ jobs:
 
       - name: Check the build log
         run: node scripts/check-build-log.mjs next-build.log
+
+  # Runs in parallel with verify: next build skips its own TypeScript step
+  # (typescript.ignoreBuildErrors in next.config.ts), so types are checked once, here.
+  typecheck:
+    runs-on: self-hosted
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
 
   unit-tests:
     needs: verify

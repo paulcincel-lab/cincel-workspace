@@ -8,6 +8,8 @@ const GOOGLE_IMG_SRC =
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   output: "standalone",
+  // Typechecking runs once, as its own CI job (npm run typecheck), so next build skips it.
+  typescript: { ignoreBuildErrors: true },
   experimental: {
     // Dev compiles only the named exports used from these barrel-style packages.
     optimizePackageImports: ["recharts", "@tanstack/react-query", "@tanstack/react-table", "cmdk", "sonner"],
