@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { AccordionPanels } from "@/components/ui/AccordionPanels";
 import { Badge } from "@/components/ui/shadcn/badge";
@@ -31,12 +31,13 @@ import { ProjectBitacoraCard } from "@/components/proyectos/ProjectBitacoraCard"
 import { canRemapImport, RemapImportSheet } from "@/components/proyectos/RemapImportSheet";
 import { ProjectEtapasCard } from "@/components/proyectos/ProjectEtapasCard";
 import { ProjectSpacesCard } from "@/components/proyectos/ProjectSpacesCard";
-import { groupFichaTasks, hasTasksWithoutEtapa, NO_PHASE_LABEL } from "@/lib/proyectos/task-groups";
+import { fichaTasksListFilters, groupFichaTasks, NO_PHASE_LABEL } from "@/lib/proyectos/task-groups";
+import { listItemOfRow } from "@/lib/tareas/page-data";
 import { hasImportData, ImportDataPanel, useImportData } from "@/components/ui/ImportDataPanel";
 import { useGoogleConnectResult } from "@/lib/google/use-google-connect-result";
 
 import { selectCurrentUser, useSessionStore } from "@/lib/stores/session-store";
-import { canSeeAdminData, resolveProjectsCapabilities } from "@/lib/auth/permissions";
+import { canSeeAdminData, resolveActivitiesCapabilities, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import {
   setProjectMembersAction,
   setProjectContactsAction,
@@ -48,6 +49,7 @@ import { qk } from "@/lib/query/keys";
 import { useActionMutation } from "@/lib/query/mutation";
 import { catalogContactsOptions, catalogStaffOptions, catalogEtapasOptions } from "@/lib/query/options/catalog";
 import { proyectoFichaOptions } from "@/lib/query/options/proyectos";
+import { tareasListInfiniteOptions } from "@/lib/query/options/tareas";
 import { useUpdateProjectMutation } from "@/lib/proyectos/ficha-mutations";
 import type { ProjectDetail, ProjectLink, TaskLinkInput } from "@/lib/types/core";
 
@@ -136,7 +138,15 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
     invalidate: [fichaKey],
   });
 
-  const tasks = useMemo(() => ficha.data?.tasks ?? [], [ficha.data]);
+  // The task rows: 30 a page with "Cargar más" (`qk.tareas.list`), grouped as they load.
+  const canViewTasks = useMemo(() => resolveActivitiesCapabilities(authenticatedUser).canViewActivities, [authenticatedUser]);
+  const taskList = useInfiniteQuery({
+    ...tareasListInfiniteOptions(fichaTasksListFilters(projectId, isAdmin)),
+    enabled: canViewTasks,
+  });
+  const taskPages = taskList.data?.pages;
+  const tasks = useMemo(() => (taskPages ?? []).flatMap((page) => page.rows.map(listItemOfRow)), [taskPages]);
+  const taskTotal = taskPages?.at(-1)?.total ?? tasks.length;
   // Etapa → Fase (FE §3.5); admins also get the project's admin tasks.
   const taskGroups = useMemo(() => groupFichaTasks(tasks, { includeAdmin: isAdmin }), [tasks, isAdmin]);
   const staff = staffQuery.data ?? [];
@@ -407,14 +417,16 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
               workflows={etapasQuery.data ?? []}
               canChangeEtapa={caps.canChangeProjectStage}
               isAdmin={isAdmin}
-              hasTasksWithoutEtapa={hasTasksWithoutEtapa(tasks)}
+              hasTasksWithoutEtapa={ficha.data?.hasTasksWithoutEtapa ?? false}
             />
 
             <ProjectSpacesCard projectId={project.id} canEdit={caps.canEditProjectGeneral} />
 
             <section className="space-y-4">
-              <h2 className="text-lg font-semibold text-foreground">Tareas ({tasks.length})</h2>
-              {tasks.length === 0 ? (
+              <h2 className="text-lg font-semibold text-foreground">Tareas ({taskTotal})</h2>
+              {taskList.isPending && canViewTasks ? (
+                <Skeleton className="h-24 w-full" />
+              ) : tasks.length === 0 ? (
                 <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">Sin tareas todavía.</p>
               ) : (
                 <AccordionPanels
@@ -451,6 +463,20 @@ export function ProjectFichaClient({ projectId, tabs }: ProjectFichaClientProps)
                   }))}
                 />
               )}
+              {taskList.hasNextPage ? (
+                <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                  <span>{tasks.length} de {taskTotal} tareas</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={taskList.isFetchingNextPage}
+                    onClick={() => void taskList.fetchNextPage()}
+                  >
+                    Cargar más
+                  </Button>
+                </div>
+              ) : null}
             </section>
 
             <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">

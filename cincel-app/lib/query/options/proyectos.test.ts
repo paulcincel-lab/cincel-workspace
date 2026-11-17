@@ -29,7 +29,7 @@ describe("proyectoFichaOptions", () => {
   });
 
   it("seeds catalog.projectSpaces(id) and importData('project', id) from the payload", async () => {
-    actions.getProyectoFichaData.mockResolvedValue({ project: { id: ID }, tasks: [], spaces: SPACES, importData: null });
+    actions.getProyectoFichaData.mockResolvedValue({ project: { id: ID }, hasTasksWithoutEtapa: false, spaces: SPACES, importData: null });
     const client = createTestQueryClient();
     await client.fetchQuery(proyectoFichaOptions(ID));
     expect(actions.getProyectoFichaData).toHaveBeenCalledWith({ id: ID });

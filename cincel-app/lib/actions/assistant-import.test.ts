@@ -4,6 +4,7 @@
  * 200-message limit, `imported_from = 'localStorage'`, tool parts kept for
  * display only, and no model call (the model mocks are never invoked).
  */
+import { unwrapActions } from "@/tests/helpers/action-result";
 import type { UIMessage } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,7 +49,8 @@ vi.mock("@/lib/assistant/provider", () => ({
   getLanguageModel: mocks.getLanguageModel,
 }));
 
-const { importLegacyAssistantThreadAction } = await import("@/lib/actions/assistant-actions");
+const assistantActionsModule = await import("@/lib/actions/assistant-actions");
+const { importLegacyAssistantThreadAction } = unwrapActions(assistantActionsModule);
 const { revalidatePath } = await import("next/cache");
 const { LEGACY_PENDING_TOOL_TEXT } = await import("@/lib/assistant/legacy-import");
 
@@ -67,6 +69,15 @@ function createdWith(): CreateInput {
   const call = mocks.create.mock.calls[0] as unknown as [unknown, string, CreateInput];
   return call[2];
 }
+
+describe("importLegacyAssistantThreadAction result", () => {
+  it("returns the INVALID code as a failed result instead of throwing", async () => {
+    await expect(assistantActionsModule.importLegacyAssistantThreadAction([])).resolves.toEqual({
+      ok: false,
+      error: expect.stringMatching(/^INVALID:/),
+    });
+  });
+});
 
 describe("importLegacyAssistantThreadAction", () => {
   beforeEach(() => {

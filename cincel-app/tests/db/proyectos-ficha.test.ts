@@ -5,9 +5,9 @@
  * Every row it creates carries a per-run marker and is deleted afterwards.
  *
  * - `loadProyectoFicha` runs ≤ 6 statements (`countQueries`).
- * - Its tasks equal today's `fetchTasksAction({ projectId })` +
- *   `fetchAdminTasksAction({ projectId, includeClosed: true })` merge, for an
- *   admin and a non-admin.
+ * - It no longer reads the project's tasks (#1051): it says whether a task has
+ *   no etapa, and the task rows are `loadTareasListPage` pages (the ficha's
+ *   "Cargar más"), with admin tasks for an admin only.
  * - Security: no `canViewProjects`, a deleted or unknown project → null; a
  *   non-admin gets no admin-kind task and no admin-only project field; the
  *   catalogs the editor reads are `{id,name,type}` / `{id,name}` only.
@@ -50,8 +50,8 @@ describe.skipIf(!url)("project ficha (test DB)", async () => {
   const { countQueries } = await import("../helpers/count-queries");
   const { getProyectoFichaData, getProyectoHistoryPage } = await import("@/lib/actions/page-data/proyectos-actions");
   const { loadProyectoFicha, PROYECTO_HISTORY_PAGE_SIZE } = await import("@/lib/loaders/proyectos");
-  const { listTasks, listAdminTasks } = await import("@/lib/repositories/tasks-repository");
-  const { viewerScopeOf } = await import("@/lib/auth/viewer-scope");
+  const { loadTareasListPage } = await import("@/lib/loaders/tareas");
+  const { fichaTasksListFilters } = await import("@/lib/proyectos/task-groups");
   const { fetchCatalogContacts, fetchCatalogStaff } = await import("@/lib/actions/page-data/catalog-actions");
 
   const ids = { projects: [] as string[], staff: [] as string[], contacts: [] as string[] };
@@ -61,15 +61,6 @@ describe.skipIf(!url)("project ficha (test DB)", async () => {
 
   const admin = () => ({ id: viewerId, access: "Administrador" as const });
   const colaborador = () => ({ id: viewerId, access: "Colaborador" as const });
-
-  /** Today's ficha task read: the viewer's project tasks plus, for admins, every admin task of the project. */
-  async function todayTaskIds(isAdminViewer: boolean): Promise<string[]> {
-    const user = await asViewer(isAdminViewer ? admin() : colaborador(), () => requireCapabilityUser());
-    const rows = await listTasks({ projectId }, viewerScopeOf(user));
-    const adminRows = isAdminViewer ? await listAdminTasks({ projectId, includeClosed: true }) : [];
-    const seen = new Set(rows.map((t) => t.id));
-    return [...rows, ...adminRows.filter((t) => !seen.has(t.id))].map((t) => t.id).sort();
-  }
 
   beforeAll(async () => {
     const [member] = await db
@@ -183,22 +174,45 @@ describe.skipIf(!url)("project ficha (test DB)", async () => {
     }
   });
 
-  it("an admin's tasks equal today's fetchTasksAction + fetchAdminTasksAction merge", async () => {
-    const data = await asViewer(admin(), () => getProyectoFichaData({ id: projectId }));
-    expect(data?.tasks.map((t) => t.id).sort()).toEqual(await todayTaskIds(true));
-    expect(data?.tasks.some((t) => t.kind === "admin")).toBe(true);
-    // The closed admin task too (`includeClosed: true`).
-    expect(data?.tasks.some((t) => t.title === `Admin cerrada ${run}`)).toBe(true);
+  it("an admin's ficha list pages every task of the project, the admin ones too", async () => {
+    const user = await asViewer(admin(), () => requireCapabilityUser());
+    const filters = fichaTasksListFilters(projectId, true);
+    const first = await loadTareasListPage(user, { filters, cursor: null });
+    expect(first.rows.length).toBe(4);
+    expect(first.total).toBe(4);
+    expect(first.nextCursor).toBeNull();
+    expect(first.rows.some((t) => t.kind === "admin")).toBe(true);
+    // The closed admin task too.
+    expect(first.rows.some((t) => t.title === `Admin cerrada ${run}`)).toBe(true);
     // Admins see the admin-only project fields.
+    const data = await asViewer(admin(), () => getProyectoFichaData({ id: projectId }));
+    expect(data).not.toHaveProperty("tasks");
+    expect(data?.hasTasksWithoutEtapa).toBe(true);
     expect(data?.project.client?.id).toBe(ids.contacts[0]);
     expect(data?.project.origin).toBe("Recomendación");
   });
 
-  it("a non-admin's tasks equal today's fetchTasksAction, with no admin kind", async () => {
+  it("the ficha list is paged with a cursor", async () => {
+    const user = await asViewer(admin(), () => requireCapabilityUser());
+    const filters = fichaTasksListFilters(projectId, true);
+    const first = await loadTareasListPage(user, { filters, cursor: null, limit: 3 });
+    expect(first.rows.length).toBe(3);
+    expect(first.total).toBe(4);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await loadTareasListPage(user, { filters, cursor: first.nextCursor, limit: 3 });
+    expect(second.rows.length).toBe(1);
+    expect(second.nextCursor).toBeNull();
+    const ids = [...first.rows, ...second.rows].map((t) => t.id);
+    expect(new Set(ids).size).toBe(4);
+  });
+
+  it("a non-admin's ficha list has no admin kind", async () => {
+    const user = await asViewer(colaborador(), () => requireCapabilityUser());
+    const page = await loadTareasListPage(user, { filters: fichaTasksListFilters(projectId, false), cursor: null });
+    expect(page.rows.some((t) => t.kind === "admin")).toBe(false);
+    expect(page.rows.length).toBe(2);
     const data = await asViewer(colaborador(), () => getProyectoFichaData({ id: projectId }));
-    expect(data?.tasks.map((t) => t.id).sort()).toEqual(await todayTaskIds(false));
-    expect(data?.tasks.some((t) => t.kind === "admin")).toBe(false);
-    expect(data?.tasks.length).toBe(2);
+    expect(data?.hasTasksWithoutEtapa).toBe(true);
   });
 
   it("strips the admin-only project fields for a non-admin in the loader", async () => {

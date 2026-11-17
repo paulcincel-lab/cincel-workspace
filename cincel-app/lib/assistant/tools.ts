@@ -745,9 +745,11 @@ export const merge_duplicate_clients = tool({
     const [, group] = dupGroups[0];
     const sorted = [...group].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const [keep, ...duplicates] = sorted;
-    const merged = await mergeContactsAction(
-      keep.id,
-      duplicates.map((d) => d.id)
+    const merged = unwrapActionResult(
+      await mergeContactsAction(
+        keep.id,
+        duplicates.map((d) => d.id)
+      )
     );
     return {
       ok: true as const,
@@ -813,9 +815,11 @@ export const merge_duplicate_activities = tool({
     const group = dupGroups[0];
     const sorted = [...group].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const [keep, ...duplicates] = sorted;
-    const merged = await mergeTasksAction(
-      keep.id,
-      duplicates.map((d) => d.id)
+    const merged = unwrapActionResult(
+      await mergeTasksAction(
+        keep.id,
+        duplicates.map((d) => d.id)
+      )
     );
     return {
       ok: true as const,

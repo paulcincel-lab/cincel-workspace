@@ -8,7 +8,7 @@ import { listHistoryPage, type HistoryPage } from "@/lib/repositories/history-re
 import { getImportData } from "@/lib/repositories/import-repository";
 import * as projectSpacesRepository from "@/lib/repositories/project-spaces-repository";
 import * as projectsRepository from "@/lib/repositories/projects-repository";
-import { listTaskRows } from "@/lib/repositories/tasks-repository";
+import { hasProjectTaskWithoutEtapa, listTaskRows } from "@/lib/repositories/tasks-repository";
 import { todayInAppTimeZone } from "@/lib/project-flow/admin-tasks";
 import { summarizeProjectTasks, type ProyectoTareasSummary } from "@/lib/proyectos/project-tasks-by-fase";
 import { EMPTY_RESUMEN_SUMMARY, type ResumenTareasSummary } from "@/lib/proyectos/resumen-summary";
@@ -50,34 +50,21 @@ import type { PortfolioRow } from "@/lib/types/redesign";
 export type ProyectoFichaData = {
   /** The same cached `getProjectForViewer` read the shell uses; admin-only fields stripped for non-admins. */
   project: ProjectDetail;
-  /** One read with a kinds filter: admin tasks only for `canSeeAdminData`. */
-  tasks: TaskListRow[];
+  /** Some non-admin task has no etapa (drives "Asignar etapa"). The task rows are `qk.tareas.list` pages. */
+  hasTasksWithoutEtapa: boolean;
   /** Also seeds `catalog.projectSpaces(id)`. */
   spaces: ProjectSpace[];
   /** Also seeds `qk.importData('project', id)`. */
   importData: ImportData | null;
 };
 
-/** Every task kind: what an administrator's ficha lists (its tasks plus the admin ones). */
-const ADMIN_FICHA_KINDS: TaskKind[] = ["workflow", "usuario", "admin"];
-
-/**
- * The ficha task read: `fetchTasksAction({ projectId })` merged with
- * `fetchAdminTasksAction({ projectId, includeClosed: true })` in one
- * statement; null when the viewer may see no task. Non-admins never ask for
- * admin kinds (and the repository drops them anyway).
- */
-function fichaTaskFilters(canViewActivities: boolean, isAdmin: boolean): { kind?: TaskKind | TaskKind[] } | null {
-  if (isAdmin) return { kind: canViewActivities ? ADMIN_FICHA_KINDS : "admin" };
-  return canViewActivities ? {} : null;
-}
-
 /**
  * The ficha of `input.id` for `user`, or null when the viewer has no
  * `canViewProjects` or the project doesn't exist or is deleted. At most 6
  * statements: the project (2, shared with the shell through React `cache()`),
- * the tasks (1), the espacios (1) and the import data (1, plus the batch
- * mapping when a non-admin opens an imported project).
+ * a one-row probe for tasks without etapa (1), the espacios (1) and the import
+ * data (1, plus the batch mapping when a non-admin opens an imported project).
+ * The task rows are not read here: the ficha pages them with "Cargar más".
  */
 export async function loadProyectoFicha(user: AuthenticatedUser, input: { id: string }): Promise<ProyectoFichaData | null> {
   if (!resolveProjectsCapabilities(user).canViewProjects) return null;
@@ -91,14 +78,14 @@ export async function loadProyectoFicha(user: AuthenticatedUser, input: { id: st
   }
   if (!project) return null;
 
-  const taskFilters = fichaTaskFilters(resolveActivitiesCapabilities(user).canViewActivities, viewer.isAdmin);
-  const [tasks, spaces, importData] = await Promise.all([
-    taskFilters ? listTaskRows({ ...taskFilters, projectId: project.id }, viewer) : Promise.resolve([] as TaskListRow[]),
+  const canViewTasks = resolveActivitiesCapabilities(user).canViewActivities;
+  const [hasTasksWithoutEtapa, spaces, importData] = await Promise.all([
+    canViewTasks ? hasProjectTaskWithoutEtapa(project.id, viewer) : Promise.resolve(false),
     projectSpacesRepository.listSpacesWithCounts(project.id),
     // The project read already proved the row exists and isn't deleted.
     getImportData("project", project.id, { hideClientColumns: !viewer.isAdmin }),
   ]);
-  return { project, tasks, spaces, importData };
+  return { project, hasTasksWithoutEtapa, spaces, importData };
 }
 
 // ── Ficha Bitácora (5b, #960) ────────────────────────────────────────────────

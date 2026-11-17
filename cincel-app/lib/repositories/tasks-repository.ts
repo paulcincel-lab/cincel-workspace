@@ -1332,6 +1332,21 @@ export async function countProjectTasks(
   return row?.n ?? 0;
 }
 
+/**
+ * Whether the project has a task without an etapa the viewer can see (admin
+ * tasks aside, as the list kinds): one statement, one row, no task read. The
+ * ficha's "Asignar etapa".
+ */
+export async function hasProjectTaskWithoutEtapa(projectId: string, viewer: ViewerScope): Promise<boolean> {
+  const rows = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(whereFilters({ projectId, withoutWorkflow: true }, viewer))
+    .limit(1);
+  return rows.length > 0;
+}
+
 /** Open admin tasks (or all with `includeClosed`), by commitment date then project name (BE §8.6). */
 export async function listAdminTasks(filters: AdminTaskFilters = {}): Promise<TaskListItem[]> {
   // Administrators only: the action refuses everyone else before this runs.
