@@ -272,6 +272,11 @@ export function ProjectTasksByFase({
   const responsableSelect = (
     <Select
       key="responsable"
+      items={{
+        [ALL_PEOPLE]: "Todos los responsables",
+        ...Object.fromEntries(summary.people.map((person) => [person.id, person.name])),
+        ...(summary.hasUnassigned ? { [UNASSIGNED_FILTER]: UNASSIGNED_LABEL } : {}),
+      }}
       value={query.responsable ?? ALL_PEOPLE}
       onValueChange={(value) =>
         setFilter({ responsable: value === ALL_PEOPLE || typeof value !== "string" ? null : value })

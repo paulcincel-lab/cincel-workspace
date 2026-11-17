@@ -309,6 +309,13 @@ describe("ProjectTasksByFase", () => {
     expect(screen.queryByRole("button", { name: "Agregar tarea a Administración" })).toBeNull();
   });
 
+  it("labels the Responsable filter instead of showing its raw value", () => {
+    renderTab("visual");
+    const trigger = screen.getByRole("combobox", { name: "Responsable" });
+    expect(trigger.textContent).toContain("Todos los responsables");
+    expect(trigger.textContent).not.toContain("__todos__");
+  });
+
   it("applies the estado filter from the URL", () => {
     nav.params = new URLSearchParams("estado=vencidas");
     renderTab("visual");
