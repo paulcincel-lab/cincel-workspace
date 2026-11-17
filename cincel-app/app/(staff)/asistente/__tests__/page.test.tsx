@@ -132,7 +132,10 @@ const STORED: Record<string, AsistentePageThread> = {
 
 async function renderPage(searchParams: Record<string, string> = {}) {
   const element = await AsistentePage({ searchParams: Promise.resolve(searchParams) });
-  return renderWithQueryClient(element);
+  const rendered = renderWithQueryClient(element);
+  // The style layouts load lazily: wait for the active one before asserting.
+  await screen.findByRole("complementary", { name: "Conversaciones" }, { timeout: 20000 });
+  return rendered;
 }
 
 const replaceState = vi.spyOn(window.history, "replaceState");

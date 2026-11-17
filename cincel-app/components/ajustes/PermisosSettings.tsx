@@ -3,7 +3,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { CheckIcon, ChevronDownIcon, EyeIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 import { SettingsSaveBar } from "@/components/ajustes/SettingsSaveBar";
 import {
@@ -239,17 +238,16 @@ function PermisosEditor() {
   const dirtyCount = useMemo(() => describePermissionChanges(saved, draft).length, [saved, draft]);
   const viewer = useSessionStore(selectCurrentUser);
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   function applySaved(next: { permissions: PermissionsState; hasCustom: boolean }, before: PermissionsState) {
     queryClient.setQueryData<AjustesPermisosPageData>(qk.ajustes.page("permisos"), (page) =>
       page ? { ...page, permissions: next.permissions, hasCustom: next.hasCustom } : page,
     );
     form.getState().replace(next.permissions);
-    // A change to the viewer's own access: drop every cached screen and re-read the session (plan §4.8).
+    // A change to the viewer's own access: drop every cached screen. The action re-renders the root layout,
+    // which re-reads the session (plan §4.8).
     if (viewer && !isProtectedPermissionRole(viewer.access) && roleChanged(before, next.permissions, viewer.access)) {
       queryClient.clear();
-      router.refresh();
     }
   }
 

@@ -23,6 +23,7 @@ import {
   type EmpresaDocSlug,
 } from "@/lib/biblioteca/catalog";
 import { useDriveStatus } from "@/lib/google/use-drive-status";
+import { useActionMutation } from "@/lib/query/mutation";
 import { bibliotecaLinksOptions } from "@/lib/query/options/biblioteca";
 import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
 import { useRecentDocs } from "@/lib/stores/recent-docs-store";
@@ -79,9 +80,11 @@ export function DocumentReader({ doc, toc, companyDoc }: DocumentReaderProps) {
 
   // Count the open for "Aperturas 30 d" (the server keeps one per person and part every 10 minutes).
   const docId = doc.id;
+  // A failed count is not worth a message: the reader opens either way.
+  const { mutate: recordOpen } = useActionMutation(recordResourceOpenAction, { onFormError: () => undefined });
   useEffect(() => {
-    void recordResourceOpenAction({ linkId: docId }).catch(() => undefined);
-  }, [docId]);
+    recordOpen({ linkId: docId });
+  }, [docId, recordOpen]);
 
   const downloadButton = download ? (
     <a href={download.href} className={buttonVariants({ variant: "outline" })}>

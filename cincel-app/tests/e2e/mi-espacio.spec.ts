@@ -227,9 +227,9 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     await openFullInbox(page);
     const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
     const requests = trackRequests(page);
-    await tabs.getByRole("link", { name: /Notificaciones/ }).click();
+    await tabs.getByRole("tab", { name: /Notificaciones/ }).click();
     await expect(page).toHaveURL(/bandeja=notificaciones/);
-    await expect(tabs.getByRole("link", { name: /Notificaciones/ })).toHaveAttribute("aria-current", "page");
+    await expect(tabs.getByRole("tab", { name: /Notificaciones/ })).toHaveAttribute("aria-current", "page");
     await page.waitForTimeout(1_000);
     expect(requests.rsc).toEqual([]);
     expect(requests.actions).toEqual([]);
@@ -239,7 +239,7 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     await openMiEspacio(page);
     await openFullInbox(page);
     const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
-    await tabs.getByRole("link", { name: /Notificaciones/ }).click();
+    await tabs.getByRole("tab", { name: /Notificaciones/ }).click();
     await expect(page).toHaveURL(/bandeja=notificaciones/);
 
     const unread = page.locator("a, button").filter({ hasText: /^Sin leer: / }).first();
@@ -261,7 +261,7 @@ test.describe("Mi espacio — nota, checklist y recordatorio", () => {
     await openMiEspacio(page);
     await openFullInbox(page);
     const tabs = page.getByRole("navigation", { name: "Pestañas de la bandeja" });
-    const gmailTab = tabs.getByRole("link", { name: /Gmail/ });
+    const gmailTab = tabs.getByRole("tab", { name: /Gmail/ });
     test.skip((await gmailTab.count()) === 0, "Gmail is not enabled.");
     await gmailTab.click();
     await expect(page).toHaveURL(/bandeja=gmail/);

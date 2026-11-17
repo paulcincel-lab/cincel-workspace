@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { toActionResult } from "@/lib/actions/action-result";
@@ -14,6 +13,7 @@ import {
   type PermissionsState,
 } from "@/lib/auth/permissionsState";
 import { requireCapabilityUser } from "@/lib/auth/session";
+import { revalidateSessionLayout } from "@/lib/cache/screens/session";
 import * as rolePermissionsRepository from "@/lib/repositories/role-permissions-repository";
 import type { ActionResult } from "@/lib/types/schedule";
 import { parseInput } from "@/lib/validation/project-flow";
@@ -56,7 +56,7 @@ async function writeMatrix(
   const changes = describePermissionChanges(before.permissions, after.permissions);
   if (changes.length > 0) {
     await rolePermissionsRepository.replaceRolePermissions({ rows: next, actorId: user.member.id, kind, changes });
-    revalidatePath("/", "layout");
+    revalidateSessionLayout();
   }
   return { permissions: after.permissions, hasCustom: after.hasCustom, changed: changes.length };
 }

@@ -105,7 +105,7 @@ test.describe("Proyecto · Resumen y pestañas", () => {
     await page.getByRole("button", { name: "Editar" }).click();
     // The admin fields come first for an administrator; Origen is a labelled input.
     await page.getByLabel("Origen").fill(origin);
-    await page.getByRole("button", { name: "Guardar" }).click();
+    await page.getByRole("button", { name: "Guardar", exact: true }).click();
 
     await expect(page.getByRole("button", { name: "Editar" })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(origin)).toBeVisible({ timeout: 15_000 });
@@ -144,7 +144,7 @@ test.describe("Proyectos · list, Resumen and Tareas on the query cache (5a, #95
 
   test("the portfolio search lives in ?q= and survives opening a project and going back", async ({ page }) => {
     await page.goto(`${BASE_URL}/proyectos`, { waitUntil: "networkidle" });
-    const search = page.getByLabel("Buscar proyecto o lugar");
+    const search = page.getByLabel("Buscar proyectos");
     await expect(search).toBeVisible({ timeout: 30_000 });
     const counts = trackServerRequests(page);
     await search.fill(PROJECT_NAME);
@@ -157,7 +157,7 @@ test.describe("Proyectos · list, Resumen and Tareas on the query cache (5a, #95
     await expect(page).toHaveURL(new RegExp(`/proyectos/${projectId}$`), { timeout: 30_000 });
     await page.goBack();
     await expect(page).toHaveURL(/\/proyectos\?(.*&)?q=/, { timeout: 30_000 });
-    await expect(page.getByLabel("Buscar proyecto o lugar")).toHaveValue(PROJECT_NAME);
+    await expect(page.getByLabel("Buscar proyectos")).toHaveValue(PROJECT_NAME);
   });
 
   test("closing ?nuevo=1 does not render the route on the server", async ({ page }) => {

@@ -729,7 +729,7 @@ function MondayRunWizard({
               mapping={mapping}
               source={source}
               choices={choices}
-              initialBoardId={focusBoardId}
+              defaultBoardId={focusBoardId}
               onMappingChange={editMapping}
               onStatusCreated={addStatus}
             />
