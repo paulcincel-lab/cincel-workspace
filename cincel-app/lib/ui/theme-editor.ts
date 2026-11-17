@@ -57,8 +57,8 @@ export const TOKEN_SECTIONS: readonly TokenSection[] = [
   {
     title: "Etapas y estatus",
     tokens: [
-      { name: "chart-1", label: "Presale" },
-      { name: "chart-1-ink", label: "Texto de Presale" },
+      { name: "chart-1", label: "Presale y Completado" },
+      { name: "chart-1-ink", label: "Texto de Presale y Completado" },
       { name: "chart-2", label: "Diseño" },
       { name: "chart-2-ink", label: "Texto de Diseño" },
       { name: "chart-3", label: "Construcción" },
@@ -70,7 +70,7 @@ export const TOKEN_SECTIONS: readonly TokenSection[] = [
       { name: "destructive", label: "Vencido / bloqueado" },
       { name: "warning", label: "En riesgo" },
       { name: "warning-ink", label: "Texto de En riesgo" },
-      { name: "success", label: "Completado" },
+      { name: "success", label: "Éxito / al día" },
       { name: "destructive-ink", label: "Texto de Vencido / bloqueado" },
       { name: "tint-primary", label: "Fondo de Presale" },
       { name: "tint-violet", label: "Fondo de Diseño" },
