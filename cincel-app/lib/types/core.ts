@@ -384,13 +384,25 @@ export type ProjectDetail = Project & {
  * `on_create`; `null`: no etapa starts; an id: that etapa starts with
  * `phaseIds` (every active fase when missing), unassigned.
  */
-export type ProjectCreateInput = { name: string; startWorkflowId?: string | null; phaseIds?: string[] };
+export type ProjectCreateInput = {
+  name: string;
+  startWorkflowId?: string | null;
+  phaseIds?: string[];
+  /** The flow the project follows; the default flow when missing. */
+  flowId?: string;
+};
 
 /** The create dialog's "Etapa inicial" options: active etapas in catalog order with their active fases. */
 export type ProjectCreateStartOptions = {
   /** What a create without the field starts: the first etapa when its auto-start is on, else null ("Ninguno"). */
   defaultWorkflowId: string | null;
   etapas: Array<WorkflowRef & { phases: Array<WorkflowPhaseRef & { templateCount: number }> }>;
+  /**
+   * The active flows, default first. The dialog shows its "Flujo" select only
+   * when there is more than one. `defaultWorkflowId` is what a create in that
+   * flow starts (its first etapa when its auto-start is on, else null).
+   */
+  flows?: Array<{ id: string; name: string; isDefault: boolean; defaultWorkflowId: string | null }>;
 };
 
 export type ProjectInput = {

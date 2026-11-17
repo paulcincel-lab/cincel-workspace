@@ -86,13 +86,17 @@ async function createProjectActionImpl(input: ProjectCreateInput | ProjectInput)
   if (!resolveProjectsCapabilities(user).canCreateProject) {
     throw new Error("FORBIDDEN: project create");
   }
-  const { startWorkflowId, phaseIds } = (input ?? {}) as ProjectCreateInput;
+  const { startWorkflowId, phaseIds, flowId } = (input ?? {}) as ProjectCreateInput;
   const picksEtapa = startWorkflowId !== undefined || phaseIds !== undefined;
   if (picksEtapa && !resolveActivitiesCapabilities(user).canCreateActivity) {
     throw new Error("FORBIDDEN: start etapa");
   }
   const row = await projectsRepository.createProject(
-    picksEtapa ? { name: input?.name, startWorkflowId, phaseIds } : { name: input?.name },
+    {
+      name: input?.name as string,
+      ...(picksEtapa ? { startWorkflowId, phaseIds } : {}),
+      ...(flowId !== undefined ? { flowId } : {}),
+    },
     user.member.id
   );
   // Drive runs after the response; no client yet, so only the internal folders.

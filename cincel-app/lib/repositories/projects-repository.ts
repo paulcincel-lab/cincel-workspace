@@ -16,6 +16,7 @@ import {
   staff,
   tasks,
   workflows,
+  flows,
 } from "@/lib/db/schema";
 import { listHistory, recordChanges, recordComment } from "@/lib/repositories/history-repository";
 import type {
@@ -410,6 +411,24 @@ export function isProjectNameTaken(err: unknown): boolean {
 }
 
 /**
+ * The flow a new project follows: the chosen one (INVALID unless it exists
+ * and is active), else the default flow; null when there is none.
+ */
+async function resolveCreateFlowId(tx: FlowExecutor, flowId: string | undefined): Promise<string | null> {
+  if (flowId) {
+    const [chosen] = await tx
+      .select({ id: flows.id })
+      .from(flows)
+      .where(and(eq(flows.id, flowId), eq(flows.active, true)))
+      .limit(1);
+    if (!chosen) throw flowError(FLOW_ERROR.INVALID, "flowId");
+    return chosen.id;
+  }
+  const [fallback] = await tx.select({ id: flows.id }).from(flows).where(eq(flows.isDefault, true)).limit(1);
+  return fallback?.id ?? null;
+}
+
+/**
  * Create a project with only a name (BE §9.4), in one transaction: the row
  * (no client), the admin task "Asignar cliente y origen", the starting etapa
  * and the history `created` change. Without `startWorkflowId` the first
@@ -419,16 +438,17 @@ export function isProjectNameTaken(err: unknown): boolean {
  * NO_PHASES.
  */
 export async function createProject(input: ProjectCreateInput, actorId: string): Promise<ProjectDetail> {
-  const { name, startWorkflowId, phaseIds } = parseInput(ProjectCreateInputSchema, input);
+  const { name, startWorkflowId, phaseIds, flowId } = parseInput(ProjectCreateInputSchema, input);
   if (phaseIds !== undefined && !startWorkflowId) throw flowError(FLOW_ERROR.INVALID, "phaseIds");
 
   let projectId: string;
   try {
     projectId = await db.transaction(async (tx) => {
       await assertProjectNameFree(tx, name);
+      const chosenFlowId = await resolveCreateFlowId(tx, flowId);
       const [row] = await tx
         .insert(projects)
-        .values({ name, status: "activo", clientId: null })
+        .values({ name, status: "activo", clientId: null, flowId: chosenFlowId })
         .returning({ id: projects.id, name: projects.name });
       await ensureAssignClientTask(tx, row.id, actorId);
       if (startWorkflowId === undefined) await autoStartOnCreate(tx, row.id, actorId);

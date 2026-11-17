@@ -309,4 +309,5 @@ export {
   loadAjustesPermisos,
   loadAjustesPuestos,
   loadAjustesEtapas,
+  loadAjustesFlujos,
 } from "@/lib/loaders/ajustes-catalogs";

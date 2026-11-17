@@ -92,3 +92,62 @@ export async function getFlowForProject(
     tramos: mapFlowTramos(rows),
   };
 }
+
+/** Every active flow with its etapas in order and their gates (readiness reads all of them in one pass). */
+export async function listActiveFlows(db: FlowExecutor): Promise<ProjectFlow[]> {
+  const flowRows = await db
+    .select()
+    .from(flows)
+    .where(eq(flows.active, true))
+    .orderBy(asc(flows.name));
+  if (flowRows.length === 0) return [];
+  const rows = await db
+    .select({
+      flowId: flowTramos.flowId,
+      workflowId: flowTramos.workflowId,
+      workflowKey: workflows.key,
+      sortOrder: flowTramos.sortOrder,
+      afterWorkflowId: flowTramos.afterWorkflowId,
+      gatePhaseKey: flowTramos.gatePhaseKey,
+    })
+    .from(flowTramos)
+    .innerJoin(workflows, eq(workflows.id, flowTramos.workflowId))
+    .orderBy(asc(flowTramos.sortOrder));
+  return flowRows.map((flow) => ({
+    flowId: flow.id,
+    key: flow.key,
+    name: flow.name,
+    isDefault: flow.isDefault,
+    tramos: mapFlowTramos(rows.filter((r) => r.flowId === flow.id)),
+  }));
+}
+
+/** Pure: the etapas of `flow` whose gate waits on `afterWorkflowId`, in flow order. */
+export function gateFollowers(
+  flow: Pick<ProjectFlow, "tramos"> | null,
+  afterWorkflowId: string,
+): FlowTramoRef[] {
+  if (!flow) return [];
+  return flow.tramos.filter((t) => t.gate?.afterWorkflowId === afterWorkflowId);
+}
+
+/** Pure: the ids of every etapa that sits in at least one of the given flows. */
+export function workflowIdsInFlows(
+  list: ReadonlyArray<Pick<ProjectFlow, "tramos">>,
+): Set<string> {
+  return new Set(list.flatMap((f) => f.tramos.map((t) => t.workflowId)));
+}
+
+/**
+ * Pure: the id of the flow a project follows: its own when that flow is in
+ * `active`, else the default one (null when there is none).
+ */
+export function effectiveFlowId(
+  projectFlowId: string | null,
+  active: ReadonlyArray<Pick<ProjectFlow, "flowId" | "isDefault">>,
+): string | null {
+  if (projectFlowId && active.some((f) => f.flowId === projectFlowId)) {
+    return projectFlowId;
+  }
+  return active.find((f) => f.isDefault)?.flowId ?? null;
+}

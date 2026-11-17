@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import {
   projectStages,
@@ -17,6 +17,7 @@ import { READINESS } from "./catalog";
 import { refreshStageClosed } from "./closing";
 import type { FlowDb, FlowExecutor, FlowTx } from "./db";
 import { FLOW_ERROR, flowError } from "./errors";
+import { gateFollowers, getFlowForProject, listActiveFlows, workflowIdsInFlows } from "./flows";
 import { startEtapa } from "./start-etapa";
 
 /** Active fase ids of an etapa, in catalog order. */
@@ -30,21 +31,55 @@ async function activePhaseIds(db: FlowExecutor, workflowId: string): Promise<str
 }
 
 /**
- * Project create (BE §9.4 step 3): when the first active etapa has
- * `auto_start = 'on_create'`, starts it with every active fase, unassigned.
- * Null when auto-start is off.
+ * The first active etapa of the project's flow (the default flow when it has
+ * none). Without any flow etapa (no flow, or all of them inactive) it is the
+ * first active etapa of the catalog, as before flows existed.
+ */
+async function firstEtapaOfFlow(
+  db: FlowExecutor,
+  projectId: string
+): Promise<{ id: string; autoStart: string } | null> {
+  const flow = await getFlowForProject(db, projectId);
+  if (flow && flow.tramos.length > 0) {
+    const rows = await db
+      .select({ id: workflows.id, autoStart: workflows.autoStart })
+      .from(workflows)
+      .where(
+        and(
+          inArray(
+            workflows.id,
+            flow.tramos.map((t) => t.workflowId)
+          ),
+          isNull(workflows.deletedAt),
+          eq(workflows.active, true)
+        )
+      );
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const tramo of flow.tramos) {
+      const row = byId.get(tramo.workflowId);
+      if (row) return row;
+    }
+  }
+  const [first] = await db
+    .select({ id: workflows.id, autoStart: workflows.autoStart })
+    .from(workflows)
+    .where(and(isNull(workflows.deletedAt), eq(workflows.active, true)))
+    .orderBy(asc(workflows.sortOrder), asc(workflows.name))
+    .limit(1);
+  return first ?? null;
+}
+
+/**
+ * Project create (BE §9.4 step 3): when the first active etapa of the
+ * project's flow has `auto_start = 'on_create'`, starts it with every active
+ * fase, unassigned. Null when auto-start is off.
  */
 export async function autoStartOnCreate(
   tx: FlowTx,
   projectId: string,
   actorId: string
 ): Promise<StartEtapaResult | null> {
-  const [first] = await tx
-    .select({ id: workflows.id, autoStart: workflows.autoStart })
-    .from(workflows)
-    .where(and(isNull(workflows.deletedAt), eq(workflows.active, true)))
-    .orderBy(asc(workflows.sortOrder), asc(workflows.name))
-    .limit(1);
+  const first = await firstEtapaOfFlow(tx, projectId);
   if (!first || first.autoStart !== "on_create") return null;
   const phaseIds = await activePhaseIds(tx, first.id);
   if (phaseIds.length === 0) return null;
@@ -178,8 +213,18 @@ export async function autoStartOnReady(
     .limit(1);
   if (!source) return [];
 
-  const followers = Object.entries(READINESS).filter(([, rule]) => rule.after === source.key);
-  if (followers.length === 0) return [];
+  // The project's flow decides which etapas follow this one and on which fase.
+  // An etapa that sits in no flow keeps the legacy rule (READINESS, the seed source).
+  const flow = await getFlowForProject(db, projectId);
+  const inFlows = workflowIdsInFlows(await listActiveFlows(db));
+  const phaseKeyById = new Map<string, string>();
+  for (const t of gateFollowers(flow, workflowId)) {
+    if (t.gate) phaseKeyById.set(t.workflowId, t.gate.phaseKey);
+  }
+  const legacyKeys = Object.entries(READINESS)
+    .filter(([, rule]) => rule.after === source.key)
+    .map(([key]) => key);
+  if (phaseKeyById.size === 0 && legacyKeys.length === 0) return [];
 
   const [project] = await db
     .select({ id: projects.id })
@@ -188,14 +233,15 @@ export async function autoStartOnReady(
     .limit(1);
   if (!project) return [];
 
-  const candidates = await db
-    .select({ id: workflows.id, key: workflows.key })
+  const flowOrder = new Map((flow?.tramos ?? []).map((t, i) => [t.workflowId, i]));
+  const found = await db
+    .select({ id: workflows.id, key: workflows.key, sortOrder: workflows.sortOrder })
     .from(workflows)
     .where(
       and(
-        inArray(
-          workflows.key,
-          followers.map(([key]) => key)
+        or(
+          phaseKeyById.size > 0 ? inArray(workflows.id, [...phaseKeyById.keys()]) : undefined,
+          legacyKeys.length > 0 ? inArray(workflows.key, legacyKeys) : undefined
         ),
         isNull(workflows.deletedAt),
         eq(workflows.active, true),
@@ -203,17 +249,25 @@ export async function autoStartOnReady(
       )
     )
     .orderBy(asc(workflows.sortOrder));
+  const candidates = found
+    .map((w) => ({
+      id: w.id,
+      phaseKey: phaseKeyById.get(w.id) ?? (!inFlows.has(w.id) ? READINESS[w.key]?.phaseKey : undefined),
+      order: flowOrder.get(w.id) ?? Number.MAX_SAFE_INTEGER,
+      sortOrder: w.sortOrder,
+    }))
+    .filter((w): w is typeof w & { phaseKey: string } => w.phaseKey !== undefined)
+    .sort((x, y) => x.order - y.order || x.sortOrder - y.sortOrder);
 
   const results: StartEtapaResult[] = [];
   for (const next of candidates) {
-    const rule = READINESS[next.key];
     const [started] = await db
       .select({ workflowId: projectStages.workflowId })
       .from(projectStages)
       .where(and(eq(projectStages.projectId, projectId), eq(projectStages.workflowId, next.id)))
       .limit(1);
     if (started) continue;
-    if (!(await isProjectReadyAfter(db, projectId, workflowId, rule.phaseKey))) continue;
+    if (!(await isProjectReadyAfter(db, projectId, workflowId, next.phaseKey))) continue;
     const phaseIds = await activePhaseIds(db, next.id);
     if (phaseIds.length === 0) continue;
 
