@@ -96,4 +96,26 @@ describe("runSupportGithubSync", () => {
     expect(list).not.toHaveBeenCalled();
     log.mockRestore();
   });
+
+  it("is idempotent: a second run over the same issue state adds no change", async () => {
+    const { runSupportGithubSync } = await setup();
+    const store = { status: "planeado" as "planeado" | "en_progreso" | "nuevo" | "en_revision" | "resuelto" | "descartado" };
+    const events: string[] = [];
+    const apply = vi.fn(async (_id: string, status: typeof store.status | "nuevo" | "en_revision" | "resuelto" | "descartado" | null) => {
+      if (status && status !== store.status) {
+        store.status = status;
+        events.push(status);
+      }
+      return { ok: true as const, data: null };
+    });
+    const deps = {
+      configured: () => true,
+      list: async () => [{ id: "a", githubIssueNumber: 1, status: store.status }],
+      getIssue: vi.fn().mockResolvedValue({ ...open, labels: ["en progreso"] }),
+      apply,
+    };
+    expect((await runSupportGithubSync(ctx, deps)).count).toBe(1);
+    expect((await runSupportGithubSync(ctx, deps)).count).toBe(0);
+    expect(events).toEqual(["en_progreso"]);
+  });
 });
