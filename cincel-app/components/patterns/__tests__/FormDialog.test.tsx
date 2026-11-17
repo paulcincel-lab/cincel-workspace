@@ -67,7 +67,7 @@ describe("FormDialog", () => {
     expect(footer).toBeTruthy();
     expect(body?.contains(footer)).toBe(false);
     expect(body?.className).toContain("overflow-y-auto");
-    expect(footer?.className).toContain("sticky");
+    expect(footer?.className).not.toContain("sticky");
     expect(footer?.textContent).toContain("Cancelar");
   });
 

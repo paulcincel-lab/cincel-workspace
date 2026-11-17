@@ -132,7 +132,7 @@ export function FormDialog({
           <div data-slot="form-dialog-body" className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
             {children}
           </div>
-          <div data-slot="form-dialog-footer" className="sticky bottom-0 mt-auto">
+          <div data-slot="form-dialog-footer" className="shrink-0">
             {errorCopy ? (
               <div className="px-4 pt-2 pb-4">
                 <Alert variant="destructive">
