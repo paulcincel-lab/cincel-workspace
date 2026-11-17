@@ -2,6 +2,7 @@ export * from "./_schema";
 export * from "./people";
 export * from "./contacts";
 export * from "./workflows";
+export * from "./flows";
 export * from "./shared";
 export * from "./projects";
 export * from "./tasks";

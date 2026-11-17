@@ -19,6 +19,7 @@ import { contactType, core, foldedTrgm, projectStatus, soft, stamps } from "./_s
 import { contacts } from "./contacts";
 import { staff } from "./people";
 import { driveFiles } from "./shared";
+import { flows } from "./flows";
 import { workflows } from "./workflows";
 
 /** Provisioning state of a project's Drive folder tree. */
@@ -51,6 +52,8 @@ export const projects = core.table(
     currentWorkflowId: uuid("current_workflow_id").references(() => workflows.id, {
       onDelete: "set null",
     }),
+    /** The flow (etapa order and gates) this project follows; null falls back to the default flow. */
+    flowId: uuid("flow_id").references(() => flows.id, { onDelete: "set null" }),
     projectType: text("project_type"),
     addressStreet: text("address_street"),
     addressCity: text("address_city"),
@@ -110,6 +113,7 @@ export const projects = core.table(
     index("idx_projects_manager_id").on(t.managerId),
     index("idx_projects_status").on(t.status),
     index("idx_projects_current_workflow_id").on(t.currentWorkflowId),
+    index("idx_projects_flow_id").on(t.flowId),
   ]
 );
 
