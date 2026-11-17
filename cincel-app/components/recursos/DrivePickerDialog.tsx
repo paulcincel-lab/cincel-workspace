@@ -38,7 +38,7 @@ export default function DrivePickerDialog({ open, onClose, onPick, rootFolderId,
 
         <DriveBrowser
           key={initialQuery ?? ""}
-          initialSearch={initialQuery}
+          defaultSearch={initialQuery}
           active={open && configured}
           rootFolderId={rootFolderId}
           selectedId={selected?.id ?? null}

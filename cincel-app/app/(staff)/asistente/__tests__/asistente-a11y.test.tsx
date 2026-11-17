@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { act, cleanup } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import axe from "axe-core";
 import type { UIMessage } from "ai";
 
@@ -97,6 +97,15 @@ function applyTheme(theme: string, mode: "light" | "dark") {
   html.classList.toggle("dark", mode === "dark");
 }
 
+beforeAll(async () => {
+  // Warm the lazily loaded style layouts so a cold module transform does not eat a test's budget.
+  await Promise.all([
+    import("@/components/widgets/asistente/AsistenteAnaliticoLayout"),
+    import("@/components/widgets/asistente/AsistenteEsencialLayout"),
+    import("@/components/widgets/asistente/AsistenteVisualLayout"),
+  ]);
+}, 120000);
+
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   window.localStorage.clear();
@@ -118,6 +127,7 @@ describe("/asistente accessibility", () => {
         const { container } = renderWithQueryClient(<AsistentePageClient threadId={THREAD.id} />, {
           client: seeded(THREADS, THREAD),
         });
+        await screen.findByRole("complementary", { name: "Conversaciones" }, { timeout: 20000 });
         await act(async () => {});
         expect(await seriousViolations(container)).toEqual([]);
       });
@@ -129,6 +139,7 @@ describe("/asistente accessibility", () => {
     const { container } = renderWithQueryClient(<AsistentePageClient threadId={null} missingThread />, {
       client: seeded([]),
     });
+    await screen.findByRole("complementary", { name: "Conversaciones" }, { timeout: 20000 });
     await act(async () => {});
     expect(await seriousViolations(container)).toEqual([]);
   });

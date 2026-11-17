@@ -24,7 +24,7 @@ vi.mock("@/components/widgets/CellEditor", () => ({
       if (next) props.onTabNext?.();
     };
     return createPortal(
-      <div role="dialog" aria-label={`Editor ${props.label ?? ""}`} data-query={props.initialQuery ?? ""}>
+      <div role="dialog" aria-label={`Editor ${props.label ?? ""}`} data-query={props.defaultQuery ?? ""}>
         {props.canEdit === true ? (
           <>
             <button type="button" onClick={() => pick(false)}>

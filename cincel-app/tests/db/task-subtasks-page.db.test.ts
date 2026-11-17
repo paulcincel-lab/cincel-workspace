@@ -104,7 +104,7 @@ describe.skipIf(!url)("task lists with subtasks (test DB)", () => {
     return { padre, zeta, beta, gamma, uno, unoHija, sola, huerfana };
   }
 
-  const ids = (rows: { id: string }[]) => rows.map((r) => r.id).sort();
+  const ids = (rows: { id: string }[]) => new Set(rows.map((r) => r.id));
 
   it("lists top-level tasks only, each with its children's ids and counts", async () => {
     await inTx(async (_tx, ctx, s) => {
@@ -187,7 +187,8 @@ describe.skipIf(!url)("task lists with subtasks (test DB)", () => {
         pages += 1;
       } while (cursor && pages < 10);
       expect(pages).toBe(4);
-      expect(seen.sort()).toEqual(ids([s.padre, s.uno, s.sola, s.huerfana]));
+      expect(seen).toHaveLength(4);
+      expect(new Set(seen)).toEqual(ids([s.padre, s.uno, s.sola, s.huerfana]));
     });
   });
 

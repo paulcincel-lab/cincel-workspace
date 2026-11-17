@@ -59,7 +59,7 @@ export type CellEditorProps<Row> = {
   /** Tab inside the editor: saved; the table moves to the next editable cell in the row. */
   onTabNext?(): void;
   /** Letter typed on the cell that opened a list editor; seeds its search. */
-  initialQuery?: string;
+  defaultQuery?: string;
   /** Field name for the search placeholder and the toast ("Responsable"). */
   label?: string;
 };
@@ -75,7 +75,7 @@ type BodyProps<Row> = {
 };
 
 export function CellEditor<Row>(props: CellEditorProps<Row>): ReactNode {
-  const { anchor, edit, row, canEdit, open, onOpenChange, onCommitted, onTabNext, initialQuery, label } = props;
+  const { anchor, edit, row, canEdit, open, onOpenChange, onCommitted, onTabNext, defaultQuery, label } = props;
   const focusRef = useRef<HTMLElement | null>(null);
   // People: the picks not saved yet (null until one changes); closing saves them.
   const draftRef = useRef<string[] | null>(null);
@@ -138,9 +138,9 @@ export function CellEditor<Row>(props: CellEditorProps<Row>): ReactNode {
         {canEdit !== true ? (
           <LockedBody reason={canEdit} focusRef={focusRef} />
         ) : edit.kind === "people" ? (
-          <PeopleBody {...body} edit={edit} draftRef={draftRef} initialQuery={initialQuery} />
+          <PeopleBody {...body} edit={edit} draftRef={draftRef} defaultQuery={defaultQuery} />
         ) : edit.kind === "select" || edit.kind === "person" ? (
-          <ListBody {...body} edit={edit} initialQuery={initialQuery} />
+          <ListBody {...body} edit={edit} defaultQuery={defaultQuery} />
         ) : edit.kind === "date" ? (
           <DateBody {...body} edit={edit} />
         ) : edit.kind === "number" ? (
@@ -192,8 +192,8 @@ function ListBody<Row>({
   label,
   focusRef,
   finish,
-  initialQuery,
-}: BodyProps<Row> & { edit: Extract<CellEdit<Row>, { kind: "select" | "person" }>; initialQuery?: string }) {
+  defaultQuery,
+}: BodyProps<Row> & { edit: Extract<CellEdit<Row>, { kind: "select" | "person" }>; defaultQuery?: string }) {
   const current = edit.value(row);
   const entries = useMemo<Entry[]>(() => {
     const options = [...edit.options(row)];
@@ -209,15 +209,15 @@ function ListBody<Row>({
   }, [edit, row, label]);
 
   const searchable =
-    edit.kind === "person" || Boolean(initialQuery) || (edit.searchable ?? entries.length > SEARCH_MIN_OPTIONS);
-  const [query, setQuery] = useState(initialQuery ?? "");
+    edit.kind === "person" || Boolean(defaultQuery) || (edit.searchable ?? entries.length > SEARCH_MIN_OPTIONS);
+  const [query, setQuery] = useState(defaultQuery ?? "");
   const shown = useMemo(() => {
     const term = fold(query.trim());
     return term ? entries.filter((e) => fold(e.option.label).includes(term)) : entries;
   }, [entries, query]);
 
   const [highlighted, setHighlighted] = useState(() => {
-    if (initialQuery) return shown[0]?.id ?? "";
+    if (defaultQuery) return shown[0]?.id ?? "";
     return (entries.find((e) => e.option.value === current) ?? entries[0])?.id ?? "";
   });
 
@@ -289,11 +289,11 @@ function PeopleBody<Row>({
   focusRef,
   finish,
   draftRef,
-  initialQuery,
+  defaultQuery,
 }: BodyProps<Row> & {
   edit: PeopleCellEdit<Row>;
   draftRef: MutableRefObject<string[] | null>;
-  initialQuery?: string;
+  defaultQuery?: string;
 }) {
   const [initial] = useState(() => edit.value(row));
   const [picked, setPicked] = useState<string[]>(initial);
@@ -306,7 +306,7 @@ function PeopleBody<Row>({
     return ordered.map((option) => ({ id: `p:${option.value}`, option }));
   }, [edit, row, initial]);
 
-  const [query, setQuery] = useState(initialQuery ?? "");
+  const [query, setQuery] = useState(defaultQuery ?? "");
   const shown = useMemo(() => {
     const term = fold(query.trim());
     return term ? entries.filter((e) => fold(e.option.label).includes(term)) : entries;

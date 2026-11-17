@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 
 const nav = vi.hoisted(() => ({ params: new URLSearchParams() }));
 const actions = vi.hoisted(() => ({ setProjectCurrentEtapaAction: vi.fn() }));
@@ -206,5 +206,40 @@ describe("ProjectsVisualLayout", () => {
     renderLayout({ projects: [PROJECTS[0]], portfolio: [PORTFOLIO[0]] });
     const summary = screen.getByRole("region", { name: "Resumen del portafolio" });
     expect(summary.querySelectorAll('[data-slot="portfolio-summary"]')).toHaveLength(4);
+  });
+
+  it("search: opens with ?q=, filters the grid, and writes ?q= without a server render", () => {
+    vi.useFakeTimers();
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      nav.params = new URLSearchParams("q=lomas");
+      const { container } = renderLayout();
+      const input = screen.getByRole("searchbox", { name: "Buscar proyectos" }) as HTMLInputElement;
+      expect(input.value).toBe("lomas");
+      const hrefs = () =>
+        [...container.querySelectorAll<HTMLAnchorElement>('[data-slot="project-grid"] [data-slot="project-card"]')].map((c) =>
+          c.getAttribute("href"),
+        );
+      expect(hrefs()).toEqual(["/proyectos/p-lomas"]);
+
+      fireEvent.change(input, { target: { value: "zzz sin coincidencia" } });
+      expect(hrefs()).toEqual([]);
+      expect(screen.getByText("Ningún proyecto coincide con la búsqueda")).toBeTruthy();
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(replaceState).toHaveBeenCalled();
+      expect(String(replaceState.mock.calls.at(-1)?.[2])).toContain("q=zzz+sin+coincidencia");
+
+      fireEvent.change(input, { target: { value: "" } });
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(String(replaceState.mock.calls.at(-1)?.[2])).not.toContain("q=");
+      expect(hrefs()).toEqual(["/proyectos/p-lomas", "/proyectos/p-andares"]);
+    } finally {
+      replaceState.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

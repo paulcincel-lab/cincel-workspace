@@ -83,7 +83,7 @@ type DataTableProps<T> = {
   emptyMessage?: string;
   isLoading?: boolean;
   loadingMessage?: string;
-  initialSorting?: SortingState;
+  defaultSorting?: SortingState;
   searchPlaceholder?: string;
   tableClassName?: string;
   wrapperClassName?: string;

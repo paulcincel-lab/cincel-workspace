@@ -124,6 +124,10 @@ describe.skipIf(!url)("Tareas header sort: every column, both ways, across pages
     }
   }
 
+  /** True when each value is on the right side of the one before it (equal values allowed). */
+  const isOrdered = <T extends string | number>(values: T[], dir: "asc" | "desc") =>
+    values.every((value, i) => i === 0 || (dir === "asc" ? values[i - 1] <= value : values[i - 1] >= value));
+
   const due = (r: TaskListRow) => r.commitmentDate ?? r.deliveryDate ?? null;
 
   it("vence: by due date both ways, no due date last", async () => {
@@ -133,8 +137,7 @@ describe.skipIf(!url)("Tareas header sort: every column, both ways, across pages
       const firstNull = dates.indexOf(null);
       expect(firstNull).toBe(set.length);
       expect(dates.slice(firstNull).every((d) => d === null)).toBe(true);
-      const sorted = [...set].sort();
-      expect(set).toEqual(dir === "asc" ? sorted : sorted.reverse());
+      expect(isOrdered(set, dir)).toBe(true);
     }
   });
 
@@ -149,9 +152,9 @@ describe.skipIf(!url)("Tareas header sort: every column, both ways, across pages
 
   it("titulo and prioridad follow the column", async () => {
     const titles = (await readAll("titulo", "asc")).map((r) => r.title.toLowerCase());
-    expect(titles).toEqual([...titles].sort());
+    expect(isOrdered(titles, "asc")).toBe(true);
     const rank = { alta: 0, media: 1, baja: 2 } as const;
     const ranks = (await readAll("prioridad", "desc")).map((r) => rank[r.priority]);
-    expect(ranks).toEqual([...ranks].sort().reverse());
+    expect(isOrdered(ranks, "desc")).toBe(true);
   });
 });

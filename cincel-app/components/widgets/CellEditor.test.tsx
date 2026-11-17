@@ -143,7 +143,7 @@ describe("CellEditor: select", () => {
   });
 
   it("searches above 5 options; the typed letter seeds the search", async () => {
-    const { onCommitted } = setup(manyEdit, { initialQuery: "pai", label: "Disciplina" });
+    const { onCommitted } = setup(manyEdit, { defaultQuery: "pai", label: "Disciplina" });
     const search = await screen.findByRole("combobox");
     expect(search.getAttribute("placeholder")).toBe("Buscar disciplina…");
     expect((search as HTMLInputElement).value).toBe("pai");
@@ -167,7 +167,7 @@ describe("CellEditor: person", () => {
   });
 
   it("search ignores accents", async () => {
-    setup(personEdit, { label: "Responsable", initialQuery: "diaz" });
+    setup(personEdit, { label: "Responsable", defaultQuery: "diaz" });
     await waitFor(() => expect(options()).toHaveLength(1));
     expect(options()[0].textContent).toContain("Bruno Díaz");
   });

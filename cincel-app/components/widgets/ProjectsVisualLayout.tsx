@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useMemo, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, FolderKanban, Plus } from "lucide-react";
+import { CalendarDays, FolderKanban, Plus, Search } from "lucide-react";
 
 import {
   NO_UPCOMING_DELIVERY,
@@ -16,6 +17,7 @@ import {
   portfolioById,
   portfolioProjectCards,
   portfolioSummary,
+  searchProjects,
   summaryTone,
   etapaTone,
   visualDescription,
@@ -28,6 +30,7 @@ import { EmptyState } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/shadcn/avatar";
 import { Button } from "@/components/ui/shadcn/button";
+import { Input } from "@/components/ui/shadcn/input";
 import { ProjectsVisualSkeleton } from "@/components/widgets/route-skeletons";
 import { DeliveryTimelineWidget } from "@/components/widgets/DeliveryTimelineWidget";
 import { PageHeader } from "@/components/widgets/PageHeader";
@@ -73,6 +76,22 @@ export const ATTENTION_LINK_LABEL = "Ver todos →";
 export const ATTENTION_LINK_HREF = "/proyectos?estilo=analitico&mostrar=vencidas";
 export const PROJECTS_GRID_TITLE = "Todos los proyectos";
 export const TIMELINE_TITLE = "Próximas entregas";
+export const VISUAL_SEARCH_LABEL = "Buscar proyectos";
+export const VISUAL_SEARCH_EMPTY = "Ningún proyecto coincide con la búsqueda";
+
+/** Same param and debounce as the other styles (`ProjectsEsencialLayout`). */
+const SEARCH_PARAM = "q";
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** Sets (or removes) the search param with `history.replaceState` (no server render). */
+function replaceSearchParam(pathname: string, value: string | null): void {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (value) params.set(SEARCH_PARAM, value);
+  else params.delete(SEARCH_PARAM);
+  const search = params.toString();
+  window.history.replaceState(window.history.state, "", `${pathname}${search ? `?${search}` : ""}${window.location.hash}`);
+}
 
 /** Visual section entrance: each section rises 60 ms after the one before. */
 const SECTION_STEP_MS = 60;
@@ -310,13 +329,33 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
   const { projects, portfolio, etapas, today, canCreateProject } = data;
   const attentionId = useId();
   const gridId = useId();
+  const pathname = usePathname() ?? "/proyectos";
+  const searchParams = useSearchParams();
+  // The search lives in `?q=` (debounced, no server render) and opens with it.
+  const [search, setSearch] = useState(() => searchParams?.get(SEARCH_PARAM) ?? "");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
+  function handleSearch(value: string) {
+    setSearch(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      searchTimer.current = null;
+      replaceSearchParam(pathname, value.trim() || null);
+    }, SEARCH_DEBOUNCE_MS);
+  }
 
   const listed = useMemo(() => activeOnlyProjects(projects), [projects]);
   const rows = useMemo(() => portfolioById(portfolio), [portfolio]);
   const etapaOrder = useMemo(() => orderedEtapas(listed, etapas), [listed, etapas]);
   const summary = useMemo(() => portfolioSummary(listed, rows), [listed, rows]);
   const attention = useMemo(() => attentionProjects(listed, rows, etapas), [listed, rows, etapas]);
-  const cards = useMemo(() => portfolioProjectCards(listed, rows, etapas), [listed, rows, etapas]);
+  const searched = useMemo(() => searchProjects(listed, search), [listed, search]);
+  const cards = useMemo(() => portfolioProjectCards(searched, rows, etapas), [searched, rows, etapas]);
   const timeline = useMemo(() => deliveryTimeline(listed, rows, today), [listed, rows, today]);
 
   const toneOf = (key: string | null) => etapaTone(key, etapaOrder);
@@ -405,10 +444,26 @@ function VisualPortfolio({ data, onNewProject }: { data: ProyectosPageData; onNe
           <h2 id={gridId} className="text-lg font-semibold">
             {PROJECTS_GRID_TITLE}
           </h2>
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {cards.length} {cards.length === 1 ? "proyecto" : "proyectos"}
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                aria-label={VISUAL_SEARCH_LABEL}
+                placeholder={VISUAL_SEARCH_LABEL}
+                value={search}
+                onChange={(event) => handleSearch(event.target.value)}
+                className="h-8 w-48 rounded-[10px] pl-8"
+              />
+            </div>
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              {cards.length} {cards.length === 1 ? "proyecto" : "proyectos"}
+            </span>
+          </div>
         </div>
+        {cards.length === 0 && search.trim() ? (
+          <p className="text-sm text-muted-foreground">{VISUAL_SEARCH_EMPTY}</p>
+        ) : null}
         <div data-slot="project-grid" className="grid gap-[18px] [grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))]">
           {cards.map((project, index) => (
             <ProjectCard

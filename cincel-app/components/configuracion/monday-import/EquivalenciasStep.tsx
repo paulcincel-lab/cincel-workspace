@@ -610,7 +610,7 @@ export function EquivalenciasStep({
   onMappingChange,
   onStatusCreated,
   onStatusMapSaved,
-  initialBoardId,
+  defaultBoardId,
 }: {
   mapping: MappingInput;
   source: MondayExportSource;
@@ -620,9 +620,9 @@ export function EquivalenciasStep({
   /** The firm-wide status map the server saved (FE §4.6 item 5). */
   onStatusMapSaved?: (statusMap: MondayStatusMap) => void;
   /** The board to open on, e.g. from "Corregir" in Vista previa. */
-  initialBoardId?: string | null;
+  defaultBoardId?: string | null;
 }) {
-  const [boardId, setBoardId] = useState(initialBoardId ?? mapping.boards[0]?.mondayBoardId ?? "");
+  const [boardId, setBoardId] = useState(defaultBoardId ?? mapping.boards[0]?.mondayBoardId ?? "");
   const [tab, setTab] = useState<EquivalenciasTab>("columnas");
   const board = findBoard(mapping, boardId) ?? mapping.boards[0];
   const boardSource = source.boards.find((candidate) => candidate.id === board?.mondayBoardId);

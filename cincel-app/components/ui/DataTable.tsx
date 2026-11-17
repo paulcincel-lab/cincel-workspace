@@ -81,7 +81,7 @@ type DataTableProps<T> = {
   emptyMessage?: string;
   isLoading?: boolean;
   loadingMessage?: string;
-  initialSorting?: SortingState;
+  defaultSorting?: SortingState;
   /**
    * A sort the page applies (on the server): the table keeps the rows in the
    * order they come and a header click only reports the column. Only the
@@ -169,7 +169,7 @@ export function DataTable<T>({
   emptyMessage = "No hay resultados.",
   isLoading = false,
   loadingMessage = "Cargando…",
-  initialSorting = [],
+  defaultSorting = [],
   manualSort,
   searchPlaceholder,
   tableClassName = "",
@@ -190,7 +190,7 @@ export function DataTable<T>({
   tableId,
   resizeColumns,
 }: DataTableProps<T>): ReactNode {
-  const [localSorting, setSorting] = useState<SortingState>(initialSorting);
+  const [localSorting, setSorting] = useState<SortingState>(defaultSorting);
   const sorting: SortingState = manualSort
     ? manualSort.sort
       ? [{ id: manualSort.sort.key, desc: manualSort.sort.direction === "desc" }]

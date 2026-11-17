@@ -159,7 +159,7 @@ function Editable<Row>({ row, rowId, columnKey, edit, canEdit, label, children }
         onOpenChange={onOpenChange}
         onCommitted={save}
         onTabNext={() => grid?.moveNext(rowId, columnKey)}
-        initialQuery={initialQuery}
+        defaultQuery={initialQuery}
         label={label}
       />
     </>

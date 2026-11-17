@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -12,9 +12,6 @@ import {
 } from "@/components/asistente/use-asistente-cache";
 import { AssistantToolGroupsProvider } from "@/components/asistente/assistant-tool-groups";
 import { PageStyleLayout } from "@/components/widgets/PageStyleLayout";
-import { AsistenteAnaliticoLayout } from "@/components/widgets/asistente/AsistenteAnaliticoLayout";
-import { AsistenteEsencialLayout } from "@/components/widgets/asistente/AsistenteEsencialLayout";
-import { AsistenteVisualLayout } from "@/components/widgets/asistente/AsistenteVisualLayout";
 import { actionErrorText } from "@/lib/errors";
 import { qk } from "@/lib/query/keys";
 import { mutationErrorText } from "@/lib/query/mutation";
@@ -22,6 +19,17 @@ import { asistenteContextOptions, asistenteThreadOptions, asistenteThreadsOption
 import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
 import type { ContextChip } from "@/lib/types/asistente";
 import type { AssistantContext, AssistantThreadSummary } from "@/lib/types/redesign";
+
+/** One chunk per presentation style: a visit only downloads the layout of its active style. */
+const AsistenteAnaliticoLayout = lazy(() =>
+  import("@/components/widgets/asistente/AsistenteAnaliticoLayout").then((m) => ({ default: m.AsistenteAnaliticoLayout })),
+);
+const AsistenteEsencialLayout = lazy(() =>
+  import("@/components/widgets/asistente/AsistenteEsencialLayout").then((m) => ({ default: m.AsistenteEsencialLayout })),
+);
+const AsistenteVisualLayout = lazy(() =>
+  import("@/components/widgets/asistente/AsistenteVisualLayout").then((m) => ({ default: m.AsistenteVisualLayout })),
+);
 
 export type { AsistentePageThread } from "@/lib/types/asistente";
 
@@ -235,6 +243,7 @@ export function AsistentePageClient({
 
   return (
     <AssistantToolGroupsProvider toolNames={toolNames}>
+      <Suspense fallback={null}>
       <PageStyleLayout
         visual={visual}
         esencial={() => (
@@ -253,6 +262,7 @@ export function AsistentePageClient({
         )}
         analitico={analitico}
       />
+      </Suspense>
     </AssistantToolGroupsProvider>
   );
 }

@@ -79,7 +79,7 @@ type Props = {
   /** Fires whenever the visible folder or search changes, so a parent can clear its selection. */
   onNavigate?: () => void;
   /** Search text to start with (e.g. a name typed in a quick-add line). */
-  initialSearch?: string;
+  defaultSearch?: string;
 };
 
 function formatModified(iso: string | null): string {
@@ -108,10 +108,10 @@ export default function DriveBrowser({
   onFileClick,
   onFileDoubleClick,
   onNavigate,
-  initialSearch = "",
+  defaultSearch = "",
 }: Props) {
   const [path, setPath] = useState<Crumb[]>([]);
-  const [search, setSearch] = useState(initialSearch);
+  const [search, setSearch] = useState(defaultSearch);
   const query = useDebounced(search.trim(), DRIVE_SEARCH_DEBOUNCE_MS);
 
   const currentFolderId = path.length > 0 ? path[path.length - 1].id : (rootFolderId ?? null);
