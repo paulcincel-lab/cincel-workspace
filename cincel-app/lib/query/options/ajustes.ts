@@ -26,6 +26,7 @@ import {
   getAjustesPermisosPageData,
   getAjustesPuestosPageData,
   getAjustesEtapasPageData,
+  getAjustesFlujosPageData,
 } from "@/lib/actions/page-data/ajustes-actions";
 import type {
   AjustesEstatusPageData,
@@ -34,6 +35,7 @@ import type {
   AjustesEtapasPageData,
 } from "@/lib/types/ajustes-catalogs";
 import type { WorkflowDetail, WorkflowRef } from "@/lib/types/core";
+import type { AjustesFlujosPageData } from "@/lib/types/flows-admin";
 import { getAjustesMondayPageData } from "@/lib/actions/page-data/ajustes-actions";
 import type { AjustesMondayPageData } from "@/lib/loaders/ajustes-monday";
 import { seedMondayQueries } from "@/lib/query/options/monday";
@@ -200,6 +202,15 @@ export function ajustesEtapasOptions() {
       seedAjustesCatalogs(client, { seg: "etapas", data });
       return data;
     },
+    staleTime: STALE.ajustes,
+  });
+}
+
+/** Ajustes › Flujos (#1035): the flows with their etapas and gates; the flow actions invalidate it. */
+export function ajustesFlujosOptions() {
+  return queryOptions<AjustesFlujosPageData>({
+    queryKey: qk.ajustes.page("flujos"),
+    queryFn: () => getAjustesFlujosPageData({}),
     staleTime: STALE.ajustes,
   });
 }

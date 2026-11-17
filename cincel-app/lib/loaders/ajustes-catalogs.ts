@@ -17,10 +17,12 @@ import {
 } from "@/lib/data/roles";
 import { db } from "@/lib/db/client";
 import { staff } from "@/lib/db/schema";
+import * as flowsRepository from "@/lib/repositories/flows-repository";
 import * as positionsRepository from "@/lib/repositories/positions-repository";
 import { STAFF_ORDER } from "@/lib/repositories/staff-repository";
 import * as taskStatusesRepository from "@/lib/repositories/task-statuses-repository";
 import * as workflowsRepository from "@/lib/repositories/workflows-repository";
+import type { AjustesFlujosPageData } from "@/lib/types/flows-admin";
 import type {
   AjustesEstatusPageData,
   AjustesPermisosPageData,
@@ -38,7 +40,7 @@ import type {
  * what the page shows leaves the server.
  */
 
-type CatalogSegment = "estatus" | "puestos" | "etapas" | "permisos";
+type CatalogSegment = "estatus" | "puestos" | "etapas" | "flujos" | "permisos";
 
 function requireSegment(user: AuthenticatedUser, segment: CatalogSegment): void {
   if (!AJUSTES_SEGMENT_CAPABILITY[segment](user)) throw new Error(`FORBIDDEN: ajustes ${segment}`);
@@ -93,6 +95,12 @@ export async function loadAjustesEtapas(user: AuthenticatedUser): Promise<Ajuste
     workflowsRepository.countTasksByPhase(),
   ]);
   return { workflows, activeProjects, phaseTaskCounts };
+}
+
+/** Flujos (#1035): every flow with its etapas and gates, and the etapas an admin can add. 4 q. */
+export async function loadAjustesFlujos(user: AuthenticatedUser): Promise<AjustesFlujosPageData> {
+  requireSegment(user, "flujos");
+  return flowsRepository.getFlowsPageData();
 }
 
 /**

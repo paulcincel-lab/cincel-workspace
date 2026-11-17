@@ -7,7 +7,9 @@
 export type ReadinessRule = { after: string; phaseKey: string };
 
 /**
- * Readiness, fixed in code and shown read-only (RD-4): Diseño after
+ * The seed source of the default flow (`flow_tramos`) and the rule of an etapa
+ * that sits in no flow yet. Flows are data now (Ajustes › Flujos): auto-start,
+ * readiness and "Listos para iniciar" read the project's flow. Diseño after
  * Presale·Cobro, Construcción after Diseño·Ejecutivo. Keyed by
  * `workflows.key`, resolved through `workflow_phases.key`, so renaming a fase
  * doesn't break it. An etapa with no rule (the first one) has `readiness: null`.

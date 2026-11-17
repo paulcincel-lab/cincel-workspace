@@ -3,6 +3,8 @@ import "server-only";
 import type { AuthenticatedUser } from "@/lib/auth/auth-service";
 import { resolveActivitiesCapabilities, resolveProjectsCapabilities } from "@/lib/auth/permissions";
 import { viewerScopeOf } from "@/lib/auth/viewer-scope";
+import { db } from "@/lib/db/client";
+import { listActiveFlows } from "@/lib/project-flow/flows";
 import { getProjectForViewer } from "@/lib/projects/project-tab-shell";
 import { listHistoryPage, type HistoryPage } from "@/lib/repositories/history-repository";
 import { getImportData } from "@/lib/repositories/import-repository";
@@ -347,10 +349,16 @@ function canPickStartEtapa(user: AuthenticatedUser): boolean {
  */
 export async function loadProjectCreateStartOptions(user: AuthenticatedUser): Promise<ProjectCreateStartOptions | null> {
   if (!canPickStartEtapa(user)) return null;
-  const tree = await workflowsRepository.listWorkflowPhaseTree();
-  const first = tree[0];
+  const [tree, activeFlows] = await Promise.all([workflowsRepository.listWorkflowPhaseTree(), listActiveFlows(db)]);
+  const startOf = (first: (typeof tree)[number] | undefined) =>
+    first && first.autoStart === "on_create" && first.phases.length > 0 ? first.id : null;
+  // The first active etapa of each flow (the tree holds the active etapas only).
+  const treeById = new Map(tree.map((wf) => [wf.id, wf]));
+  const flowStart = (tramos: Array<{ workflowId: string }>) =>
+    startOf(tramos.map((t) => treeById.get(t.workflowId)).find((wf) => wf !== undefined)) ?? null;
+  const defaultFlow = activeFlows.find((f) => f.isDefault);
   return {
-    defaultWorkflowId: first && first.autoStart === "on_create" && first.phases.length > 0 ? first.id : null,
+    defaultWorkflowId: defaultFlow ? flowStart(defaultFlow.tramos) : startOf(tree[0]),
     etapas: tree.map((wf) => ({
       id: wf.id,
       key: wf.key,
@@ -358,6 +366,9 @@ export async function loadProjectCreateStartOptions(user: AuthenticatedUser): Pr
       sortOrder: wf.sortOrder,
       phases: wf.phases.map((p) => ({ id: p.id, name: p.name, sortOrder: p.sortOrder, templateCount: p.templateCount })),
     })),
+    flows: [...activeFlows]
+      .sort((x, y) => Number(y.isDefault) - Number(x.isDefault) || x.name.localeCompare(y.name, "es"))
+      .map((f) => ({ id: f.flowId, name: f.name, isDefault: f.isDefault, defaultWorkflowId: flowStart(f.tramos) })),
   };
 }
 

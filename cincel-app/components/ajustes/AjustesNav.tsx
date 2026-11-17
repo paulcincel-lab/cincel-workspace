@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 
 export type AjustesNavKey =
   | "perfil" | "apariencia" | "notificaciones" | "integraciones" | "solicitudes"
-  | "general" | "tema" | "horario" | "etapas" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
+  | "general" | "tema" | "horario" | "etapas" | "flujos" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
 
 export type AjustesNavProps = {
   active: AjustesNavKey;
@@ -52,6 +52,7 @@ const ORGANIZATION_ITEMS: ReadonlyArray<{ key: AjustesAdminSegment; label: strin
   { key: "tema", label: "Tema y estilo" },
   { key: "horario", label: "Control de horario" },
   { key: "etapas", label: "Etapas y fases" },
+  { key: "flujos", label: "Flujos" },
   { key: "puestos", label: "Puestos" },
   { key: "estatus", label: "Estatus" },
   { key: "permisos", label: "Permisos" },
@@ -78,6 +79,7 @@ export function ajustesNavKeyFromPath(pathname: string | null | undefined): Ajus
 
 function isSegmentVisible(key: AjustesAdminSegment, isAdmin: boolean, segments?: AjustesVisibleSegments): boolean {
   if ((key === "etapas" || key === "puestos") && !PROJECT_FLOW_SETTINGS_PAGES[key]) return false;
+  if (key === "flujos" && !PROJECT_FLOW_SETTINGS_PAGES.etapas) return false;
   return segments ? segments[key] === true : isAdmin;
 }
 

@@ -64,13 +64,20 @@ export function projectCreateDescription(presaleAutoStart: boolean): string {
  * default (`startOptions.defaultWorkflowId`); `uncheckedPhaseIds` empty =
  * every fase checked.
  */
-export type ProjectStartChoice = { workflowId?: string | null; uncheckedPhaseIds: ReadonlySet<string> };
+export type ProjectStartChoice = {
+  workflowId?: string | null;
+  uncheckedPhaseIds: ReadonlySet<string>;
+  /** The picked flow; undefined = the default flow. */
+  flowId?: string;
+};
 
 const UNTOUCHED_START: ProjectStartChoice = { uncheckedPhaseIds: new Set() };
 
 /** The etapa the form shows: the picked one, else the default. */
 export function selectedStartEtapa(options: ProjectCreateStartOptions, choice: ProjectStartChoice) {
-  const id = choice.workflowId === undefined ? options.defaultWorkflowId : choice.workflowId;
+  const flow = choice.flowId ? options.flows?.find((f) => f.id === choice.flowId) : undefined;
+  const fallback = flow ? flow.defaultWorkflowId : options.defaultWorkflowId;
+  const id = choice.workflowId === undefined ? fallback : choice.workflowId;
   return id ? (options.etapas.find((t) => t.id === id) ?? null) : null;
 }
 
@@ -83,13 +90,17 @@ export function selectedStartEtapa(options: ProjectCreateStartOptions, choice: P
 export function projectStartInput(
   options: ProjectCreateStartOptions | null | undefined,
   choice: ProjectStartChoice
-): Pick<ProjectCreateInput, "startWorkflowId" | "phaseIds"> | "NO_PHASES" {
-  if (!options || (choice.workflowId === undefined && choice.uncheckedPhaseIds.size === 0)) return {};
+): Pick<ProjectCreateInput, "startWorkflowId" | "phaseIds" | "flowId"> | "NO_PHASES" {
+  if (!options) return {};
+  // Only a flow that is not the default is sent; the server defaults the rest.
+  const flow = choice.flowId ? options.flows?.find((f) => f.id === choice.flowId && !f.isDefault) : undefined;
+  const flowPart = flow ? { flowId: flow.id } : {};
+  if (choice.workflowId === undefined && choice.uncheckedPhaseIds.size === 0) return flowPart;
   const etapa = selectedStartEtapa(options, choice);
-  if (!etapa) return { startWorkflowId: null };
+  if (!etapa) return { startWorkflowId: null, ...flowPart };
   const phaseIds = etapa.phases.filter((p) => !choice.uncheckedPhaseIds.has(p.id)).map((p) => p.id);
   if (etapa.phases.length > 0 && phaseIds.length === 0) return "NO_PHASES";
-  return { startWorkflowId: etapa.id, phaseIds };
+  return { startWorkflowId: etapa.id, phaseIds, ...flowPart };
 }
 
 /**
@@ -188,8 +199,37 @@ export function ProjectStartFields({
     onChange({ ...value, uncheckedPhaseIds: next });
   }
 
+  const flows = options.flows ?? [];
+  const flowItems: Record<string, string> = Object.fromEntries(flows.map((f) => [f.id, f.name]));
+  const flowId = value.flowId ?? flows.find((f) => f.isDefault)?.id ?? flows[0]?.id;
+
   return (
     <>
+      {flows.length > 1 ? (
+        <FormField>
+          <Label htmlFor="project-flow" className="block text-sm font-normal text-muted-foreground">
+            Flujo
+          </Label>
+          <Select
+            items={flowItems}
+            value={flowId}
+            onValueChange={(next) => {
+              if (next) onChange({ flowId: next as string, uncheckedPhaseIds: new Set() });
+            }}
+          >
+            <SelectTrigger id="project-flow" className="mt-1 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {flows.map((f) => (
+                <SelectItem key={f.id} value={f.id}>
+                  {f.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
+      ) : null}
       <FormField>
         <Label htmlFor="project-start-etapa" className="block text-sm font-normal text-muted-foreground">
           Etapa inicial
@@ -199,6 +239,7 @@ export function ProjectStartFields({
           value={etapa?.id ?? NO_ETAPA}
           onValueChange={(next) =>
             onChange({
+              ...value,
               workflowId: !next || next === NO_ETAPA ? null : (next as string),
               uncheckedPhaseIds: new Set(),
             })

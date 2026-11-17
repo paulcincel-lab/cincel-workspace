@@ -21,6 +21,7 @@ import {
   type AjustesNotificacionesPageData,
   type AjustesPerfilPageData,
 } from "@/lib/loaders/ajustes";
+import type { AjustesFlujosPageData } from "@/lib/types/flows-admin";
 import { parseInput } from "@/lib/validation/project-flow";
 import { TeamHoursInputSchema } from "@/lib/validation/redesign";
 import { getSessionAccess } from "@/lib/auth/session";
@@ -30,6 +31,7 @@ import {
   loadAjustesPermisos,
   loadAjustesPuestos,
   loadAjustesEtapas,
+  loadAjustesFlujos,
 } from "@/lib/loaders/ajustes-catalogs";
 import type {
   AjustesEstatusPageData,
@@ -147,6 +149,12 @@ export async function getAjustesPuestosPageData(input: z.input<typeof EmptyInput
 export async function getAjustesEtapasPageData(input: z.input<typeof EmptyInput> = {}): Promise<AjustesEtapasPageData> {
   parseInput(EmptyInput, input);
   return loadAjustesEtapas(await requireCapabilityUser());
+}
+
+/** Ajustes › Flujos: the flows with their etapas and gates. Administrador, else FORBIDDEN. */
+export async function getAjustesFlujosPageData(input: z.input<typeof EmptyInput> = {}): Promise<AjustesFlujosPageData> {
+  parseInput(EmptyInput, input);
+  return loadAjustesFlujos(await requireCapabilityUser());
 }
 
 /**

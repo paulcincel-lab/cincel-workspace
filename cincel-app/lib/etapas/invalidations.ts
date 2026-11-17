@@ -44,3 +44,9 @@ export const ETAPA_INVALIDATIONS = [
   // The sidebar project dots use the etapa colors.
   qk.shell.projects(),
 ] as const;
+
+/**
+ * A flow (create, edit, default): this page and the create dialog's "Flujo"
+ * select, and the Proyectos list ("Listos para iniciar" follows the flow).
+ */
+export const FLOW_INVALIDATIONS = [qk.ajustes.page("flujos"), qk.proyectos.createStart(), qk.proyectos.list()] as const;

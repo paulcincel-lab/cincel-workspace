@@ -18,6 +18,7 @@ export type AjustesAdminSegment =
   | "tema"
   | "horario"
   | "etapas"
+  | "flujos"
   | "puestos"
   | "estatus"
   | "permisos"
@@ -30,6 +31,7 @@ export const AJUSTES_ADMIN_SEGMENTS: readonly AjustesAdminSegment[] = [
   "tema",
   "horario",
   "etapas",
+  "flujos",
   "puestos",
   "estatus",
   "permisos",
@@ -63,6 +65,8 @@ export const AJUSTES_SEGMENT_CAPABILITY: Readonly<Record<AjustesAdminSegment, Aj
   // the segment admits either and each section checks its own capability.
   horario: (user) => canManageTimeTracking(user) || canViewTeamHours(user),
   etapas: (user) => PROJECT_FLOW_SETTINGS_PAGES.etapas && isSettingsAdministrator(user),
+  // Ajustes › Flujos: same rule as Etapas y fases (it edits how those etapas chain).
+  flujos: (user) => PROJECT_FLOW_SETTINGS_PAGES.etapas && isSettingsAdministrator(user),
   puestos: (user) => PROJECT_FLOW_SETTINGS_PAGES.puestos && isSettingsAdministrator(user),
   estatus: (user) => isSettingsAdministrator(user),
   permisos: (user) => isSettingsAdministrator(user),

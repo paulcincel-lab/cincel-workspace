@@ -36,6 +36,8 @@ export const ProjectCreateInputSchema = z.object({
   name,
   startWorkflowId: uuid.nullable().optional(),
   phaseIds: z.array(uuid).max(50).optional(),
+  /** The flow the project follows; the default flow when missing. */
+  flowId: uuid.optional(),
 });
 export const ProjectSpaceNameSchema = name;
 export const OrderedIdsSchema = z.array(uuid).max(500);
@@ -91,3 +93,19 @@ export const AdminTaskFiltersSchema = z.object({
 });
 
 export type AdminTaskFilters = z.infer<typeof AdminTaskFiltersSchema>;
+
+/** `createFlowAction` / `updateFlowAction` (#1035): the etapas are in flow order. */
+export const FlowInputSchema = z.object({
+  name,
+  active: z.boolean().optional(),
+  tramos: z
+    .array(
+      z.object({
+        workflowId: uuid,
+        afterWorkflowId: uuid.nullable().optional(),
+        gatePhaseKey: z.string().trim().min(1).max(120).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
