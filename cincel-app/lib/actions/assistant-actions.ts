@@ -126,7 +126,13 @@ async function markAssistantThreadReadActionImpl(input: { id: string }): Promise
  * call. No page calls it since the browser copy of the thread was retired. Tool parts are kept for display
  * only (`lib/assistant/legacy-import.ts`). Errors: `INVALID`.
  */
-export async function importLegacyAssistantThreadAction(messages: UIMessage[]): Promise<{ id: string }> {
+export async function importLegacyAssistantThreadAction(
+  ...args: Parameters<typeof importLegacyAssistantThreadActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof importLegacyAssistantThreadActionImpl>>>> {
+  return toActionResult(() => importLegacyAssistantThreadActionImpl(...args));
+}
+
+async function importLegacyAssistantThreadActionImpl(messages: UIMessage[]): Promise<{ id: string }> {
   const staffId = await sessionStaffId();
   const parsed = parseInput(LegacyAssistantMessagesSchema, messages);
   const rows = normalizeLegacyMessages(parsed);

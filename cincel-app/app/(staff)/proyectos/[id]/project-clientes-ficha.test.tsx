@@ -36,6 +36,7 @@ vi.mock("@/lib/auth/session", () => ({
 vi.mock("@/lib/auth/permissions", () => ({
   canSeeAdminData: () => state.admin,
   resolveProjectsCapabilities: () => ({ canEditProjectGeneral: state.editor, canChangeProjectStage: state.editor }),
+  resolveActivitiesCapabilities: () => ({ canViewActivities: false }),
 }));
 vi.mock("@/lib/projects/project-tab-shell", () => ({ loadProjectTabShell }));
 vi.mock("@/lib/loaders/proyectos-shell", () => ({ loadProyectoShell: loaders.loadProyectoShell }));
@@ -86,7 +87,7 @@ beforeEach(() => {
         }
       : null,
   );
-  loaders.loadProyectoFicha.mockResolvedValue({ project: DETAIL, tasks: [], spaces: [], importData: null });
+  loaders.loadProyectoFicha.mockResolvedValue({ project: DETAIL, hasTasksWithoutEtapa: false, spaces: [], importData: null });
   loaders.loadProyectoHistory.mockResolvedValue({ events: [], nextCursor: null });
   loaders.loadCatalogStaff.mockResolvedValue([]);
   loaders.loadCatalogContacts.mockResolvedValue([]);

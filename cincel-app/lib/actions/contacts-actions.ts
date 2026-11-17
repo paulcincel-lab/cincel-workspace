@@ -134,9 +134,12 @@ async function setContactTagsActionImpl(contactId: string, tags: ContactTag[]): 
  * plain contact delete — merging is destructive to the losing records.
  */
 export async function mergeContactsAction(
-  keepId: string,
-  duplicateIds: string[]
-): Promise<ContactDetail> {
+  ...args: Parameters<typeof mergeContactsActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof mergeContactsActionImpl>>>> {
+  return toActionResult(() => mergeContactsActionImpl(...args));
+}
+
+async function mergeContactsActionImpl(keepId: string, duplicateIds: string[]): Promise<ContactDetail> {
   const user = await requireCapabilityUser();
   if (!resolveClientsCapabilities(user).canDeleteClient) {
     throw new Error("FORBIDDEN: contact merge");

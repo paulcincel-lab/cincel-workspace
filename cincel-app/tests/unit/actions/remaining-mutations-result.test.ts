@@ -21,7 +21,7 @@ vi.mock("@/lib/repositories/contacts-repository", () => repo);
 vi.mock("@/lib/repositories/staff-repository", () => repo);
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 
-import { setContactTagsAction } from "@/lib/actions/contacts-actions";
+import { mergeContactsAction, setContactTagsAction } from "@/lib/actions/contacts-actions";
 import { deleteStaffAction, reorderStaffAction } from "@/lib/actions/staff-actions";
 
 beforeEach(() => {
@@ -50,5 +50,9 @@ describe("remaining user-facing mutations return ActionResult", () => {
   it("reorderStaffAction returns the forbidden code instead of throwing", async () => {
     await expect(reorderStaffAction(["s1"])).resolves.toEqual({ ok: false, error: "FORBIDDEN: staff reorder" });
     expect(repo.reorderStaff).not.toHaveBeenCalled();
+  });
+
+  it("mergeContactsAction returns the forbidden code instead of throwing", async () => {
+    await expect(mergeContactsAction("c1", ["c2"])).resolves.toEqual({ ok: false, error: "FORBIDDEN: contact merge" });
   });
 });

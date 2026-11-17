@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   output: "standalone",
   experimental: {
+    // Dev compiles only the named exports used from these barrel-style packages.
+    optimizePackageImports: ["recharts", "@tanstack/react-query", "@tanstack/react-table", "cmdk", "sonner"],
     // Solicitud screenshots: 5 MB each, plus the form overhead.
     serverActions: { bodySizeLimit: "6mb" },
     // Going back to a page seen in the last 30 s reuses its payload instead of rendering it again.

@@ -37,6 +37,11 @@ const remapActions = vi.hoisted(() => ({
   applyMondayRemapAction: vi.fn(),
 }));
 
+const tareasActions = vi.hoisted(() => ({ getTareasListPage: vi.fn() }));
+vi.mock("@/lib/actions/page-data/tareas-actions", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getTareasListPage: tareasActions.getTareasListPage,
+}));
 vi.mock("@/lib/actions/projects-actions", () => actions);
 vi.mock("@/lib/actions/page-data/proyectos-actions", () => pageData);
 vi.mock("@/lib/actions/page-data/catalog-actions", () => catalog);
@@ -55,6 +60,7 @@ vi.mock("@/components/proyectos/ProjectAdminFields", () => ({
 }));
 
 import { qk } from "@/lib/query/keys";
+import { fichaTasksListFilters } from "@/lib/proyectos/task-groups";
 import { hydrationRoundtrip, renderWithQueryClient } from "@/lib/query/test-utils";
 import { seedSessionUser } from "@/tests/helpers/session-user";
 
@@ -162,7 +168,7 @@ const TABS = <nav aria-label="Secciones del proyecto" data-testid="project-tabs"
  * the ficha (seeding espacios and import data), the first Bitácora page and,
  * for editors, the catalogs.
  */
-async function renderFicha(opts: { admin?: boolean; editor?: boolean; tasks?: TaskListRow[] } = {}) {
+async function renderFicha(opts: { admin?: boolean; editor?: boolean; tasks?: TaskListRow[]; nextCursor?: string; total?: number } = {}) {
   const editor = opts.editor ?? true;
   seedSessionUser({
     member: { id: "s1", name: "Ana López" },
@@ -171,9 +177,15 @@ async function renderFicha(opts: { admin?: boolean; editor?: boolean; tasks?: Ta
   const { client, state } = await hydrationRoundtrip(async (server: QueryClient) => {
     server.setQueryData(qk.proyectos.tab(P, "ficha"), {
       project: project(),
-      tasks: opts.tasks ?? (opts.admin ? [adminTask()] : []),
+      hasTasksWithoutEtapa: false,
       spaces: SPACES,
       importData: null,
+    });
+    // The first page of the task list (`qk.tareas.list`), which the page prefetches.
+    const rows = opts.tasks ?? (opts.admin ? [adminTask()] : []);
+    server.setQueryData(qk.tareas.list(fichaTasksListFilters(P, Boolean(opts.admin))), {
+      pages: [{ rows, nextCursor: opts.nextCursor ?? null, total: opts.total ?? rows.length }],
+      pageParams: [null],
     });
     server.setQueryData(qk.catalog.projectSpaces(P), SPACES);
     server.setQueryData(qk.importData("project", P), null);
@@ -202,7 +214,7 @@ beforeEach(() => {
   actions.updateProjectAction.mockResolvedValue({ ok: true, data: project({ projectType: "Residencial" }) });
   actions.setProjectMembersAction.mockResolvedValue({ ok: true, data: undefined });
   actions.setProjectContactsAction.mockResolvedValue({ ok: true, data: undefined });
-  pageData.getProyectoFichaData.mockResolvedValue({ project: project(), tasks: [], spaces: SPACES, importData: null });
+  pageData.getProyectoFichaData.mockResolvedValue({ project: project(), hasTasksWithoutEtapa: false, spaces: SPACES, importData: null });
   pageData.getProyectoHistoryPage.mockResolvedValue({ events: [], nextCursor: null });
 });
 
@@ -260,6 +272,19 @@ describe("ficha admin data", () => {
     expect(screen.getByText("Por asignar")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Asignar" })).toBeTruthy();
     expect(screen.getByText("Administración")).toBeTruthy();
+  });
+
+  it("pages the task list with Cargar más, grouping what has loaded", async () => {
+    const first = { ...adminTask(), id: "t-1", kind: "usuario" as const, title: "Primera tarea" };
+    const second = { ...adminTask(), id: "t-2", kind: "usuario" as const, title: "Segunda tarea" };
+    tareasActions.getTareasListPage.mockResolvedValue({ rows: [second], nextCursor: null, total: 2 });
+    await renderFicha({ tasks: [first], nextCursor: "c1", total: 2 });
+    expect(screen.getByRole("heading", { name: "Tareas (2)" })).toBeTruthy();
+    expect(screen.getByText("1 de 2 tareas")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+    await waitFor(() => expect(tareasActions.getTareasListPage).toHaveBeenCalledTimes(1));
+    expect(tareasActions.getTareasListPage.mock.calls[0][0]).toMatchObject({ cursor: "c1" });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Cargar más" })).toBeNull());
   });
 
   it("confirms a client change with an AlertDialog, saves and invalidates the Clientes tab too", async () => {

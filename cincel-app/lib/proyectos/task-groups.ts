@@ -1,3 +1,4 @@
+import type { TareasListFilters } from "@/lib/query/keys";
 import type { TaskListItem, WorkflowPhaseRef, WorkflowRef } from "@/lib/types/core";
 
 export const NO_PHASE_LABEL = "Sin fase · revisar";
@@ -106,4 +107,21 @@ export function groupFichaTasks<T extends FichaGroupTask = TaskListItem>(
 /** True when the project has non-admin tasks without an etapa (drives "Asignar etapa"). */
 export function hasTasksWithoutEtapa(tasks: FichaGroupTask[]): boolean {
   return tasks.some((t) => t.kind !== "admin" && !t.workflow);
+}
+
+/**
+ * The filters of the ficha's task list (`qk.tareas.list`): every task of the
+ * project, subtasks as rows, in etapa and fase order, admin tasks too for an
+ * administrator. The page prefetches and the client reads the same key.
+ */
+export function fichaTasksListFilters(projectId: string, isAdmin: boolean): TareasListFilters {
+  return {
+    etapa: null,
+    proyecto: projectId,
+    responsable: null,
+    estado: null,
+    q: null,
+    topLevelOnly: false,
+    ...(isAdmin ? { incluirAdmin: true as const } : {}),
+  };
 }

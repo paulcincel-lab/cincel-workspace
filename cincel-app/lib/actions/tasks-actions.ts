@@ -247,7 +247,13 @@ async function deleteTaskActionImpl(id: string): Promise<void> {
  * tasks and dependencies move to the survivor, then the duplicates are soft-deleted. Same capability as a
  * plain task delete — merging is destructive to the losing records.
  */
-export async function mergeTasksAction(keepId: string, duplicateIds: string[]): Promise<TaskDetail> {
+export async function mergeTasksAction(
+  ...args: Parameters<typeof mergeTasksActionImpl>
+): Promise<ActionResult<Awaited<ReturnType<typeof mergeTasksActionImpl>>>> {
+  return toActionResult(() => mergeTasksActionImpl(...args));
+}
+
+async function mergeTasksActionImpl(keepId: string, duplicateIds: string[]): Promise<TaskDetail> {
   const { user, viewer } = await requireTaskWriter(keepId, ...duplicateIds);
   if (!resolveActivitiesCapabilities(user).canDeleteActivity) {
     throw new Error("FORBIDDEN: task merge");
