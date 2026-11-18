@@ -23,6 +23,7 @@ export const ticketClientContextSchema = z.object({
   path: z.string().trim().min(1).max(500),
   estilo: z.string().trim().max(40),
   theme: z.string().trim().max(40),
+  themeId: z.string().trim().max(40).optional(),
   viewport: z.string().trim().max(40),
   userAgent: z.string().trim().max(500),
 });

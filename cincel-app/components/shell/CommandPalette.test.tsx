@@ -194,6 +194,18 @@ describe("CommandPalette search", () => {
     expect(screen.getByTestId("command-palette-footer").textContent).toContain("5 resultados");
   });
 
+  it("counts the visible actions in the footer along with the results", async () => {
+    search.searchWorkspaceAction.mockResolvedValue(RESULTS);
+    renderPalette(true);
+    type("nota");
+
+    await screen.findByText("Juanma");
+    await screen.findByText("Acciones");
+    const total = screen.getAllByRole("option").length;
+    expect(total).toBeGreaterThan(RESULTS.length);
+    expect(screen.getByTestId("command-palette-footer").textContent).toContain(`${total} resultados`);
+  });
+
   it("opens internal results with the router and Drive files in a new tab", async () => {
     search.searchWorkspaceAction.mockResolvedValue(RESULTS);
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);

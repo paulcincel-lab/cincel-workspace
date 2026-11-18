@@ -271,7 +271,7 @@ export function CommandPalette() {
     if (id === "registrar-entrada") clockIn();
   }
 
-  const resultCount = shownResults.length;
+  const resultCount = shownResults.length + visibleActions.length;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
