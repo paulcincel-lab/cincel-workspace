@@ -1,4 +1,5 @@
 import type { TicketClientContext, TicketDraft, TicketKind } from "@/lib/types/soporte";
+import { formatThemeLabel } from "@/lib/soporte/theme-label";
 import { ticketDraftSchema } from "@/lib/validation/soporte";
 
 /** Label of the main text field; it follows the kind. */
@@ -36,6 +37,7 @@ export function captureClientContext(): TicketClientContext {
     path: `${window.location.pathname}${window.location.search}`.slice(0, 500) || "/",
     estilo: root.getAttribute("data-style") ?? "",
     theme: root.getAttribute("data-theme") ?? "",
+    themeId: root.getAttribute("data-theme-id") ?? undefined,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
     userAgent: navigator.userAgent.slice(0, 500),
   };
@@ -46,7 +48,7 @@ export function contextRows(context: TicketClientContext, appVersion: string | n
   return [
     { label: "Página", value: context.path },
     { label: "Estilo", value: context.estilo || "predeterminado" },
-    { label: "Tema", value: context.theme === "dark" ? "oscuro" : context.theme === "light" ? "claro" : context.theme || "—" },
+    { label: "Tema", value: formatThemeLabel(context.themeId, context.theme) || "—" },
     { label: "Versión", value: appVersion ?? "desarrollo" },
     { label: "Pantalla", value: context.viewport },
   ];

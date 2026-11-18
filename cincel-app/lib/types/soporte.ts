@@ -87,6 +87,8 @@ export type TicketClientContext = {
   path: string;
   estilo: string;
   theme: string;
+  /** Color theme preset (data-theme-id); absent on older rows. */
+  themeId?: string;
   viewport: string;
   userAgent: string;
 };

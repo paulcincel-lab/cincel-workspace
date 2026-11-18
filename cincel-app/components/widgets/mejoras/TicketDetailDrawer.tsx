@@ -28,6 +28,7 @@ import { useActionMutation } from "@/lib/query/mutation";
 import { catalogStaffOptions } from "@/lib/query/options/catalog";
 import { mejorasListInfiniteOptions, ticketOptions } from "@/lib/query/options/soporte";
 import { uploadTicketAttachments } from "@/lib/soporte/attachments-client";
+import { formatThemeLabel } from "@/lib/soporte/theme-label";
 import { SOPORTE_GITHUB_ENABLED } from "@/lib/soporte/flags";
 import {
   AREA_LABEL,
@@ -326,7 +327,7 @@ function DrawerBody({ ticket }: { ticket: TicketDetail }) {
             <dt className="text-muted-foreground">Estilo</dt>
             <dd>{ticket.context.estilo}</dd>
             <dt className="text-muted-foreground">Tema</dt>
-            <dd>{ticket.context.theme}</dd>
+            <dd>{formatThemeLabel(ticket.context.themeId, ticket.context.theme)}</dd>
             <dt className="text-muted-foreground">Versión</dt>
             <dd>{ticket.context.appVersion}</dd>
             <dt className="text-muted-foreground">Navegador</dt>

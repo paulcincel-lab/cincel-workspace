@@ -3,6 +3,7 @@
  * (Problema, Propuesta, Contexto técnico) with the redaction already applied.
  * Pure and client-safe.
  */
+import { formatThemeLabel } from "@/lib/soporte/theme-label";
 import { redactForGithub, type RedactionContext } from "@/lib/soporte/redact";
 import { AREA_LABEL, KIND_LABEL, type TicketArea, type TicketContext, type TicketKind } from "@/lib/types/soporte";
 
@@ -34,7 +35,7 @@ function technicalContext(source: PublishDraftSource): string {
     ["Área", AREA_LABEL[source.area] ?? source.area],
     ["Ruta", path || null],
     ["Estilo", source.context.estilo || null],
-    ["Tema", source.context.theme || null],
+    ["Tema", formatThemeLabel(source.context.themeId, source.context.theme) || null],
     ["Pantalla", source.context.viewport || null],
     ["Versión", source.context.appVersion || null],
   ];
