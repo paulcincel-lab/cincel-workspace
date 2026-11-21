@@ -51,6 +51,12 @@ Cómo funciona, en corto:
       una app **Externa**, Google exige verificación y una evaluación de seguridad antes de dejar usarlo. Con una app
       **Interna** no hay verificación; la consola puede mostrar un aviso de "permiso restringido" o "sensible" junto a
       los permisos de Gmail. Si aparece, copiar el texto del aviso en el issue. No cambiar el público a Externo.
+- [ ] Marcar el cliente "Cincel Staff" como **de confianza** en la consola de administración de Workspace, para que
+      el control de acceso de apps de terceros no bloquee los permisos de Calendario y Gmail. Ruta: **Seguridad →
+      Acceso y control de datos → Controles de API → Gestionar el acceso de apps de terceros → Configurar app nueva →
+      ID de cliente de OAuth**, pegar el ID del cliente (paso 3), elegir **De confianza** y guardar. Hacerlo para el
+      cliente de cada ambiente. Si no se marca y el dominio restringe las apps de terceros, Google responde
+      `access_denied` al conectar Calendario o Gmail aunque los permisos ya estén en la pantalla de consentimiento.
 
 ## 3. Cliente OAuth "Cincel Staff"
 
