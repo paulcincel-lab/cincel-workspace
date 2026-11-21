@@ -662,6 +662,12 @@ export type TaskBulkPatch =
 export type TaskBulkResult = {
   updated: string[];
   skipped: { id: string; reason: string }[];
+  /**
+   * A status change also moves the open subtasks of the tasks it names: their
+   * ids are in `updated` (or `skipped`), and here is where each one was, so
+   * Deshacer can put it back.
+   */
+  subtasks?: { id: string; parentId: string; status: TaskStatus; customStatusId: string | null }[];
 };
 
 export type TaskFilters = {

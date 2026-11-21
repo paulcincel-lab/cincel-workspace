@@ -84,6 +84,7 @@ export function undoPatches(
   before: readonly TaskBulkTask[],
   field: TaskBulkField,
   updated: readonly string[],
+  subtasks: TaskBulkResult["subtasks"] = [],
 ): { ids: string[]; patch: TaskBulkPatch }[] {
   const changed = new Set(updated);
   const byValue = new Map<string, { ids: string[]; patch: TaskBulkPatch }>();
@@ -100,6 +101,17 @@ export function undoPatches(
     if (entry) entry.ids.push(task.id);
     else byValue.set(k, { ids: [task.id], patch });
   }
+  // A status change also moved the open subtasks: each goes back to the status it had.
+  if (field === "estatus") {
+    for (const sub of subtasks) {
+      if (!changed.has(sub.id)) continue;
+      const patch: TaskBulkPatch = sub.customStatusId ? { customStatusId: sub.customStatusId } : { status: sub.status };
+      const k = `sub:${sub.customStatusId ?? sub.status}`;
+      const entry = byValue.get(k);
+      if (entry) entry.ids.push(sub.id);
+      else byValue.set(k, { ids: [sub.id], patch });
+    }
+  }
   return [...byValue.values()];
 }
 
@@ -112,10 +124,10 @@ export function bulkResultToast(result: TaskBulkResult): string {
 
 /**
  * What a bulk change or delete refreshes: every Tareas view, each project's
- * Tareas tab, resumen and cronograma, Inicio, the badges, Mi espacio and the
- * tasks' detail.
+ * Tareas tab, resumen and cronograma, Inicio, the badges, Mi espacio, the
+ * tasks' detail and their subtasks (`subtaskIds`: the ones a status change moved too).
  */
-export function bulkInvalidations(tasks: readonly TaskBulkTask[]): QueryKey[] {
+export function bulkInvalidations(tasks: readonly TaskBulkTask[], subtaskIds: readonly string[] = []): QueryKey[] {
   const seen = new Set<string>();
   const keys: QueryKey[] = [];
   const add = (k: QueryKey) => {
@@ -128,7 +140,13 @@ export function bulkInvalidations(tasks: readonly TaskBulkTask[]): QueryKey[] {
     taskStatusInvalidations(projectId).forEach(add);
     taskDeleteInvalidations(projectId).forEach(add);
   }
-  for (const task of tasks) add(qk.tasks.detail(task.id));
+  for (const task of tasks) {
+    add(qk.tasks.detail(task.id));
+    // A parent's subtasks (its expanded rows and the sheet's list) read the status too.
+    add(qk.tasks.subtasks(task.id));
+    add(qk.tasks.children(task.id));
+  }
+  for (const id of subtaskIds) add(qk.tasks.detail(id));
   return keys;
 }
 

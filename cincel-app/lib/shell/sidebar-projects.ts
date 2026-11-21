@@ -44,3 +44,22 @@ export function activeProjectId(pathname: string | null | undefined): string | n
   const match = /^\/proyectos\/([^/?#]+)/.exec(pathname ?? "");
   return match ? decodeURIComponent(match[1]!) : null;
 }
+
+/** The `/tareas` URL with the Proyecto filter preset to `projectId` (shareable). */
+export function tareasProjectHref(projectId: string): string {
+  return `/tareas?proyecto=${encodeURIComponent(projectId)}`;
+}
+
+/**
+ * The project a `/tareas` URL narrows to: the id of `?proyecto=<id>` when the
+ * route is `/tareas` and the param names exactly one project; otherwise null.
+ */
+export function activeTareasProjectId(
+  pathname: string | null | undefined,
+  search: string | URLSearchParams | null | undefined,
+): string | null {
+  if (!pathname || !/^\/tareas(\/|$)/.test(pathname)) return null;
+  const value = new URLSearchParams(search ?? "").get("proyecto")?.trim().toLowerCase();
+  if (!value || value.includes(",")) return null;
+  return value;
+}

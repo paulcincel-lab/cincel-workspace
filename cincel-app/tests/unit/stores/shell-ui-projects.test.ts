@@ -6,7 +6,7 @@ import { SHELL_UI_STORAGE_KEY, useShellUi } from "@/lib/stores/shell-ui-store";
 
 beforeEach(() => {
   window.localStorage.clear();
-  useShellUi.setState({ projectsOpen: false, inactiveProjectsOpen: false });
+  useShellUi.setState({ projectsOpen: false, tareasOpen: false, inactiveProjectsOpen: false });
 });
 afterEach(() => window.localStorage.clear());
 
@@ -18,10 +18,11 @@ describe("useShellUi sidebar projects", () => {
 
   it("persists the open states only, not the palette", () => {
     useShellUi.getState().setProjectsOpen(true);
+    useShellUi.getState().setTareasOpen(true);
     useShellUi.getState().setInactiveProjectsOpen(true);
     useShellUi.getState().openSearch();
     const saved = JSON.parse(window.localStorage.getItem(SHELL_UI_STORAGE_KEY) ?? "{}");
-    expect(saved.state).toEqual({ projectsOpen: true, inactiveProjectsOpen: true });
+    expect(saved.state).toEqual({ projectsOpen: true, tareasOpen: true, inactiveProjectsOpen: true });
   });
 
   it("survives a reload: rehydrating restores the saved state", async () => {
@@ -33,6 +34,18 @@ describe("useShellUi sidebar projects", () => {
     expect(useShellUi.getState().projectsOpen).toBe(true);
     expect(useShellUi.getState().inactiveProjectsOpen).toBe(false);
     expect(useShellUi.getState().searchOpen).toBe(false);
+  });
+
+  it("restores the Tareas submenu state and defaults it for older saves", async () => {
+    window.localStorage.setItem(
+      SHELL_UI_STORAGE_KEY,
+      JSON.stringify({ state: { projectsOpen: true, tareasOpen: true }, version: 1 }),
+    );
+    await useShellUi.persist.rehydrate();
+    expect(useShellUi.getState().tareasOpen).toBe(true);
+    window.localStorage.setItem(SHELL_UI_STORAGE_KEY, JSON.stringify({ state: { projectsOpen: true }, version: 1 }));
+    await useShellUi.persist.rehydrate();
+    expect(useShellUi.getState().tareasOpen).toBe(false);
   });
 
   it("ignores a stored value of another shape", async () => {

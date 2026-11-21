@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeProjectId,
+  activeTareasProjectId,
   groupSidebarProjects,
   PROJECTS_FILTER_THRESHOLD,
   showsProjectsFilter,
+  tareasProjectHref,
 } from "@/lib/shell/sidebar-projects";
 import type { ShellProject } from "@/lib/types/shell";
 
@@ -67,5 +69,28 @@ describe("activeProjectId", () => {
     expect(activeProjectId("/proyectos")).toBeNull();
     expect(activeProjectId("/tareas")).toBeNull();
     expect(activeProjectId(null)).toBeNull();
+  });
+});
+
+describe("tareasProjectHref", () => {
+  it("opens /tareas with the Proyecto filter preset", () => {
+    expect(tareasProjectHref("3f6c1c0e-9a1d-4a53-8c0e-0b6f1f2f6a11")).toBe(
+      "/tareas?proyecto=3f6c1c0e-9a1d-4a53-8c0e-0b6f1f2f6a11",
+    );
+  });
+});
+
+describe("activeTareasProjectId", () => {
+  it("reads the single project of ?proyecto= on /tareas", () => {
+    expect(activeTareasProjectId("/tareas", "proyecto=ABC-1&etapa=diseno")).toBe("abc-1");
+    expect(activeTareasProjectId("/tareas", new URLSearchParams("proyecto=p1"))).toBe("p1");
+  });
+
+  it("is null without the param, for several projects or on another route", () => {
+    expect(activeTareasProjectId("/tareas", "")).toBeNull();
+    expect(activeTareasProjectId("/tareas", "proyecto=a,b")).toBeNull();
+    expect(activeTareasProjectId("/proyectos", "proyecto=a")).toBeNull();
+    expect(activeTareasProjectId(null, "proyecto=a")).toBeNull();
+    expect(activeTareasProjectId("/tareas", null)).toBeNull();
   });
 });

@@ -30,7 +30,7 @@ import type { NavItem, NavItemKey, NavModel } from "@/lib/ui/nav";
 
 import type { AppShellProps } from "./AppShell";
 import { AvatarMenu } from "./AvatarMenu";
-import { SidebarProjectsEntry } from "./SidebarProjects";
+import { SidebarProjectsEntry, SidebarTareasEntry } from "./SidebarProjects";
 
 /**
  * Sidebar of the new shell (redesign FE §3.1, §4.1; frame `Sidebar`): logo,
@@ -145,6 +145,13 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
                   {items.map((item) =>
                     item.key === "proyectos" ? (
                       <SidebarProjectsEntry
+                        key={item.key}
+                        item={item}
+                        active={item.key === activeKey}
+                        prefetch={prefetchFor(item.key)}
+                      />
+                    ) : item.key === "tareas" ? (
+                      <SidebarTareasEntry
                         key={item.key}
                         item={item}
                         active={item.key === activeKey}

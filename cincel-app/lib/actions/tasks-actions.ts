@@ -287,7 +287,9 @@ export async function bulkUpdateTasksAction(
 /**
  * One field on many tasks (#1040). Each task keeps its own permission (the
  * same checks as the single-task action for that field): tasks the viewer
- * can't change are skipped with the error code, the rest are updated.
+ * can't change are skipped with the error code, the rest are updated. A
+ * status change also moves the open subtasks of each task, under the same
+ * checks, and reports where they were in `subtasks` (for Deshacer).
  */
 async function bulkUpdateTasksActionImpl(ids: string[], patch: TaskBulkPatch): Promise<TaskBulkResult> {
   const user = await requireCapabilityUser();
@@ -298,16 +300,37 @@ async function bulkUpdateTasksActionImpl(ids: string[], patch: TaskBulkPatch): P
   const result: TaskBulkResult = { updated: [], skipped: [] };
   const closing: TaskDetail[] = [];
   const assigned: TaskDetail[] = [];
-  for (const id of [...new Set(ids)]) {
+  const isStatus = "status" in patch || "customStatusId" in patch;
+  const selected = [...new Set(ids)];
+  // A status change also moves each parent's open subtasks, in the same call (the selected ones keep their own turn).
+  const target = "customStatusId" in patch ? { customStatusId: patch.customStatusId } : "status" in patch ? { status: patch.status } : null;
+  const picked = new Set(selected);
+  const subtasks =
+    isStatus && target
+      ? (await tasksRepository.listOpenSubtasksToMove(selected, target)).filter((s) => !picked.has(s.id))
+      : [];
+  const queue: { id: string; sub: boolean }[] = [
+    ...selected.map((id) => ({ id, sub: false })),
+    ...subtasks.map((s) => ({ id: s.id, sub: true })),
+  ];
+  const refused = new Set<string>();
+  for (const { id, sub } of queue) {
+    // A parent that was skipped keeps its subtasks where they are.
+    if (sub && refused.has(subtasks.find((s) => s.id === id)!.parentId)) continue;
     try {
       await tasksRepository.assertTaskVisible(id, viewer);
       const row = await bulkUpdateOne(id, patch, caps, user.member.id);
       result.updated.push(id);
-      if (row && ("status" in patch || "customStatusId" in patch)) closing.push(row);
+      if (sub) {
+        const before = subtasks.find((s) => s.id === id)!;
+        (result.subtasks ??= []).push(before);
+      }
+      if (row && isStatus) closing.push(row);
       if (row && "managerId" in patch) assigned.push(row);
     } catch (error) {
       // Only the task's own refusals (plain `Error`s with a code) skip it; anything else fails the call.
       if (!(error instanceof Error) || error.constructor !== Error) throw error;
+      refused.add(id);
       result.skipped.push({ id, reason: bulkSkipReason(error.message) });
     }
   }
@@ -335,8 +358,8 @@ async function bulkUpdateOne(
   if ("status" in patch || "customStatusId" in patch) {
     if (caps.statusScope === "none") throw new Error("FORBIDDEN: task status change");
     return "status" in patch
-      ? tasksRepository.setTaskStatus(id, patch.status, actorId)
-      : tasksRepository.setTaskCustomStatus(id, patch.customStatusId, actorId);
+      ? tasksRepository.setTaskStatus(id, patch.status, actorId, { cascade: false })
+      : tasksRepository.setTaskCustomStatus(id, patch.customStatusId, actorId, { cascade: false });
   }
   if ("managerId" in patch) {
     if (!caps.canChangeResponsible) throw new Error("FORBIDDEN: task reassign");

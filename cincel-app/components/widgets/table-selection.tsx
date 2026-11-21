@@ -86,7 +86,8 @@ export const SELECT_CELL_CLASS = "w-8 pr-0 pl-3";
 
 type CheckboxBaseProps = { checked: boolean; indeterminate?: boolean; label: string; onToggle(range: boolean): void };
 
-function SelectCheckbox({ checked, indeterminate, label, onToggle }: CheckboxBaseProps) {
+/** One select checkbox (shift-click reports `range`); the board's cards use it too. */
+export function SelectCheckbox({ checked, indeterminate, label, onToggle }: CheckboxBaseProps) {
   // Shift is read from the pointer / key that starts the change (the change event carries no modifiers).
   const shift = useRef(false);
   return (

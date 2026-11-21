@@ -29,6 +29,8 @@ import { useBoardDrag, type BoardCardDragProps } from "@/components/tablero/useB
 import { DistributionWidget } from "@/components/widgets/DistributionWidget";
 import { LIFT_CLASS } from "@/components/widgets/lift";
 import { RecordTable } from "@/components/widgets/RecordTable";
+import { SelectCheckbox } from "@/components/widgets/table-selection";
+import { SELECT_ROW_LABEL } from "@/components/widgets/table-rows";
 import { StyleView } from "@/components/widgets/StyleView";
 import { EtapaBadge } from "@/components/widgets/EtapaBadge";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
@@ -128,6 +130,18 @@ export type TaskBoardWidgetProps = {
    * drag handle, can't be dragged and its "Mover a…" is disabled. Default: every card.
    */
   canMove?(task: TaskListItem): boolean;
+  /**
+   * Visual: card multi-select (#1168). Each card shows a checkbox (shift-click
+   * selects the range between the last toggled card and this one); the page
+   * shows the bulk bar and moves every selected card when one is dropped.
+   */
+  selection?: BoardSelection;
+};
+
+/** What the board needs of a task selection (`useTaskSelection` satisfies it). */
+export type BoardSelection = {
+  isSelected(id: string): boolean;
+  toggle(id: string, options?: { range?: boolean }): void;
 };
 
 export type BoardColumnPages = {
@@ -224,6 +238,7 @@ export function TaskBoardWidget({
   compactCompleted = false,
   hideCompleted = false,
   canMove,
+  selection,
 }: TaskBoardWidgetProps) {
   const tasks = useMemo(() => flattenBoard(board), [board]);
   const columns = useMemo(() => {
@@ -257,6 +272,7 @@ export function TaskBoardWidget({
           visibleCards={visibleCards}
           compactCompleted={compactCompleted}
           canMove={canMove}
+          selection={selection}
         />
       )}
       esencial={() => empty ?? <BoardEsencial tasks={tasks} columns={columns} table={table} />}
@@ -321,6 +337,7 @@ function BoardVisual({
   visibleCards,
   compactCompleted,
   canMove,
+  selection,
 }: {
   tasks: TaskListItem[];
   columns: BoardColumn[];
@@ -330,6 +347,7 @@ function BoardVisual({
   visibleCards?: number;
   compactCompleted?: boolean;
   canMove?: TaskBoardWidgetProps["canMove"];
+  selection?: BoardSelection;
 }) {
   const grouped = groupTasksByColumn(tasks, columns);
   const today = todayIso();
@@ -347,7 +365,8 @@ function BoardVisual({
 
   function move(taskId: string, columnKey: string) {
     const task = tasks.find((t) => t.id === taskId);
-    if (task && statusSelectValue(task) === columnKey) return;
+    // A selected card moves with the rest of the selection, even when it is already in that column.
+    if (task && statusSelectValue(task) === columnKey && !selection?.isSelected(taskId)) return;
     if (task && canMove && !canMove(task)) return;
     const showError = (err: unknown) => toast.error(actionErrorText(err));
     const target = columns.find((c) => c.key === columnKey);
@@ -370,6 +389,7 @@ function BoardVisual({
   // Cards just created from a column's quick-add enter with `row-new`.
   const recent = useQuickAddRecent((s) => s.recent);
 
+  const loadedIds = new Set(tasks.map((t) => t.id));
   const renderCard = (task: TaskListItem, columnIndex: number, cardIndex: number) => (
     <BoardCard
       key={task.id}
@@ -384,6 +404,7 @@ function BoardVisual({
       movable={canMove?.(task) ?? true}
       compact={compactCompleted && statusSelectValue(task) === "completado"}
       isNew={recent.includes(task.id)}
+      selection={selection && loadedIds.has(task.id) ? selection : undefined}
     />
   );
 
@@ -610,6 +631,7 @@ function BoardCard({
   movable = true,
   compact = false,
   isNew = false,
+  selection,
 }: {
   task: TaskListItem;
   href: string;
@@ -626,7 +648,17 @@ function BoardCard({
   compact?: boolean;
   /** Just created from a quick-add: enters with `row-new`. */
   isNew?: boolean;
+  /** Card multi-select: a checkbox on the card. */
+  selection?: BoardSelection;
 }) {
+  const selected = selection?.isSelected(task.id) ?? false;
+  const selectBox = selection ? (
+    <SelectCheckbox
+      checked={selected}
+      label={SELECT_ROW_LABEL(task.title)}
+      onToggle={(range) => selection.toggle(task.id, { range })}
+    />
+  ) : null;
   const titleLink = (className: string) => (
     <Link
       href={href}
@@ -669,14 +701,17 @@ function BoardCard({
         data-task-id={task.id}
         data-compact=""
         data-dragging={dragging || undefined}
+        data-selected={selected || undefined}
         style={{ "--anim-delay": delay } as CSSProperties}
         className={cn(
           "anim-in flex cursor-grab flex-col gap-1.5 rounded-md border bg-card px-3.5 py-3 text-card-foreground shadow-[var(--shadow-card)] active:cursor-grabbing",
           dragging ? "drag-lift border-primary" : LIFT_CLASS,
+          selected && "border-primary",
           isNew && "row-new",
         )}
       >
         <div className="flex min-w-0 items-start gap-2">
+          {selectBox}
           <CircleCheck aria-hidden="true" className="mt-px size-4 shrink-0 text-success" />
           <div className="flex min-w-0 flex-col gap-0.5">
             {titleLink("line-clamp-2 text-[13.5px] leading-[1.35] font-medium hover:underline")}
@@ -706,11 +741,13 @@ function BoardCard({
       data-testid="task-card"
       data-task-id={task.id}
       data-dragging={dragging || undefined}
+      data-selected={selected || undefined}
       style={{ "--anim-delay": delay } as CSSProperties}
       className={cn(
         "anim-in flex cursor-grab flex-col gap-2.5 overflow-hidden rounded-md border bg-card text-sm text-card-foreground shadow-[var(--shadow-card)] active:cursor-grabbing",
         blocked && "border-tint-destructive",
         dragging ? "drag-lift border-primary" : LIFT_CLASS,
+        selected && "border-primary",
         isNew && "row-new",
       )}
     >
@@ -718,6 +755,7 @@ function BoardCard({
 
       <div className="flex flex-col gap-2 px-3.5 pb-3">
         <div className="flex items-center gap-2">
+          {selectBox}
           {task.workflow ? <EtapaBadge etapa={task.workflow} variant="chip" /> : null}
           {blocked ? (
             <span data-slot="board-card-blocked" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-destructive">

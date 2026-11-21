@@ -3,12 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 
+import { Badge } from "@/components/ui/shadcn/badge";
 import { Input } from "@/components/ui/shadcn/input";
 import {
   SidebarMenuAction,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -17,8 +19,14 @@ import {
 } from "@/components/ui/shadcn/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/shadcn/tooltip";
 import { shellProjectsOptions } from "@/lib/query/options/shell";
-import { activeProjectId, groupSidebarProjects, showsProjectsFilter } from "@/lib/shell/sidebar-projects";
-import { selectInactiveProjectsOpen, selectProjectsOpen, useShellUi } from "@/lib/stores/shell-ui-store";
+import {
+  activeProjectId,
+  activeTareasProjectId,
+  groupSidebarProjects,
+  showsProjectsFilter,
+  tareasProjectHref,
+} from "@/lib/shell/sidebar-projects";
+import { selectInactiveProjectsOpen, selectProjectsOpen, selectTareasOpen, useShellUi } from "@/lib/stores/shell-ui-store";
 import type { ShellProject } from "@/lib/types/shell";
 import type { NavItem } from "@/lib/ui/nav";
 import type { NavPrefetchHandlers } from "@/lib/shell/nav-prefetch";
@@ -76,7 +84,7 @@ export function SidebarProjectsEntry({
   );
 }
 
-function ProjectRow({ project, current }: { project: ShellProject; current: boolean }) {
+function ProjectRow({ project, current, href }: { project: ShellProject; current: boolean; href?: string }) {
   return (
     <SidebarMenuSubItem>
       <Tooltip>
@@ -85,7 +93,7 @@ function ProjectRow({ project, current }: { project: ShellProject; current: bool
             <SidebarMenuSubButton
               isActive={current}
               data-project-link=""
-              render={<Link href={`/proyectos/${project.id}`} aria-current={current ? "page" : undefined} />}
+              render={<Link href={href ?? `/proyectos/${project.id}`} aria-current={current ? "page" : undefined} />}
             />
           }
         >
@@ -174,6 +182,126 @@ function ProjectsSubmenu({ currentId }: { currentId: string | null }) {
             </ul>
           </li>
         ) : null}
+      </SidebarMenuSub>
+    </div>
+  );
+}
+
+function badgeText(count: number): string {
+  return count > 99 ? "99+" : String(count);
+}
+
+/**
+ * The sidebar "Tareas" entry with its collapsible submenu (RFC #1163): the
+ * label links to `/tareas` with its pending badge, the chevron only toggles.
+ * The submenu lists the active projects from `qk.shell.projects()`; each opens
+ * `/tareas?proyecto=<id>` with the Proyecto filter preset. The open state
+ * lives in `useShellUi` (persisted).
+ */
+export function SidebarTareasEntry({
+  item,
+  active,
+  prefetch,
+}: {
+  item: NavItem;
+  active: boolean;
+  prefetch?: NavPrefetchHandlers;
+}) {
+  const Icon = item.icon;
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const open = useShellUi(selectTareasOpen);
+  const setOpen = useShellUi((s) => s.setTareasOpen);
+  const menuId = useId();
+  const currentId = activeTareasProjectId(pathname, searchParams?.toString());
+  // The page itself is only "active" while no project of the list is.
+  const labelActive = active && currentId === null;
+  const count = item.badge;
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        className="h-9"
+        isActive={labelActive}
+        render={<Link href={item.href} prefetch aria-current={active ? "page" : undefined} {...prefetch} />}
+      >
+        <Icon aria-hidden="true" strokeWidth={1.8} />
+        <span>{item.label}</span>
+        {count ? <span className="sr-only">{`, ${count} pendientes`}</span> : null}
+      </SidebarMenuButton>
+      {count ? (
+        <SidebarMenuBadge aria-hidden="true" className="right-8">
+          <Badge variant="count">{badgeText(count)}</Badge>
+        </SidebarMenuBadge>
+      ) : null}
+      <SidebarMenuAction
+        type="button"
+        aria-label={open ? "Ocultar tareas por proyecto" : "Mostrar tareas por proyecto"}
+        aria-expanded={open}
+        aria-controls={menuId}
+        className="top-2"
+        onClick={() => setOpen(!open)}
+      >
+        <ChevronRight aria-hidden="true" className={open ? "rotate-90 transition-transform" : "transition-transform"} />
+      </SidebarMenuAction>
+      <div id={menuId} hidden={!open}>
+        {open ? <TareasSubmenu currentId={currentId} /> : null}
+      </div>
+    </SidebarMenuItem>
+  );
+}
+
+function TareasSubmenu({ currentId }: { currentId: string | null }) {
+  const { data, isPending } = useQuery(shellProjectsOptions());
+  const [query, setQuery] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+  const projects = data ?? [];
+  // Only active projects: no "Pausados y cerrados" group.
+  const { active } = groupSidebarProjects(projects, query);
+  const filtering = query.trim() !== "";
+  const activeCount = projects.filter((p) => p.status === "activo").length;
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const focusables = Array.from(listRef.current?.querySelectorAll<HTMLElement>("input, a[data-project-link]") ?? []);
+    const index = focusables.indexOf(document.activeElement as HTMLElement);
+    if (index === -1) return;
+    const next = focusables[index + (event.key === "ArrowDown" ? 1 : -1)];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  }
+
+  return (
+    <div ref={listRef} onKeyDown={onKeyDown}>
+      {showsProjectsFilter(activeCount) ? (
+        <div className="mx-3.5 px-2.5 pt-1 pb-1">
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filtrar proyectos…"
+            aria-label="Filtrar proyectos"
+            className="h-7 text-xs"
+          />
+        </div>
+      ) : null}
+      <SidebarMenuSub className="max-h-72 overflow-y-auto" aria-label="Tareas por proyecto">
+        {isPending ? (
+          <li className="px-2 py-1 text-xs text-sidebar-foreground/80">Cargando proyectos…</li>
+        ) : active.length === 0 ? (
+          <li className="px-2 py-1 text-xs text-sidebar-foreground/80">
+            {filtering ? "Ningún proyecto coincide." : "No hay proyectos activos."}
+          </li>
+        ) : null}
+        {active.map((project) => (
+          <ProjectRow
+            key={project.id}
+            project={project}
+            current={project.id.toLowerCase() === currentId}
+            href={tareasProjectHref(project.id)}
+          />
+        ))}
       </SidebarMenuSub>
     </div>
   );
