@@ -146,6 +146,18 @@ describe.skipIf(!url)("support admin repository", () => {
     expect((await repo.getMejorasCounts()).nuevo).toBeGreaterThanOrEqual(1);
   });
 
+  it("counts resolved this month up and down with the status", async () => {
+    const t = await ticket(`Resuelta ${tag}`);
+    const filters = { q: `Resuelta ${tag}` };
+    expect((await repo.getMejorasCounts(filters)).resolvedThisMonth).toBe(0);
+    await repo.updateTicket(ids.admin, t.id, { status: "resuelto" });
+    expect((await repo.getMejorasCounts(filters)).resolvedThisMonth).toBe(1);
+    await repo.updateTicket(ids.admin, t.id, { status: "planeado" });
+    const back = await repo.getMejorasCounts(filters);
+    expect(back.resolvedThisMonth).toBe(0);
+    expect(back.firstResponseHours).not.toBeNull();
+  });
+
   it("pages by cursor without repeating rows", async () => {
     const before = (await repo.listMejoras({ sort: "created" }, null)).rows.length;
     for (let i = 0; i < 3; i++) await ticket(`Pagina ${i} ${tag}`);

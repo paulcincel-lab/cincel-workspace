@@ -98,6 +98,14 @@ describe("triage patches", () => {
     expect(patchCounts(zero, [{ from: "nuevo", to: "resuelto" }]).nuevo).toBe(0);
   });
 
+  it("moves the resolved-this-month counter with Resuelta moves", () => {
+    const counts = { ...COUNTS, resolvedThisMonth: 2 };
+    expect(patchCounts(counts, [{ from: "nuevo", to: "resuelto" }]).resolvedThisMonth).toBe(3);
+    expect(patchCounts(counts, [{ from: "resuelto", to: "nuevo" }]).resolvedThisMonth).toBe(1);
+    expect(patchCounts({ ...counts, resolvedThisMonth: 0 }, [{ from: "resuelto", to: "nuevo" }]).resolvedThisMonth).toBe(0);
+    expect(patchCounts(COUNTS, [{ from: "nuevo", to: "resuelto" }]).resolvedThisMonth).toBeUndefined();
+  });
+
   it("groups rows by status", () => {
     const groups = groupByStatus([row(), row({ id: "t2", status: "resuelto" })]);
     expect(groups.nuevo).toHaveLength(1);

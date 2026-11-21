@@ -83,12 +83,16 @@ export function patchPages<P extends { pages: TicketsPage[] }>(data: P, changes:
 /** The counts after the status moves of `moves` (`from` → `to` per row); other fields do not touch them. */
 export function patchCounts(counts: MejorasCounts, moves: readonly { from: TicketStatus; to: TicketStatus }[]): MejorasCounts {
   const byStatus = { ...counts.byStatus };
+  let resolved = counts.resolvedThisMonth;
   for (const { from, to } of moves) {
     if (from === to) continue;
+    // A move into or out of Resuelta happens now, so it counts in this month (the refetch settles older ones).
+    if (resolved !== undefined && to === "resuelto") resolved += 1;
+    if (resolved !== undefined && from === "resuelto") resolved = Math.max(0, resolved - 1);
     byStatus[from] = Math.max(0, byStatus[from] - 1);
     byStatus[to] += 1;
   }
-  return { ...counts, byStatus, nuevo: byStatus.nuevo };
+  return { ...counts, byStatus, nuevo: byStatus.nuevo, ...(resolved !== undefined ? { resolvedThisMonth: resolved } : {}) };
 }
 
 /** Rows of `rows` by status, in the order they came. */
