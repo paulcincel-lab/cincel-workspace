@@ -1,32 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQueries, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useQueries, useQuery, type QueryKey } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/shadcn/button";
 import { BULK_BAR_BUTTON_CLASS, BulkActionBar, type BulkBarAction } from "@/components/widgets/BulkActionBar";
 import { CellEditor } from "@/components/widgets/CellEditor";
-import { UNDO_LABEL, UNDO_MS, UNDONE_TOAST, type AnyCellEdit, type CellValue } from "@/components/widgets/editable-cell";
+import type { AnyCellEdit, CellValue } from "@/components/widgets/editable-cell";
 import { DELETE_LABEL } from "@/components/widgets/table-rows";
-import { bulkUpdateTasksAction } from "@/lib/actions/tasks-actions";
 import { resolveActivitiesCapabilities } from "@/lib/auth/permissions";
-import { actionErrorText } from "@/lib/errors";
 import { catalogTaskStatusesOptions } from "@/lib/query/options/catalog";
 import { taskPhasesOptions } from "@/lib/query/options/tareas";
-import { qk } from "@/lib/query/keys";
 import { selectAuthenticatedUser, useSessionStore } from "@/lib/stores/session-store";
-import type { StaffRef, TaskBulkPatch, TaskStatusOption, WorkflowPhaseRef } from "@/lib/types/core";
+import type { StaffRef, TaskStatusOption, WorkflowPhaseRef } from "@/lib/types/core";
 
 import {
   TASK_BULK_FIELDS,
-  bulkInvalidations,
-  bulkPatchOf,
   bulkPhaseOptions,
-  bulkResultToast,
   commonValue,
-  undoPatches,
   type TaskBulkField,
   type TaskBulkTask,
 } from "./task-bulk";
@@ -41,6 +33,7 @@ import {
   BULK_STATUS_LABEL,
   BULK_SUPPORT_LABEL,
 } from "./task-table-copy";
+import { useBulkTaskPatch } from "./use-bulk-task-patch";
 import type { TaskSelection } from "./use-task-selection";
 import type { DeleteTaskTarget, DeleteTasks } from "./use-delete-tasks";
 
@@ -82,7 +75,6 @@ const NO_TASKS: TaskBulkTask[] = [];
 const noCommit = async () => ({ ok: true as const, data: null });
 
 export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hide }: TaskBulkBarProps): ReactNode {
-  const qc = useQueryClient();
   const user = useSessionStore(selectAuthenticatedUser);
   const caps = useMemo(() => resolveActivitiesCapabilities(user), [user]);
   const active = selection.count > 0;
@@ -119,69 +111,10 @@ export function TaskBulkBar({ selection, taskOf, staff, deletes, invalidate, hid
   const fields = TASK_BULK_FIELDS.filter((field) => allowed[field] && !hide?.includes(field));
 
   // ── Saves.
-  const extra = useRef(invalidate);
-  useEffect(() => {
-    extra.current = invalidate;
-  });
-  const refresh = useCallback(
-    (changed: readonly TaskBulkTask[]) => {
-      for (const queryKey of [...bulkInvalidations(changed), ...(extra.current ?? [])]) {
-        void qc.invalidateQueries({ queryKey });
-      }
-    },
-    [qc],
-  );
-
-  const runPatch = useCallback(async (ids: string[], patch: TaskBulkPatch) => {
-    try {
-      return await bulkUpdateTasksAction(ids, patch);
-    } catch (error) {
-      return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
-    }
-  }, []);
-
-  const lastToast = useRef<string | number | null>(null);
+  const { apply: applyPatch } = useBulkTaskPatch(invalidate);
   const apply = useCallback(
-    async (field: TaskBulkField, value: CellValue) => {
-      const patch = bulkPatchOf(field, value);
-      if (!patch || tasks.length === 0) return;
-      const before = tasks;
-      const result = await runPatch(
-        before.map((t) => t.id),
-        patch,
-      );
-      if (!result.ok) {
-        toast.error(actionErrorText(result.error));
-        return;
-      }
-      const changed = before.filter((t) => result.data.updated.includes(t.id));
-      refresh(changed);
-      // Planned hours move the calendar's day meters.
-      if (field === "horas") void qc.invalidateQueries({ queryKey: qk.calendario.all });
-      if (lastToast.current !== null) toast.dismiss(lastToast.current);
-      const undo = undoPatches(before, field, result.data.updated);
-      lastToast.current = toast(bulkResultToast(result.data), {
-        duration: UNDO_MS,
-        ...(undo.length > 0
-          ? {
-              action: {
-                label: UNDO_LABEL,
-                onClick: () => {
-                  void (async () => {
-                    const results = await Promise.all(undo.map((u) => runPatch(u.ids, u.patch)));
-                    refresh(changed);
-                    if (field === "horas") void qc.invalidateQueries({ queryKey: qk.calendario.all });
-                    const failed = results.find((r) => !r.ok);
-                    if (failed && !failed.ok) toast.error(actionErrorText(failed.error));
-                    else toast(UNDONE_TOAST);
-                  })();
-                },
-              },
-            }
-          : {}),
-      });
-    },
-    [tasks, runPatch, refresh, qc],
+    (field: TaskBulkField, value: CellValue) => applyPatch(tasks, field, value),
+    [applyPatch, tasks],
   );
 
   // ── Pickers: one `CellEditor` at a time, anchored to its button on the bar.

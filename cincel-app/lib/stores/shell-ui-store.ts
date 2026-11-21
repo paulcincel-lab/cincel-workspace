@@ -16,7 +16,7 @@ import { registerPersistedStore } from "@/components/shell/UiStoresHydrator";
  *   `setSearchOpen`, mount/unmount → `setSearchAvailable`), the Sidebar
  *   search button and `NotFoundSearchButton` (`openSearch`), and
  *   `AppShellClient` (`closeSearch` on a pathname change).
- * - The sidebar "Proyectos" submenu (`projectsOpen`, `inactiveProjectsOpen`) is
+ * - The sidebar "Proyectos" submenu (`projectsOpen`, `tareasOpen`, `inactiveProjectsOpen`) is
  *   remembered in the browser under `cincel.ui.shell.v1`; the palette state is
  *   not persisted. `skipHydration`: `<UiStoresHydrator/>` rehydrates after mount.
  * - Reset on an identity change (logout) and between tests.
@@ -27,9 +27,12 @@ export type ShellUiState = {
   searchAvailable: boolean;
   /** The sidebar "Proyectos" submenu is expanded. */
   projectsOpen: boolean;
+  /** The sidebar "Tareas" submenu (active projects) is expanded. */
+  tareasOpen: boolean;
   /** Its "Pausados y cerrados" sub-group is expanded. */
   inactiveProjectsOpen: boolean;
   setProjectsOpen(open: boolean): void;
+  setTareasOpen(open: boolean): void;
   setInactiveProjectsOpen(open: boolean): void;
   openSearch(): void;
   closeSearch(): void;
@@ -40,11 +43,12 @@ export type ShellUiState = {
 
 export const SHELL_UI_INITIAL: Pick<
   ShellUiState,
-  "searchOpen" | "searchAvailable" | "projectsOpen" | "inactiveProjectsOpen"
+  "searchOpen" | "searchAvailable" | "projectsOpen" | "tareasOpen" | "inactiveProjectsOpen"
 > = {
   searchOpen: false,
   searchAvailable: false,
   projectsOpen: false,
+  tareasOpen: false,
   inactiveProjectsOpen: false,
 };
 
@@ -56,6 +60,7 @@ export const useShellUi = create<ShellUiState>()(
     (set) => ({
   ...SHELL_UI_INITIAL,
   setProjectsOpen: (projectsOpen) => set({ projectsOpen }),
+  setTareasOpen: (tareasOpen) => set({ tareasOpen }),
   setInactiveProjectsOpen: (inactiveProjectsOpen) => set({ inactiveProjectsOpen }),
   openSearch: () => set({ searchOpen: true }),
   closeSearch: () => set({ searchOpen: false }),
@@ -81,14 +86,16 @@ export const useShellUi = create<ShellUiState>()(
       }),
       partialize: (state) => ({
         projectsOpen: state.projectsOpen,
+        tareasOpen: state.tareasOpen,
         inactiveProjectsOpen: state.inactiveProjectsOpen,
       }),
       // A stored value of another shape never breaks the store.
       merge: (persisted, current) => {
-        const saved = (persisted ?? {}) as Partial<Pick<ShellUiState, "projectsOpen" | "inactiveProjectsOpen">>;
+        const saved = (persisted ?? {}) as Partial<Pick<ShellUiState, "projectsOpen" | "tareasOpen" | "inactiveProjectsOpen">>;
         return {
           ...current,
           projectsOpen: saved.projectsOpen === true,
+          tareasOpen: saved.tareasOpen === true,
           inactiveProjectsOpen: saved.inactiveProjectsOpen === true,
         };
       },
@@ -103,6 +110,7 @@ registerPersistedStore(useShellUi);
 
 export const selectSearchOpen = (s: ShellUiState): boolean => s.searchOpen;
 export const selectProjectsOpen = (s: ShellUiState): boolean => s.projectsOpen;
+export const selectTareasOpen = (s: ShellUiState): boolean => s.tareasOpen;
 export const selectInactiveProjectsOpen = (s: ShellUiState): boolean => s.inactiveProjectsOpen;
 export const selectSearchAvailable = (s: ShellUiState): boolean => s.searchAvailable;
 

@@ -119,7 +119,9 @@ describe.skipIf(!url)("bulkUpdateTasksAction (test DB)", async () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.data.updated.sort()).toEqual([t.a, t.b].sort());
+    // t.a's open subtask goes with it.
+    expect(result.data.updated.sort()).toEqual([t.a, t.b, t.sub].sort());
+    expect(result.data.subtasks).toEqual([{ id: t.sub, parentId: t.a, status: "pendiente", customStatusId: null }]);
     expect(result.data.skipped).toEqual(
       expect.arrayContaining([
         { id: t.admin, reason: "FORBIDDEN" },
@@ -129,9 +131,50 @@ describe.skipIf(!url)("bulkUpdateTasksAction (test DB)", async () => {
     expect(result.data.skipped).toHaveLength(2);
     expect((await read(t.a)).status).toBe("completado");
     expect((await read(t.b)).status).toBe("completado");
+    expect((await read(t.sub)).status).toBe("completado");
     expect((await read(t.admin)).status).toBe("pendiente");
     // One closing-hook pass for the changed tasks.
     expect(scheduleTaskClosingHook).toHaveBeenCalledTimes(1);
+  });
+
+  it("a status change moves the open subtasks with their parent and Deshacer puts them back", async () => {
+    const [done] = await db
+      .insert(schema.tasks)
+      .values({ projectId, kind: "usuario", title: `BLK${run} Sub hecha`, createdById: meId, managerId: meId, parentTaskId: t.b, status: "completado" })
+      .returning({ id: schema.tasks.id });
+    const [open] = await db
+      .insert(schema.tasks)
+      .values({ projectId, kind: "usuario", title: `BLK${run} Sub abierta`, createdById: meId, managerId: meId, parentTaskId: t.b, status: "en_proceso" })
+      .returning({ id: schema.tasks.id });
+
+    const moved = await asViewer(colaborador(), () => bulkUpdateTasksAction([t.b], { status: "bloqueado" }));
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+    expect(moved.data.updated.sort()).toEqual([t.b, open.id].sort());
+    expect(moved.data.subtasks).toEqual([{ id: open.id, parentId: t.b, status: "en_proceso", customStatusId: null }]);
+    expect((await read(open.id)).status).toBe("bloqueado");
+    // A completed subtask stays where it is.
+    expect((await read(done.id)).status).toBe("completado");
+
+    // Moving the subtask alone does not touch its parent.
+    await asViewer(colaborador(), () => bulkUpdateTasksAction([open.id], { status: "pendiente" }));
+    expect((await read(open.id)).status).toBe("pendiente");
+    expect((await read(t.b)).status).toBe("bloqueado");
+
+    // Selecting the parent and the subtask moves each once.
+    const both = await asViewer(colaborador(), () => bulkUpdateTasksAction([t.b, open.id], { status: "en_proceso" }));
+    expect(both.ok && both.data.updated.sort()).toEqual([t.b, open.id].sort());
+    expect(both.ok && both.data.subtasks).toBeUndefined();
+  });
+
+  it("a parent the viewer can't change keeps its subtasks where they are", async () => {
+    const [open] = await db
+      .insert(schema.tasks)
+      .values({ projectId, kind: "usuario", title: `BLK${run} Sub de admin`, createdById: meId, managerId: meId, parentTaskId: t.admin })
+      .returning({ id: schema.tasks.id });
+    const result = await asViewer(colaborador(), () => bulkUpdateTasksAction([t.admin], { status: "completado" }));
+    expect(result.ok && result.data.updated).toEqual([]);
+    expect((await read(open.id)).status).toBe("pendiente");
   });
 
   it("skips every task when the viewer lacks the field's capability", async () => {

@@ -1931,15 +1931,80 @@ export async function updateTask(
   return (await getTask(id))!;
 }
 
-export async function setTaskStatus(id: string, status: TaskStatus, actorId: string): Promise<TaskDetail> {
-  return updateTask(id, { status }, actorId);
+/** A status as a task takes it: a built-in one, or a custom one by id. */
+export type TaskStatusTarget = { status: TaskStatus } | { customStatusId: string };
+
+/** What an open subtask had before a parent's status change moved it (Deshacer puts it back). */
+export type SubtaskStatusBefore = { id: string; status: TaskStatus; customStatusId: string | null };
+
+/**
+ * The open subtasks of the given parents (live, not archived, not
+ * Completado) that a move to `target` would change, with the status each one
+ * has now. Subtasks already in the target are left out.
+ */
+export async function listOpenSubtasksToMove(
+  parentIds: readonly string[],
+  target: TaskStatusTarget
+): Promise<(SubtaskStatusBefore & { parentId: string })[]> {
+  if (parentIds.length === 0) return [];
+  const rows = await db
+    .select({
+      id: tasks.id,
+      parentId: tasks.parentTaskId,
+      status: tasks.status,
+      customStatusId: tasks.customStatusId,
+    })
+    .from(tasks)
+    .where(
+      and(
+        inArray(tasks.parentTaskId, [...parentIds]),
+        isNull(tasks.deletedAt),
+        eq(tasks.archived, false),
+        ne(tasks.status, "completado")
+      )
+    )
+    .orderBy(asc(tasks.createdAt));
+  return rows
+    .filter((r) =>
+      "customStatusId" in target
+        ? r.customStatusId !== target.customStatusId
+        : !(r.status === target.status && r.customStatusId === null)
+    )
+    .map((r) => ({ id: r.id, parentId: r.parentId!, status: r.status, customStatusId: r.customStatusId }));
+}
+
+/**
+ * Moves a task to a built-in status. A parent's open subtasks go with it
+ * (same status, one history entry each) unless `opts.cascade` is false: the
+ * bulk action moves them itself, one by one, under their own checks.
+ */
+export async function setTaskStatus(
+  id: string,
+  status: TaskStatus,
+  actorId: string,
+  opts: { cascade?: boolean } = {}
+): Promise<TaskDetail> {
+  const row = await updateTask(id, { status }, actorId);
+  if (opts.cascade === false) return row;
+  return (await cascadeToSubtasks(id, { status }, actorId)) ? ((await getTask(id)) ?? row) : row;
+}
+
+/** Moves each open subtask of `parentId` to `target`; true when any moved. */
+async function cascadeToSubtasks(parentId: string, target: TaskStatusTarget, actorId: string): Promise<boolean> {
+  const subtasks = await listOpenSubtasksToMove([parentId], target);
+  for (const subtask of subtasks) {
+    if ("customStatusId" in target) await setTaskCustomStatus(subtask.id, target.customStatusId, actorId, { cascade: false });
+    else await setTaskStatus(subtask.id, target.status, actorId, { cascade: false });
+  }
+  return subtasks.length > 0;
 }
 
 /** Move a task into a custom status (see underlyingStatus for what `tasks.status` keeps). */
 export async function setTaskCustomStatus(
   id: string,
   customStatusId: string,
-  actorId: string
+  actorId: string,
+  opts: { cascade?: boolean } = {}
 ): Promise<TaskDetail> {
   const before = await loadLiveTask(id);
   const [cs] = await db
@@ -1954,6 +2019,7 @@ export async function setTaskCustomStatus(
     .where(eq(tasks.id, id))
     .returning();
   await recordChanges({ entity: "task", entityId: id, actorId, before, after, fields: TASK_TRACKED_FIELDS });
+  if (opts.cascade !== false) await cascadeToSubtasks(id, { customStatusId }, actorId);
   return (await getTask(id))!;
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 
+import { boardColumns, flattenBoard, groupTasksByColumn } from "@/components/tablero/board-model";
 import { EmptyState, type EmptyStateProps } from "@/components/shell/EmptyState";
 import { ErrorState } from "@/components/shell/ErrorState";
 import { PageHeader, type PageHeaderProps } from "@/components/shell/PageHeader";
@@ -35,9 +36,9 @@ import {
   type TareasMostrar,
   type TareasQuery,
 } from "@/lib/tareas/query";
-import { BASE_STATUS_LABEL, parseStatusValue } from "@/lib/tasks/status-options";
+import { BASE_STATUS_LABEL, parseStatusValue, statusSelectValue } from "@/lib/tasks/status-options";
 import { etapaColorVar } from "@/lib/etapas/compat";
-import type { TaskListItem, WorkflowRef } from "@/lib/types/core";
+import type { StaffRef, TaskListItem, WorkflowRef } from "@/lib/types/core";
 import { cn } from "@/lib/utils";
 
 import { useQuickAddCreate } from "./quick-add-create";
@@ -55,7 +56,10 @@ import {
   weekMeta,
   weekStripDays,
 } from "./tareas-visual-model";
-import { useTareasFilters, useTareasPageReady } from "./use-tareas-page";
+import { TaskBulkBar } from "./TaskBulkBar";
+import { useBulkTaskPatch } from "./use-bulk-task-patch";
+import { useTareasFilters, useTareasPage, useTareasPageReady } from "./use-tareas-page";
+import { useTaskSelection } from "./use-task-selection";
 
 export const TAREAS_VISUAL_SEARCH_PLACEHOLDER = "Buscar tareas";
 export const TAREAS_VISUAL_SOLO_MIAS = "Solo mías";
@@ -69,6 +73,7 @@ const MOSTRAR_CHIPS: { key: TareasMostrar; label: string }[] = [
 ];
 
 const NO_BOARD: TareasBoardData = { columns: {}, statuses: [] };
+const NO_STAFF: StaffRef[] = [];
 
 /** Pills of the Visual filter row: h32, rounded, 12.5 / 500, the count in mono. */
 const CHIP_CLASS = "h-8 rounded-full px-3 text-[12.5px] font-medium";
@@ -127,22 +132,25 @@ export function TareasVisual({
   const board = useMemo(() => boardOfColumns(data.columns), [data]);
   const table = useMemo(() => tableroTable(board), [board]);
   const columnPages = useMemo(() => ({ filters: f, columns: data.columns }), [f, data]);
+  const staff = useTareasPage(query).data?.staff ?? NO_STAFF;
+
+  // ── Card selection (#1168): the loaded cards in column order, as the board lays them out.
+  const tasks = useMemo(() => flattenBoard(board), [board]);
+  const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const visibleIds = useMemo(() => {
+    const hideDone = isHidingCompleted(query);
+    const columns = boardColumns(data.statuses).filter((c) => !(hideDone && c.key === "completado"));
+    const grouped = groupTasksByColumn(tasks, columns);
+    return columns.flatMap((c) => (grouped[c.key] ?? []).map((t) => t.id));
+  }, [tasks, data.statuses, query]);
+  const selection = useTaskSelection({ visibleIds, resetKey: JSON.stringify(f) });
+  const taskOfId = useCallback((id: string) => tasksById.get(id), [tasksById]);
+  const { apply: applyBulk } = useBulkTaskPatch();
 
   const user = useSessionStore(selectAuthenticatedUser);
   const capabilities = useMemo(() => resolveActivitiesCapabilities(user), [user]);
   const viewerId = user?.member.id ?? null;
 
-  // ── Moves (drag and "Mover a…"): optimistic on `tareas.board(f)`.
-  const qc = useQueryClient();
-  const { mutate } = useTableroMove(f);
-  const onMove = useCallback(
-    (taskId: string, columnKey: string) => {
-      const row = findBoardRow(qc, f, taskId);
-      if (row && columnKeyOfRow(row) === columnKey) return;
-      mutate({ taskId, columnKey, projectId: row?.project.id ?? null });
-    },
-    [qc, f, mutate],
-  );
   const canMove = useCallback(
     (task: TaskListItem) => {
       if (capabilities.statusScope === "all") return true;
@@ -151,6 +159,38 @@ export function TareasVisual({
     },
     [capabilities.statusScope, viewerId],
   );
+
+  // ── Moves (drag and "Mover a…"): optimistic on `tareas.board(f)`.
+  const qc = useQueryClient();
+  const { mutate } = useTableroMove(f);
+  const onMove = useCallback(
+    (taskId: string, columnKey: string) => {
+      // A selected card takes every selected card with it: one Estatus change, with its Deshacer.
+      if (selection.isSelected(taskId)) {
+        const picked = [...selection.selectedIds]
+          .map(taskOfId)
+          .filter((t): t is TaskListItem => t !== undefined && canMove(t) && statusSelectValue(t) !== columnKey);
+        if (picked.length > 0) {
+          void applyBulk(picked, "estatus", columnKey);
+        }
+        return;
+      }
+      const row = findBoardRow(qc, f, taskId);
+      if (row && columnKeyOfRow(row) === columnKey) return;
+      mutate({ taskId, columnKey, projectId: row?.project.id ?? null });
+    },
+    [qc, f, mutate, selection, taskOfId, applyBulk, canMove],
+  );
+  // Esc clears the selection (not while typing in a field or inside an open menu or dialog).
+  useEffect(() => {
+    if (selection.count === 0) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || isTypingTarget(event.target)) return;
+      selection.clear();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selection]);
 
   // ── Quick-add per column: the column fixes the status; the project comes from the filter or the line.
   const quickAdd = useQuickAddCreate();
@@ -259,6 +299,7 @@ export function TareasVisual({
         compactCompleted
         hideCompleted={isHidingCompleted(query)}
         canMove={canMove}
+        selection={selection}
       />
     );
   }
@@ -284,6 +325,7 @@ export function TareasVisual({
         onQuery={onQuery}
       />
       {content}
+      <TaskBulkBar selection={selection} taskOf={taskOfId} staff={staff} />
     </div>
   );
 }
