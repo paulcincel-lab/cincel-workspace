@@ -55,25 +55,25 @@ describe("AssistantLauncher", () => {
     expect(assistantEntryEnabled()).toBe(Object.values(IMPLEMENTED).every(Boolean));
 
     render(<AssistantLauncher enabled={false} />);
-    expect(screen.queryByRole("button", { name: /Pregúntale a Cincel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Pregúntale a Chavita/ })).toBeNull();
     pressCmdJ();
-    expect(screen.queryByText("Cincel", { selector: "h2" })).toBeNull();
+    expect(screen.queryByText("Chavita", { selector: "h2" })).toBeNull();
   });
 
   it("is hidden on /asistente", () => {
     pathname = "/asistente";
     render(<AssistantLauncher enabled />);
-    expect(screen.queryByRole("button", { name: /Pregúntale a Cincel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Pregúntale a Chavita/ })).toBeNull();
   });
 
   it("is hidden when the shell asks for it", () => {
     render(<AssistantLauncher enabled hidden />);
-    expect(screen.queryByRole("button", { name: /Pregúntale a Cincel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Pregúntale a Chavita/ })).toBeNull();
   });
 
   it("shows the button with the ⌘J hint and opens the sheet", async () => {
     render(<AssistantLauncher enabled />);
-    const button = screen.getByRole("button", { name: /Pregúntale a Cincel/ });
+    const button = screen.getByRole("button", { name: /Pregúntale a Chavita/ });
     expect(button.textContent).toContain("⌘J");
     fireEvent.click(button);
     expect(await screen.findByPlaceholderText("Pregunta, pide un cálculo o arrastra un plano…")).toBeTruthy();
@@ -125,7 +125,7 @@ describe("AssistantLauncher", () => {
 
   it("Escape closes the sheet and focus returns to the trigger", async () => {
     render(<AssistantLauncher enabled />);
-    const button = screen.getByRole("button", { name: /Pregúntale a Cincel/ });
+    const button = screen.getByRole("button", { name: /Pregúntale a Chavita/ });
     button.focus();
     fireEvent.click(button);
     const composer = await screen.findByPlaceholderText("Pregunta, pide un cálculo o arrastra un plano…");
@@ -140,7 +140,7 @@ describe("AssistantLauncher", () => {
     pathname = "/tareas";
     search = new URLSearchParams({ tarea: TASK });
     render(<AssistantLauncher enabled />);
-    fireEvent.click(screen.getByRole("button", { name: /Pregúntale a Cincel/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Pregúntale a Chavita/ }));
     expect(await screen.findByText("Viendo: Planos de fachada")).toBeTruthy();
   });
 });

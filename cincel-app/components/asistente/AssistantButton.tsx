@@ -69,7 +69,7 @@ type DragState = {
 };
 
 /**
- * Floating "Pregúntale a Cincel" button with the ⌘J hint (redesign FE §3.1,
+ * Floating "Pregúntale a Chavita" button with the ⌘J hint (redesign FE §3.1,
  * §4.9). It sits on the left or right edge (bottom-right by default) and can
  * be moved: drag it, or use Alt + arrow keys when focused. A press without
  * movement opens the assistant. The position is remembered per device and
@@ -237,13 +237,13 @@ export function AssistantButton({ onOpen, onIntent, ref }: AssistantButtonProps)
         data-testid="asistente-boton"
       >
         <SparklesIcon aria-hidden data-icon="inline-start" />
-        Pregúntale a Cincel
+        Pregúntale a Chavita
         <kbd aria-hidden className="rounded-sm border border-primary-foreground/40 px-1.5 font-mono text-xs">
           ⌘J
         </kbd>
       </Button>
       <span id={hintId} className="sr-only">
-        Pregúntale a Cincel (⌘J). Arrástralo o usa Alt + flechas para moverlo.
+        Pregúntale a Chavita (⌘J). Arrástralo o usa Alt + flechas para moverlo.
       </span>
     </div>
   );

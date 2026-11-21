@@ -433,7 +433,7 @@ describe("/asistente starters", () => {
 
   it("does not render the floating assistant button", async () => {
     await renderPage();
-    expect(screen.queryByRole("button", { name: /Pregúntale a Cincel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Pregúntale a Chavita/ })).toBeNull();
   });
 });
 

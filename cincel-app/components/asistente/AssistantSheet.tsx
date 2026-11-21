@@ -200,7 +200,7 @@ export function AssistantSheet({ open, onOpenChange, context, finalFocus }: Assi
             C
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <SheetTitle>Cincel</SheetTitle>
+            <SheetTitle>Chavita</SheetTitle>
             <SheetDescription className="sr-only">
               Chavita, el asistente de Cincel. Pregunta sobre tus proyectos, tareas y equipo.
             </SheetDescription>
@@ -486,7 +486,7 @@ function SheetConversation({ threadId, seedMessages, openingError, context, onTu
           }}
         >
           <label htmlFor="asistente-sheet-composer" className="sr-only">
-            Mensaje para Cincel
+            Mensaje para Chavita
           </label>
           <Textarea
             id="asistente-sheet-composer"
