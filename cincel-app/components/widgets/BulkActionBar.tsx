@@ -5,6 +5,7 @@ import { XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/shadcn/button";
 import { CLEAR_SELECTION_LABEL, SELECTED_COUNT } from "@/components/widgets/table-rows";
+import { useRegisterBulkBar } from "@/lib/stores/bulk-bar-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,7 +14,8 @@ import { cn } from "@/lib/utils";
  * `count` is 0. Field pickers (Estatus, Responsable, …) go in `children`.
  * Same parts as `components/v2/table/BulkActionBar` (the shadcn Button on a
  * `foreground` bar), sticky at the bottom of the viewport; Esc inside it
- * clears the selection.
+ * clears the selection. While it is visible the floating Chavita button hides
+ * (`useRegisterBulkBar`), so nothing covers its controls (#1176).
  */
 export type BulkBarAction = {
   id: string;
@@ -37,6 +39,7 @@ export const BULK_BAR_BUTTON_CLASS =
   "h-7 border border-background/30 text-background hover:bg-background/10 hover:text-background aria-expanded:bg-background/10";
 
 export function BulkActionBar({ count, actions, onClear, children }: BulkActionBarProps): ReactNode {
+  useRegisterBulkBar(count > 0);
   if (count === 0) return null;
   return (
     <div

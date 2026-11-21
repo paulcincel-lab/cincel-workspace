@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { AssistantButton } from "@/components/asistente/AssistantButton";
 import { IMPLEMENTED } from "@/lib/actions/assistant-actions.flags";
 import { assistantContextFromRoute, isAssistantPage } from "@/lib/assistant/page-context";
+import { assistantButtonHiddenByBulkBar, useBulkBar } from "@/lib/stores/bulk-bar-store";
 import { useAssistantUi } from "@/lib/stores/assistant-ui-store";
 
 /** Stub phase (FE §9): the entry point stays hidden until the assistant thread actions are implemented. */
@@ -47,6 +48,7 @@ export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnab
   // Stays true after the first open so the sheet keeps its state and close animation.
   const sheetMounted = useAssistantUi((s) => s.mounted);
   const setOpen = useAssistantUi((s) => s.setOpen);
+  const bulkBarVisible = useBulkBar((s) => assistantButtonHiddenByBulkBar(s.visible));
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const tarea = searchParams?.get("tarea") ?? null;
@@ -80,7 +82,9 @@ export function AssistantLauncher({ hidden = false, enabled = assistantEntryEnab
 
   return (
     <>
-      <AssistantButton ref={buttonRef} onOpen={() => setOpen(true)} onIntent={preloadAssistantSheet} />
+      {bulkBarVisible ? null : (
+        <AssistantButton ref={buttonRef} onOpen={() => setOpen(true)} onIntent={preloadAssistantSheet} />
+      )}
       {sheetMounted ? (
         <Suspense fallback={null}>
           <AssistantSheet open={open} onOpenChange={setOpen} context={context} finalFocus={buttonRef} />
