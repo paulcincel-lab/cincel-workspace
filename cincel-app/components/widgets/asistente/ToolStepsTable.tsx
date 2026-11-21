@@ -74,7 +74,7 @@ export function ToolStepsTable({ groups }: ToolStepsTableProps): ReactNode {
   if (rows.length === 0) return null;
   return (
     <div data-slot="tool-steps-table" className="overflow-x-auto rounded-[10px] border border-border bg-card">
-      <table aria-label="Pasos del asistente" className="w-full border-collapse text-left text-[12.5px]">
+      <table aria-label="Pasos de Chavita" className="w-full border-collapse text-left text-[12.5px]">
         <thead>
           <tr>
             {HEADERS.map((header) => (

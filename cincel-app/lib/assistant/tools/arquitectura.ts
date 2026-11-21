@@ -250,7 +250,7 @@ const progressReportSchema = z.object({
 // ── measure_areas_from_plan ────────────────────────────────────────────────
 
 export const AREAS_NOTE =
-  "Valores aproximados leídos del plano por el asistente; verifícalos contra las cotas antes de usarlos en un presupuesto.";
+  "Valores aproximados leídos del plano por Chavita; verifícalos contra las cotas antes de usarlos en un presupuesto.";
 
 const AreasAnswerSchema = z.object({
   spaces: z

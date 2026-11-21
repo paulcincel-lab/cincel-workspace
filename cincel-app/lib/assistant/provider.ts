@@ -19,7 +19,7 @@ export function getLanguageModel() {
   const model = process.env.LLM_MODEL ?? "gpt-4o-mini";
 
   if (!baseURL || !apiKey) {
-    throw new Error("El asistente no está configurado");
+    throw new Error("Chavita no está configurado");
   }
 
   const provider = createOpenAI({ baseURL, apiKey });

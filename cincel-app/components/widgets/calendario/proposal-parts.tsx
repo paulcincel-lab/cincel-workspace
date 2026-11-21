@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/shadcn/button";
 
-export const PROPOSAL_LEGEND = "Cambio propuesto por el asistente (sin aplicar)";
+export const PROPOSAL_LEGEND = "Cambio propuesto por Chavita (sin aplicar)";
 export const PROPOSAL_STALE_TEXT = "Esta propuesta ya no está vigente.";
 
 export type ProposalVariant = "visual" | "esencial" | "analitico";

@@ -64,7 +64,7 @@ const NAV: NavModel = {
     { key: "proyectos", label: "Proyectos", href: "/proyectos", icon: Folder },
     { key: "personas", label: "Personas", href: "/personas", icon: Users },
     { key: "biblioteca", label: "Biblioteca", href: "/biblioteca", icon: BookOpen },
-    { key: "asistente", label: "Asistente", href: "/asistente", icon: Sparkles },
+    { key: "asistente", label: "Chavita", href: "/asistente", icon: Sparkles },
   ],
   etapas: [],
   footer: [{ key: "ajustes", label: "Ajustes", href: "/ajustes", icon: SlidersHorizontal }],
@@ -148,8 +148,8 @@ describe("splitBottomTabs", () => {
     expect(TABS.items.map((item) => item.key)).toEqual(["inicio", "tareas", "mi-espacio", "proyectos"]);
   });
 
-  it("leaves Personas, Biblioteca, Asistente and Ajustes for Más", () => {
-    expect(TABS.more.map((item) => item.label)).toEqual(["Personas", "Biblioteca", "Asistente", "Ajustes"]);
+  it("leaves Personas, Biblioteca, Chavita and Ajustes for Más", () => {
+    expect(TABS.more.map((item) => item.label)).toEqual(["Personas", "Biblioteca", "Chavita", "Ajustes"]);
   });
 
   it("skips items that the nav model hid", () => {
@@ -235,13 +235,13 @@ describe("BottomTabs below 768 px", () => {
     expect(screen.getByRole("link", { name: /^Inicio/ }).querySelector("[data-slot=bottom-tabs-badge]")).toBeNull();
   });
 
-  it("opens the Más sheet with Personas, Biblioteca, Asistente and Ajustes", async () => {
+  it("opens the Más sheet with Personas, Biblioteca, Chavita and Ajustes", async () => {
     renderTabs();
     fireEvent.click(screen.getByRole("button", { name: /Más/ }));
     const sheet = await screen.findByRole("dialog");
     expect(within(sheet).getByText("Más")).toBeTruthy();
     const links = within(sheet).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["Personas", "Biblioteca", "Asistente", "Ajustes"]);
+    expect(links.map((link) => link.textContent)).toEqual(["Personas", "Biblioteca", "Chavita", "Ajustes"]);
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/personas", "/biblioteca", "/asistente", "/ajustes"]);
   });
 

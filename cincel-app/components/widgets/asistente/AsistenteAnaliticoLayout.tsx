@@ -78,7 +78,7 @@ export const ANALITICO_COPY = {
   placeholder: "Pregunta o pide algo… (/ para comandos)",
   thinking: "Pensando…",
   older: "Mensajes anteriores",
-  turnError: "No se pudo obtener una respuesta del asistente. Verifica que esté configurado e intenta de nuevo.",
+  turnError: "No se pudo obtener una respuesta de Chavita. Verifica que esté configurado e intenta de nuevo.",
   newThreadEmpty: "Pregunta por tus proyectos y tareas; confirma antes de que cambie algo.",
 } as const;
 
@@ -304,7 +304,7 @@ function AssistantMessageView({ message, groups, rows, selected, contextLabel, o
   }
 
   return (
-    <article aria-label="Respuesta del asistente" className="flex flex-col gap-3">
+    <article aria-label="Respuesta de Chavita" className="flex flex-col gap-3">
       <div {...selectProps} className={cn("rounded-[10px]", selected && "ring-1 ring-primary", ring)}>
         <ToolStepsTable groups={groups} />
       </div>
@@ -381,7 +381,7 @@ function AnaliticoComposer({ value, onChange, onSubmit, busy, tokensLabel, chip,
       }}
     >
       <label htmlFor="asistente-analitico-mensaje" className="sr-only">
-        Mensaje al asistente
+        Mensaje a Chavita
       </label>
       <textarea
         id="asistente-analitico-mensaje"
@@ -857,7 +857,7 @@ export function AsistenteAnaliticoLayout({
     <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
       <div className={cn("shrink-0 pt-7 pb-4", narrow ? "px-4" : "px-8")}>
         <PageHeader
-          title="Asistente"
+          title="Chavita"
           description={ANALITICO_COPY.description}
           actions={
             <>

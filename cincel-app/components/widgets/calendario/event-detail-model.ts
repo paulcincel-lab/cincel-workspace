@@ -12,7 +12,7 @@ export const DETAIL_COPY = {
   historyEmpty: "Todavía no hay movimientos.",
   noSubtasks: "Sin subtareas",
   changeDatePicker: "Nueva fecha compromiso",
-  overdueNote: "Lleva días de retraso. Reprográmala o pide al asistente que proponga una fecha.",
+  overdueNote: "Lleva días de retraso. Reprográmala o pide a Chavita que proponga una fecha.",
   dueNote: "Fecha compromiso. Arrastra la tarea a otro día para cambiarla.",
 } as const;
 

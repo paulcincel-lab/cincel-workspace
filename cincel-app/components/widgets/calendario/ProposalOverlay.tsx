@@ -30,7 +30,7 @@ export function ProposalOverlay({ proposal, range, checked, children }: Proposal
   const originals = originalItemIds(proposal, checked);
   const ghosts = range ? range.items.filter((item) => originals.has(item.id)) : [];
   return (
-    <section aria-label="Propuesta del asistente" data-slot="proposal-overlay" className="flex flex-col gap-2">
+    <section aria-label="Propuesta de Chavita" data-slot="proposal-overlay" className="flex flex-col gap-2">
       <p className="text-xs text-muted-foreground">{PROPOSAL_LEGEND}</p>
       {children ? (
         children(entries, originals)

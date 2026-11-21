@@ -349,7 +349,7 @@ describe("/asistente history", () => {
     expect(replaceState).toHaveBeenLastCalledWith(window.history.state, "", "/asistente");
     expect(useAssistantUi.getState().threadId).toBeNull();
     expect(within(log()).getByText(EMPTY_TEXT)).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByLabelText("Mensaje al asistente"));
+    expect(document.activeElement).toBe(screen.getByLabelText("Mensaje a Chavita"));
   });
 });
 
@@ -399,7 +399,7 @@ describe("/asistente starters", () => {
       fireEvent.click(await screen.findByRole("button", { name: /^Cuantificación/ }));
     });
 
-    const composer = screen.getByLabelText("Mensaje al asistente") as HTMLTextAreaElement;
+    const composer = screen.getByLabelText("Mensaje a Chavita") as HTMLTextAreaElement;
     expect(composer.value).toBe("Cuantifica el material para ");
     expect(mocks.sendMessage).not.toHaveBeenCalled();
   });
@@ -453,7 +453,7 @@ describe("/asistente session and stubs", () => {
   it("nav item is present only when every assistant-actions flag is true", async () => {
     const session = { staffId: "s1", name: "Ana", role: "Diseño", isAdmin: false, photoUrl: null };
     const item = await asistenteNavItem.resolve(session);
-    expect(item).toMatchObject({ key: "asistente", label: "Asistente", href: "/asistente" });
+    expect(item).toMatchObject({ key: "asistente", label: "Chavita", href: "/asistente" });
 
     mocks.flags.deleteAssistantThreadAction = false;
     expect(await asistenteNavItem.resolve(session)).toBeNull();

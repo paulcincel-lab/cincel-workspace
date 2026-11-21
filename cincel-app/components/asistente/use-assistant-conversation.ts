@@ -47,7 +47,7 @@ export type AssistantConversation = {
 
 export const ASSISTANT_PAGE_CHAT_API = "/api/asistente/chat";
 export const ASSISTANT_ERROR_TEXT =
-  "No se pudo obtener una respuesta del asistente. Verifica que esté configurado e intenta de nuevo.";
+  "No se pudo obtener una respuesta de Chavita. Verifica que esté configurado e intenta de nuevo.";
 /** Reason stored on approvals left unanswered when the user writes a new message. */
 export const NEW_MESSAGE_DENIAL_REASON = "nuevo mensaje";
 

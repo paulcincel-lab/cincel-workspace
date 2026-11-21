@@ -140,11 +140,11 @@ describe("CalendarMonthGrid", () => {
 });
 
 describe("CalendarWeekColumns", () => {
-  it("renders 7 columns with their headings and an Asistente button each", () => {
+  it("renders 7 columns with their headings and a Chavita button each", () => {
     setup("semana", [task()]);
     expect(screen.getAllByRole("gridcell")).toHaveLength(7);
     expect(screen.getByRole("button", { name: "Abrir el lunes 9" }).textContent).toBe("LUN 9");
-    expect(screen.getAllByRole("button", { name: /Pedir al asistente para el/ })).toHaveLength(7);
+    expect(screen.getAllByRole("button", { name: /Pedir a Chavita para el/ })).toHaveLength(7);
     expect(screen.getByText("Ingenierías")).toBeTruthy();
   });
 

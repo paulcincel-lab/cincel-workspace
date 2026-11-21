@@ -31,7 +31,7 @@ describe("ToolSteps", () => {
     ] as unknown as Parts;
     render(<ToolSteps parts={parts} meta={{ toolMs: { c1: 640 } }} />);
 
-    const list = screen.getByRole("list", { name: "Pasos del asistente" });
+    const list = screen.getByRole("list", { name: "Pasos de Chavita" });
     const items = within(list).getAllByRole("listitem");
     expect(items).toHaveLength(2);
     expect(items[0]!.textContent).toContain("Buscó tus tareas vencidas");
@@ -81,9 +81,9 @@ describe("ToolSteps", () => {
     const one = screen.getByRole("button", { name: /1 herramienta usada/ });
     expect(one.getAttribute("aria-expanded")).toBe("false");
     expect(one.textContent).toContain("1.4 s");
-    expect(screen.queryByRole("list", { name: "Pasos del asistente" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Pasos de Chavita" })).toBeNull();
     fireEvent.click(one);
-    expect(screen.getByRole("list", { name: "Pasos del asistente" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Pasos de Chavita" })).toBeTruthy();
     unmount();
 
     const three = [DONE, listTasks("output-available", { output: { tasks: [] } }, "c2"), listTasks("output-error", {}, "c3")];

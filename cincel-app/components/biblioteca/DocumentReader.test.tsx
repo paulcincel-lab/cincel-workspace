@@ -96,23 +96,23 @@ describe("DocumentReader", () => {
     expect(downloads[0].getAttribute("href")).toBe("/api/google/drive/file/docmanual1/content");
   });
 
-  it("hides 'Preguntar al asistente…' while the assistant flags are off", () => {
+  it("hides 'Preguntar a Chavita…' while the assistant flags are off", () => {
     renderReader(1);
-    expect(screen.queryByRole("button", { name: "Preguntar al asistente sobre este documento" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Preguntar a Chavita sobre este documento" })).toBeNull();
   });
 
   it("stays hidden while any assistant flag is still off", () => {
     setAssistantFlags(true);
     flags.IMPLEMENTED.fetchAssistantActionsAction = false;
     renderReader(1);
-    expect(screen.queryByRole("button", { name: "Preguntar al asistente sobre este documento" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Preguntar a Chavita sobre este documento" })).toBeNull();
   });
 
   it("opens the shared assistant sheet with the document's route as context", () => {
     setAssistantFlags(true);
     const openAssistant = vi.spyOn(useAssistantUi.getState(), "openAssistant");
     renderReader(1);
-    fireEvent.click(screen.getByRole("button", { name: "Preguntar al asistente sobre este documento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preguntar a Chavita sobre este documento" }));
     expect(openAssistant).toHaveBeenCalledWith({ context: { route: "/biblioteca/empresa/manual-de-la-empresa?parte=manual-2" } });
     openAssistant.mockRestore();
   });
@@ -120,7 +120,7 @@ describe("DocumentReader", () => {
   it("puts the store in the open state with the route override", () => {
     setAssistantFlags(true);
     renderReader(1);
-    fireEvent.click(screen.getByRole("button", { name: "Preguntar al asistente sobre este documento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preguntar a Chavita sobre este documento" }));
     expect(useAssistantUi.getState()).toMatchObject({
       open: true,
       contextOverride: { route: "/biblioteca/empresa/manual-de-la-empresa?parte=manual-2" },

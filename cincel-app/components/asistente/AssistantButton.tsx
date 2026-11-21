@@ -74,7 +74,7 @@ type DragState = {
  * be moved: drag it, or use Alt + arrow keys when focused. A press without
  * movement opens the assistant. The position is remembered per device and
  * re-clamped on resize. Right click (or the context-menu key) offers
- * "Restablecer posición del asistente". The shortcut (⌘J / Ctrl+J) is
+ * "Restablecer posición de Chavita". The shortcut (⌘J / Ctrl+J) is
  * handled by `AssistantLauncher`.
  */
 export function AssistantButton({ onOpen, onIntent, ref }: AssistantButtonProps) {
@@ -211,7 +211,7 @@ export function AssistantButton({ onOpen, onIntent, ref }: AssistantButtonProps)
               setMenuOpen(false);
             }}
           >
-            Restablecer posición del asistente
+            Restablecer posición de Chavita
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

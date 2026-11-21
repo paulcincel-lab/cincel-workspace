@@ -250,7 +250,7 @@ function StepItem({ step, last, results }: { step: ToolStep; last: boolean; resu
 
 function StepList({ steps, results }: { steps: readonly ToolStep[]; results: boolean }) {
   return (
-    <ol aria-label="Pasos del asistente" className="flex flex-col">
+    <ol aria-label="Pasos de Chavita" className="flex flex-col">
       {steps.map((step, index) => (
         <StepItem key={step.toolCallId} step={step} last={index === steps.length - 1} results={results} />
       ))}
@@ -418,7 +418,7 @@ function StepsTable({ groups }: { groups: readonly ToolStepGroup[] }) {
   return (
     <div className="overflow-x-auto rounded-[10px] border border-border">
       <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
-        <caption className="sr-only">Pasos del asistente</caption>
+        <caption className="sr-only">Pasos de Chavita</caption>
         <thead className="bg-muted/50 text-xs text-muted-foreground">
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">#</th>

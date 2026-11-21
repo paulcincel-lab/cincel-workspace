@@ -26,7 +26,7 @@ function step(overrides: Partial<ToolStep>): ToolStep {
 }
 
 function bodyRows(): HTMLElement[] {
-  const table = screen.getByRole("table", { name: "Pasos del asistente" });
+  const table = screen.getByRole("table", { name: "Pasos de Chavita" });
   return within(table).getAllByRole("row").slice(1);
 }
 

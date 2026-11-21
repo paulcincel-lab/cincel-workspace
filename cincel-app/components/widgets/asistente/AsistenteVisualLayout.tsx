@@ -192,7 +192,7 @@ export function AsistenteVisualLayout(props: AsistenteVisualLayoutProps): ReactN
     <div className={`flex min-h-0 w-full flex-col overflow-hidden ${FRAME_HEIGHT}`}>
       <div className="shrink-0 px-4 pt-5 pb-3 md:px-8 md:pt-7 md:pb-4">
         <PageHeader
-          title="Asistente"
+          title="Chavita"
           description={INTRO}
           actions={
             <>

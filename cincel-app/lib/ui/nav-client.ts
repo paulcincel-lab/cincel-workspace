@@ -44,7 +44,7 @@ export const NAV_LABELS: Record<NavItemKey, string> = {
   proyectos: "Proyectos",
   personas: "Personas",
   biblioteca: "Biblioteca",
-  asistente: "Asistente",
+  asistente: "Chavita",
   mejoras: "Mejoras",
   ajustes: "Ajustes",
 };

@@ -198,10 +198,10 @@ describe("QuickAddRow", () => {
     expect(document.activeElement).not.toBe(input);
   });
 
-  it("slash opens the Asistente with the query", () => {
+  it("slash opens Chavita with the query", () => {
     const { input, onCreate } = renderRow();
     typeInto(input, "/ cerrar la etapa de Diseño");
-    expect(hint()).toContain("Pedir al asistente: “cerrar la etapa de Diseño”");
+    expect(hint()).toContain("Pedir a Chavita: “cerrar la etapa de Diseño”");
     fireEvent.keyDown(input, { key: "Enter" });
     const state = useAssistantUi.getState();
     expect(state.open).toBe(true);
@@ -283,7 +283,7 @@ describe("QuickAddRow", () => {
     expect(root?.getAttribute("data-variant")).toBe(variant);
     expect(input.placeholder).toBe(
       variant === "row"
-        ? "Nueva tarea en Diseño…  @persona  #etapa  fecha  !prioridad  ·  / asistente"
+        ? "Nueva tarea en Diseño…  @persona  #etapa  fecha  !prioridad  ·  / chavita"
         : "Escribe para agregar una tarea…",
     );
     if (variant === "row") expect(root?.tagName).toBe("TR");

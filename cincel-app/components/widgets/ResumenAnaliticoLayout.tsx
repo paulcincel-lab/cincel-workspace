@@ -1009,7 +1009,7 @@ function ResumenQuickAdd({ projectId, etapa, data, people, etapas, meId, team, c
             {showHint && suggestion && person ? (
               <div role="status" className="anim-in flex flex-col gap-2 rounded-[10px] border border-border bg-muted px-3 py-2 text-[12.5px] text-secondary-foreground">
                 <p>
-                  <b className="font-semibold">Asistente:</b> {person.name} está al {person.loadPct} % y tiene {person.overdueHere}{" "}
+                  <b className="font-semibold">Chavita:</b> {person.name} está al {person.loadPct} % y tiene {person.overdueHere}{" "}
                   {person.overdueHere === 1 ? "vencida" : "vencidas"} aquí. {suggestion.name} tiene {suggestion.loadPct} % de carga y ya
                   trabajó {suggestion.phaseName} en {suggestion.projectName}.
                 </p>

@@ -100,7 +100,7 @@ describe("alerts per Estilo", () => {
       </CalendarioOverlayContext.Provider>,
     );
     expect(screen.getByRole("button", { name: "✦ Reparte esto" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Propuesta del asistente" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Propuesta de Chavita" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "✦ Reparte esto" }));
     expect(onAlert).toHaveBeenCalledTimes(1);
     const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });

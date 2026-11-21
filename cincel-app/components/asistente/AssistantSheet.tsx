@@ -202,7 +202,7 @@ export function AssistantSheet({ open, onOpenChange, context, finalFocus }: Assi
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <SheetTitle>Cincel</SheetTitle>
             <SheetDescription className="sr-only">
-              Asistente de Cincel. Pregunta sobre tus proyectos, tareas y equipo.
+              Chavita, el asistente de Cincel. Pregunta sobre tus proyectos, tareas y equipo.
             </SheetDescription>
             {effectiveContext.calendar ? (
               <Badge variant="outline" className="max-w-full" data-testid="asistente-contexto">

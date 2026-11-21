@@ -188,7 +188,7 @@ describe("Resumen Analítico accessibility (#997)", () => {
     render(<Page style="analitico" restricted={false} />);
     fireEvent.change(screen.getByLabelText("Nueva tarea en Construcción"), { target: { value: "Revisar plafones @paul" } });
     const hint = await screen.findByRole("status", {}, { timeout: 2000 });
-    expect(hint.textContent).toContain("Asistente:");
+    expect(hint.textContent).toContain("Chavita:");
   });
 });
 

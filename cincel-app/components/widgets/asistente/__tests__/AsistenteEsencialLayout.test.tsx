@@ -146,13 +146,13 @@ describe("AsistenteEsencialLayout", () => {
     expect(buttons.length).toBeLessThanOrEqual(4);
     const text = buttons[0].textContent ?? "";
     fireEvent.click(buttons[0]);
-    expect((screen.getByLabelText("Mensaje al asistente") as HTMLTextAreaElement).value).toBe(text);
+    expect((screen.getByLabelText("Mensaje a Chavita") as HTMLTextAreaElement).value).toBe(text);
     expect(chat.current.send).not.toHaveBeenCalled();
   });
 
   it("focus stays in the textarea after send", async () => {
     renderLayout([]);
-    const textarea = screen.getByLabelText("Mensaje al asistente") as HTMLTextAreaElement;
+    const textarea = screen.getByLabelText("Mensaje a Chavita") as HTMLTextAreaElement;
     textarea.focus();
     fireEvent.change(textarea, { target: { value: "¿Quién está saturado?" } });
     fireEvent.keyDown(textarea, { key: "Enter" });

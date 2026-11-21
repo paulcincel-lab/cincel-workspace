@@ -102,7 +102,7 @@ const DOMAINS: Domain[] = [
     absent: [selector("[data-slot=sidebar-time-clock]"), button("Registrar entrada"), button("Pausa"), button("Salida")],
   },
   { domain: "notifications", absent: [testId("slot-bandeja-badge")] },
-  { domain: "assistant", absent: [testId("assistant-button"), testId("assistant-sheet"), link(/^Asistente/)] },
+  { domain: "assistant", absent: [testId("assistant-button"), testId("assistant-sheet"), link(/^Chavita/)] },
   { domain: "dashboard", absent: [link(/^Inicio/)] },
   { domain: "my-space", absent: [link(/^Mi espacio/)] },
   { domain: "gmail", absent: [button(/Gmail/), link(/Gmail/)] },

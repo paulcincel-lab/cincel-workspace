@@ -77,7 +77,7 @@ export const AREA_LABEL: Record<TicketArea, string> = {
   personas: "Personas",
   "mi-espacio": "Mi espacio",
   biblioteca: "Biblioteca",
-  asistente: "Asistente",
+  asistente: "Chavita",
   ajustes: "Ajustes",
   otro: "Otro",
 };
