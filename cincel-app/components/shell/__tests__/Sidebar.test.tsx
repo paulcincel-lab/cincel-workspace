@@ -60,7 +60,7 @@ vi.mock("@/lib/query/options/tareas", () => ({
 vi.mock("@/components/asistente/AssistantButton", () => ({
   AssistantButton: ({ onOpen }: { onOpen(): void }) => (
     <button type="button" onClick={onOpen}>
-      Pregúntale a Cincel
+      Pregúntale a Chavita
     </button>
   ),
 }));
@@ -485,20 +485,20 @@ describe("AppShellClient", () => {
     };
 
     renderFullShell("/inicio");
-    expect(screen.queryByRole("button", { name: "Pregúntale a Cincel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pregúntale a Chavita" })).toBeNull();
 
     cleanup();
     state.assistant.fetchAssistantThreadAction = true;
     renderFullShell("/inicio");
-    expect(screen.getByRole("button", { name: "Pregúntale a Cincel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Pregúntale a Chavita" })).toBeTruthy();
 
     cleanup();
     renderFullShell("/asistente");
-    expect(screen.queryByRole("button", { name: "Pregúntale a Cincel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pregúntale a Chavita" })).toBeNull();
 
     cleanup();
     renderFullShell("/inicio", true);
-    expect(screen.queryByRole("button", { name: "Pregúntale a Cincel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pregúntale a Chavita" })).toBeNull();
   });
 
   it("renders an empty sidebar without items", () => {

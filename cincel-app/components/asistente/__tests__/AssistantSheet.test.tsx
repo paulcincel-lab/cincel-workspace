@@ -100,10 +100,10 @@ describe("AssistantSheet context chip", () => {
 
   it("shows no chip and makes no lookup on a page without an entity, or with an id that isn't a uuid", async () => {
     const { unmount } = renderSheet({ route: "/inicio" });
-    await screen.findByText("Cincel");
+    await screen.findByText("Chavita");
     unmount();
     renderSheet({ route: "/proyectos/nope", projectId: "nope" });
-    await screen.findByText("Cincel");
+    await screen.findByText("Chavita");
     expect(screen.queryByText(/^Viendo:/)).toBeNull();
     expect(lookupAssistantContextAction).not.toHaveBeenCalled();
   });
@@ -282,7 +282,7 @@ describe("AssistantSheet threads", () => {
   it("does not read the thread list until the history menu opens", async () => {
     const client = createTestQueryClient();
     renderSheet({ route: "/inicio" }, client);
-    await screen.findByText("Cincel");
+    await screen.findByText("Chavita");
     expect(fetchAssistantThreadsAction).not.toHaveBeenCalled();
     expect(client.getQueryData<AssistantThreadSummary[]>(qk.asistente.threads())).toBeUndefined();
   });

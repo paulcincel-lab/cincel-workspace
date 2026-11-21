@@ -12,7 +12,7 @@ const sheetModuleLoads = vi.hoisted(() => ({ count: 0 }));
 vi.mock("@/components/asistente/AssistantSheet", () => {
   sheetModuleLoads.count += 1;
   return {
-    AssistantSheet: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Asistente" /> : null),
+    AssistantSheet: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Chavita" /> : null),
   };
 });
 
@@ -27,7 +27,7 @@ afterEach(cleanup);
 describe("AssistantLauncher lazy sheet", () => {
   it("does not load the sheet module on render; hover starts loading it and opening shows it", async () => {
     render(<AssistantLauncher enabled />);
-    const button = screen.getByRole("button", { name: /Pregúntale a Cincel/ });
+    const button = screen.getByRole("button", { name: /Pregúntale a Chavita/ });
     expect(sheetModuleLoads.count).toBe(0);
     expect(screen.queryByRole("dialog")).toBeNull();
 
@@ -36,7 +36,7 @@ describe("AssistantLauncher lazy sheet", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
 
     fireEvent.click(button);
-    expect(await screen.findByRole("dialog", { name: "Asistente" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "Chavita" })).toBeTruthy();
     expect(sheetModuleLoads.count).toBe(1);
   });
 });

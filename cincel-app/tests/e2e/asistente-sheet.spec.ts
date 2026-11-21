@@ -70,7 +70,7 @@ test.describe("Asistente · sheet", () => {
     const bodies = await stubChatRoute(page);
     await page.goto(`${BASE_URL}/inicio`, { waitUntil: "load" });
 
-    const trigger = page.getByRole("button", { name: /Pregúntale a Cincel/ });
+    const trigger = page.getByRole("button", { name: /Pregúntale a Chavita/ });
     await expect(trigger).toBeVisible();
     await trigger.focus();
     await page.keyboard.press("ControlOrMeta+j");
@@ -111,7 +111,7 @@ test.describe("Asistente · sheet", () => {
     const bodies = await stubChatRoute(page);
     await page.goto(`${BASE_URL}/inicio`, { waitUntil: "load" });
 
-    await page.getByRole("button", { name: /Pregúntale a Cincel/ }).click();
+    await page.getByRole("button", { name: /Pregúntale a Chavita/ }).click();
     await page.getByPlaceholder(COMPOSER).fill("Crea una nota de compras");
     await page.getByRole("button", { name: "Enviar" }).click();
     await page.getByRole("button", { name: "Confirmar" }).click();
