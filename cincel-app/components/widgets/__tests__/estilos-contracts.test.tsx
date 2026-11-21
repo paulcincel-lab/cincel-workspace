@@ -148,7 +148,7 @@ describe("Estilos contracts", () => {
       { type: "dynamic-tool", toolName: "buscar", toolCallId: "c2", state: "input-available", input: {} },
     ] as unknown as UIMessage["parts"];
     render(<ToolSteps parts={parts} />);
-    const list = screen.getByRole("list", { name: "Pasos del asistente" });
+    const list = screen.getByRole("list", { name: "Pasos de Chavita" });
     const items = [...list.querySelectorAll(":scope > li")].map((li) => li.textContent ?? "");
     expect(items).toHaveLength(2);
     expect(items[0]).toContain("listTasks");

@@ -52,7 +52,7 @@ async function pageScrolls(page: Page): Promise<{ vertical: boolean; horizontal:
 }
 
 async function send(page: Page, text: string, n: number): Promise<void> {
-  const input = page.getByLabel("Mensaje al asistente");
+  const input = page.getByLabel("Mensaje a Chavita");
   await input.fill(text);
   await input.press("Enter");
   await expect(page.getByText(`Respuesta ${n}, párrafo 1`, { exact: false })).toBeVisible();
@@ -69,7 +69,7 @@ test.describe("Asistente · Visual", () => {
     await stubChatRoute(page);
     await page.goto(`${BASE_URL}/asistente?estilo=visual`, { waitUntil: "load" });
 
-    const input = page.getByLabel("Mensaje al asistente");
+    const input = page.getByLabel("Mensaje a Chavita");
     await expect(input).toBeVisible();
     await send(page, "Primera pregunta", 1);
     const before = await input.boundingBox();
@@ -103,7 +103,7 @@ test.describe("Asistente · Visual", () => {
     await stubChatRoute(page);
     await page.goto(`${BASE_URL}/asistente?estilo=visual`, { waitUntil: "load" });
 
-    await expect(page.getByLabel("Mensaje al asistente")).toBeVisible();
+    await expect(page.getByLabel("Mensaje a Chavita")).toBeVisible();
     await expect(page.getByLabel("Buscar conversaciones")).toBeHidden();
 
     await page.getByRole("button", { name: "Conversaciones" }).click();

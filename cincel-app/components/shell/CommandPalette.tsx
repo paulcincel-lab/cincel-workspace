@@ -57,7 +57,7 @@ import { useClockMutation } from "./use-clock-mutation";
  *   while the next ones load; below 2 characters no search call is made.
  * - "Registrar entrada": `useQuery(qk.me.today())`; the clock-in writes its
  *   result into that entry (`useClockMutation`), no router refresh.
- * - "Preguntar al asistente": shown while `useAssistantUi.available` (the
+ * - "Preguntar a Chavita": shown while `useAssistantUi.available` (the
  *   launcher is active on this route, so never on /asistente); opens the sheet.
  */
 
@@ -91,7 +91,7 @@ const ACTIONS: readonly PaletteAction[] = [
   { id: "crear-tarea", label: "Crear tarea", keywords: ["nueva tarea", "pendiente"], icon: PlusIcon },
   { id: "nuevo-proyecto", label: "Nuevo proyecto", keywords: ["crear proyecto", "obra"], icon: FolderPlusIcon },
   { id: "nueva-nota", label: "Nueva nota", keywords: ["crear nota", "apunte"], icon: NotebookPenIcon },
-  { id: "preguntar-asistente", label: "Preguntar al asistente", keywords: ["cincel", "ayuda", "chat"], icon: SparklesIcon },
+  { id: "preguntar-asistente", label: "Preguntar a Chavita", keywords: ["cincel", "ayuda", "chat"], icon: SparklesIcon },
   { id: "registrar-entrada", label: "Registrar entrada", keywords: ["jornada", "horario", "checar"], icon: ClockIcon },
   { id: "reportar-problema", label: "Reportar un problema", keywords: ["error", "falla", "bug", "soporte"], icon: BugIcon },
   { id: "sugerir-mejora", label: "Sugerir una mejora", keywords: ["idea", "propuesta", "soporte"], icon: LightbulbIcon },

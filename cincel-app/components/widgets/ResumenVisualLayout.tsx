@@ -641,7 +641,7 @@ export function ResumenVisualLayout({
                 aria-hidden="true"
                 className="flex-none rounded-md border border-b-2 border-border px-1.5 py-px font-mono text-[11px] text-foreground"
               >
-                / asistente
+                / chavita
               </kbd>
             </div>
           ) : null}

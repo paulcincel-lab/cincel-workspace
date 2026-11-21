@@ -59,7 +59,7 @@ describe("proposal widgets", () => {
   ])("overlay draws %s with a text tag and the legend", (_n, proposal, checked, tag) => {
     render(<ProposalOverlay proposal={proposal} checked={checked} />);
     expect(screen.getByText(tag)).toBeTruthy();
-    expect(screen.getByText("Cambio propuesto por el asistente (sin aplicar)")).toBeTruthy();
+    expect(screen.getByText("Cambio propuesto por Chavita (sin aplicar)")).toBeTruthy();
   });
 
   it("table: unchecking excludes a row from the checked list, Aplicar and Cancelar call back", () => {

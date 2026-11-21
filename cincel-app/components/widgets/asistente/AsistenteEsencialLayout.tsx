@@ -101,7 +101,7 @@ export function AsistenteEsencialLayout(props: AsistenteEsencialLayoutProps): Re
     <div className={`flex min-h-0 w-full flex-col overflow-hidden ${FRAME_HEIGHT}`}>
       <div className="shrink-0 px-4 pt-5 pb-3 md:px-8 md:pt-7 md:pb-4 [&_[data-slot=page-header]]:mb-0">
         <PageHeader
-          title="Asistente"
+          title="Chavita"
           description={INTRO}
           actions={
             <>
@@ -438,7 +438,7 @@ function AssistantMessage({
   const meta = message.metadata as AssistantMessageMeta | undefined;
 
   return (
-    <article aria-label={latest ? "Respuesta del asistente" : "Respuesta anterior del asistente"} className="flex flex-col gap-2.5">
+    <article aria-label={latest ? "Respuesta de Chavita" : "Respuesta anterior de Chavita"} className="flex flex-col gap-2.5">
       {hasSteps ? <ToolSteps parts={message.parts} meta={meta} variant="compact" /> : null}
       {texts.map((t) => (
         <div key={t.index} className={MARKDOWN_CLASS}>

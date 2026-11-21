@@ -85,7 +85,7 @@ export function AssistantComposer({
 
   return (
     <form
-      aria-label="Escribir al asistente"
+      aria-label="Escribir a Chavita"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -106,7 +106,7 @@ export function AssistantComposer({
       )}
     >
       <label htmlFor="asistente-composer" className="sr-only">
-        Mensaje al asistente
+        Mensaje a Chavita
       </label>
       <textarea
         id="asistente-composer"

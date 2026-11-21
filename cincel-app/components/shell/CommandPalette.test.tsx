@@ -334,17 +334,17 @@ describe("CommandPalette actions group", () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("No se pudo completar la acción. Intenta de nuevo."));
   });
 
-  it("offers Preguntar al asistente only while useAssistantUi.available, and opens the sheet", async () => {
+  it("offers Preguntar a Chavita only while useAssistantUi.available, and opens the sheet", async () => {
     act(() => useAssistantUi.getState().setAvailable(true));
     renderPalette(true);
-    fireEvent.click(screen.getByText("Preguntar al asistente"));
+    fireEvent.click(screen.getByText("Preguntar a Chavita"));
     expect(useAssistantUi.getState().open).toBe(true);
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("closed"));
 
     cleanup();
     act(() => useAssistantUi.getState().setAvailable(false));
     renderPalette(true);
-    expect(screen.queryByText("Preguntar al asistente")).toBeNull();
+    expect(screen.queryByText("Preguntar a Chavita")).toBeNull();
   });
 });
 

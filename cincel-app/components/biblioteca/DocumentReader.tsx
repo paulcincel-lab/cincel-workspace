@@ -53,7 +53,7 @@ export function isAssistantAvailable(): boolean {
  * extends the Recursos workspace viewer with a left TOC (one entry per part,
  * linked by `?parte=`), the reading column (the workspace preview of the part)
  * and a right panel (actualizado, por, estado, "Descargar PDF", and
- * "Preguntar al asistente sobre este documento" while the assistant flags are
+ * "Preguntar a Chavita sobre este documento" while the assistant flags are
  * on). "Preguntar" opens the shell's one assistant sheet (`useAssistantUi`)
  * with the document's route as context; the reader mounts no sheet of its
  * own. Drive (preview, download) comes from `useDriveStatus()`.
@@ -214,7 +214,7 @@ export function DocumentReader({ doc, toc, companyDoc }: DocumentReaderProps) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles aria-hidden="true" className="size-4" />
-                  Preguntar al asistente
+                  Preguntar a Chavita
                 </CardTitle>
                 <CardDescription>Haz preguntas sobre este documento y recibe la respuesta con la sección exacta.</CardDescription>
               </CardHeader>
@@ -223,7 +223,7 @@ export function DocumentReader({ doc, toc, companyDoc }: DocumentReaderProps) {
                   className="w-full whitespace-normal"
                   onClick={() => useAssistantUi.getState().openAssistant({ context: { route } })}
                 >
-                  Preguntar al asistente sobre este documento
+                  Preguntar a Chavita sobre este documento
                 </Button>
               </CardContent>
             </Card>

@@ -89,7 +89,7 @@ function Harness({ onNewConversation = vi.fn() }: { onNewConversation?: () => vo
 }
 
 function composer(): HTMLTextAreaElement {
-  return screen.getByLabelText("Mensaje al asistente") as HTMLTextAreaElement;
+  return screen.getByLabelText("Mensaje a Chavita") as HTMLTextAreaElement;
 }
 
 beforeEach(() => {

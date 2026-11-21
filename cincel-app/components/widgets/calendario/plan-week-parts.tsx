@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { backlogSummary, dayLong, dayShort, dayNumber, daysOf, hoursLabel, type PlanBacklogTask } from "./plan-week-model";
 
 export const PLAN_SECTION_ID = "planear-mi-semana";
-export const PLAN_DROP_ZONE_COPY = "✦ Arrastra tareas aquí para que el asistente las acomode";
+export const PLAN_DROP_ZONE_COPY = "✦ Arrastra tareas aquí para que Chavita las acomode";
 
 /** What every Estilo of the board shares. */
 export type PlanWeekCommon = {
@@ -245,7 +245,7 @@ export function PlanWeekBacklog({
         )}
       >
         {PLAN_DROP_ZONE_COPY}
-        {planDrops.length > 0 ? <span className="mt-1 block text-xs">{planDrops.length} elegidas para el asistente</span> : null}
+        {planDrops.length > 0 ? <span className="mt-1 block text-xs">{planDrops.length} elegidas para Chavita</span> : null}
       </div>
     </div>
   );

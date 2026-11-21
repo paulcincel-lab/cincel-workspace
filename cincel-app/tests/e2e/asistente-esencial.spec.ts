@@ -15,7 +15,7 @@ test.describe("Asistente Esencial — live LLM", () => {
     await loginAsAdmin(page, BASE_URL);
     await page.goto(`${BASE_URL}/asistente?estilo=esencial`, { waitUntil: "domcontentloaded" });
 
-    const input = page.getByLabel("Mensaje al asistente");
+    const input = page.getByLabel("Mensaje a Chavita");
     await expect(input).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("list", { name: "Preguntas de ejemplo" })).toBeVisible();
     const before = await input.boundingBox();

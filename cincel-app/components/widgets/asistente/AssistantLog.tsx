@@ -112,7 +112,7 @@ function AssistantMessage({
   onEditDraft?: AssistantLogProps["onEditDraft"];
 }) {
   return (
-    <article aria-label="Respuesta del asistente" className="flex min-w-0 gap-3">
+    <article aria-label="Respuesta de Chavita" className="flex min-w-0 gap-3">
       <Avatar />
       <div className="flex min-w-0 flex-1 flex-col gap-4 text-sm leading-[1.6] [&_strong]:font-semibold [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
         <AssistantMessageParts

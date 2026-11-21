@@ -391,7 +391,7 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
   const placeholder =
     context.placeholder ??
     (variant === "row"
-      ? `Nueva tarea en ${context.label}…  @persona  #etapa  fecha  !prioridad  ·  / asistente`
+      ? `Nueva tarea en ${context.label}…  @persona  #etapa  fecha  !prioridad  ·  / chavita`
       : "Escribe para agregar una tarea…");
   const active = focused || hasText;
 
@@ -454,8 +454,8 @@ function QuickAddLine({ context, onCreate, variant, colSpan = 1 }: QuickAddRowPr
             variant === "row" && "mb-3",
           )}
         >
-          <p className="font-medium">Pedir al asistente: “{parsed.slash}”</p>
-          <p>Enter abre el asistente con este texto.</p>
+          <p className="font-medium">Pedir a Chavita: “{parsed.slash}”</p>
+          <p>Enter abre Chavita con este texto.</p>
         </div>
       ) : suggestion ? (
         <div

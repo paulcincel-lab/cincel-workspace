@@ -65,7 +65,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   if (!isAssistantConfigured()) {
     return NextResponse.json(
-      { error: "El asistente no está configurado en este servidor." },
+      { error: "Chavita no está configurado en este servidor." },
       { status: 503 }
     );
   }

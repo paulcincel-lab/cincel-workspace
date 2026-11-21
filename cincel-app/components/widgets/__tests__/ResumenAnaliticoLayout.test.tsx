@@ -222,7 +222,7 @@ describe("ResumenAnaliticoLayout", () => {
     const input = quickAdd();
     fireEvent.change(input, { target: { value: "Revisar plafones @paul" } });
     const hint = await screen.findByRole("status", {}, { timeout: 2000 });
-    expect(hint.textContent).toContain("Asistente:");
+    expect(hint.textContent).toContain("Chavita:");
     expect(hint.textContent).toContain("Paul Langarica está al 92 %");
     expect(hint.textContent).toContain("Ana López tiene 40 % de carga y ya trabajó Obra negra en Casa Roble.");
     expect(within(hint).getByRole("button", { name: /Asignar a Ana/ })).toBeTruthy();
