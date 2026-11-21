@@ -3,12 +3,13 @@
  * replies and internal notes, duplicates. Re-exported by `support-repository`.
  * Authorization (`canManageSupport`) is checked by the actions.
  */
-import { and, count, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
 import { staff, supportTicketEvents, supportTickets } from "@/lib/db/schema";
 import { notify } from "@/lib/notifications/notify";
+import { mexicoMonthRange } from "@/lib/soporte/month-range";
 import type { ActionResult } from "@/lib/types/schedule";
 import {
   CLOSED_STATUSES,
@@ -197,7 +198,52 @@ export async function getMejorasCounts(filters: TicketFilters = {}): Promise<Mej
     .select({ n: count() })
     .from(supportTickets)
     .where(eq(supportTickets.status, "nuevo"));
-  return { byStatus, nuevo: Number(nuevo), total };
+
+  // "Resueltas este mes": resolved (closed_at is set when it moves to `resuelto` and cleared when it leaves) in the Mexico City month.
+  const { start, end } = mexicoMonthRange();
+  const [{ n: resolved }] = await db
+    .select({ n: count() })
+    .from(supportTickets)
+    .where(
+      and(
+        ...where,
+        eq(supportTickets.status, "resuelto"),
+        gte(supportTickets.closedAt, start),
+        lt(supportTickets.closedAt, end),
+      ),
+    );
+
+  // Mean hours from creation to the first public reply or status change by a person.
+  const firstEvent = db
+    .select({
+      ticketId: supportTicketEvents.ticketId,
+      at: sql<Date>`min(${supportTicketEvents.createdAt})`.as("first_at"),
+    })
+    .from(supportTicketEvents)
+    .where(
+      and(
+        eq(supportTicketEvents.visibility, "public"),
+        inArray(supportTicketEvents.type, ["reply", "status"]),
+        sql`${supportTicketEvents.actorId} is not null`,
+      ),
+    )
+    .groupBy(supportTicketEvents.ticketId)
+    .as("first_event");
+  const [{ hours }] = await db
+    .select({
+      hours: sql<string | null>`avg(extract(epoch from (${firstEvent.at} - ${supportTickets.createdAt})) / 3600)`,
+    })
+    .from(supportTickets)
+    .innerJoin(firstEvent, eq(firstEvent.ticketId, supportTickets.id))
+    .where(where.length > 0 ? and(...where) : undefined);
+
+  return {
+    byStatus,
+    nuevo: Number(nuevo),
+    total,
+    resolvedThisMonth: Number(resolved),
+    firstResponseHours: hours === null ? null : Math.max(0, Number(hours)),
+  };
 }
 
 // ── Writes ──────────────────────────────────────────────────────────────────
