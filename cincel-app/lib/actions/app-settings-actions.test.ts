@@ -10,6 +10,9 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 
 const repo = vi.hoisted(() => ({ getAppSetting: vi.fn(), getAppSettingEntry: vi.fn(), setAppSetting: vi.fn() }));
 vi.mock("@/lib/repositories/app-settings-repository", () => repo);
+vi.mock("@/lib/etapas/compat", () => ({
+  listEtapas: vi.fn(async () => [{ key: "presale" }, { key: "diseno" }]),
+}));
 
 vi.mock("@/lib/auth/permissions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/permissions")>();
@@ -26,7 +29,7 @@ import { unwrapActions } from "@/tests/helpers/action-result";
 
 import * as appSettingsActions from "./app-settings-actions";
 
-const { fetchGeneralSettingsAction, restoreGeneralSettingsAction, saveGeneralSettingsAction } =
+const { fetchGeneralSettingsAction, restoreGeneralSettingsAction, saveGeneralSettingsAction, setNavVisibilityAction, fetchNavVisibilityAction } =
   unwrapActions(appSettingsActions);
 
 const ADMIN = { member: { role: "Administrador" }, access: "Administrador" };
@@ -165,5 +168,43 @@ describe("fetchGeneralSettingsAction", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     repo.getAppSettingEntry.mockRejectedValue(new Error("down"));
     await expect(fetchGeneralSettingsAction()).resolves.toMatchObject({ hasCustom: false, savedAt: null });
+  });
+});
+
+describe("nav visibility actions", () => {
+  it("saves only the valid keys and drops unknown ones, Ajustes and deleted etapas", async () => {
+    repo.setAppSetting.mockResolvedValue(new Date("2026-11-04T16:30:00.000Z"));
+    const result = await setNavVisibilityAction([
+      "calendario",
+      "calendario",
+      "etapa:presale",
+      "etapa:borrada",
+      "ajustes",
+      "nope",
+      "search",
+    ]);
+    expect(result.hidden).toEqual(["calendario", "etapa:presale", "search"]);
+    expect(repo.setAppSetting).toHaveBeenCalledWith(
+      "nav_visibility",
+      JSON.stringify({ version: 1, hidden: ["calendario", "etapa:presale", "search"] }),
+    );
+    expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
+  });
+
+  it("rejects input that is not a list of strings", async () => {
+    await expect(setNavVisibilityAction("calendario" as never)).rejects.toThrow("INVALID_NAV_VISIBILITY");
+    expect(repo.setAppSetting).not.toHaveBeenCalled();
+  });
+
+  it.each(DENIED_USERS)("denies %s on save and read", async (_label, user) => {
+    currentUser.value = user;
+    await expect(setNavVisibilityAction(["calendario"])).rejects.toThrow(/^FORBIDDEN/);
+    await expect(fetchNavVisibilityAction()).rejects.toThrow(/^FORBIDDEN/);
+    expect(repo.setAppSetting).not.toHaveBeenCalled();
+  });
+
+  it("reads the stored value for an administrator", async () => {
+    repo.getAppSetting.mockResolvedValue(JSON.stringify({ version: 1, hidden: ["personas", "x"] }));
+    await expect(fetchNavVisibilityAction()).resolves.toEqual({ version: 1, hidden: ["personas"] });
   });
 });

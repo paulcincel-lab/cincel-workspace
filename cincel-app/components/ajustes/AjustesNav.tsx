@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 
 export type AjustesNavKey =
   | "perfil" | "apariencia" | "notificaciones" | "integraciones" | "solicitudes"
-  | "general" | "tema" | "horario" | "etapas" | "flujos" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
+  | "general" | "tema" | "menu" | "horario" | "etapas" | "flujos" | "puestos" | "estatus" | "permisos" | "monday" | "google" | "eliminados";
 
 export type AjustesNavProps = {
   active: AjustesNavKey;
@@ -50,6 +50,7 @@ const PERSONAL_ITEMS: ReadonlyArray<{ key: PersonalKey; label: string }> = [
 const ORGANIZATION_ITEMS: ReadonlyArray<{ key: AjustesAdminSegment; label: string }> = [
   { key: "general", label: "General" },
   { key: "tema", label: "Tema y estilo" },
+  { key: "menu", label: "Menú" },
   { key: "horario", label: "Control de horario" },
   { key: "etapas", label: "Etapas y fases" },
   { key: "flujos", label: "Flujos" },

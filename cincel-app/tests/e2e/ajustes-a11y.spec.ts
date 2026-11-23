@@ -137,6 +137,7 @@ test.describe("Accesibilidad — Ajustes › Organización (General, Tema, Horar
   const SEGMENTS = [
     { path: "/ajustes/general", ready: { role: "button", name: "Guardar cambios" } },
     { path: "/ajustes/tema", ready: { role: "button", name: "Publicar para todos" } },
+    { path: "/ajustes/menu", ready: { role: "button", name: "Mostrar todo" } },
     { path: "/ajustes/horario", ready: { role: "radiogroup", name: "Control de horario" } },
     { path: "/ajustes/google", ready: { role: "heading", name: "Grupos de Google" } },
   ] as const;

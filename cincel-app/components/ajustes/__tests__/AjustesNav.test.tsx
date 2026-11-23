@@ -19,6 +19,7 @@ const PERSONAL = ["Perfil", "Apariencia", "Notificaciones", "Gmail, calendario y
 const ORGANIZATION = [
   "General",
   "Tema y estilo",
+  "Menú",
   "Control de horario",
   "Etapas y fases",
   "Flujos",
@@ -33,6 +34,7 @@ const ORGANIZATION = [
 const NONE: AjustesVisibleSegments = {
   general: false,
   tema: false,
+  menu: false,
   horario: false,
   etapas: false,
   flujos: false,

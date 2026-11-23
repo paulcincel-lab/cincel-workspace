@@ -69,6 +69,10 @@ export type AjustesSegment = "apariencia" | "integraciones" | "notificaciones" |
 
 export const qk = {
   shell: {
+    /** Prefix of every shell query (badges, projects, menu visibility). */
+    all: () => ["shell"] as const,
+    /** The organization menu visibility (Ajustes › Menú). */
+    navVisibility: () => ["shell", "nav-visibility"] as const,
     badges: () => ["shell", "badges"] as const,
     /** The sidebar "Proyectos" submenu: every project the viewer can see (id, name, status, etapa color). */
     projects: () => ["shell", "projects"] as const,

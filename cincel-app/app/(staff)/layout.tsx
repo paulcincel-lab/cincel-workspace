@@ -13,6 +13,7 @@ import { qk } from "@/lib/query/keys";
 import { shellBadgesOptions, shellProjectsOptions } from "@/lib/query/options/shell";
 import { prefetch } from "@/lib/query/server";
 import { capabilityUserOf, loadShellBadges } from "@/lib/shell/badges";
+import { getNavVisibility } from "@/lib/shell/nav-visibility-server";
 import { loadShellProjects } from "@/lib/shell/projects";
 import type { TodayStatus } from "@/lib/types/redesign";
 import type { MyProfile } from "@/lib/types/shell";
@@ -75,7 +76,8 @@ const EMPTY_NAV: NavModel = { items: [], etapas: [], footer: [] };
 /** A nav failure must not take every page down; the shell renders without items. */
 async function loadNav(session: NavSession): Promise<NavModel> {
   try {
-    return await buildNavModel(session);
+    const { hidden } = await getNavVisibility();
+    return await buildNavModel(session, undefined, hidden);
   } catch (error) {
     console.error("[staff-layout] nav model failed", error);
     return EMPTY_NAV;

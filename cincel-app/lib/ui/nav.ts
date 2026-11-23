@@ -10,6 +10,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { NAV_ITEM_SOURCES } from "@/lib/shell/nav-items";
 import { listEtapas, etapaColorVar } from "@/lib/etapas/compat";
+import { NAV_ETAPAS_KEY, NAV_LOCKED_KEY, etapaVisibilityKey } from "@/lib/shell/nav-visibility";
 
 export type NavItemKey =
   | "inicio"
@@ -29,6 +30,8 @@ export type NavModel = {
   items: NavItem[];
   etapas: { key: string; name: string; colorVar: string; href: string }[];
   footer: NavItem[];
+  /** Keys hidden from Ajustes › Menú (search, jornada and the submenus are read from here). */
+  hidden?: string[];
 };
 
 /** The session fields the nav model is built from (FE `AppShellProps["session"]`). */
@@ -102,8 +105,12 @@ async function loadEtapas(): Promise<NavModel["etapas"]> {
 export async function buildNavModel(
   session: NavSession,
   sources: readonly NavItemSource[] = NAV_ITEM_SOURCES,
+  hiddenKeys: readonly string[] = [],
 ): Promise<NavModel> {
-  const sorted = [...sources].sort((a, b) => a.order - b.order);
+  // Ajustes never hides for an administrator, so they can always reach Ajustes › Menú.
+  const hidden = hiddenKeys.filter((key) => !(session.isAdmin && key === NAV_LOCKED_KEY));
+  // A hidden entry is dropped before it resolves, so its badge and count reads never run.
+  const sorted = [...sources].filter((source) => !hidden.includes(source.key)).sort((a, b) => a.order - b.order);
   const resolved = await Promise.all(
     sorted.map(async (source) => ({ source, item: await resolveSource(source, session) })),
   );
@@ -117,6 +124,9 @@ export async function buildNavModel(
     (source.section === "footer" ? footer : items).push(item);
   }
 
-  const etapas = seen.has(ETAPAS_TARGET) ? await loadEtapas() : [];
-  return { items, etapas, footer };
+  const showEtapas = seen.has(ETAPAS_TARGET) && !hidden.includes(NAV_ETAPAS_KEY);
+  const etapas = showEtapas
+    ? (await loadEtapas()).filter((etapa) => !hidden.includes(etapaVisibilityKey(etapa.key)))
+    : [];
+  return { items, etapas, footer, hidden: hidden.length > 0 ? [...hidden] : undefined };
 }
