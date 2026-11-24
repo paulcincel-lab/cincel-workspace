@@ -34,7 +34,6 @@ import { PRIORITY_LABEL, daysLate, taskDueDate } from "./tablero-table";
 export const ANALITICO_DESCRIPTION = "Por proyecto y etapa, ordenada por retraso.";
 export const ANALITICO_EMPTY_TITLE = "No hay tareas con estos filtros";
 export const ANALITICO_EMPTY_LATE_TITLE = "No hay tareas en retraso";
-export const ANALITICO_ANCHORS_CAPTION = "tareas vencidas por proyecto";
 export const ANALITICO_TABLE_LABEL = "Tareas por proyecto y etapa";
 
 export const ANALITICO_COLUMNS: RecordColumn[] = [
