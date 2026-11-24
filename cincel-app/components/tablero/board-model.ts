@@ -38,6 +38,8 @@ export function customStatusesOf(tasks: TaskListItem[]): { id: string; name: str
  * Groups tasks into the columns. Each task sits in its custom status's column
  * when it has one, else in its built-in status's. `columnOf` overrides where a
  * task sits (e.g. an optimistic move not yet confirmed by the server).
+ * A task whose column isn't shown (e.g. Completado while hiding completed
+ * tasks, before the refetch lands) is left out.
  */
 export function groupTasksByColumn(
   tasks: TaskListItem[],
@@ -48,7 +50,7 @@ export function groupTasksByColumn(
   const next: Record<string, TaskListItem[]> = Object.fromEntries(columns.map((c) => [c.key, []]));
   tasks.forEach((t) => {
     const key = columnOf(t);
-    next[keys.has(key) ? key : t.status].push(t);
+    next[keys.has(key) ? key : t.status]?.push(t);
   });
   return next;
 }

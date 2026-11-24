@@ -33,4 +33,15 @@ describe("board model", () => {
     expect(moved.bloqueado.map((t) => t.id)).toEqual(["t1"]);
     expect(moved.pendiente.map((t) => t.id)).toEqual(["t2", "t3"]);
   });
+
+  it("leaves out tasks whose column isn't shown instead of throwing", () => {
+    const withoutDone = boardColumns([]).filter((c) => c.key !== "completado");
+    const done = taskBoardTasks.filter((t) => t.status === "completado");
+    expect(done.length).toBeGreaterThan(0);
+    const grouped = groupTasksByColumn(taskBoardTasks, withoutDone);
+    expect(grouped.completado).toBeUndefined();
+    const placed = Object.values(grouped).flat().map((t) => t.id);
+    expect(placed).toHaveLength(taskBoardTasks.length - done.length);
+    done.forEach((t) => expect(placed).not.toContain(t.id));
+  });
 });
