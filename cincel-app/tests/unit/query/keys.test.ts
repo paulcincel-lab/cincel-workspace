@@ -15,6 +15,8 @@ function shapes() {
   return {
     "shell.badges": qk.shell.badges(),
     "shell.projects": qk.shell.projects(),
+    "shell.all": qk.shell.all(),
+    "shell.navVisibility": qk.shell.navVisibility(),
     "org.general": qk.org.general(),
     "me.today": qk.me.today(),
     "me.weekHours": qk.me.weekHours(),

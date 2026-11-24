@@ -45,6 +45,39 @@ afterEach(() => {
   mocks.etapaColorVar.mockReset();
 });
 
+describe("buildNavModel with hidden keys", () => {
+  it("drops a hidden item before it resolves, so its reads never run", async () => {
+    mocks.listEtapas.mockResolvedValue([]);
+    const mejoras = source("mejoras", 80, { badge: 4 });
+    const nav = await buildNavModel(ADMIN_SESSION, [source("inicio", 10), mejoras], ["mejoras"]);
+    expect(nav.items.map((i) => i.key)).toEqual(["inicio"]);
+    expect(mejoras.resolve).not.toHaveBeenCalled();
+  });
+
+  it("hides the Etapas group with Tareas, with the etapas key, or one etapa at a time", async () => {
+    mocks.listEtapas.mockResolvedValue(ETAPAS);
+    mocks.etapaColorVar.mockReturnValue("var(--chart-1)");
+    const sources = [source("tareas", 30)];
+    expect((await buildNavModel(ADMIN_SESSION, sources, ["tareas"])).etapas).toEqual([]);
+    expect((await buildNavModel(ADMIN_SESSION, sources, ["etapas"])).etapas).toEqual([]);
+    const some = await buildNavModel(ADMIN_SESSION, sources, ["etapa:diseno"]);
+    expect(some.etapas.map((e) => e.key)).toEqual(["presale", "construccion"]);
+    expect(some.hidden).toEqual(["etapa:diseno"]);
+  });
+
+  it("never hides Ajustes for an administrator", async () => {
+    const ajustes = source("ajustes", 90, { section: "footer" });
+    const admin = await buildNavModel(ADMIN_SESSION, [ajustes], ["ajustes"]);
+    expect(admin.footer.map((i) => i.key)).toEqual(["ajustes"]);
+  });
+
+  it("keeps the search, jornada and submenu keys for the sidebar", async () => {
+    const nav = await buildNavModel(ADMIN_SESSION, [source("inicio", 10)], ["search", "jornada", "tareas:proyectos"]);
+    expect(nav.hidden).toEqual(["search", "jornada", "tareas:proyectos"]);
+    expect(nav.items.map((i) => i.key)).toEqual(["inicio"]);
+  });
+});
+
 describe("buildNavModel", () => {
   it("collects the sources by order and splits items and footer", async () => {
     mocks.listEtapas.mockResolvedValue([]);

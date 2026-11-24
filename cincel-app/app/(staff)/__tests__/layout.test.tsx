@@ -28,6 +28,9 @@ vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/lib/auth/session", () => ({ getSessionAccess: mocks.getSessionAccess }));
 vi.mock("@/lib/ui/preferences-server", () => ({ getResolvedAppearance: mocks.getResolvedAppearance }));
 vi.mock("@/lib/ui/nav", () => ({ buildNavModel: mocks.buildNavModel }));
+vi.mock("@/lib/shell/nav-visibility-server", () => ({
+  getNavVisibility: async () => ({ version: 1, hidden: ["mejoras"] }),
+}));
 vi.mock("@/lib/actions/time-tracking-actions", () => ({
   fetchMyTodayAction: mocks.fetchMyTodayAction,
   clockInAction: mocks.clockInAction,
@@ -141,7 +144,7 @@ describe("app/(staff)/layout", () => {
     // Time tracking disabled: the sidebar clock stays hidden.
     expect(props.today).toBeNull();
     // The nav never reads the photo, so it runs next to the photo read.
-    expect(mocks.buildNavModel).toHaveBeenCalledWith({ ...props.session, photoUrl: null });
+    expect(mocks.buildNavModel).toHaveBeenCalledWith({ ...props.session, photoUrl: null }, undefined, ["mejoras"]);
   });
 
   it("starts the photo, nav, day and badge reads together (one Promise.all)", async () => {

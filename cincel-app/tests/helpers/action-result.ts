@@ -132,7 +132,7 @@ export const ACTION_RESULT_MUTATIONS: Readonly<Record<string, readonly string[]>
     "importLegacyAssistantThreadAction",
   ],
   "workspace-access-actions": ["ensureMissingProjectFoldersAction"],
-  "app-settings-actions": ["saveGeneralSettingsAction", "restoreGeneralSettingsAction"],
+  "app-settings-actions": ["saveGeneralSettingsAction", "restoreGeneralSettingsAction", "setNavVisibilityAction"],
   "resources-actions": ["createResourceLinkAction", "updateResourceLinkAction", "deleteResourceLinkAction"],
 };
 

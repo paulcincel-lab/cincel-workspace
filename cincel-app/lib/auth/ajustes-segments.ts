@@ -16,6 +16,7 @@ import {
 export type AjustesAdminSegment =
   | "general"
   | "tema"
+  | "menu"
   | "horario"
   | "etapas"
   | "flujos"
@@ -29,6 +30,7 @@ export type AjustesAdminSegment =
 export const AJUSTES_ADMIN_SEGMENTS: readonly AjustesAdminSegment[] = [
   "general",
   "tema",
+  "menu",
   "horario",
   "etapas",
   "flujos",
@@ -63,6 +65,8 @@ export const AJUSTES_SEGMENT_CAPABILITY: Readonly<Record<AjustesAdminSegment, Aj
   tema: (user) => canManageAppearance(user),
   // The settings sections need canManageTimeTracking and the report canViewTeamHours;
   // the segment admits either and each section checks its own capability.
+  // Ajustes › Menú: which menu elements are visible to everyone; administrators only.
+  menu: (user) => isSettingsAdministrator(user),
   horario: (user) => canManageTimeTracking(user) || canViewTeamHours(user),
   etapas: (user) => PROJECT_FLOW_SETTINGS_PAGES.etapas && isSettingsAdministrator(user),
   // Ajustes › Flujos: same rule as Etapas y fases (it edits how those etapas chain).

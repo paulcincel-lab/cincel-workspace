@@ -43,10 +43,13 @@ export function SidebarProjectsEntry({
   item,
   active,
   prefetch,
+  showSubmenu = true,
 }: {
   item: NavItem;
   active: boolean;
   prefetch?: NavPrefetchHandlers;
+  /** False while the submenu is hidden from Ajustes › Menú: no chevron and no project list. */
+  showSubmenu?: boolean;
 }) {
   const Icon = item.icon;
   const pathname = usePathname();
@@ -67,6 +70,8 @@ export function SidebarProjectsEntry({
         <Icon aria-hidden="true" strokeWidth={1.8} />
         <span>{item.label}</span>
       </SidebarMenuButton>
+      {showSubmenu ? (
+        <>
       <SidebarMenuAction
         type="button"
         aria-label={open ? "Ocultar proyectos" : "Mostrar proyectos"}
@@ -80,6 +85,8 @@ export function SidebarProjectsEntry({
       <div id={menuId} hidden={!open}>
         {open ? <ProjectsSubmenu currentId={currentId} /> : null}
       </div>
+        </>
+      ) : null}
     </SidebarMenuItem>
   );
 }
@@ -202,10 +209,13 @@ export function SidebarTareasEntry({
   item,
   active,
   prefetch,
+  showSubmenu = true,
 }: {
   item: NavItem;
   active: boolean;
   prefetch?: NavPrefetchHandlers;
+  /** False while the submenu is hidden from Ajustes › Menú: no chevron and no project list. */
+  showSubmenu?: boolean;
 }) {
   const Icon = item.icon;
   const pathname = usePathname();
@@ -230,10 +240,12 @@ export function SidebarTareasEntry({
         {count ? <span className="sr-only">{`, ${count} pendientes`}</span> : null}
       </SidebarMenuButton>
       {count ? (
-        <SidebarMenuBadge aria-hidden="true" className="right-8">
+        <SidebarMenuBadge aria-hidden="true" className={showSubmenu ? "right-8" : undefined}>
           <Badge variant="count">{badgeText(count)}</Badge>
         </SidebarMenuBadge>
       ) : null}
+      {showSubmenu ? (
+        <>
       <SidebarMenuAction
         type="button"
         aria-label={open ? "Ocultar tareas por proyecto" : "Mostrar tareas por proyecto"}
@@ -247,6 +259,8 @@ export function SidebarTareasEntry({
       <div id={menuId} hidden={!open}>
         {open ? <TareasSubmenu currentId={currentId} /> : null}
       </div>
+        </>
+      ) : null}
     </SidebarMenuItem>
   );
 }

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/shadcn/sidebar";
 import { useGeneralSettings } from "@/lib/settings/use-general-settings";
 import { useNavBadges, withNavBadges } from "@/lib/shell/nav-badges";
+import { isNavKeyVisible, NAV_JORNADA_KEY, NAV_PROYECTOS_SUBMENU_KEY, NAV_SEARCH_KEY, NAV_TAREAS_SUBMENU_KEY } from "@/lib/shell/nav-visibility";
 import { useNavPrefetch, type NavPrefetchHandlers } from "@/lib/shell/nav-prefetch";
 import type { SidebarSlotNodes } from "@/lib/shell/sidebar-slots";
 import { isSearchVisible, isTimeClockVisible } from "@/lib/shell/visibility";
@@ -101,8 +102,8 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
   const items = withNavBadges(nav.items, badges);
   const footer = withNavBadges(nav.footer, badges);
   const systemName = generalSettings.system.systemName.trim() || "Cincel Workspace";
-  const showSearch = isSearchVisible();
-  const showClock = isTimeClockVisible(today) && slots["time-clock"] !== undefined;
+  const showSearch = isSearchVisible() && isNavKeyVisible(nav.hidden, NAV_SEARCH_KEY);
+  const showClock = isTimeClockVisible(today) && isNavKeyVisible(nav.hidden, NAV_JORNADA_KEY) && slots["time-clock"] !== undefined;
   const profileHref = footer.some((item) => item.key === "ajustes") ? "/ajustes/perfil" : null;
 
   return (
@@ -149,6 +150,7 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
                         item={item}
                         active={item.key === activeKey}
                         prefetch={prefetchFor(item.key)}
+                        showSubmenu={isNavKeyVisible(nav.hidden, NAV_PROYECTOS_SUBMENU_KEY)}
                       />
                     ) : item.key === "tareas" ? (
                       <SidebarTareasEntry
@@ -156,6 +158,7 @@ export function Sidebar({ nav, activeKey, session, today, slots = {} }: SidebarP
                         item={item}
                         active={item.key === activeKey}
                         prefetch={prefetchFor(item.key)}
+                        showSubmenu={isNavKeyVisible(nav.hidden, NAV_TAREAS_SUBMENU_KEY)}
                       />
                     ) : (
                     <NavEntry
