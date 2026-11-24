@@ -117,7 +117,11 @@ export async function readAppearanceCookie(currentVersion: number): Promise<Appe
 /** Writes the `cincel-appearance` cookie (server actions and route handlers only). */
 export async function writeAppearanceCookie(appearance: ResolvedAppearance): Promise<void> {
   const jar = await cookies();
-  jar.set(APPEARANCE_COOKIE, serializeAppearanceCookie(appearance), {
+  const value = serializeAppearanceCookie(appearance);
+  // Any cookie write makes Next refresh the whole route after a Server Action. A preference outside
+  // the cookie ("Ocultar completadas") leaves it as it is, so the action returns without that refresh (#1182).
+  if (jar.get(APPEARANCE_COOKIE)?.value === value) return;
+  jar.set(APPEARANCE_COOKIE, value, {
     ...APPEARANCE_COOKIE_OPTIONS,
     secure: process.env.NODE_ENV === "production",
   });
