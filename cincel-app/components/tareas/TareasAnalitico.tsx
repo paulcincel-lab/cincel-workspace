@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FilterCard, type FilterGroup } from "@/components/widgets/FilterCard";
 import { renderAnaliticoTaskCell } from "@/components/widgets/analitico-task-cell";
 import { HiddenCompletedLine, HideCompletedSwitch } from "@/components/widgets/HideCompletedSwitch";
-import { GroupedTable, type Group, type GroupAnchor, type RowDetail } from "@/components/widgets/GroupedTable";
+import { GroupedTable, type Group, type RowDetail } from "@/components/widgets/GroupedTable";
 import { IncludeSupportSwitch } from "@/components/widgets/IncludeSupportSwitch";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
 import { ProjectFilter } from "@/components/widgets/ProjectFilter";
@@ -52,7 +52,6 @@ import type { TaskListRow, WorkflowRef } from "@/lib/types/core";
 
 import { useQuickAddCreate } from "./quick-add-create";
 import {
-  ANALITICO_ANCHORS_CAPTION,
   ANALITICO_COLUMNS,
   ANALITICO_COLUMNS_WITH_HOURS,
   ANALITICO_DAYS_LATE_HEAT,
@@ -196,7 +195,7 @@ function sameState(a: GroupRowsState | undefined, b: GroupRowsState): boolean {
  * Tareas · Analítico (frames `Main`, `Analitico-Vencidas`, Estilos #988):
  * every task in tables grouped project → etapa, ordered by delay. Header,
  * `FilterCard` (Mostrar, Etapa, Responsable, search; synced with the URL),
- * `KpiStrip`, then `GroupedTable` with the "Ir a" row, one section per
+ * `KpiStrip`, then `GroupedTable`, one section per
  * project (overdue desc, then name) and one group per etapa, each with its
  * own rows query, a quick-add row (not in En retraso) and a footer. Every
  * count comes from `tareas.summary(f)`. En retraso hides projects and etapas
@@ -418,17 +417,6 @@ export function TareasAnalitico({
     return (id: string) => byId.get(id);
   }, [shownRows]);
 
-  const anchors = useMemo<GroupAnchor[]>(
-    () =>
-      summary.projects.map((p) => ({
-        groupId: projectGroupId(p.project.id),
-        label: p.project.name,
-        count: p.overdue,
-        tone: "destructive",
-      })),
-    [summary.projects],
-  );
-
   // ── `?tarea=<id>` opens the task sheet over the table (shallow: the table under it stays as it is).
   const taskHref = useCallback(
     (taskId: string) => {
@@ -586,8 +574,6 @@ export function TareasAnalitico({
           tableId="tareas-analitico"
           columns={columns}
           groups={groups}
-          anchors={anchors}
-          anchorsCaption={ANALITICO_ANCHORS_CAPTION}
           expanded={expanded}
           onExpandedChange={onExpandedChange}
           heat={[ANALITICO_DAYS_LATE_HEAT]}

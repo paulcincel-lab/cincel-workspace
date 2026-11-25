@@ -165,18 +165,13 @@ describe("TareasAnalitico", () => {
     expect(lomas.textContent).toContain("1 de 2 tareas");
   });
 
-  it("Ir a focuses the project", async () => {
+  it("has no Ir a row: the Proyecto filter does that job (SOL-0010)", () => {
     renderAnalitico();
-    const anchors = screen.getByRole("navigation", { name: "Ir a" });
-    const link = within(anchors).getByText("Depto Roma").closest("a")!;
-    fireEvent.click(link);
-    const section = screen.getByRole("region", { name: "Depto Roma" });
-    const header = within(section).getAllByRole("button")[0];
-    await waitFor(() => expect(document.activeElement).toBe(header));
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-    // The overdue count per project, destructive only when there are some.
-    expect(within(anchors).getByText("3").className).toContain("text-destructive");
-    expect(within(anchors).getByText("0").className).toContain("text-muted-foreground");
+    expect(screen.queryByRole("navigation", { name: "Ir a" })).toBeNull();
+    expect(screen.queryByText("tareas vencidas por proyecto")).toBeNull();
+    // The project sections and the table toolbar stay.
+    expect(screen.getByRole("region", { name: "Depto Roma" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Contraer todo|Expandir todo/ })).toBeTruthy();
   });
 
   it("expand all and collapse all", async () => {

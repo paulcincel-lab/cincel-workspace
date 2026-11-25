@@ -1,7 +1,7 @@
 /**
  * Tareas · Analítico counts (`qk.tareas.summary(f)`): one grouping-sets query
  * over project + etapa, project and the whole set (`tasksRepository.taskSummary`),
- * so every KPI, "Ir a" count, header, etapa row and footer is right however
+ * so every KPI, header, etapa row and footer is right however
  * many tasks match, not only over the loaded rows. Pure and client-safe.
  *
  * - open: not completado and no closing custom status;
