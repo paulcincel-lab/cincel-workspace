@@ -8,7 +8,6 @@ import { buttonVariants } from "@/components/ui/shadcn/button";
 import { DistributionWidget } from "@/components/widgets/DistributionWidget";
 import { kpiValueText } from "@/components/widgets/KpiWidget";
 import { LineSeriesWidget, type LineSeries } from "@/components/widgets/LineSeriesWidget";
-import { PageHeader } from "@/components/widgets/PageHeader";
 import { LIFT_CLASS } from "@/components/widgets/lift";
 import { WidgetCard } from "@/components/widgets/WidgetCard";
 import { areaTintClass } from "@/lib/areas/area-color";
@@ -48,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { AddSubtaskInline, useCanCreateSubtask } from "@/components/tareas/AddSubtaskInline";
 import { EmptyWidgetCard } from "./EmptyWidgetCard";
 import { weekLabel, weeklyPaceTable } from "./WeeklyPaceChart";
+import { InicioProfileHeader } from "./InicioProfileHeader";
 
 export type InicioVisualProps = {
   data: InicioData;
@@ -632,7 +632,8 @@ export function InicioVisual({ data, me, renderedAt }: InicioVisualProps) {
 
   return (
     <div data-slot="inicio-visual" className="flex flex-col gap-5">
-      <PageHeader
+      <InicioProfileHeader
+        fallbackName={me.firstName}
         title={greeting}
         description={visualHeaderDescription(renderedAt)}
         actions={

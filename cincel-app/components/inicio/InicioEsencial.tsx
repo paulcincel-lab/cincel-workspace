@@ -12,7 +12,6 @@ import { Skeleton } from "@/components/ui/shadcn/skeleton";
 import { EsencialCard } from "@/components/widgets/EsencialCard";
 import { EsencialItemRow, type EsencialMeta } from "@/components/widgets/EsencialItemRow";
 import { LineSeriesWidget, type LineSeries } from "@/components/widgets/LineSeriesWidget";
-import { PageHeader } from "@/components/widgets/PageHeader";
 import { QuickAddRow, type QuickAddCreated, type QuickAddDraft } from "@/components/widgets/QuickAddRow";
 import { StyleContent } from "@/components/widgets/StyleContent";
 import { createUserTaskAction } from "@/lib/actions/tasks-actions";
@@ -30,6 +29,7 @@ import { etapaColorVar, etapaLabel } from "@/lib/etapas/compat";
 import type { TaskDetail, UserTaskInput } from "@/lib/types/core";
 import type { InicioData } from "@/lib/types/redesign";
 import type { AgendaItem, AttentionItem, ProgressItem } from "@/lib/types/widgets";
+import { InicioProfileHeader } from "./InicioProfileHeader";
 
 /**
  * Inicio · Esencial (frame `Inicio-Esencial`, #990): four soft cards with one
@@ -482,7 +482,8 @@ export function InicioEsencialSkeleton() {
 export function InicioEsencial({ data, firstName, now, meId, loading = false }: InicioEsencialProps) {
   return (
     <StyleContent className="flex flex-col gap-5">
-      <PageHeader
+      <InicioProfileHeader
+        fallbackName={firstName}
         title={`${greetingFor(now, TZ)}, ${firstName}`}
         description={esencialDateLine(now, data.myAttention)}
         actions={
