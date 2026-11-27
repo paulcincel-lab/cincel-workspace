@@ -11,7 +11,6 @@ import { FilterCard } from "@/components/widgets/FilterCard";
 import { GroupedTable, type Group, type HeatRule } from "@/components/widgets/GroupedTable";
 import { KpiStrip } from "@/components/widgets/KpiStrip";
 import { LineSeriesWidget, type LineSeries } from "@/components/widgets/LineSeriesWidget";
-import { PageHeader } from "@/components/widgets/PageHeader";
 import { QuickAddRow } from "@/components/widgets/QuickAddRow";
 import { formatValue } from "@/components/widgets/record-table-format";
 import {
@@ -58,6 +57,7 @@ import type { RecordColumn } from "@/lib/types/widgets";
 
 import { useInicioQuickAdd } from "./use-inicio-quick-add";
 import { weekLabel } from "./WeeklyPaceChart";
+import { InicioProfileHeader } from "./InicioProfileHeader";
 
 export type InicioAnaliticoProps = {
   data: InicioData;
@@ -628,7 +628,8 @@ export function InicioAnalitico({ data, firstName, now }: InicioAnaliticoProps) 
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <PageHeader
+      <InicioProfileHeader
+        fallbackName={firstName}
         title={`${greetingFor(now)}, ${firstName}`}
         description={analiticoDescription(now, weekCount)}
         actions={
