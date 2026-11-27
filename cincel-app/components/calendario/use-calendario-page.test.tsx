@@ -90,11 +90,11 @@ describe("URL writers", () => {
 
   it("replace adds no history entry and push adds one", () => {
     const length = window.history.length;
-    replaceCalendarioUrl({ ...base, fecha: "2026-11-20" });
+    replaceCalendarioUrl({ ...base, fecha: "2000-01-10" });
     expect(window.history.length).toBe(length);
-    pushCalendarioUrl({ ...base, fecha: "2026-11-27" });
+    pushCalendarioUrl({ ...base, fecha: "2000-01-17" });
     expect(window.history.length).toBe(length + 1);
-    expect(new URL(window.location.href).searchParams.get("fecha")).toBe("2026-11-27");
+    expect(new URL(window.location.href).searchParams.get("fecha")).toBe("2000-01-17");
   });
 
   it("leaves today out of the URL", () => {
